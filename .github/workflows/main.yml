@@ -1,0 +1,171 @@
+name: 🚀 Gmaxepay Deployment
+
+on:
+  push:
+    branches: [dev]
+
+jobs:     
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 📋 Get commit info
+      id: commit
+      run: |
+        echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "message=${{ github.event.head_commit.message }}" >> $GITHUB_OUTPUT
+        echo "author=${{ github.event.head_commit.author.name }}" >> $GITHUB_OUTPUT
+        echo "author_email=${{ github.event.head_commit.author.email }}" >> $GITHUB_OUTPUT
+        echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+        echo "time=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+    - name: 📢 Notify Slack - Started
+      uses: 8398a7/action-slack@v3
+      with:
+        status: custom
+        custom_payload: |
+          {
+            "text": "🚀 Deployment Started",
+            "attachments": [{
+              "color": "good",
+              "fields": [
+                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
+                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
+                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
+              ]
+            }]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: 🚀 Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_PEM_KEY }}
+        port: 22
+        timeout: 30s
+        command_timeout: 2m
+        script: |
+          set -e
+          REPO_DIR="/home/${{ secrets.EC2_USERNAME }}/gmaxepay-backend"
+          REPO_URL="https://github.com/kamaleshkulal1/gmaxepay-backend.git"
+          
+          echo "🚀 Starting deployment..."
+          
+          # Update code
+          if [ ! -d "$REPO_DIR" ]; then
+            echo "📥 Cloning repository..."
+            git clone $REPO_URL $REPO_DIR
+          else
+            echo "🔄 Pulling latest changes..."
+            cd $REPO_DIR
+            # Stash local changes (like .env) before pulling
+            git stash push -m "Auto-stash before deployment" || true
+            git pull origin dev
+          fi
+          
+          cd $REPO_DIR
+          echo "📦 Installing dependencies...."
+          npm install --silent
+          
+          # Setup PM2
+          if ! command -v pm2 &> /dev/null; then
+            echo "⚙️ Installing PM2..."
+            npm install -g pm2 --silent
+          fi
+          
+          echo "🔄 Restarting application..."
+          pm2 delete gmaxepay-backend 2>/dev/null || true
+          pm2 start index.js --name gmaxepay-backend --silent
+          pm2 save --silent
+          
+          echo "⏳ Waiting for startup..."
+          sleep 20
+          
+          echo "🔍 Checking PM2 status..."
+          pm2 list
+          
+          echo "🏥 Health check..."
+          echo "⏳ Attempting health check..."
+          if curl -f -s "http://localhost:8005/health" > /dev/null; then
+            echo "✅ Deployment successful!"
+            exit 0
+          else
+            echo "❌ Health check failed immediately"
+            echo "📋 PM2 Status:"
+            pm2 list
+            echo "📋 Recent Logs:"
+            pm2 logs gmaxepay-backend --lines 10
+            echo "📋 Environment Check:"
+            echo "PORT: $PORT"
+            echo "NODE_ENV: $NODE_ENV"
+            echo "health_check_failed=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+    - name: ✅ Notify Slack - Success
+      uses: 8398a7/action-slack@v3
+      if: success()
+      with:
+        status: success
+        custom_payload: |
+          {
+            "text": "🎉 Deployment Successful",
+            "attachments": [{
+              "color": "good",
+              "fields": [
+                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
+                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
+                {"title": "URL", "value": "http://${{ secrets.EC2_HOST }}", "short": false},
+                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
+              ]
+            }]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: 🏥 Health Check Failure Notification
+      uses: 8398a7/action-slack@v3
+      if: failure() && steps.deploy.outputs.health_check_failed == 'true'
+      with:
+        status: failure
+        custom_payload: |
+          {
+            "text": "🏥 Health Check Failed",
+            "attachments": [{
+              "color": "warning",
+              "fields": [
+                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
+                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
+                {"title": "Error", "value": "Application deployed but health check failed", "short": false},
+                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
+                {"title": "Action", "value": "Check application logs and database connection", "short": false}
+              ]
+            }]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: ❌ Notify Slack - Failed
+      uses: 8398a7/action-slack@v3
+      if: failure()
+      with:
+        status: failure
+        custom_payload: |
+          {
+            "text": "🚨 Deployment Failed",
+            "attachments": [{
+              "color": "danger",
+              "fields": [
+                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
+                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
+                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
+                {"title": "Action", "value": "Check GitHub Actions logs for details", "short": false}
+              ]
+            }]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
