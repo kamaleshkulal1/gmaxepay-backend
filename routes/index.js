@@ -23,6 +23,6 @@ const router = express.Router();
 // router.use(require('./retailer/v1/index'));
 
 // Log routes
-router.use('/api/v1', use(require('./root')));
+router.use('/api/v1', require('./root'));
 
 module.exports = router;
