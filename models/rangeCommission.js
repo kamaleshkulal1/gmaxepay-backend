@@ -20,7 +20,8 @@ let RangeCommission = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      },      
+      },
+      allowNull: true
     },
     slabId: {
       allowNull: false,

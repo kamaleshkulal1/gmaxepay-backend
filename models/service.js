@@ -22,7 +22,8 @@ let Services = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      },      
+      },
+      allowNull: true
     },
     serviceName: {
       type: DataTypes.STRING,

@@ -25,7 +25,8 @@ let WalletHistory = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      }
+      },
+      allowNull: true
     },
     walletType: {
       type: DataTypes.STRING,

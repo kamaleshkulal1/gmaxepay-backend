@@ -27,7 +27,8 @@ let Wallet = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      }
+      },
+      allowNull: true
     },
     roleType: {
       type: DataTypes.INTEGER

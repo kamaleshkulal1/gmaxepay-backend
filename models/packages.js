@@ -21,7 +21,8 @@ let Package = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      },      
+      },
+      allowNull: true
     },
     packageName: {
       type: DataTypes.STRING,

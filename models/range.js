@@ -16,7 +16,8 @@ let Range = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      },      
+      },
+      allowNull: true
     },
     operatorType: {
       type: DataTypes.STRING,

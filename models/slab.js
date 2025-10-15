@@ -21,7 +21,8 @@ let Slab = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      },      
+      },
+      allowNull: true
     },
     slabName: {
       type: DataTypes.STRING,
