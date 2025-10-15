@@ -140,7 +140,7 @@ async function roles() {
         },
         {
           roleType: 1,
-          roleName: 'COMPANY_ADMIN',
+          roleName: 'ADMIN',
           isActive: true,
           isDeleted: false
         },
