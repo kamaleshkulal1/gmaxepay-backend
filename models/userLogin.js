@@ -21,7 +21,8 @@ let userLogin = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      }
+      },
+      allowNull: true
     },
     user_type: {
       type: DataTypes.INTEGER,

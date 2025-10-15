@@ -13,13 +13,6 @@ let role = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
-   companyId: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: 'company',
-        key: 'id'
-      },      
-    },
     roleType: {
       type: DataTypes.STRING
     },

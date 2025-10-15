@@ -46,13 +46,6 @@ let Wallet = sequelize.define(
         this.setDataValue('mobikwik', parseFloat(value.toFixed(2)));
       }
     },
-    bank: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0,
-      set(value) {
-        this.setDataValue('bank', parseFloat(value.toFixed(2)));
-      }
-    },
     ...reusableSMSAttribute
   },
   {

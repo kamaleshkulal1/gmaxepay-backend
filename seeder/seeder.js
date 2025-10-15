@@ -134,18 +134,16 @@ async function roles() {
       let rolesToInsert = [
         {
           roleType: 1,
-          roleName: 'SUPER_ADMIN',
+          roleName: 'SUPERADMIN',
           isActive: true,
           isDeleted: false
         },
-        { roleType: 1, roleName: 'ADMIN', isActive: true, isDeleted: false },
         {
           roleType: 1,
-          roleName: 'SUB_ADMIN',
+          roleName: 'COMPANY_ADMIN',
           isActive: true,
           isDeleted: false
         },
-        { roleType: 1, roleName: 'RETAILER', isActive: true, isDeleted: false },
         {
           roleType: 1,
           roleName: 'MASTER_DISTRIBUTOR',
@@ -158,22 +156,15 @@ async function roles() {
           isActive: true,
           isDeleted: false
         },
-        { roleType: 1, roleName: 'API_USER', isActive: true, isDeleted: false },
         {
-          roleType: 2,
-          roleName: 'SALES_MANAGER',
+          roleType: 1,
+          roleName: 'RETAILER',
           isActive: true,
           isDeleted: false
         },
         {
           roleType: 2,
-          roleName: 'SALES_EXECUTIVE',
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          roleType: 2,
-          roleName: 'CUSTOMER_SUPPORT',
+          roleName: 'EMPLOYEE',
           isActive: true,
           isDeleted: false
         }
@@ -13936,48 +13927,10 @@ async function seedRangeComm() {
   }
 }
 
-async function seedCompany() {
-  try {
-    let existingCompany = await dbService.findOne(model.company, { id: 1 });
-    
-    if (!existingCompany) {
-      await dbService.create(model.company, {
-        id: 1,
-        companyName: 'Gmaxepay',
-        appName: 'Gmaxepay',
-        companyPan: 'ABCDE1234F',
-        companyGst: '12ABCDE1234F1Z5',
-        logo: {
-          url: 'https://example.com/logo.png',
-          alt: 'Gmaxepay Logo'
-        },
-        favicon: {
-          url: 'https://example.com/favicon.ico',
-          alt: 'Gmaxepay Favicon'
-        },
-        primaryColor: '#007bff',
-        secondaryColor: '#6c757d',
-        customDomain: 'gmaxepay.com',
-        contactName: 'Gmaxepay Admin',
-        contactEmail: 'admin@gmaxepay.com',
-        mobileNo: '+91-9876543210',
-        billingAddress: 'Gmaxepay Technologies Pvt Ltd\n123 Business Park\nMumbai, Maharashtra 400001\nIndia',
-        shippingAddress: 'Gmaxepay Technologies Pvt Ltd\n123 Business Park\nMumbai, Maharashtra 400001\nIndia',
-        modulesEnabled: [1, 2, 3, 4, 5],
-        remark: 'Default company for Gmaxepay platform running on IP 13.203.121.18'
-      });
-      console.log('Gmaxepay company seeded successfully.');
-    } else {
-      console.log('Gmaxepay company already exists.');
-    }
-  } catch (error) {
-    console.error('Error seeding company:', error);
-  }
-}
 
 async function seedData() {
   
-  //  await roles();
+   await roles();
   //  await permissions();
   //  await insertPermissions();
   //  await rolePermission();
@@ -13986,14 +13939,13 @@ async function seedData() {
   //  await OperatorType();
   //  await state();
   //   await gstState();
-  //   await bank();
-    // await services();
+    await bank();
+    await services();
    
   
   //  await cardType();
   //  await paymentInsturment();
-   await seedCompany();
-   await seedPgCommercials();
+  //  await seedPgCommercials();
   //  await seedRangeComm();
   //  await seedRangeCharges();
    
