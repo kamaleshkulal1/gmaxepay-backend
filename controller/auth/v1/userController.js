@@ -106,7 +106,7 @@ const resetPassword = async (req, res) => {
         const token = req.headers['token'];
 
         if (!newPassword || !confirmPassword) {
-            return res.failure({ message: 'New password and confirm password are required!' });
+            return res.failure({ message: 'New password and confirm password are required!!' });
         }
 
         if (newPassword.length < 8) {
