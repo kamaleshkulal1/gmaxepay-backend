@@ -8,6 +8,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
+      
     - name: 📋 Get commit info
       id: commit
       run: |
@@ -74,9 +77,28 @@ jobs:
           else
             echo "🔄 Pulling latest changes..."
             cd $REPO_DIR
-            # Stash local changes (like .env) before pulling
-            git stash push -m "Auto-stash before deployment" || true
-            git pull origin dev
+            
+            # Reset any local changes (except .env if it exists)
+            echo "🧹 Cleaning working directory..."
+            git fetch origin dev
+            
+            # Preserve .env file if it exists
+            if [ -f .env ]; then
+              cp .env /tmp/.env.backup
+              echo "💾 Backed up .env file"
+            fi
+            
+            # Hard reset to latest dev branch
+            git reset --hard origin/dev
+            
+            # Restore .env file
+            if [ -f /tmp/.env.backup ]; then
+              cp /tmp/.env.backup .env
+              rm /tmp/.env.backup
+              echo "✅ Restored .env file"
+            fi
+            
+            echo "✅ Updated to latest code from dev branch"
           fi
           
           cd $REPO_DIR
