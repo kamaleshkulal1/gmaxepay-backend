@@ -1,15 +1,24 @@
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const winston = require('winston');
 const path = require('path');
 
-// Configure AWS SDK
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1'
-});
-
-const s3 = new AWS.S3();
+// Configure AWS SDK v3 - only if credentials are available
+let s3Client = null;
+if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && 
+    process.env.AWS_ACCESS_KEY_ID !== 'your_aws_access_key_here') {
+  try {
+    s3Client = new S3Client({
+      region: process.env.AWS_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      }
+    });
+  } catch (error) {
+    console.warn('Failed to initialize S3 client:', error.message);
+    s3Client = null;
+  }
+}
 
 // Custom S3 transport for Winston
 class S3Transport extends winston.Transport {
@@ -17,13 +26,20 @@ class S3Transport extends winston.Transport {
     super(options);
     this.bucket = options.bucket || 'gmaxepay';
     this.folder = options.folder || 'development';
-    this.s3 = options.s3 || s3;
+    this.s3Client = options.s3Client || s3Client;
   }
 
   log(info, callback) {
     setImmediate(() => {
       this.emit('logged', info);
     });
+
+    // If S3 client is not available, skip S3 upload
+    if (!this.s3Client) {
+      console.warn('S3 logging disabled: AWS credentials not configured');
+      callback(null, true);
+      return;
+    }
 
     // Create log entry
     const logEntry = {
@@ -48,18 +64,40 @@ class S3Transport extends winston.Transport {
       ServerSideEncryption: 'AES256'
     };
 
-    this.s3.upload(params, (err, data) => {
-      if (err) {
-        console.error('S3 upload error:', err);
-        callback(err);
-      } else {
+    this.s3Client.send(new PutObjectCommand(params))
+      .then(() => {
         callback(null, true);
-      }
-    });
+      })
+      .catch((err) => {
+        console.error('S3 upload error:', err.message || err);
+        // Don't fail the entire logging process if S3 fails
+        callback(null, true);
+      });
   }
 }
 
 // Create logger instance
+const transports = [
+  // Console transport for development
+  new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.simple()
+    )
+  })
+];
+
+// Only add S3 transport if credentials are available
+if (s3Client) {
+  transports.push(new S3Transport({
+    bucket: 'gmaxepay',
+    folder: 'development'
+  }));
+} else {
+  console.warn('S3 logging disabled: AWS credentials not configured or invalid. Only console logging will be available.');
+  console.warn('To enable S3 logging, set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION environment variables.');
+}
+
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -67,20 +105,7 @@ const logger = winston.createLogger({
     winston.format.errors({ stack: true }),
     winston.format.json()
   ),
-  transports: [
-    // Console transport for development
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    }),
-    // S3 transport
-    new S3Transport({
-      bucket: 'gmaxepay',
-      folder: 'development'
-    })
-  ]
+  transports: transports
 });
 
 module.exports = logger;

@@ -1,14 +1,14 @@
-const AWS = require('aws-sdk');
+const { S3Client, ListObjectsV2Command, GetObjectCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const logger = require('../config/s3Logger');
 
-// Configure AWS SDK
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1'
+// Configure AWS SDK v3
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  }
 });
-
-const s3 = new AWS.S3();
 
 class LogService {
   constructor() {
@@ -25,18 +25,18 @@ class LogService {
         MaxKeys: 1000
       };
 
-      const data = await s3.listObjectsV2(params).promise();
+      const data = await s3Client.send(new ListObjectsV2Command(params));
       const logs = [];
 
       // Process each log file
       for (const object of data.Contents) {
         try {
-          const logData = await s3.getObject({
+          const logData = await s3Client.send(new GetObjectCommand({
             Bucket: this.bucket,
             Key: object.Key
-          }).promise();
+          }));
 
-          const logEntry = JSON.parse(logData.Body.toString());
+          const logEntry = JSON.parse(await logData.Body.transformToString());
           
           // Apply filters
           if (this.matchesFilters(logEntry, filters)) {
@@ -218,7 +218,7 @@ class LogService {
         Prefix: `${this.folder}/logs/`
       };
 
-      const data = await s3.listObjectsV2(params).promise();
+      const data = await s3Client.send(new ListObjectsV2Command(params));
       const objectsToDelete = [];
 
       for (const object of data.Contents) {
@@ -228,10 +228,10 @@ class LogService {
       }
 
       if (objectsToDelete.length > 0) {
-        await s3.deleteObjects({
+        await s3Client.send(new DeleteObjectsCommand({
           Bucket: this.bucket,
           Delete: { Objects: objectsToDelete }
-        }).promise();
+        }));
 
         logger.info(`Deleted ${objectsToDelete.length} old log files`);
         return objectsToDelete.length;

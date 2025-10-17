@@ -1,6 +1,6 @@
 const fs = require('fs');
 const mime = require('mime-types');
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const model = require('../model');
 const File = model.File;
 const dotenv = require('dotenv');
@@ -9,10 +9,12 @@ const dayjs = require('dayjs');
 const { S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, NODE_ENV, S3_REGION } =
   process.env;
 
-const s3 = new AWS.S3({
+const s3Client = new S3Client({
   region: S3_REGION,
-  accessKeyId: S3_ACCESS_KEY_ID, //process.env.ACCESS_KEY_ID, //
-  secretAccessKey: S3_SECRET_ACCESS_KEY //process.env.SECRET_ACCESS_KEY, //
+  credentials: {
+    accessKeyId: S3_ACCESS_KEY_ID,
+    secretAccessKey: S3_SECRET_ACCESS_KEY,
+  }
 });
 /**
  * upload File
@@ -32,7 +34,7 @@ const uploadFile = async (file, id) => {
     }
   };
   try {
-    return s3.upload(params).promise();
+    return await s3Client.send(new PutObjectCommand(params));
   } catch (error) {
     console.log(error);
   }
@@ -51,7 +53,7 @@ const uploadBinaryFiles = async (file, filename) => {
     }
   };
   try {
-    return s3.upload(params).promise();
+    return await s3Client.send(new PutObjectCommand(params));
   } catch (error) {
     console.log(error);
   }
