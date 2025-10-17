@@ -26,7 +26,8 @@ app.use(
 );
 app.use(cookieParser());
 
-app.set('trust proxy', 1);
+// Trust proxy to get real client IP
+app.set('trust proxy', true);
 app.use(require('./utils/response/responseHandler'));
 const httpServer = require('http').createServer(app);
 app.use(express.urlencoded({ extended: true }));
