@@ -1,5 +1,5 @@
-const logService = require('../services/logService');
-const logger = require('../config/s3Logger');
+const logService = require('../services/fileLogService');
+const logger = require('../config/fileLogger');
 
 class LogController {
   // Get all logs with filtering
@@ -470,7 +470,7 @@ class LogController {
 
       res.json({
         success: true,
-        message: `Successfully deleted ${deletedCount} old log files`,
+        message: `Successfully deleted ${deletedCount} old log entries`,
         data: {
           deletedCount,
           daysOld
@@ -481,6 +481,105 @@ class LogController {
       res.status(500).json({
         success: false,
         message: 'Error deleting old logs',
+        error: error.message
+      });
+    }
+  }
+
+  // Get tail logs (recent logs)
+  async getTailLogs(req, res) {
+    try {
+      const { lines = 100 } = req.query;
+      
+      const logs = await logService.getTailLogs(parseInt(lines));
+
+      res.json({
+        success: true,
+        data: {
+          logs,
+          count: logs.length,
+          lines: parseInt(lines)
+        }
+      });
+    } catch (error) {
+      logger.error('Error getting tail logs', { error: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Error retrieving tail logs',
+        error: error.message
+      });
+    }
+  }
+
+  // Search logs by text
+  async searchLogs(req, res) {
+    try {
+      const { q: searchTerm, limit = 100, offset = 0 } = req.query;
+      
+      if (!searchTerm) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search term is required'
+        });
+      }
+
+      const logs = await logService.searchLogs(searchTerm);
+      
+      // Apply pagination
+      const paginatedLogs = logs.slice(offset, offset + parseInt(limit));
+
+      res.json({
+        success: true,
+        data: {
+          logs: paginatedLogs,
+          total: logs.length,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: logs.length > offset + parseInt(limit),
+          searchTerm
+        }
+      });
+    } catch (error) {
+      logger.error('Error searching logs', { error: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Error searching logs',
+        error: error.message
+      });
+    }
+  }
+
+  // Get log file info
+  async getLogFileInfo(req, res) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const logFilePath = path.join(__dirname, '../logs/server.log');
+      const errorLogFilePath = path.join(__dirname, '../logs/error.log');
+      
+      const info = {
+        serverLog: {
+          exists: fs.existsSync(logFilePath),
+          size: fs.existsSync(logFilePath) ? fs.statSync(logFilePath).size : 0,
+          lastModified: fs.existsSync(logFilePath) ? fs.statSync(logFilePath).mtime : null
+        },
+        errorLog: {
+          exists: fs.existsSync(errorLogFilePath),
+          size: fs.existsSync(errorLogFilePath) ? fs.statSync(errorLogFilePath).size : 0,
+          lastModified: fs.existsSync(errorLogFilePath) ? fs.statSync(errorLogFilePath).mtime : null
+        }
+      };
+
+      res.json({
+        success: true,
+        data: info
+      });
+    } catch (error) {
+      logger.error('Error getting log file info', { error: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Error retrieving log file info',
         error: error.message
       });
     }

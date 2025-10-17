@@ -16,7 +16,7 @@ let logger = require('morgan');
 const seeder = require('./seeder/seeder');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
-const { morganMiddleware, responseInterceptor, errorLogger } = require('./middleware/loggingMiddleware');
+const { morganMiddleware, requestLogger, responseInterceptor, errorLogger } = require('./middleware/loggingMiddleware');
 
 const app = express();
 app.use(
@@ -55,8 +55,9 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Use custom logging middleware instead of default morgan
 app.use(morganMiddleware);
-app.use(responseInterceptor);
 app.use(express.json());
+app.use(requestLogger);
+app.use(responseInterceptor);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static('uploads'));
 

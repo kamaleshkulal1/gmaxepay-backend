@@ -32,4 +32,13 @@ router.get('/logs/statistics', logController.getLogStatistics);
 // Delete old logs
 router.delete('/logs/cleanup', logController.deleteOldLogs);
 
+// Get tail logs (recent logs)
+router.get('/logs/tail', logController.getTailLogs);
+
+// Search logs by text
+router.get('/logs/search', logController.searchLogs);
+
+// Get log file info
+router.get('/logs/info', logController.getLogFileInfo);
+
 module.exports = router;
