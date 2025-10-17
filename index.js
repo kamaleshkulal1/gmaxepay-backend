@@ -110,16 +110,16 @@ function name() {
   console.log('Router is Working!');
 }
 if (process.env.NODE_ENV !== 'test') {
-  models.sequelize
-    .sync({ alter: true })
-    .then(() => {})
-    .finally(() => {
-      app.use(routes);
-      seeder();
-      name();
-    });
+  // models.sequelize
+  //   .sync({ alter: true })
+  //   .then(() => {})
+  //   .finally(() => {
+  //     app.use(routes);
+  //     // seeder();
+  //     name();
+  //   });
   // seeder();
-  // app.use(routes);
+  app.use(routes);
   httpServer.listen(process.env.PORT, () => {
     console.log(`gmaxepay is running on port ${process.env.PORT} successfully.`);
   });

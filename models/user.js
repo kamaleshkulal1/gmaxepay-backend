@@ -93,6 +93,14 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    is2faEnabledActive:{
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+    isResetPassword: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
     profileImage: {
       type: DataTypes.JSON,
       allowNull: true
@@ -223,6 +231,18 @@ const User = sequelize.define(
     loggedIn: {
       type: DataTypes.BOOLEAN
     },
+    loginAttempts: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    },
+    isLocked: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    lockUntil: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     ...reusableModelAttribute
   },
   {
@@ -257,34 +277,16 @@ const User = sequelize.define(
               rolePrefix = 'AD';
               break;
             case 3:
-              rolePrefix = 'SA';
+              rolePrefix = 'MDI';
               break;
             case 4:
-              rolePrefix = 'RT';
+              rolePrefix = 'DI';
               break;
             case 5:
-              rolePrefix = 'MD';
+              rolePrefix = 'RE';
               break;
             case 6:
-              rolePrefix = 'DT';
-              break;
-            case 7:
-              rolePrefix = 'AU';
-              break;
-            case 8:
-              rolePrefix = 'EM';
-              break;
-            case 10:
-              rolePrefix = 'SM';
-              break;
-            case 11:
-              rolePrefix = 'SE';
-              break;
-            case 12:
-              rolePrefix = 'CU';
-              break;
-            case 13:
-              rolePrefix = 'WLAD';
+              rolePrefix = 'EMP';
               break;
           }
 
@@ -369,6 +371,66 @@ User.prototype.isPasswordMatch = async function (password) {
 User.prototype.isPinMatch = async function (pin) {
   const user = this;
   return bcrypt.compare(pin, user.secureKey);
+};
+
+User.prototype.isAccountLocked = function () {
+  return !!(this.isLocked && this.lockUntil && this.lockUntil > Date.now());
+};
+
+
+User.prototype.incrementLoginAttempts = async function () {
+  // If we have a previous lock that has expired, restart at 1
+  if (this.lockUntil && this.lockUntil < Date.now()) {
+    return await this.update({
+      loginAttempts: 1,
+      lockUntil: null,
+      isLocked: false
+    });
+  }
+  
+  const updates = { loginAttempts: this.loginAttempts + 1 };
+  
+  // Lock account after 3 failed attempts (password or OTP) for 20 minutes
+  if (this.loginAttempts + 1 >= authConstantEnum.MAX_LOGIN_RETRY_LIMIT && !this.isLocked) {
+    updates.lockUntil = Date.now() + authConstantEnum.LOGIN_LOCK_TIME * 60 * 1000; // 20 minutes
+    updates.isLocked = true;
+  }
+  
+  return await this.update(updates);
+};
+
+User.prototype.resetLoginAttempts = async function () {
+  return await this.update({
+    loginAttempts: 0,
+    lockUntil: null,
+    isLocked: false
+  });
+};
+
+User.prototype.resetAllLockAttempts = async function () {
+  return await this.update({
+    loginAttempts: 0,
+    lockUntil: null,
+    isLocked: false
+  });
+};
+
+User.prototype.resetOtpAttempts = async function () {
+  return await this.update({
+    loginAttempts: 0,
+    lockUntil: null,
+    isLocked: false
+  });
+};
+
+User.prototype.incrementOtpAttempts = async function () {
+  // Use the same logic as incrementLoginAttempts since OTP and login attempts are unified
+  return await this.incrementLoginAttempts();
+};
+
+User.prototype.isOtpLocked = function () {
+  // Use the same logic as isAccountLocked since OTP and login attempts are unified
+  return this.isAccountLocked();
 };
 
 User.prototype.toJSON = function () {

@@ -37,6 +37,8 @@ morgan.token('req-body', (req) => {
     if (body.password) body.password = '[REDACTED]';
     if (body.token) body.token = '[REDACTED]';
     if (body.authorization) body.authorization = '[REDACTED]';
+    if (body.mobileOtp) body.mobileOtp = '[REDACTED]';
+    if (body.otp) body.otp = '[REDACTED]';
     return JSON.stringify(body);
   }
   return '';
