@@ -1089,6 +1089,93 @@ const resendOTP = async (mobileNo, companyId) => {
   }
 };
 
+const resendMobileOTP = async (token, companyId) => {
+  try {
+    if (!token) {
+      return {
+        flag: true,
+        msg: 'Data token is required!'
+      };
+    }
+
+    // Validate and decrypt dataToken with expiration check
+    const tokenValidation = validateAndDecryptDataToken(token);
+    if (!tokenValidation.isValid) {
+      return {
+        flag: true,
+        msg: tokenValidation.error
+      };
+    }
+
+    const userDetail = tokenValidation.userDetail;
+    const { mobileNo, userId, companyId: tokenCompanyId } = userDetail;
+
+    const where = {
+      id: userId,
+      isActive: true,
+      isDeleted: false,
+      mobileNo
+    };
+    
+    if (companyId !== null) {
+      where.companyId = companyId;
+    }
+    
+    const user = await dbService.findOne(model.user, where);
+    if (!user) {
+      return {
+        flag: true,
+        msg: 'User does not exist!'
+      };
+    }
+    
+    // Check if OTP attempts are locked
+    if (user.isOtpLocked()) {
+      return {
+        flag: true,
+        msg: `Cannot resend OTP. Account is locked due to multiple failed attempts. Please contact admin for assistance.`
+      };
+    }
+    
+    // Reset OTP attempts when resending OTP
+    await user.resetOtpAttempts();
+    
+    // Generate new OTP
+    const code = random.randomNumber(6);
+    const hashedCode = await bcrypt.hash(code, 10);
+    const expireOTP = moment().add(120, 'seconds').toISOString(); // 2 minutes
+    
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { otpMobile: hashedCode + '~' + expireOTP }
+    );
+    
+    // Send SMS
+    const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;
+    const smsSend = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
+    
+    if (smsSend) {
+      return {
+        flag: false,
+        msg: 'OTP sent successfully! Please enter the OTP.',
+        data: {
+          requiresOtpVerify: true,
+          token: token
+        }
+      };
+    } else {
+      return {
+        flag: true,
+        msg: 'Error during sending OTP!'
+      };
+    }
+  } catch (error) {
+    console.error('Error resending mobile OTP:', error);
+    throw new Error(error.message);
+  }
+};
+
 const logoutUser = async (id) => {
   try {
     const date = moment.utc();
@@ -1831,6 +1918,7 @@ module.exports = {
   loginWithOtp,
   verifyMobileOTP,
   resendOTP,
+  resendMobileOTP,
   generateToken,
   generateTempToken,
   logoutUser,
