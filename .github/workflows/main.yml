@@ -12,8 +12,8 @@ jobs:
       id: commit
       run: |
         echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
-        echo "message=$(echo '${{ github.event.head_commit.message }}' | sed 's/"/\\"/g')" >> $GITHUB_OUTPUT
-        echo "author=$(echo '${{ github.event.head_commit.author.name }}' | sed 's/"/\\"/g')" >> $GITHUB_OUTPUT
+        echo "message=${{ github.event.head_commit.message }}" >> $GITHUB_OUTPUT
+        echo "author=${{ github.event.head_commit.author.name }}" >> $GITHUB_OUTPUT
         echo "author_email=${{ github.event.head_commit.author.email }}" >> $GITHUB_OUTPUT
         echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
         echo "time=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
