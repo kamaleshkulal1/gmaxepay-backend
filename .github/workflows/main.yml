@@ -80,7 +80,7 @@ jobs:
             
             # Reset any local changes (except .env if it exists)
             echo "🧹 Cleaning working directory..."
-            git fetch origin dev
+            git fetch origin ${{ github.ref_name }}
             
             # Preserve .env file if it exists
             if [ -f .env ]; then
@@ -88,8 +88,8 @@ jobs:
               echo "💾 Backed up .env file"
             fi
             
-            # Hard reset to latest dev branch
-            git reset --hard origin/dev
+            # Hard reset to latest branch
+            git reset --hard origin/${{ github.ref_name }}
             
             # Restore .env file
             if [ -f /tmp/.env.backup ]; then
@@ -98,7 +98,7 @@ jobs:
               echo "✅ Restored .env file"
             fi
             
-            echo "✅ Updated to latest code from dev branch"
+            echo "✅ Updated to latest code from ${{ github.ref_name }} branch"
           fi
           
           cd $REPO_DIR
