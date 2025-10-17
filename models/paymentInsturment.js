@@ -16,9 +16,9 @@ let PaymentInsturment = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false
     },
-    type: {
-      type: DataTypes.STRING,
-      allowNull: false
+    isCardType: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
     },
     isActive: {
       type: DataTypes.BOOLEAN,

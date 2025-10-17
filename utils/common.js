@@ -334,6 +334,40 @@ const reusableAttributes = {
   addedBy: { type: DataTypes.INTEGER }
 };
 
+/**
+ * parseTimeToMilliseconds: converts time string to milliseconds
+ * @param {string} timeString : time string in format like '5m', '1h', '30s', '2d'
+ * @return {number} : time in milliseconds
+ */
+function parseTimeToMilliseconds(timeString) {
+  if (!timeString || typeof timeString !== 'string') {
+    return 5 * 60 * 1000; // Default to 5 minutes if invalid input
+  }
+
+  const timeRegex = /^(\d+)([smhd])$/i;
+  const match = timeString.match(timeRegex);
+  
+  if (!match) {
+    return 5 * 60 * 1000; // Default to 5 minutes if format is invalid
+  }
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+
+  switch (unit) {
+    case 's':
+      return value * 1000; // seconds to milliseconds
+    case 'm':
+      return value * 60 * 1000; // minutes to milliseconds
+    case 'h':
+      return value * 60 * 60 * 1000; // hours to milliseconds
+    case 'd':
+      return value * 24 * 60 * 60 * 1000; // days to milliseconds
+    default:
+      return 5 * 60 * 1000; // Default to 5 minutes for unknown units
+  }
+}
+
 module.exports = {
   randomNumber,
   replaceAll,
@@ -346,5 +380,6 @@ module.exports = {
   reusableTransactionAttribute,
   reusableAttributes,
   convertObjectToEnum,
-  convertObjectToString
+  convertObjectToString,
+  parseTimeToMilliseconds
 };

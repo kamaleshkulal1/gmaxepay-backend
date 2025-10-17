@@ -17,14 +17,6 @@ let Services = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
-   companyId: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: 'company',
-        key: 'id'
-      },
-      allowNull: true
-    },
     serviceName: {
       type: DataTypes.STRING,
       allowNull: false

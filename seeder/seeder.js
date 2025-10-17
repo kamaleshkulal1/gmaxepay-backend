@@ -5496,85 +5496,57 @@ async function servicePush() {
       const datas = [
         {
           isActive: true,
-          serviceName: 'Recharge'
+          serviceName: 'AEPS 1'
         },
         {
           isActive: true,
-          serviceName: 'AEPS'
+          serviceName: 'AEPS 2'
         },
         {
           isActive: true,
-          serviceName: 'Mini Bank'
+          serviceName: 'DMT 1'
         },
         {
           isActive: true,
-          serviceName: 'Money Transfer'
+          serviceName: 'DMT 2'
         },
         {
           isActive: true,
-          serviceName: 'Add Money'
+          serviceName: 'BBPS'
         },
         {
           isActive: true,
-          serviceName: 'Travel'
+          serviceName: 'Credit Card 1'
         },
         {
           isActive: true,
-          serviceName: 'Public E-Services'
+          serviceName: 'Credit Card 2'
         },
         {
           isActive: true,
-          serviceName: 'Package'
+          serviceName: 'CMS 1'
         },
         {
           isActive: true,
-          serviceName: 'PSA Service'
+          serviceName: 'CMS 2'
         },
         {
           isActive: true,
-          serviceName: 'Shopping'
+          serviceName: 'MATM'
         },
         {
           isActive: true,
-          serviceName: 'DTH Subscription'
+          serviceName: 'IndoNepal'
         },
         {
           isActive: true,
-          serviceName: 'Affiliate shopping'
+          serviceName: 'AEPS Cash Withdrawal'
         },
-        {
+       {
           isActive: true,
-          serviceName: 'Xpress Payout'
-        },
-        {
-          isActive: true,
-          serviceName: 'Retailer Outlet'
-        },
-        {
-          isActive: true,
-          serviceName: 'Service Request'
-        },
-        {
-          isActive: true,
-          serviceName: 'Bidding'
-        },
-        {
-          isActive: true,
-          serviceName: 'Vehicle Insurance'
-        },
-        {
-          isActive: true,
-          serviceName: 'Bill Payment'
-        },
-        {
-          isActive: true,
-          serviceName: 'UPI Payment'
-        },
-        {
-          isActive: true,
-          serviceName: 'Issuance Service'
+          serviceName: 'Issuance'
         }
-      ];
+      ]
       await dbService.createMany(model.services, datas);
     }
   } catch (error) {
@@ -5585,7 +5557,7 @@ async function OperatorType() {
   try {
     let existingDoc = await dbService.findOne(model.operatorType, { id: 1 });
     if (!existingDoc) {
-      let datas = [{ name: 'PayIn' }, { name: 'PayOut' },{name:'Prepaid'},{name:'DTH'}];
+      let datas = [{ name: 'PayIn' }, { name: 'PayOut' },{name:'Prepaid'},{name:'DTH 1'},{name:'DTH 2'},{name:'UPI DMT'}, {name:'BBPS'}, {name:'Credit Card 1'}, {name:'Credit Card 2'}, {name:'CMS 1'}, {name:'CMS 2'}, {name:'MATM'}, {name:'IndoNepal'}, {name:'AEPS Cash Withdrawal'}, {name:'Insurance'}];
 
       await dbService.createMany(model.operatorType, datas);
     }
@@ -13528,94 +13500,60 @@ async function services() {
     let existingDoc = await dbService.findOne(model.services, { id: 1 });
     if (!existingDoc) {
       const initialStateData = [        
-        {
-          serviceName: 'Recharge',
-          isActive: true
-        },
-        {
-          serviceName: 'AEPS',
-          isActive: true
-        },
-        {
-          serviceName: 'Mini Bank',
-          isActive: true
-        },
-        {
-          serviceName: 'Money Transfer',
-          isActive: true
-        },
-        {
-          serviceName: 'Add Money',
-          isActive: true
-        },
-        {
-          serviceName: 'Travel',
-          isActive: true
-        },
-        {
-          serviceName: 'Public E-Services',
-          isActive: true
-        },
-        {
-          serviceName: 'Package',
-          isActive: true
-        },
-        {
-          serviceName: 'PSA Service',
-          isActive: true
-        },
-        {
-          serviceName: 'Shopping',
-          isActive: true
-        },
-        {
-          serviceName: 'DTH Subscription',
-          isActive: true
-        },
-        {
-          serviceName: 'Affiliate shopping',
-          isActive: true
-        },
-        {
-          serviceName: 'Xpress Payout',
-          isActive: true
-        },
-        {
-          serviceName: 'Retailer Outlet',
-          isActive: true
-        },
-        {
-          serviceName: 'Service Request',
-          isActive: true
-        },
-        {
-          serviceName: 'Bidding',
-          isActive: true
-        },
-        {
-          serviceName: 'Vehicle Insurance',
-          isActive: true
-        },
-        {
-          serviceName: 'Bill Payment',
-          isActive: true
-        },
-        {
-          serviceName: 'UPI Payment',
-          isActive: true
-        },
-        {
-          serviceName: 'Issuance Service',
-          isActive: true
-        },
-        {
-          serviceName: 'PayIn',
-          isActive: true
-        },
+       
           {
-          serviceName: 'PayOut',
-          isActive: true
-        }
+            isActive: true,
+            serviceName: 'AEPS 1'
+          },
+          {
+            isActive: true,
+            serviceName: 'AEPS 2'
+          },
+          {
+            isActive: true,
+            serviceName: 'DMT 1'
+          },
+          {
+            isActive: true,
+            serviceName: 'DMT 2'
+          },
+          {
+            isActive: true,
+            serviceName: 'BBPS'
+          },
+          {
+            isActive: true,
+            serviceName: 'Credit Card 1'
+          },
+          {
+            isActive: true,
+            serviceName: 'Credit Card 2'
+          },
+          {
+            isActive: true,
+            serviceName: 'CMS 1'
+          },
+          {
+            isActive: true,
+            serviceName: 'CMS 2'
+          },
+          {
+            isActive: true,
+            serviceName: 'MATM'
+          },
+          {
+            isActive: true,
+            serviceName: 'IndoNepal'
+          },
+          {
+            isActive: true,
+            serviceName: 'AEPS Cash Withdrawal'
+          },
+         {
+            isActive: true,
+            serviceName: 'Issuance'
+          }
+        
       ];
 
       await dbService.createMany(model.services, initialStateData);
@@ -13639,7 +13577,7 @@ async function cardType() {
 
       await dbService.createMany(model.cardType, initialStateData);
     }
-    console.log('Card type Inserted');
+    console.log('Card type Inserted');x
   } catch (error) {
     console.log('Failed to update card type due to:', error.message);
   }
@@ -13734,10 +13672,11 @@ async function seedPgCommercials() {
       { select: ['id', 'name'] }
     );
 
-    const roleTypes = [6, 4, 2];
+    const roleTypes = [5,4,3,2];
     const roleNames = {
-      6: 'DI',
-      4: 'RE',
+      5: 'RE',
+      4: 'DI',
+      3: 'MDI',
       2: 'AD'
     };
 
@@ -13813,10 +13752,11 @@ async function seedRangeCharges() {
       { select: ['id', 'operatorName', 'operatorType'] }
     );
 
-    const roleTypes = [6, 4, 2];
+    const roleTypes = [5,4,3,2];
     const roleNames = {
-      6: 'DI',
-      4: 'RE',
+      5: 'RE',
+      4: 'DI',
+      3: 'MDI',
       2: 'AD'
     };
 
@@ -13875,10 +13815,11 @@ async function seedRangeComm() {
       { select: ['id', 'operatorName', 'operatorType'] }
     );
 
-    const roleTypes = [6, 4, 2];
+    const roleTypes = [5,4,3,2];
     const roleNames = {
-      6: 'DI',
-      4: 'RE',
+      5: 'RE',
+      4: 'DI',
+      3: 'MDI',
       2: 'AD'
     };
 
@@ -13928,26 +13869,70 @@ async function seedRangeComm() {
 }
 
 
+
+
+async function seedUsers() {
+  try {
+    const User = require('../models/user');
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({
+      where: { email: 'gmaxepay@gmail.com' }
+    });
+
+    if (!existingUser) {
+      const userData = {
+        name: 'Gmaxepay Admin',
+        email: 'gmaxepay@gmail.com',
+        mobileNo: '9071138349',
+        password: '12345678',
+        userRole: 1, // Super Admin
+        kycStatus: 1, // Approved
+        userType: 1, // Admin type
+        isActive: true,
+        isDeleted: false,
+        mobileVerify: true,
+        emailVerify: true,
+        aadharVerify: true,
+        panVerify: true,
+        imageVerify: true,
+        isLoginOtp: false,
+        signupStep: 4,
+        tokenVersion: 0,
+        loggedIn: false
+      };
+
+      await User.create(userData);
+      console.log('User seeded successfully');
+    } else {
+      console.log('User already exists');
+    }
+  } catch (error) {
+    console.error('Error seeding user:', error);
+  }
+}
+
 async function seedData() {
   
    await roles();
   //  await permissions();
   //  await insertPermissions();
   //  await rolePermission();
-  //  await KycDocumentSettings();
-  //  await servicePush();
-  //  await OperatorType();
-  //  await state();
-  //   await gstState();
+   await KycDocumentSettings();
+   await servicePush();
+   await OperatorType();
+   await state();
+    await gstState();
     await bank();
     await services();
    
   
-  //  await cardType();
-  //  await paymentInsturment();
-  //  await seedPgCommercials();
-  //  await seedRangeComm();
-  //  await seedRangeCharges();
+   await cardType();
+   await paymentInsturment();
+   await seedPgCommercials();
+   await seedRangeComm();
+   await seedRangeCharges();
+   await seedUsers();
    
 }
 module.exports = seedData;

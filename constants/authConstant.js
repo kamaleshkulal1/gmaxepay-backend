@@ -7,11 +7,13 @@ const JWT = {
   JWT_TEMP_SECRET: process.env.JWT_TEMP_SECRET || 'default_jwt_temp_secret_key',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'default_jwt_refresh_secret_key',
   EXPIRES_IN: 30,
-  OTP_EXPIRES_IN: 120,
+  OTP_EXPIRES_IN: 120, // 2 minutes in seconds
   JWT_REFRESH_EXPIRY: '7d',
   ALGORITHM: process.env.JWT_ALGORITHM || 'HS256',
   ISSUER: process.env.JWT_ISSUER || 'gmaxepay',
-  AUDIENCE: process.env.JWT_AUDIENCE || 'gmaxepay_users'
+  AUDIENCE: process.env.JWT_AUDIENCE || 'gmaxepay_users',
+  TOKEN_ENCRYPT_EXPIRY: 300, // 5 minutes in seconds for token encryption expiry
+  SIGNATURE_TOKEN_EXPIRY: process.env.SIGNATURE_TOKEN_EXPIRY || '10m' // 10 minutes for signature token expiry
 };
 
 const USER_TYPES = {
@@ -78,11 +80,9 @@ let LOGIN_ACCESS = {
   [EMPLOYEE_TYPES.CUSTOMER_SUPPORT]: [PLATFORM.CUSTOMER_SUPPORT]
 };
 
-const MAX_LOGIN_RETRY_LIMIT = 3;
+const MAX_LOGIN_RETRY_LIMIT = 3; // Unified retry limit for both password and OTP attempts
 const MAX_RESEND_OTP_RETRY_LIMIT = 3;
-const MAX_LOGIN_OTP_RETRY_LIMIT = 3;
-const LOGIN_REACTIVE_TIME = 20;
-const OTP_REACTIVE_TIME = 1;
+const LOGIN_LOCK_TIME = 20; // Unified lock time in minutes for both password and OTP failures
 
 const FORGOT_PASSWORD_WITH = {
   LINK: {
@@ -112,12 +112,10 @@ module.exports = {
   EMPLOYEE_TYPES,
   PLATFORM,
   MAX_LOGIN_RETRY_LIMIT,
-  LOGIN_REACTIVE_TIME,
+  LOGIN_LOCK_TIME,
   FORGOT_PASSWORD_WITH,
   LOGIN_ACCESS,
-  OTP_REACTIVE_TIME,
   MAX_RESEND_OTP_RETRY_LIMIT,
-  MAX_LOGIN_OTP_RETRY_LIMIT,
   KYC_STATUS,
   TEMPLATE_TYPE,
   USERS,

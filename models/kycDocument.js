@@ -11,14 +11,6 @@ let KycDocumentSetting = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
-    companyId: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: 'company',
-        key: 'id'
-      },
-      allowNull: true
-    },
     docName: {
       allowNull: false,
       type: DataTypes.STRING,

@@ -51,6 +51,7 @@ db.rangeCommission = require('./rangeCommission');
 db.bank = require('./bank');
 db.customerBank = require('./customerBank');
 db.cardType = require('./cardType');
+db.paymentInstrument = require('./paymentInsturment');
 
 // Company & KYC Models
 db.company = require('./company');
@@ -62,15 +63,14 @@ db.ipListType = require('./ipListType');
 
 // Commented out models that don't exist yet
 // db.outlet = require('./outlet');
-// db.news = require('./news');
+db.news = require('./news');
 // db.customer = require('./customer');
 // db.bbpsOperatorCategory = require('./bbpsOperatorCategory');
 // db.bbpsOperator = require('./bbpsOperator');
-// db.eService = require('./eServiceReport');
-// db.eServices = require('./EService');
+db.eService = require('./eServiceReport');
+db.eServices = require('./EService');
 // db.signUpResponses = require('./signUpResponses');
 // db.paymentHistory = require('./paymentHistory');
-// db.paymentInstrument = require('./paymentInsturment');
 // db.paymentLogs = require('./paymentLogs');
 db.notification = require('./notification');
 // db.rechargeHistory = require('./rechargeHistory');
@@ -109,7 +109,10 @@ db.user.hasMany(db.user, {
  *    targetKey: 'roleID',
  *  });
  */
-
+db.rolePermission.hasMany(db.role, {
+  foreignKey: 'id',
+  targetKey: 'roleId'
+});
 db.role.hasMany(db.rolePermission, { foreignKey: 'roleId' });
 db.permission.hasMany(db.rolePermission, { foreignKey: 'permissionId' });
 

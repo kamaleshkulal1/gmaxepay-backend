@@ -24,6 +24,6 @@ const router = express.Router();
 
 // Log routes
 router.use('/apilogger', require('./logRoutes'));
-
+router.use('/auth', require('./auth/index'));
 
 module.exports = router;

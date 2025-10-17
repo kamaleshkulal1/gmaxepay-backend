@@ -1,0 +1,207 @@
+const { slab, commSlab, role } = require('../../../models');
+const model = require('../../../models');
+const dbService = require('../../../utils/dbService');
+const authService = require('../../../services/auth');
+const { Op } = require('sequelize');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { JWT, TYPES } = require('../../../constants/authConstant');
+
+const login = async (req, res) => {
+    try {
+        const { mobileNo, password, latitude, longitude, userType } = req.body;
+        const companyId = req.headers['company-id'] || null;
+
+        if (!mobileNo) {
+            return res.failure({ message: 'Mobile number is required!' });
+        }
+        if (!password) {
+            return res.failure({ message: 'Password is required!' });
+        }
+
+        if (password.length < 8) {
+            return res.failure({ message: 'Password must be at least 8 characters long!' });
+        }
+
+        if (!latitude || !longitude) {
+            return res.failure({ message: 'Location coordinates are required!' });
+        }
+
+        if (!userType) {
+            return res.failure({ message: 'User type is required!' });
+        }
+
+        // Validate userType against valid types
+        const validUserTypes = Object.values(TYPES);
+        if (!validUserTypes.includes(parseInt(userType))) {
+            return res.failure({ 
+                message: 'Invalid user type. Valid types are: ' + validUserTypes.join(', ') 
+            });
+        }
+
+        const result = await authService.loginUser(
+            mobileNo,
+            password,
+            latitude,
+            longitude,
+            userType,
+            req,
+            companyId
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const verifyOTP = async (req, res) => {
+    try {
+        const { otp } = req.body;
+        const companyId = req.headers['company-id'] || null;
+        const token = req.headers['token'];
+
+        if (!otp) {
+            return res.failure({ message: 'OTP is required!' });
+        }
+
+        if (!token) {
+            return res.failure({ message: 'Data token is required!' });
+        }
+        
+        const result = await authService.verifyMobileOTP(
+            token,
+            otp,
+            companyId
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const resetPassword = async (req, res) => {
+    try {
+        const { newPassword, confirmPassword } = req.body;
+        const companyId = req.headers['company-id'] || null;
+        const token = req.headers['token'];
+
+        if (!newPassword || !confirmPassword) {
+            return res.failure({ message: 'New password and confirm password are required!' });
+        }
+
+        if (newPassword.length < 8) {
+            return res.failure({ message: 'New password must be at least 8 characters long!' });
+        }
+
+        if (!token) {
+            return res.failure({ message: 'Data token is required!' });
+        }
+        const result = await authService.resetPassword(
+            token,
+            newPassword,
+            confirmPassword,
+            companyId
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const handle2FA = async (req, res) => {
+    try {
+        const { otp } = req.body;
+        const companyId = req.headers['company-id'] || null;
+        const dataToken = req.headers['data-token'];
+
+        if (!otp) {
+            return res.badRequest({ message: '2FA code is required!' });
+        }
+
+        if (!dataToken) {
+            return res.badRequest({ message: 'Data token is required!' });
+        }
+        
+        const result = await authService.handle2FA(
+            dataToken,
+            otp,
+            companyId
+        );
+
+        if (result.flag) {
+            return res.badRequest({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const refreshAccessToken = async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+
+        if (!refreshToken) {
+            return res.badRequest({ message: 'Refresh token is required!' });
+        }
+
+        const result = await authService.refreshAccessToken(refreshToken);
+        
+        if (result.flag) {
+            return res.unauthorized({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+module.exports = {
+    login,
+    verifyOTP,
+    resetPassword,
+    handle2FA,
+    refreshAccessToken
+};

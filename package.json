@@ -13,20 +13,26 @@
   "type": "commonjs",
   "dependencies": {
     "aws-sdk": "^2.1692.0",
+    "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
+    "express-slow-down": "^3.0.0",
     "helmet": "^8.1.0",
     "i": "^0.3.7",
+    "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "passport": "^0.7.0",
     "pg": "^8.16.3",
+    "qrcode": "^1.5.4",
+    "random-string-alphanumeric-generator": "^0.12.2",
     "sequelize": "^6.37.7",
     "sequelize-paginate": "^1.1.6",
     "sequelize-transforms": "^2.0.0",
+    "speakeasy": "^2.0.0",
     "winston": "^3.18.3"
   }
 }
