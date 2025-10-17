@@ -101,16 +101,53 @@ jobs:
           pm2 list
           
           echo "🏥 Health check..."
-          echo "⏳ Attempting health check..."
-          if curl -f -s "http://localhost:8005/health" > /dev/null; then
+          echo "⏳ Attempting health check with retries..."
+          
+          # Health check with retries and proper status validation
+          HEALTH_CHECK_SUCCESS=false
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Health check attempt $i/$MAX_RETRIES..."
+            
+            # Make health check request and capture both status code and response
+            HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:8005/health")
+            HTTP_STATUS=$(echo "$HEALTH_RESPONSE" | tail -n1)
+            RESPONSE_BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
+            
+            echo "📊 HTTP Status: $HTTP_STATUS"
+            echo "📄 Response: $RESPONSE_BODY"
+            
+            # Check if HTTP status is 200 and JSON status is 'ok'
+            if [ "$HTTP_STATUS" = "200" ]; then
+              # Check if JSON response contains status: 'ok'
+              if echo "$RESPONSE_BODY" | grep -q '"status":"ok"'; then
+                echo "✅ Health check successful! Status: OK"
+                HEALTH_CHECK_SUCCESS=true
+                break
+              else
+                echo "⚠️ HTTP 200 but JSON status not 'ok': $RESPONSE_BODY"
+              fi
+            else
+              echo "❌ HTTP status not 200: $HTTP_STATUS"
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⏳ Waiting $RETRY_DELAY seconds before retry..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          if [ "$HEALTH_CHECK_SUCCESS" = "true" ]; then
             echo "✅ Deployment successful!"
             exit 0
           else
-            echo "❌ Health check failed immediately"
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
             echo "📋 PM2 Status:"
             pm2 list
             echo "📋 Recent Logs:"
-            pm2 logs gmaxepay-backend --lines 10
+            pm2 logs gmaxepay-backend --lines 20
             echo "📋 Environment Check:"
             echo "PORT: $PORT"
             echo "NODE_ENV: $NODE_ENV"

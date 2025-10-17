@@ -71,7 +71,27 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-   res.json({status: 'ok', message: 'gmaxepay is running beautifully'})
+  try {
+    // Basic health checks
+    const healthStatus = {
+      status: 'ok',
+      message: 'gmaxepay is running beautifully',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development'
+    };
+    
+    // Return 200 OK status
+    res.status(200).json(healthStatus);
+  } catch (error) {
+    // Return 500 Internal Server Error if something goes wrong
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Test endpoint for IP tracking
