@@ -173,6 +173,34 @@ const handle2FA = async (req, res) => {
     }
 };
 
+const resendOTP = async(req,res)=>{
+    try{
+        const companyId = req.headers['company-id'] || null;
+        const token = req.headers['token'];
+
+        if (!token) {
+            return res.failure({ message: 'Data token is required!' });
+        }
+        
+        const result = await authService.resendMobileOTP(
+            token,
+            companyId
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+        
+    }catch(error){
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+}
 const refreshAccessToken = async (req, res) => {
     try {
         const { refreshToken } = req.body;
@@ -203,5 +231,6 @@ module.exports = {
     verifyOTP,
     resetPassword,
     handle2FA,
-    refreshAccessToken
+    refreshAccessToken,
+    resendOTP
 };
