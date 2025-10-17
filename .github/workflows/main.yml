@@ -41,8 +41,8 @@ jobs:
               "color": "good",
               "fields": [
                 {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
-                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
                 {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
               ]
             }]
@@ -167,10 +167,10 @@ jobs:
               "color": "good",
               "fields": [
                 {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
-                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
-                {"title": "URL", "value": "http://${{ secrets.EC2_HOST }}", "short": false},
-                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
+                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
+                {"title": "URL", "value": "http://${{ secrets.EC2_HOST }}", "short": false}
               ]
             }]
           }
@@ -189,10 +189,10 @@ jobs:
               "color": "warning",
               "fields": [
                 {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
-                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
-                {"title": "Error", "value": "Application deployed but health check failed", "short": false},
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
                 {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
+                {"title": "Error", "value": "Application deployed but health check failed", "short": false},
                 {"title": "Action", "value": "Check application logs and database connection", "short": false}
               ]
             }]
@@ -212,8 +212,8 @@ jobs:
               "color": "danger",
               "fields": [
                 {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} (${{ steps.commit.outputs.author_email }})", "short": true},
-                {"title": "Message", "value": "${{ steps.commit.outputs.message }}", "short": false},
+                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
                 {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
                 {"title": "Action", "value": "Check GitHub Actions logs for details", "short": false}
               ]
