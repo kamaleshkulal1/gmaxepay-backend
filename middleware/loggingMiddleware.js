@@ -288,7 +288,19 @@ const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 
 console.log = function(...args) {
-  logger.logConsole('info', args.join(' '));
+  const message = args.join(' ');
+  
+  // Check if this is a Morgan log and extract IP
+  let ip = 'unknown';
+  if (message.includes('Morgan:')) {
+    // Extract IP from Morgan log format: "Morgan: IP - - [date] ..."
+    const ipMatch = message.match(/Morgan:\s+([^\s-]+)/);
+    if (ipMatch) {
+      ip = ipMatch[1];
+    }
+  }
+  
+  logger.logConsole('info', message, { ip });
   originalConsoleLog.apply(console, args);
 };
 

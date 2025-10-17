@@ -373,11 +373,12 @@ logger.logAPIError = (data) => {
   });
 };
 
-logger.logConsole = (level, message) => {
+logger.logConsole = (level, message, data = {}) => {
   logger.log(level, 'Console Log', {
     type: 'console_log',
     level: level,
     message: redactSensitiveData(message),
+    ip: data.ip || 'unknown',
     timestamp: new Date().toISOString()
   });
 };
