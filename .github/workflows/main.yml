@@ -82,6 +82,10 @@ jobs:
             echo "🧹 Cleaning working directory..."
             git fetch origin ${{ github.ref_name }}
             
+            # Force clean the working directory
+            git clean -fd
+            git reset --hard HEAD
+            
             # Preserve .env file if it exists
             if [ -f .env ]; then
               cp .env /tmp/.env.backup
