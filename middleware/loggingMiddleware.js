@@ -1,7 +1,7 @@
 const morgan = require('morgan');
 const logger = require('../config/fileLogger');
 
-// Enhanced IP detection function
+// Enhanced IP detection function with IPv4/IPv6 support
 function getClientIP(req) {
   // Priority order: forwarded headers first, then direct connection
   const ipSources = [
@@ -26,17 +26,31 @@ function getClientIP(req) {
     req.connection?.socket?.remoteAddress
   ];
   
-  // Filter out localhost and invalid IPs
+  // Filter and validate IPs
   const validIPs = ipSources.filter(ip => {
     if (!ip || ip === '') return false;
+    
     // Skip localhost addresses
     if (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1') return false;
-    // Skip private network ranges (but allow them in production)
-    if (process.env.NODE_ENV === 'development' && 
-        (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.'))) {
-      return false;
+    
+    // Skip private network ranges in development
+    if (process.env.NODE_ENV === 'development') {
+      // IPv4 private ranges
+      if (ip.match(/^192\.168\./) || ip.match(/^10\./) || ip.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)) {
+        return false;
+      }
+      // IPv6 private ranges
+      if (ip.match(/^fe80:/) || ip.match(/^fc00:/) || ip.match(/^fd00:/)) {
+        return false;
+      }
     }
-    return true;
+    
+    // Basic IP validation (IPv4 or IPv6)
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+    const ipv6CompressedRegex = /^([0-9a-fA-F]{1,4}:)*::([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}$/;
+    
+    return ipv4Regex.test(ip) || ipv6Regex.test(ip) || ipv6CompressedRegex.test(ip);
   });
   
   // Return first valid IP or fallback to req.ip

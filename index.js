@@ -96,6 +96,19 @@ app.get('/health', (req, res) => {
   }
 });
 
+// Helper function to detect IP type
+function detectIPType(ip) {
+  if (!ip || ip === 'unknown') return 'unknown';
+  
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+  const ipv6CompressedRegex = /^([0-9a-fA-F]{1,4}:)*::([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}$/;
+  
+  if (ipv4Regex.test(ip)) return 'IPv4';
+  if (ipv6Regex.test(ip) || ipv6CompressedRegex.test(ip)) return 'IPv6';
+  return 'unknown';
+}
+
 // Test endpoint for IP tracking
 app.get('/test-ip', (req, res) => {
   const ipSources = {
@@ -116,16 +129,25 @@ app.get('/test-ip', (req, res) => {
   // Debug: log all headers
   console.log('All headers received:', req.headers);
   console.log('IP sources:', ipSources);
+  console.log('CF-Connecting-IP:', req.headers['cf-connecting-ip']);
+  console.log('CF-IPCountry:', req.headers['cf-ipcountry']);
+  console.log('CF-Ray:', req.headers['cf-ray']);
   
   res.json({
     message: 'IP tracking test',
     detectedIP: req.ip,
+    detectedIPType: detectIPType(req.ip),
     allIPSources: ipSources,
     userAgent: req.headers['user-agent'],
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
     trustProxy: app.get('trust proxy'),
-    allHeaders: req.headers
+    allHeaders: req.headers,
+    cloudflareHeaders: {
+      'cf-connecting-ip': req.headers['cf-connecting-ip'],
+      'cf-ipcountry': req.headers['cf-ipcountry'],
+      'cf-ray': req.headers['cf-ray']
+    }
   });
 });
 // Error handling middleware
