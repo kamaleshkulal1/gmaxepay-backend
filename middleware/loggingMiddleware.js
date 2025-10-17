@@ -1,32 +1,51 @@
 const morgan = require('morgan');
 const logger = require('../config/fileLogger');
 
-// Custom Morgan token for IP address with comprehensive detection
-morgan.token('client-ip', (req) => {
-  // Try multiple methods to get the real client IP
+// Enhanced IP detection function
+function getClientIP(req) {
+  // Priority order: forwarded headers first, then direct connection
   const ipSources = [
-    req.ip,                                    // Express.js req.ip
-    req.connection?.remoteAddress,            // Direct connection
-    req.socket?.remoteAddress,                 // Socket connection
-    req.connection?.socket?.remoteAddress,     // Socket within connection
-    req.headers['x-forwarded-for']?.split(',')[0]?.trim(),  // Load balancer/proxy
-    req.headers['x-real-ip'],                  // Nginx proxy
-    req.headers['x-client-ip'],                // Custom header
-    req.headers['cf-connecting-ip'],           // Cloudflare
-    req.headers['x-cluster-client-ip'],        // Cluster
-    req.headers['x-forwarded'],                // Forwarded header
-    req.headers['forwarded-for'],              // Forwarded for
-    req.headers['forwarded']                   // Forwarded
+    // Cloudflare and CDN headers (highest priority)
+    req.headers['cf-connecting-ip'],
+    req.headers['x-real-ip'],
+    req.headers['x-client-ip'],
+    
+    // Load balancer/proxy headers
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim(),
+    req.headers['x-cluster-client-ip'],
+    req.headers['x-forwarded'],
+    req.headers['forwarded-for'],
+    req.headers['forwarded'],
+    
+    // Express.js req.ip (should work with trust proxy)
+    req.ip,
+    
+    // Direct connection (fallback)
+    req.connection?.remoteAddress,
+    req.socket?.remoteAddress,
+    req.connection?.socket?.remoteAddress
   ];
   
-  // Find the first valid IP address
-  for (const ip of ipSources) {
-    if (ip && ip !== '::1' && ip !== '127.0.0.1' && ip !== '::ffff:127.0.0.1') {
-      return ip;
+  // Filter out localhost and invalid IPs
+  const validIPs = ipSources.filter(ip => {
+    if (!ip || ip === '') return false;
+    // Skip localhost addresses
+    if (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1') return false;
+    // Skip private network ranges (but allow them in production)
+    if (process.env.NODE_ENV === 'development' && 
+        (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.'))) {
+      return false;
     }
-  }
+    return true;
+  });
   
-  return 'unknown';
+  // Return first valid IP or fallback to req.ip
+  return validIPs[0] || req.ip || 'unknown';
+}
+
+// Custom Morgan token for IP address with comprehensive detection
+morgan.token('client-ip', (req) => {
+  return getClientIP(req);
 });
 
 // Function to redact sensitive data from any object
@@ -184,32 +203,6 @@ function parseMorganLog(message) {
       responseBody: ''
     };
   }
-}
-
-// Enhanced IP detection function
-function getClientIP(req) {
-  const ipSources = [
-    req.ip,
-    req.connection?.remoteAddress,
-    req.socket?.remoteAddress,
-    req.connection?.socket?.remoteAddress,
-    req.headers['x-forwarded-for']?.split(',')[0]?.trim(),
-    req.headers['x-real-ip'],
-    req.headers['x-client-ip'],
-    req.headers['cf-connecting-ip'],
-    req.headers['x-cluster-client-ip'],
-    req.headers['x-forwarded'],
-    req.headers['forwarded-for'],
-    req.headers['forwarded']
-  ];
-  
-  for (const ip of ipSources) {
-    if (ip && ip !== '') {
-      return ip;
-    }
-  }
-  
-  return 'unknown';
 }
 
 // Response interceptor middleware

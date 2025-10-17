@@ -113,12 +113,19 @@ app.get('/test-ip', (req, res) => {
     'forwarded': req.headers['forwarded']
   };
   
+  // Debug: log all headers
+  console.log('All headers received:', req.headers);
+  console.log('IP sources:', ipSources);
+  
   res.json({
     message: 'IP tracking test',
     detectedIP: req.ip,
     allIPSources: ipSources,
     userAgent: req.headers['user-agent'],
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    trustProxy: app.get('trust proxy'),
+    allHeaders: req.headers
   });
 });
 // Error handling middleware
