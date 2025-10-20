@@ -1,5 +1,5 @@
-const { slab, commSlab, role } = require('../../../models');
-const model = require('../../../models');
+const { slab, commSlab, role } = require('../../../models/index');
+const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const authService = require('../../../services/auth');
 const { Op } = require('sequelize');
@@ -140,7 +140,7 @@ const resetPassword = async (req, res) => {
 
 const handle2FA = async (req, res) => {
     try {
-        const { otp } = req.body;
+        const { otp, latitude, longitude, ipAddress } = req.body;
         const companyId = req.headers['company-id'] || null;
         const dataToken = req.headers['data-token'];
 
@@ -155,7 +155,10 @@ const handle2FA = async (req, res) => {
         const result = await authService.handle2FA(
             dataToken,
             otp,
-            companyId
+            companyId,
+            latitude,
+            longitude,
+            ipAddress
         );
 
         if (result.flag) {
@@ -212,12 +215,36 @@ const refreshAccessToken = async (req, res) => {
         const result = await authService.refreshAccessToken(refreshToken);
         
         if (result.flag) {
-            return res.unauthorized({ message: result.msg });
+            return res.unAuthorized({ message: result.msg });
         }
 
         return res.success({ 
             message: result.msg,
             data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const logout = async (req, res) => {
+    try {
+        const userId = req.user?.id; // User is attached to req by authentication middleware
+        
+        if (!userId) {
+            return res.unAuthorized({ message: 'User not authenticated!' });
+        }
+
+        const result = await authService.logoutUser(userId);
+
+        if (!result) {
+            return res.failure({ message: 'Logout failed!' });
+        }
+
+        return res.success({ 
+            message: 'Logged out successfully!'
         });
 
     } catch (error) {
@@ -232,5 +259,6 @@ module.exports = {
     resetPassword,
     handle2FA,
     refreshAccessToken,
-    resendOTP
+    resendOTP,
+    logout
 };

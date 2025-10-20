@@ -5,25 +5,15 @@
 
 const express = require('express');
 const router = express.Router();
-/*
- * const rateLimit = require('express-rate-limit');
- * const rateLimiter = rateLimit({
- *   windowMs: 10 * 60 * 1000,
- *   max: process.env.TOTAL_RATELIMIT,
- *   message: {
- *     status: 429,
- *     message: 'Rate limit exceeded, please try again after 10 minutes'
- *   }
- * });
- */
+const { authLimit } = require('../middleware/ratelimiter');
 
-// router.use(rateLimiter);
-
-// router.use(require('./MainRoute/v1/index'));
-// router.use(require('./retailer/v1/index'));
-
-// Log routes
+// Log routes (no rate limiting)
 router.use('/apilogger', require('./logRoutes'));
-router.use('/auth', require('./auth/index'));
+
+// Auth routes with rate limiting
+router.use('/auth', authLimit, require('./auth/index'));
+
+// Admin routes (protected with authentication middleware)
+router.use('/admin', require('./admin/index'));
 
 module.exports = router;

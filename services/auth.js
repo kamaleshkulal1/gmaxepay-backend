@@ -449,15 +449,19 @@ const loginUser = async (
       }
 
       // If 2FA is not active, proceed with direct login
-      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-      
-      // Update user login status
+      // Update user login status FIRST
       const getTokenVersion = getRandomNumber();
       await dbService.update(
         model.user,
         { id: user.id },
         { tokenVersion: getTokenVersion, loggedIn: true }
       );
+      
+      // Update user object with new tokenVersion
+      user.tokenVersion = getTokenVersion;
+      
+      // Generate tokens with correct tokenVersion
+      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
 
       return {
         flag: false,
@@ -679,15 +683,19 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
         }
 
         // If 2FA is not active, proceed with direct login
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-        
-        // Update user login status
+        // Update user login status FIRST
         const getTokenVersion = getRandomNumber();
         await dbService.update(
           model.user,
           { id: user.id },
           { tokenVersion: getTokenVersion, loggedIn: true }
         );
+        
+        // Update user object with new tokenVersion
+        user.tokenVersion = getTokenVersion;
+        
+        // Generate tokens with correct tokenVersion
+        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
 
         return {
           flag: false,
@@ -1453,6 +1461,7 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
 
 const verify2FA = async (dataToken, otp, companyId) => {
   try {
+    const {latitude, longitude, ipAddress} = req.body;
     if (!dataToken || !otp) {
       return {
         flag: true,
@@ -1495,50 +1504,79 @@ const verify2FA = async (dataToken, otp, companyId) => {
       };
     }
 
-    // In development environment, skip OTP verification
-    if (process.env.NODE_ENV === 'development') {
-      // Generate final tokens after 2FA verification
-      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-      
-      // Update user login status
-      const getTokenVersion = getRandomNumber();
-      await dbService.update(
-        model.user,
-        { id: user.id },
-        { tokenVersion: getTokenVersion, loggedIn: true }
-      );
+      // In development environment, skip OTP verification
+      if (process.env.NODE_ENV === 'development') {
+        // Update user login status FIRST
+        const getTokenVersion = getRandomNumber();
+        await dbService.update(
+          model.user,
+          { id: user.id },
+          { tokenVersion: getTokenVersion, loggedIn: true }
+        );
+        
+        // Update user object with new tokenVersion
+        user.tokenVersion = getTokenVersion;
+        
+        // Generate final tokens after 2FA verification
+        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
 
-      return {
-        flag: false,
-        msg: '2FA verification successful!',
-        data: {
-          accessToken,
-          refreshToken,
-          user: {
-            id: user.id,
-            name: user.name,
-            mobileNo: user.mobileNo,
-            userRole: user.userRole,
-            outletName: user.outletName,
-            companyId: user.companyId
+        // Create userLogin record for successful 2FA verification
+        const userLoginRecord = await dbService.createOne(model.userLogin, {
+          user_id: user.id,
+          user_type: user.userRole,
+          isLoggedIn: true,
+          latitude: latitude || null ,
+          longitude: longitude|| null,
+          ipAddress: ipAddress|| null,
+          companyId: user.companyId
+        });
+
+        return {
+          flag: false,
+          msg: '2FA verification successful!',
+          data: {
+            accessToken,
+            refreshToken,
+            user: {
+              id: user.id,
+              name: user.name,
+              mobileNo: user.mobileNo,
+              userRole: user.userRole,
+              outletName: user.outletName,
+              companyId: user.companyId
+            },
+            userLogin: userLoginRecord
           }
-        }
-      };
-    }
+        };
+      }
 
     // Production environment - Verify OTP
     const verificationResult = verifyOTP(otp, user);
     if (verificationResult) {
-      // Generate final tokens after 2FA verification
-      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-      
-      // Update user login status
+      // Update user login status FIRST
       const getTokenVersion = getRandomNumber();
       await dbService.update(
         model.user,
         { id: user.id },
         { tokenVersion: getTokenVersion, loggedIn: true }
       );
+      
+      // Update user object with new tokenVersion
+      user.tokenVersion = getTokenVersion;
+      
+      // Generate final tokens after 2FA verification
+      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+
+      // Create userLogin record for successful 2FA verification
+      const userLoginRecord = await dbService.createOne(model.userLogin, {
+        user_id: user.id,
+        user_type: user.userRole,
+        isLoggedIn: true,
+        latitude: longitude|| null,
+        longitude: longitude|| null,
+        ipAddress: ipAddress|| null,
+        companyId: user.companyId
+      });
 
       return {
         flag: false,
@@ -1632,6 +1670,17 @@ const setup2FA = async (dataToken, otp, companyId) => {
         { tokenVersion: getTokenVersion, loggedIn: true }
       );
 
+      // Create userLogin record for successful 2FA setup
+      const userLoginRecord = await dbService.createOne(model.userLogin, {
+        user_id: user.id,
+        user_type: user.userRole,
+        isLoggedIn: true,
+        latitude:  null, // Will be updated if available
+        longitude: null, // Will be updated if available
+        ipAddress: null, // Will be updated if available
+        companyId: user.companyId
+      });
+
       return {
         flag: false,
         msg: '2FA setup successful!',
@@ -1645,7 +1694,8 @@ const setup2FA = async (dataToken, otp, companyId) => {
             userRole: user.userRole,
             outletName: user.outletName,
             companyId: user.companyId
-          }
+          },
+          userLogin: userLoginRecord
         }
       };
     }
@@ -1671,6 +1721,17 @@ const setup2FA = async (dataToken, otp, companyId) => {
         { tokenVersion: getTokenVersion, loggedIn: true }
       );
 
+      // Create userLogin record for successful 2FA setup
+      const userLoginRecord = await dbService.createOne(model.userLogin, {
+        user_id: user.id,
+        user_type: user.userRole,
+        isLoggedIn: true,
+        latitude: null, // Will be updated if available
+        longitude: null, // Will be updated if available
+        ipAddress: null, // Will be updated if available
+        companyId: user.companyId
+      });
+
       return {
         flag: false,
         msg: '2FA setup successful!',
@@ -1684,7 +1745,8 @@ const setup2FA = async (dataToken, otp, companyId) => {
             userRole: user.userRole,
             outletName: user.outletName,
             companyId: user.companyId
-          }
+          },
+          userLogin: userLoginRecord
         }
       };
     } else {
@@ -1699,8 +1761,9 @@ const setup2FA = async (dataToken, otp, companyId) => {
   }
 };
 
-const handle2FA = async (dataToken, otp, companyId) => {
+const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
   try {
+
     if (!dataToken || !otp) {
       return {
         flag: true,
@@ -1744,16 +1807,30 @@ const handle2FA = async (dataToken, otp, companyId) => {
     if (shouldVerify) {
       // Verify existing 2FA
       if (process.env.NODE_ENV === 'development') {
-        // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-        
-        // Update user login status
+        // Update user login status FIRST
         const getTokenVersion = getRandomNumber();
         await dbService.update(
           model.user,
           { id: user.id },
           { tokenVersion: getTokenVersion, loggedIn: true }
         );
+        
+        // Update user object with new tokenVersion
+        user.tokenVersion = getTokenVersion;
+        
+        // Generate final tokens after 2FA verification
+        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+
+        // Create userLogin record for successful 2FA verification
+        const userLoginRecord = await dbService.createOne(model.userLogin, {
+          user_id: user.id,
+          user_type: user.userRole,
+          isLoggedIn: true,
+          latitude: latitude|| null, // Will be updated if available
+          longitude: longitude|| null, // Will be updated if available
+          ipAddress: ipAddress|| null, // Will be updated if available
+          companyId: user.companyId
+        });
 
         return {
           flag: false,
@@ -1768,7 +1845,8 @@ const handle2FA = async (dataToken, otp, companyId) => {
               userRole: user.userRole,
               outletName: user.outletName,
               companyId: user.companyId
-            }
+            },
+            userLogin: userLoginRecord
           }
         };
       }
@@ -1776,16 +1854,30 @@ const handle2FA = async (dataToken, otp, companyId) => {
       // Production environment - Verify OTP
       const verificationResult = verifyOTP(otp, user);
       if (verificationResult) {
-        // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-        
-        // Update user login status
+        // Update user login status FIRST
         const getTokenVersion = getRandomNumber();
         await dbService.update(
           model.user,
           { id: user.id },
           { tokenVersion: getTokenVersion, loggedIn: true }
         );
+        
+        // Update user object with new tokenVersion
+        user.tokenVersion = getTokenVersion;
+        
+        // Generate final tokens after 2FA verification
+        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+
+        // Create userLogin record for successful 2FA verification
+        const userLoginRecord = await dbService.createOne(model.userLogin, {
+          user_id: user.id,
+          user_type: user.userRole,
+          isLoggedIn: true,
+          latitude: latitude|| null, 
+          longitude: longitude|| null, 
+          ipAddress: ipAddress|| null,
+          companyId: user.companyId
+        });
 
         return {
           flag: false,
@@ -1800,7 +1892,8 @@ const handle2FA = async (dataToken, otp, companyId) => {
               userRole: user.userRole,
               outletName: user.outletName,
               companyId: user.companyId
-            }
+            },
+            userLogin: userLoginRecord
           }
         };
       } else {
@@ -1843,6 +1936,17 @@ const handle2FA = async (dataToken, otp, companyId) => {
           { tokenVersion: getTokenVersion, loggedIn: true }
         );
 
+        // Create userLogin record for successful 2FA setup
+        const userLoginRecord = await dbService.createOne(model.userLogin, {
+          user_id: user.id,
+          user_type: user.userRole,
+          isLoggedIn: true,
+          latitude: latitude|| null, 
+          longitude: longitude|| null, 
+          ipAddress: ipAddress|| null, 
+          companyId: user.companyId
+        });
+
         return {
           flag: false,
           msg: '2FA setup successful!',
@@ -1856,7 +1960,8 @@ const handle2FA = async (dataToken, otp, companyId) => {
               userRole: user.userRole,
               outletName: user.outletName,
               companyId: user.companyId
-            }
+            },
+            userLogin: userLoginRecord
           }
         };
       }
@@ -1882,6 +1987,17 @@ const handle2FA = async (dataToken, otp, companyId) => {
           { tokenVersion: getTokenVersion, loggedIn: true }
         );
 
+        // Create userLogin record for successful 2FA setup
+        const userLoginRecord = await dbService.createOne(model.userLogin, {
+          user_id: user.id,
+          user_type: user.userRole,
+          isLoggedIn: true,
+          latitude: latitude  || null, 
+          longitude: longitude|| null,
+          ipAddress: ipAddress|| null,
+          companyId: user.companyId
+        });
+
         return {
           flag: false,
           msg: '2FA setup successful!',
@@ -1895,7 +2011,8 @@ const handle2FA = async (dataToken, otp, companyId) => {
               userRole: user.userRole,
               outletName: user.outletName,
               companyId: user.companyId
-            }
+            },
+            userLogin: userLoginRecord
           }
         };
       } else {

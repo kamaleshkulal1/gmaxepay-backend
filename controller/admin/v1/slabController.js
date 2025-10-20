@@ -1,5 +1,5 @@
-const { slab, commSlab, role } = require('../../../model');
-const model = require('../../../model');
+const { slab, commSlab, role } = require('../../../models/index');
+const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
 const bcrypt = require('bcrypt');

@@ -3,11 +3,14 @@
  * Use `app.js` to run your app.
  * To start the server, run: `node app.js`.
  */
+
+// Load environment variables FIRST before any other imports
+const dotenv = require('dotenv');
+dotenv.config({ path: '.env' });
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const dotenv = require('dotenv');
-dotenv.config({ path: '.env' });
 global.__basedir = __dirname;
 const passport = require('passport');
 const routes = require('./routes');

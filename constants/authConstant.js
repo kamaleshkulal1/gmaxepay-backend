@@ -2,10 +2,20 @@
  * authConstant.js
  * @description :: constants used in authentication
  */
+
+// Ensure environment variables are loaded
+require('dotenv').config({ path: '.env' });
+
 const JWT = {
-  SECRET: process.env.JWT_SECRET || 'default_jwt_secret_key',
-  JWT_TEMP_SECRET: process.env.JWT_TEMP_SECRET || 'default_jwt_temp_secret_key',
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'default_jwt_refresh_secret_key',
+  get SECRET() {
+    return process.env.JWT_ACCESS_SECRET ;
+  },
+  get JWT_TEMP_SECRET() {
+    return process.env.JWT_TEMP_SECRET ;
+  },
+  get JWT_REFRESH_SECRET() {
+    return process.env.JWT_REFRESH_SECRET;
+  },
   EXPIRES_IN: 30,
   OTP_EXPIRES_IN: 120, // 2 minutes in seconds
   JWT_REFRESH_EXPIRY: '7d',

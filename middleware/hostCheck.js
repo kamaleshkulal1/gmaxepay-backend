@@ -1,5 +1,5 @@
 const { MESSAGE } = require('../constants/msgConstant');
-const model = require('../model');
+const model = require('../models');
 const dbService = require('../utils/dbService');
 
 const hostCheck = async (req, res, next) => {

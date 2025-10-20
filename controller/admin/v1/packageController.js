@@ -1,4 +1,4 @@
-const model = require('../../../model/index');
+const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 
 const registerPackage = async (req, res) => {

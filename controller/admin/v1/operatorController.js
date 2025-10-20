@@ -1,6 +1,6 @@
-const { operator, operatorType, state, user } = require('../../../model');
+const { operator, operatorType, state, user } = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
-const model = require('../../../model');
+const model = require('../../../models/index');
 const fs = require('fs');
 
 const registerService = async (req, res) => {

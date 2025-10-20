@@ -1,5 +1,5 @@
 const dbService = require('../../../utils/dbService');
-const { permission, rolePermission, role } = require('../../../model/index');
+const { permission, rolePermission, role } = require('../../../models/index');
 const { Op } = require('sequelize');
 
 /**
