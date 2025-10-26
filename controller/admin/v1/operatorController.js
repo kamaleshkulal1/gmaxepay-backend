@@ -1,6 +1,7 @@
 const { operator, operatorType, state, user } = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models/index');
+const { Op } = require('sequelize');
 const fs = require('fs');
 
 const registerService = async (req, res) => {
@@ -8,7 +9,7 @@ const registerService = async (req, res) => {
     let permissions = req.permission;
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 24 &&
+        permission.dataValues.permissionId === 8 &&
         permission.dataValues.write === true
     );
 
@@ -18,7 +19,7 @@ const registerService = async (req, res) => {
 
     let dataToCreate = { ...(req.body || {}) };
     let { operator_image } = req.files || {};
-    const companyId = req.companyId;
+    const companyId = req.companyId || req.user.companyId || null;
 
     if (operator_image) {
       operator_image.map((file) => ({
@@ -45,7 +46,12 @@ const registerService = async (req, res) => {
       ...createdUser.dataValues
     };
     const [slabs, ranges, paymentInstruments, cardTypes] = await Promise.all([
-      dbService.findAll(model.slab, {companyId}, { select: ['id'] }),
+      dbService.findAll(model.slab, {
+        [Op.or]: [
+          { companyId: companyId },
+          { companyId: null } // Include global slabs
+        ]
+      }, { select: ['id'] }),
       dbService.findAll(
         model.range,
         { operatorType: userToReturn.operatorType },
@@ -63,11 +69,11 @@ const registerService = async (req, res) => {
     let roleNames;
 
     if (userToReturn.operatorType === 'BBPS') {
-      roleTypes = [2, 4, 6, 7, 8];
-      roleNames = ['AD', 'RE', 'DI', 'AU','WU'];
+      roleTypes = [1, 2, 3, 4, 5];
+      roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
     } else {
-      roleTypes = [2, 4, 6];
-      roleNames = ['AD', 'RE', 'DI','WU'];
+      roleTypes = [1, 2, 3, 4, 5];
+      roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
     }
 
     const dataToInsert = slabs.flatMap((slab) =>
@@ -81,7 +87,7 @@ const registerService = async (req, res) => {
         commAmt: 0,
         commType: 'com',
         amtType: 'fix',
-        companyId
+        companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
       }))
     );
 
@@ -100,7 +106,7 @@ const registerService = async (req, res) => {
           commAmt: 0,
           commType: 'com',
           amtType: 'fix',
-          companyId
+          companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
         }))
       )
     );
@@ -120,7 +126,7 @@ const registerService = async (req, res) => {
           commAmt: 0,
           commType: 'com',
           amtType: 'fix',
-          companyId
+          companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
         }))
       )
     );
@@ -147,7 +153,7 @@ const registerService = async (req, res) => {
                   paymentInstrumentName: paymentInstrument.name,
                   cardTypeId: cardType.id,
                   cardTypeName: cardType.name,
-                  companyId
+                  companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
                 });
               }
             } else {
@@ -165,7 +171,7 @@ const registerService = async (req, res) => {
                 paymentInstrumentName: paymentInstrument.name,
                 cardTypeId: null,
                 cardTypeName: null,
-                companyId
+                companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
               });
             }
           }

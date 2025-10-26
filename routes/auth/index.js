@@ -5,7 +5,7 @@ const authentication = require('../../middleware/authentication');
 
 // Auth routes
 router.post('/login', userController.login);
-router.post('/verify-otp', userController.verifyOTP);
+router.post('/verify-mobile-otp', userController.verifyOTP);
 router.post('/reset-password', userController.resetPassword);
 router.post('/handle-2fa', userController.handle2FA);
 router.post('/refresh-token', userController.refreshAccessToken);

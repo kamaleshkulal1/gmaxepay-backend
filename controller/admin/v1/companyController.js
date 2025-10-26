@@ -1,0 +1,701 @@
+const model = require('../../../models');
+const dbService = require('../../../utils/dbService');
+const { Op } = require('sequelize');
+const axios = require('axios');
+const { where, cast, col } = require('sequelize');
+const imageService = require('../../../services/imageService');
+const { uploadImageToS3, deleteImageFromS3, getImageUrl } = imageService;
+const key = Buffer.from(process.env.AES_KEY, 'hex');
+const iv = Buffer.from(process.env.AES_IV, 'hex');
+const { decrypt, doubleEncrypt } = require('../../../utils/doubleCheckUp');
+
+
+const createCompany = async (req, res) => {
+  try {
+    let data = req.body;
+    
+    // Validate required fields
+    if(!data.BussinessEntity) {
+      return res.failure({
+        message: 'Business entity is required'
+      });
+    }
+    if(!data.MobileNo) {
+      return res.failure({
+        message: 'Mobile number is required'
+      });
+    }
+    if(!data.PanNumber) {
+      return res.failure({
+        message: 'PAN number is required'
+      });
+    }
+    if(!data.PanName) {
+      return res.failure({
+        message: 'PAN name is required'
+      });
+    }
+    if(!data.email) {
+      return res.failure({
+        message: 'Email is required'
+      });
+    }
+    // Check if profileImage is provided either as S3 key or as file upload
+    if(!data.profileImage && !req.file) {
+      return res.failure({
+        message: 'Profile image is required. Please provide either profileImage (S3 key) or upload a file.'
+      });
+    }
+    if(!data.address) {
+      return res.failure({
+        message: 'Address is required'
+      });
+    }
+    if(!data.city) {
+      return res.failure({
+        message: 'City is required'
+      });
+    }
+    if(!data.state) {
+      return res.failure({
+        message: 'State is required'
+      });
+    }
+    if(!data.companyName) {
+      return res.failure({
+        message: 'Company name is required'
+      });
+    }
+    if(!data.postalCode) {
+      return res.failure({
+        message: 'Postal code is required'
+      });
+    }
+    if(!data.customDomain) {
+      return res.failure({
+        message: 'Custom domain is required'
+      });
+    }
+    if(!data.Remarks) {
+      return res.failure({
+        message: 'Remarks are required'
+      });
+    }
+    
+    // Check for duplicate phone number
+    const existingPhone = await dbService.findOne(model.user, {
+      mobileNo: data.MobileNo,
+      isDeleted: false
+    });
+    
+    if (existingPhone) {
+      return res.failure({
+        message: 'Phone number already exists',
+        data: {
+          mobileNo: data.MobileNo
+        }
+      });
+    }
+    
+    // Check for duplicate email
+    const existingEmail = await dbService.findOne(model.user, {
+      email: data.email,
+      isDeleted: false
+    });
+    
+    if (existingEmail) {
+      return res.failure({
+        message: 'Email already exists',
+        data: {
+          email: data.email
+        }
+      });
+    }
+    
+    // Check for duplicate domain name
+    const existingDomain = await dbService.findOne(model.company, {
+      customDomain: data.customDomain,
+      isDeleted: false
+    });
+    
+    if (existingDomain) {
+      return res.failure({
+        message: 'Domain name already exists',
+        data: {
+          customDomain: data.customDomain
+        }
+      });
+    }
+    
+    // Check for duplicate company name
+    const existingCompany = await dbService.findOne(model.company, {
+      companyName: data.companyName,
+      isDeleted: false
+    });
+    
+    if (existingCompany) {
+      return res.failure({
+        message: 'Company name already exists',
+        data: {
+          companyName: data.companyName
+        }
+      });
+    }
+    
+  const encryptedPanNumber = doubleEncrypt(data.PanNumber, key);
+
+  // Declare panNameFromAPI outside the if block so it's accessible throughout the function
+  let panNameFromAPI = null;
+
+  // PAN verification logic
+  try {
+    // Check if PAN already exists in eKycHub table
+    const existingPan = await dbService.findOne(model.ekycHub, {
+      identityNumber1: data.PanNumber,
+      identityType: 'PAN'
+    });
+
+    if (existingPan) {
+      // Decrypt the cached response
+      let panVerificationResult = null;
+      try {
+        const encryptedData = JSON.parse(existingPan.response);
+        if (encryptedData && encryptedData.encrypted) {
+          const decryptedResponse = decrypt(encryptedData, key);
+          if (decryptedResponse) {
+            panVerificationResult = JSON.parse(decryptedResponse);
+          } else {
+            panVerificationResult = encryptedData;
+          }
+        } else {
+          panVerificationResult = JSON.parse(existingPan.response);
+        }
+      } catch (e) {
+        // If not encrypted or not JSON, return as is
+        panVerificationResult = existingPan.response;
+      }
+      console.log('panVerificationResult', panVerificationResult);
+
+      // Check if PAN name matches
+      if (panVerificationResult && panVerificationResult.status === 'Success') {
+        panNameFromAPI = panVerificationResult.registered_name || panVerificationResult.data?.name || panVerificationResult.name;
+        if (panNameFromAPI && panNameFromAPI.toLowerCase().trim() === data.PanName.toLowerCase().trim()) {
+          // PAN name matches, continue with company creation
+          console.log('PAN verification successful - name matches');
+        } else {
+          // PAN name doesn't match
+          return res.failure({
+            message: 'PAN name mismatch. Please verify your PAN name.',
+            data: {
+              providedPanName: data.PanName,
+            }
+          });
+        }
+      } else {
+        // PAN verification failed
+        return res.failure({
+          message: 'PAN verification failed. Please fetch PAN verification first.',
+          data: {
+            panNumber: data.PanNumber,
+            status: panVerificationResult?.status || 'Failed'
+          }
+        });
+      }
+    } else {
+      // PAN not found in eKycHub table
+      return res.failure({
+        message: 'PAN not found in verification records. Please fetch PAN verification first.',
+        data: {
+          panNumber: data.PanNumber
+        }
+      });
+    }
+
+  } catch (panError) {
+    console.error('PAN verification error:', panError);
+    return res.failure({
+      message: 'PAN verification failed. Please try again.',
+      error: panError.message
+    });
+  }
+
+  // Handle profile image upload if file is provided
+  let profileImageKey = data.profileImage;
+  
+  if (req.file && !data.profileImage) {
+    try {
+      // Upload the file to S3
+      const fileBuffer = req.file.buffer;
+      const fileName = req.file.originalname;
+      const uploadResult = await uploadImageToS3(
+        fileBuffer,
+        fileName,
+        'profile',
+        null,
+        'profileImage'
+      );
+      profileImageKey = uploadResult.key;
+    } catch (uploadError) {
+      console.error('Profile image upload error:', uploadError);
+      return res.failure({
+        message: 'Failed to upload profile image. Please try again.',
+        error: uploadError.message
+      });
+    }
+  }
+
+    // Prepare company data
+    const companyData = {
+      companyName: data.companyName,
+      companyPan: data.PanNumber,
+      BussinessEntity: data.BussinessEntity,
+      fullAddress: data.address,
+      city: data.city,
+      state: data.state,
+      postalCode: data.postalCode,
+      customDomain: data.customDomain,
+      remark: data.Remarks,
+      isActive: true
+    };
+
+    // Create company first
+    const company = await dbService.createOne(model.company, companyData);
+
+    // Create user with role 2 and profileImage
+    const userData = {
+      mobileNo: data.MobileNo,
+      email: data.email,
+      profileImage: profileImageKey, // S3 key from upload or provided
+      userRole: 2, // Role 2 as specified
+      companyId: company.id,
+      name: panNameFromAPI || data.PanName, // Use API name or fallback to provided PAN name
+      fullAddress: data.address,
+      city: data.city,
+      state: data.state,
+      zipcode: data.postalCode,
+      userId: data.userId, // Will be auto-generated by hook if not provided
+      isActive: true,
+    };
+
+    const user = await dbService.createOne(model.user, userData);
+
+    // Create wallet for the user
+    const walletData = {
+      refId: user.id,
+      companyId: company.id,
+      mainWallet: 0,
+      apesWallet: 0,
+      roleType: 2
+    };
+
+    const wallet = await dbService.createOne(model.wallet, walletData);
+
+    return res.success({
+      message: 'Company created successfully',
+      data: {
+        company,
+        user: {
+          id: user.id,
+          userId: user.userId,
+          mobileNo: user.mobileNo,
+          email: user.email,
+          profileImageUrl: getImageUrl(user.profileImage)
+        },
+        wallet: {
+          id: wallet.id,
+          mainWallet: wallet.mainWallet,
+          apesWallet: wallet.apesWallet
+        }
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+
+const getPincodeByCity = async (req, res) => {
+  try {
+    const { city } = req.body;
+    const user = await dbService.findOne(model.user, { id: req.user.id });
+    if(!req.user.id){
+      return res.failure({ message: 'User is not found required' });
+    }
+    
+    if(!user) return res.failure({ message: 'User is not found' });
+    
+    if (!city) return res.failure({ message: 'City is required' });
+    
+    // Fetch pincode from external API
+    const url = `${process.env.POSTAL_PINCODE_URL}/postoffice/${city}`;
+    const response = await axios.get(url);
+    const data = response.data;
+    
+    if (data[0].Status === 'Success') {
+      return res.success({ 
+        message: 'Pincode fetched successfully', 
+        data: data[0].PostOffice 
+      });
+    } else {
+      return res.failure({ 
+        message: 'No pincode found for the given city. Try different spelling or district name.' 
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const getCityByPincode = async (req, res) => {
+  try {
+    const { pincode } = req.body;
+    
+    if (!pincode) return res.failure({ message: 'Pincode is required' });
+    
+    // Fetch city details from external API
+    const url = `${process.env.POSTAL_PINCODE_URL}/pincode/${pincode}`;
+    const response = await axios.get(url);
+    const data = response.data;
+    
+    if (data[0].Status === 'Success' && data[0].PostOffice && data[0].PostOffice.length > 0) {
+      const postOffices = data[0].PostOffice;
+      
+      // Extract unique city/district/state information
+      const cityInfo = {
+        pincode: postOffices[0].Pincode,
+        state: postOffices[0].State,
+        district: postOffices[0].District,
+        postOffices: postOffices.map(office => ({
+          name: office.Name,
+          city: office.District,
+          state: office.State,
+          pincode: office.Pincode,
+          division: office.Division,
+          region: office.Region,
+          circle: office.Circle
+        })),
+        totalPostOffices: postOffices.length
+      };
+      
+      return res.success({ 
+        message: 'City fetched successfully', 
+        data: cityInfo
+      });
+    } else {
+      return res.failure({ 
+        message: 'Invalid pincode or no data found for the given pincode.'
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+
+const getCompanyById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.failure({ message: 'Company ID is required' });
+
+    const company = await dbService.findOne(model.company, { id });
+    if (!company) return res.failure({ message: 'Company not found' });
+
+    // Convert to JSON and add image URLs
+    const companyData = company.toJSON();
+    if (companyData.logo) {
+      companyData.logoUrl = getImageUrl(companyData.logo);
+    }
+    if (companyData.favicon) {
+      companyData.faviconUrl = getImageUrl(companyData.favicon);
+    }
+
+    return res.success({
+      message: 'Company fetched successfully',
+      data: companyData
+    });
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const getAllCompanies = async (req, res) => {
+  try {
+    let dataToFind = req.body;
+    let query = {};
+    let options = {};
+
+    if (dataToFind && dataToFind.query) {
+      query = { ...query, ...dataToFind.query };
+    }
+
+    // Count-only response
+    if (dataToFind?.isCountOnly) {
+      const count = await dbService.count(model.company, query);
+      if (!count) return res.recordNotFound();
+      return res.success({ data: { totalRecords: count } });
+    }
+
+    if (dataToFind?.options !== undefined) {
+      options = dataToFind.options;
+    }
+
+    if (dataToFind?.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            where(cast(col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        query[Op.or] = orConditions;
+      }
+    }
+
+    const foundCompanies = await dbService.findAll(
+      model.company,
+      query,
+      options
+    );
+    console.log('Found Companies:', foundCompanies);
+    if (!foundCompanies || foundCompanies.length === 0) {
+      return res.recordNotFound({ message: 'No companies found.' });
+    }
+
+    // Add image URLs to all companies
+    const companiesWithUrls = foundCompanies.map(company => {
+      const companyData = company.toJSON();
+      if (companyData.logo) {
+        companyData.logoUrl = getImageUrl(companyData.logo);
+      }
+      if (companyData.favicon) {
+        companyData.faviconUrl = getImageUrl(companyData.favicon);
+      }
+      return companyData;
+    });
+
+    return res.success({
+      message: 'Companies fetched successfully!',
+      data: companiesWithUrls
+    });
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const updateCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let updateData = req.body;
+    
+    // Only allow specific fields to be updated
+    const allowedFields = [
+      'primaryColor',
+      'secondaryColor',
+      'singupPageDesign',
+      'navigationBar',
+      'supportPhoneNumbers',
+      'customerSupportEmail',
+      'companyName',
+      'companyPan',
+      'companyGst',
+      'contactName',
+      'contactEmail',
+      'mobileNo',
+      'BussinessEntity',
+      'billingAddress',
+      'shippingAddress',
+      'modulesEnabled',
+      'remark'
+    ];
+    
+    // Filter only allowed fields
+    const filteredData = {};
+    allowedFields.forEach(field => {
+      if (updateData[field] !== undefined) {
+        filteredData[field] = updateData[field];
+      }
+    });
+    
+    // Handle modulesEnabled array parsing
+    if (
+      filteredData.modulesEnabled &&
+      typeof filteredData.modulesEnabled === 'string'
+    ) {
+      filteredData.modulesEnabled = JSON.parse(
+        filteredData.modulesEnabled.replace(/'/g, '"')
+      );
+    }
+    
+    // Handle supportPhoneNumbers array parsing
+    if (
+      filteredData.supportPhoneNumbers &&
+      typeof filteredData.supportPhoneNumbers === 'string'
+    ) {
+      try {
+        filteredData.supportPhoneNumbers = JSON.parse(filteredData.supportPhoneNumbers);
+      } catch (e) {
+        // If it's not JSON, split by comma
+        filteredData.supportPhoneNumbers = filteredData.supportPhoneNumbers.split(',').map(s => s.trim());
+      }
+    }
+    
+    const company = await dbService.findOne(model.company, { id });
+    if (!company) return res.failure({ message: 'Company not found' });
+    
+    const updated = await dbService.update(model.company, { id }, filteredData);
+    
+    // Fetch updated company to return with image URLs
+    const updatedCompany = await dbService.findOne(model.company, { id });
+    const companyData = updatedCompany.toJSON();
+    if (companyData.logo) {
+      companyData.logoUrl = getImageUrl(companyData.logo);
+    }
+    if (companyData.favicon) {
+      companyData.faviconUrl = getImageUrl(companyData.favicon);
+    }
+    
+    return res.success({
+      message: 'Company updated successfully',
+      data: companyData
+    });
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const updateCompanyLogoAndFavicon = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type } = req.body; // 'logo' or 'favicon'
+    
+    if (!req.file) {
+      return res.failure({ message: 'Image file is required' });
+    }
+    
+    if (!type || !['logo', 'favicon'].includes(type)) {
+      return res.failure({ message: 'Type must be either "logo" or "favicon"' });
+    }
+    
+    const company = await dbService.findOne(model.company, { id });
+    if (!company) return res.failure({ message: 'Company not found' });
+    
+    // Upload new image to S3
+    const fileBuffer = req.file.buffer;
+    const fileName = req.file.originalname;
+    const uploadResult = await uploadImageToS3(
+      fileBuffer,
+      fileName,
+      'company',
+      id,
+      type
+    );
+    
+    // Delete old image from S3 if exists
+    const oldImageKey = type === 'logo' ? company.logo : company.favicon;
+    if (oldImageKey) {
+      try {
+        await deleteImageFromS3(oldImageKey);
+      } catch (error) {
+        console.error(`Error deleting old ${type}:`, error);
+        // Continue even if deletion fails
+      }
+    }
+    
+    // Update company with new image
+    const updateData = {
+      [type]: uploadResult.key
+    };
+    
+    const updated = await dbService.update(model.company, { id }, updateData);
+    
+    return res.success({
+      message: `${type.charAt(0).toUpperCase() + type.slice(1)} updated successfully`,
+      data: {
+        ...updated.toJSON(),
+        [`${type}Url`]: getImageUrl(uploadResult.key)
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const uploadProfileImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.failure({ message: 'Image file is required' });
+    }
+    
+    // Upload image to S3
+    const fileBuffer = req.file.buffer;
+    const fileName = req.file.originalname;
+    const uploadResult = await uploadImageToS3(
+      fileBuffer,
+      fileName,
+      'profile',
+      null,
+      'profileImage'
+    );
+    
+    return res.success({
+      message: 'Profile image uploaded successfully',
+      data: {
+        profileImage: uploadResult.key,
+        profileImageUrl: getImageUrl(uploadResult.key)
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const deleteCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const company = await dbService.findOne(model.company, { id });
+    if (!company) return res.failure({ message: 'Company not found' });
+
+    await dbService.destroy(model.company, { id });
+    return res.success({
+      message: 'Company deleted successfully',
+      data: company
+    });
+  } catch (error) {
+    console.error(error);
+    return res.failure({ message: error.message });
+  }
+};
+
+module.exports = {
+  createCompany,
+  getCompanyById,
+  getAllCompanies,
+  updateCompany,
+  updateCompanyLogoAndFavicon,
+  uploadProfileImage,
+  deleteCompany,
+  getPincodeByCity,
+  getCityByPincode
+};

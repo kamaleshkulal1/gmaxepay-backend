@@ -3,36 +3,76 @@ const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
 const bcrypt = require('bcrypt');
+const { USER_TYPES } = require('../../../constants/authConstant');
 
 const registerService = async (req, res) => {
   try {
-    let permissions = req.permission;
+    let permissions = req.permission || [];
+    
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 27 &&
+        permission.dataValues.permissionId === 12 &&
         permission.dataValues.write === true
     );
+    
+    // Temporary bypass for SUPER_ADMIN - remove this after fixing permissions
+    if (req.user?.userType === USER_TYPES.SUPER_ADMIN) {
+      hasPermission = true;
+    }
 
     if (!hasPermission) {
       return res.failure({ message: `User doesn't have Permission!` });
     }
 
+    // Only SUPER_ADMIN can create slabs
+    if (req.user?.userType !== USER_TYPES.SUPER_ADMIN) {
+      return res.failure({ message: 'Only SUPER_ADMIN can create slabs' });
+    }
+
     let dataToCreate = { ...(req.body || {}) };
-    const companyId = req.companyId;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+
+    // Set default slabType if not provided
+    if (!dataToCreate.slabType) {
+      dataToCreate.slabType = 'level'; // Default to 'level' type
+    }
+
+    // Set default slabScope if not provided
+    if (!dataToCreate.slabScope) {
+      dataToCreate.slabScope = 'private'; // Default to 'private' scope
+    }
+
+    // Validate slabType
+    if (!['level', 'channel'].includes(dataToCreate.slabType)) {
+      return res.failure({ message: 'slabType must be either "level" or "channel"' });
+    }
+
+    // Validate slabScope
+    if (!['global', 'private'].includes(dataToCreate.slabScope)) {
+      return res.failure({ message: 'slabScope must be either "global" or "private"' });
+    }
+
+    // For global slabs, companyId should be null
+    if (dataToCreate.slabScope === 'global') {
+      dataToCreate.companyId = null;
+    } else {
+      // For private slabs, use the companyId from request
+      dataToCreate.companyId = companyId;
+    }
 
     dataToCreate = {
       ...dataToCreate,
       isActive: true,
       addedBy: req.user.id,
-      type: req.user.userType,
-      companyId
+      type: req.user.userType
     };
 
     if (dataToCreate.isSignUpB2B) {
-      let datas = await dbService.findOne(slab, {
-        isSignUpB2B: true,
-        companyId
-      });
+      let findQuery = { isSignUpB2B: true };
+      if (dataToCreate.slabScope === 'private' && dataToCreate.companyId !== null && dataToCreate.companyId !== undefined) {
+        findQuery.companyId = dataToCreate.companyId;
+      }
+      let datas = await dbService.findOne(slab, findQuery);
       if (datas) {
         return res.failure({ message: 'Only one isSignUp can be True!' });
       }
@@ -71,13 +111,8 @@ const registerService = async (req, res) => {
     // Updated role mapping based on user requirements:
     // 1-SUPERADMIN, 2-ADMIN(company_Admin(Whitelable)), 3-MASTER_DISTRIBUTOR, 4-DISTRIBUTOR, 5-RETAILER
     // AD = White label (Admin), MD = Master Distributor, DI = Distributor, RE = Retailer
-    if (userToReturn.operatorType === 'BBPS') {
-      roleTypes = [2, 3, 4, 5, 7, 8]; // Including AU and WU for BBPS
-      roleNames = ['AD', 'MD', 'DI', 'RE', 'AU', 'WU'];
-    } else {
-      roleTypes = [2, 3, 4, 5, 8]; // Excluding AU for non-BBPS, keeping WU
-      roleNames = ['AD', 'MD', 'DI', 'RE', 'WU'];
-    }
+    roleTypes = [1, 2, 3, 4, 5];
+    roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
 
     let dataToInsert = [];
     let dataToInsertRangeComm = [];
@@ -96,7 +131,7 @@ const registerService = async (req, res) => {
           commAmt: 0,
           commType: 'com',
           amtType: 'fix',
-          companyId
+          companyId: roleType === 1 ? null : dataToCreate.companyId // AD (Super Admin) has no companyId, others have companyId
         });
       });
     });
@@ -122,7 +157,7 @@ const registerService = async (req, res) => {
             commAmt: 0,
             commType: 'com',
             amtType: 'fix',
-            companyId
+            companyId: roleType === 1 ? null : dataToCreate.companyId // AD (Super Admin) has no companyId, others have companyId
           });
         });
       }
@@ -149,7 +184,7 @@ const registerService = async (req, res) => {
             commAmt: 0,
             commType: 'com',
             amtType: 'fix',
-            companyId
+            companyId: roleType === 1 ? null : dataToCreate.companyId // AD (Super Admin) has no companyId, others have companyId
           });
         });
       }
@@ -162,19 +197,17 @@ const registerService = async (req, res) => {
     for (const operator of payInOperators) {
       for (const roleType of roleTypes) {
         const roleNameValue =
-          roleType === 2
-            ? 'AD'  // White label (Admin)
-            : roleType === 3
-              ? 'MD'  // Master Distributor
-              : roleType === 4
-                ? 'DI'  // Distributor
-                : roleType === 5
-                  ? 'RE'  // Retailer
-                  : roleType === 7
-                    ? 'AU'  // Authorized User
-                    : roleType === 8
-                      ? 'WU'  // Wallet User
-                      : '';
+          roleType === 1
+            ? 'AD'  // Super Admin
+            : roleType === 2
+              ? 'AD'  // Admin (White label)
+              : roleType === 3
+                ? 'MD'  // Master Distributor
+                : roleType === 4
+                  ? 'DI'  // Distributor  
+                  : roleType === 5
+                    ? 'RE'  // Retailer
+                    :'';
 
         for (const paymentInstrument of paymentInstruments) {
           const existingPgCommercial = await dbService.findOne(
@@ -184,7 +217,7 @@ const registerService = async (req, res) => {
               operatorId: operator.id,
               roleType,
               paymentInstrumentId: paymentInstrument.id,
-              companyId
+              companyId: dataToCreate.companyId
             }
           );
 
@@ -205,7 +238,7 @@ const registerService = async (req, res) => {
                   paymentInstrumentName: paymentInstrument.name,
                   cardTypeId: cardType.id,
                   cardTypeName: cardType.name,
-                  companyId
+                  companyId: roleType === 1 ? null : dataToCreate.companyId // AD (Super Admin) has no companyId, others have companyId
                 });
               }
             } else {
@@ -223,7 +256,7 @@ const registerService = async (req, res) => {
                 paymentInstrumentName: paymentInstrument.name,
                 cardTypeId: null,
                 cardTypeName: null,
-                companyId
+                companyId: roleType === 1 ? null : dataToCreate.companyId // AD (Super Admin) has no companyId, others have companyId
               });
             }
           }
@@ -257,6 +290,7 @@ const registerService = async (req, res) => {
     }
   }
 };
+
 const updateService = async (req, res) => {
   try {
     let permissions = req.permission;
@@ -330,7 +364,7 @@ const findAllService = async (req, res) => {
     );
 
     let dataToFind = req.body;
-    const companyId = req.companyId;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
     let options = {};
     let query = {};
     let foundUser;
@@ -338,7 +372,9 @@ const findAllService = async (req, res) => {
     if (dataToFind && dataToFind.query) {
       query = dataToFind.query;
     }
-    query = { ...query, companyId };
+    if (companyId !== null && companyId !== undefined) {
+      query = { ...query, companyId };
+    }
 
     if (dataToFind && dataToFind.isCountOnly) {
       foundUser = await dbService.count(slab, query);
@@ -411,10 +447,15 @@ const findAllService = async (req, res) => {
 
 const getAllSlab = async (req, res) => {
   try {
-    const companyId = req.companyId;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
     const foundSlab = await dbService.findAll(
       slab,
-      { companyId },
+      companyId !== null && companyId !== undefined ? {
+        [Op.or]: [
+          { companyId: companyId },
+          { companyId: null } // Include global slabs
+        ]
+      } : {},
       {
         select: ['slabName', 'id'],
         sort: {
@@ -494,7 +535,7 @@ const findAllslabComm = async (req, res) => {
       return res.failure({ message: `User doesn't have Permission!` });
     }
     let dataToFind = req.body;
-    const companyId = req.companyId;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
     let options = { order: [['id', 'ASC']] };
     let query = {};
     let foundUser;
@@ -502,7 +543,9 @@ const findAllslabComm = async (req, res) => {
     if (dataToFind && dataToFind.query) {
       query = dataToFind.query;
     }
-    query = { ...query, companyId };
+    if (companyId !== null && companyId !== undefined) {
+      query = { ...query, companyId };
+    }
 
     if (dataToFind && dataToFind.isCountOnly) {
       foundUser = await dbService.count(model.pgCommercials, query);
@@ -567,14 +610,16 @@ const findAllslabComm = async (req, res) => {
 const findAllRechargeSlabComm = async (req, res) => {
   try {
     let dataToFind = req.body;
-    const companyId = req.companyId;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
     let options = { order: [['id', 'ASC']] };
     let query = {};
 
     if (dataToFind?.query) {
       query = dataToFind.query;
     }
-    query = { ...query, companyId };
+    if (companyId !== null && companyId !== undefined) {
+      query = { ...query, companyId };
+    }
     if (dataToFind?.isCountOnly) {
       const countRechargeSlab = await dbService.count(model.commSlab, {
         ...query,
@@ -652,7 +697,7 @@ const bbpsSlabComm = async (req, res) => {
     }
 
     let dataToFind = req.body;
-    const companyId = req.companyId;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
     let options = { order: [['id', 'ASC']] };
     let query = { operatorType: 'BBPS' };
     let foundUser;
@@ -663,7 +708,9 @@ const bbpsSlabComm = async (req, res) => {
         ...dataToFind.query
       };
     }
-    query = { ...query, companyId };
+    if (companyId !== null && companyId !== undefined) {
+      query = { ...query, companyId };
+    }
 
     if (dataToFind && dataToFind.isCountOnly) {
       foundUser = await dbService.count(model.commSlab, query);

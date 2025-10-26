@@ -1,7 +1,7 @@
 const fs = require('fs');
 const mime = require('mime-types');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const model = require('../model');
+const model = require('../models');
 const File = model.File;
 const dotenv = require('dotenv');
 dotenv.config({ path: './config.env' });

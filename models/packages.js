@@ -29,14 +29,6 @@ let Package = sequelize.define(
       allowNull: false,
       unique: true
     },
-    cost: {
-      type: DataTypes.INTEGER,
-      allowNull: true
-    },
-    expiredIn: {
-      type: DataTypes.INTEGER,
-      allowNull: true
-    },
     remark: {
       type: DataTypes.STRING
     },

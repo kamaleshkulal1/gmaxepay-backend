@@ -54,7 +54,35 @@ const authentication = async (req, res, next) => {
       });
     }
 
-    // Attach user to request
+    // Load user permissions based on role
+    let permissions = [];
+    if (user.userRole) {
+      const rolePermissions = await dbService.findAll(
+        model.rolePermission,
+        { roleId: user.userRole },
+        {
+          include: [
+            {
+              model: model.permission,
+              attributes: ['id', 'moduleName', 'isParent', 'parentId']
+            }
+          ]
+        }
+      );
+      
+      permissions = rolePermissions.map(rp => ({
+        permissionId: rp.permissionId,
+        read: rp.read,
+        write: rp.write,
+        dataValues: {
+          permissionId: rp.permissionId,
+          read: rp.read,
+          write: rp.write
+        }
+      }));
+    }
+
+    // Attach user and permissions to request
     req.user = {
       id: user.id,
       mobileNo: user.mobileNo,
@@ -63,6 +91,8 @@ const authentication = async (req, res, next) => {
       userType: user.userType,
       tokenVersion: user.tokenVersion
     };
+    
+    req.permission = permissions;
 
     next();
   } catch (err) {

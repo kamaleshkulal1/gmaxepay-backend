@@ -102,7 +102,7 @@ const User = sequelize.define(
       defaultValue: true
     },
     profileImage: {
-      type: DataTypes.JSON,
+      type: DataTypes.STRING,
       allowNull: true
     },
     mobileVerify: {
@@ -243,6 +243,14 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true
     },
+    resetPan: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    resetAadhar: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     ...reusableModelAttribute
   },
   {
@@ -271,13 +279,13 @@ const User = sequelize.define(
           let rolePrefix;
           switch (user.userRole) {
             case 1:
-              rolePrefix = 'SAD';
-              break;
-            case 2:
               rolePrefix = 'AD';
               break;
+            case 2:
+              rolePrefix = 'WU';
+              break;
             case 3:
-              rolePrefix = 'MDI';
+              rolePrefix = 'MD';
               break;
             case 4:
               rolePrefix = 'DI';
@@ -286,7 +294,7 @@ const User = sequelize.define(
               rolePrefix = 'RE';
               break;
             case 6:
-              rolePrefix = 'EMP';
+              rolePrefix = 'EP';
               break;
           }
 

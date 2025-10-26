@@ -56,6 +56,52 @@ const authConstant = require('../constants/authConstant');
  *  updateRoleTypes();
  */
 
+async function createBasicPackage() {
+  try {
+    // Check if basic package already exists
+    let existingPackage = await dbService.findOne(model.packages, {
+      packageName: 'Basic'
+    });
+
+    if (!existingPackage) {
+      // Create basic package
+      let basicPackage = await dbService.createOne(model.packages, {
+        packageName: 'Basic',
+        remark: 'Basic package with all services',
+        isMore: false,
+        isDefault: true,
+        isSelfAssigned: false,
+        slabAssigned: null,
+        companyId: null,
+        addedBy: 1,
+        isActive: true
+      });
+
+      console.log('Basic package created successfully');
+
+      // Get all services
+      let allServices = await dbService.findAll(model.services, {});
+      
+      if (allServices && allServices.length > 0) {
+        // Create package-service relationships for all services
+        let packageServiceData = allServices.map(service => ({
+          packageId: basicPackage.id,
+          serviceId: service.id,
+          addedBy: 1,
+          isActive: true
+        }));
+
+        await dbService.createMany(model.packageService, packageServiceData);
+        console.log(`Added ${allServices.length} services to Basic package`);
+      }
+    } else {
+      console.log('Basic package already exists');
+    }
+  } catch (error) {
+    console.log('Failed to create basic package:', error.message);
+  }
+}
+
 async function KycDocumentSettings() {
   try {
     let existingDoc = await dbService.findOne(model.kycDocumentSetting, {
@@ -184,7 +230,7 @@ async function permissions() {
     if (!permission) {
       let permissionToInsert = [
         {
-          moduleName: 'USER_MANAGEMENT',
+          moduleName: 'MEMBERS',
           isParent: true,
           parentId: null,
           isActive: true,
@@ -194,7 +240,7 @@ async function permissions() {
         //API and Operator Management
 
         {
-          moduleName: 'API_&_OPERATOR_MANAGEMENT',
+          moduleName: 'API_&_OPERATOR',
           isParent: true,
           parentId: null,
           isActive: true,
@@ -203,7 +249,7 @@ async function permissions() {
 
         // Commision
         {
-          moduleName: 'COMMISION',
+          moduleName: 'RESOURCES',
           isParent: true,
           parentId: null,
           isActive: true,
@@ -212,90 +258,15 @@ async function permissions() {
 
         // Master and Settings
         {
-          moduleName: 'MASTER_AND_SETTINGS',
+          moduleName: 'FUND_MANAGEMENT',
           isParent: true,
           parentId: null,
           isActive: true,
           isDeleted: false
         },
-
-        // Requests
-        {
-          moduleName: 'REQUEST',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-
         // Shopping
         {
-          moduleName: 'SHOPPING',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-
-        // Device Management
-        {
-          moduleName: 'DEVICE_MANAGEMENT',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-
-        //Report
-        {
-          moduleName: 'REPORT',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-
-        //RechargeDashBoard
-        {
-          moduleName: 'RECHARGE_DASHBOARD',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-        //FundRequest
-        {
-          moduleName: 'FUND_REQUEST',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-        //RechargeDashBoard
-        {
-          moduleName: 'RECHARGE_REPORT',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-        //RechargeDashBoard
-        {
-          moduleName: 'SLAB_DETAIL',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'SUPPORT',
-          isParent: true,
-          parentId: null,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'COMPLAIN',
+        moduleName: 'TXN_HISTORY',
           isParent: true,
           parentId: null,
           isActive: true,
@@ -323,78 +294,23 @@ async function insertPermissions() {
           isDeleted: false
         },
         {
-          moduleName: 'CUSTOMER_CARE',
+          moduleName: 'AGENT',
           isParent: null,
           parentId: 1,
           isActive: true,
           isDeleted: false
         },
-        {
-          moduleName: 'OUTLET',
-          isParent: null,
-          parentId: 1,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'ROLE_MANAGEMENT',
-          isParent: null,
-          parentId: 1,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'PROFILE',
-          isParent: null,
-          parentId: 1,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'EMPLOYEE',
-          isParent: null,
-          parentId: 1,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'BULK_EMAIL',
-          isParent: null,
-          parentId: 1,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'BULK_SMS',
-          isParent: null,
-          parentId: 1,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'BULK_NOTIFICATION',
-          isParent: null,
-          parentId: 1,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'RECHARGE_API',
-          isParent: null,
-          parentId: 2,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'SMS_API',
-          isParent: null,
-          parentId: 2,
-          isActive: true,
-          isDeleted: false
-        },
+
         {
           moduleName: 'OPERATOR_MASTER',
           isParent: null,
+          parentId: 2,
+          isActive: true,
+          isDeleted: false
+        },
+        {
+          moduleName: 'SERVICE_MASTER',
+          isParent: true,
           parentId: 2,
           isActive: true,
           isDeleted: false
@@ -408,6 +324,13 @@ async function insertPermissions() {
         },
         {
           moduleName: 'API_CIRCLE_CODE',
+          isParent: null,
+          parentId: 2,
+          isActive: true,
+          isDeleted: false
+        },
+        {
+          moduleName: 'NEWS_SETTING',
           isParent: null,
           parentId: 2,
           isActive: true,
@@ -442,7 +365,7 @@ async function insertPermissions() {
           isDeleted: false
         },
         {
-          moduleName: 'DENOMINATION_MASTER',
+          moduleName: 'SETTLEMENT_BANK_REQUEST',
           isParent: null,
           parentId: 4,
           isActive: true,
@@ -456,213 +379,30 @@ async function insertPermissions() {
           isDeleted: false
         },
         {
-          moduleName: 'DEPARTMENT_ROLE_MASTER',
+          moduleName: 'GST_VERIFICATION',
           isParent: null,
           parentId: 4,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'IP_MASTER',
+          moduleName: 'WALLET_LOCK_REQUEST',
           isParent: null,
           parentId: 4,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'KYC_DOCUMENT_SETTING',
+          moduleName: 'CHARGE_BACK_AND_RECOVERY',
           isParent: null,
           parentId: 4,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'MESSAGE_SETTING',
+          moduleName: 'FUND_REQUEST',
           isParent: null,
           parentId: 4,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'NEWS_SETTING',
-          isParent: null,
-          parentId: 4,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'BANK_MASTER',
-          isParent: null,
-          parentId: 4,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'RANGE_MASTER',
-          isParent: null,
-          parentId: 4,
-          isActive: true,
-          isDeleted: false
-        },
-
-        {
-          moduleName: 'RECHARGE_PENDING',
-          isParent: null,
-          parentId: 5,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'RECHARGE_DISPUTE',
-          isParent: null,
-          parentId: 5,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'DMT_PENDING',
-          isParent: null,
-          parentId: 5,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'DMR_DISPUTE',
-          isParent: null,
-          parentId: 5,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'FUND_ORDER',
-          isParent: null,
-          parentId: 5,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'ADD_PRODUCT',
-          isParent: null,
-          parentId: 6,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'ALL_PRODUCT',
-          isParent: null,
-          parentId: 6,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'CATEGORY',
-          isParent: null,
-          parentId: 6,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'FILETR_AND_BRANDS',
-          isParent: null,
-          parentId: 6,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'VENDOR_MASTER',
-          isParent: null,
-          parentId: 7,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'DEVICE_MASTER',
-          isParent: null,
-          parentId: 7,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'M-ATM_REQUEST',
-          isParent: null,
-          parentId: 7,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'MPOS_DEVICE_INVENTORY',
-          isParent: null,
-          parentId: 7,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'ADMIN_DAYBOOK_OPERATOR',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'ADMIN_DAYBOOK_API',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'ADMIN_DAYBOOK_DATE_API',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'DAYBOOK_CFF',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'WALLET_SUMMARY',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'BBPS_REPORT',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'RECHARGE_REPORT_CHILD',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'DMT_REPORT',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'MINI_BANK_REPORT',
-          isParent: null,
-          parentId: 8,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'ADMIN_LEDGER',
-          isParent: null,
-          parentId: 8,
           isActive: true,
           isDeleted: false
         }
@@ -678,13 +418,21 @@ async function insertPermissions() {
 
 async function rolePermission() {
   try {
+    console.log('Starting rolePermission seeder...');
+    
     let rolesPermission = await dbService.findOne(model.rolePermission, {
       id: 1
     });
 
     if (!rolesPermission) {
+      console.log('No existing rolePermission found, inserting new data...');
+      
+      // First, let's get all existing permissions to ensure we only reference valid IDs
+      let existingPermissions = await dbService.findAll(model.permission, {});
+      console.log(`Found ${existingPermissions.length} existing permissions`);
+      
       let rolesPermissionToInsert = [
-        // For Role Admin
+        // For Role SUPERADMIN
         {
           roleId: 1,
           permissionId: 1,
@@ -765,15 +513,15 @@ async function rolePermission() {
         {
           roleId: 1,
           permissionId: 12,
-          read: false,
-          write: false,
+          read: true,
+          write: true,
           isDeleted: false
         },
         {
           roleId: 1,
           permissionId: 13,
-          read: false,
-          write: false,
+          read: true,
+          write: true,
           isDeleted: false
         },
         {
@@ -839,344 +587,344 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 1,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 48,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 49,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
+        // {
+        //   roleId: 1,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 48,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 49,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
 
-        // For Role SUB_ADMIN
+        // For Role ADMIN(COMPANY ADMIN)
 
         {
           roleId: 2,
@@ -1325,845 +1073,846 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 2,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 48,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 49,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        // For Role SUB ADMIN
-
-        {
-          roleId: 3,
-          permissionId: 1,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 2,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 3,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 4,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 5,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 6,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 7,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 8,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 9,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 10,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 11,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 12,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 13,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 14,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 15,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 16,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
+        // {
+        //   roleId: 2,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 48,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 49,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
 
         // For Role MASTER_DISTRIBUTOR
 
         {
+          roleId: 3,
+          permissionId: 1,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 2,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 3,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 4,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 5,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 6,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 7,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 8,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 9,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 10,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 11,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 12,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 13,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 14,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 15,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 16,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 17,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 18,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 19,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 20,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        {
+          roleId: 3,
+          permissionId: 21,
+          read: false,
+          write: false,
+          isDeleted: false
+        },
+        // {
+        //   roleId: 3,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+
+        // // For Role DISTRIBUTOR
+
+        {
           roleId: 4,
           permissionId: 1,
           read: false,
@@ -2310,350 +2059,350 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 4,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        // For Role DISTRIBUTOR
+        // {
+        //   roleId: 4,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // For Role RETAILER
 
         {
           roleId: 5,
@@ -2802,350 +2551,350 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 5,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        // // For Role API_USER
+        // {
+        //   roleId: 5,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // // For Role EMPLOYEE
 
         {
           roleId: 6,
@@ -3292,2200 +3041,2206 @@ async function rolePermission() {
           permissionId: 21,
           read: false,
           write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-
-        // // For Role SALES_MANAGER
-        {
-          roleId: 7,
-          permissionId: 1,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 2,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 3,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 4,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 5,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 6,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 7,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 8,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 9,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 10,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 11,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 12,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 13,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 14,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 15,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 16,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 7,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-
-        // // For Role SALES_EXECUTIVE
-
-        {
-          roleId: 8,
-          permissionId: 1,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 2,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 3,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 4,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 5,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 6,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 7,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 8,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 9,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 10,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 11,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 12,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 13,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 14,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 15,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 16,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 62,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 63,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 64,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 65,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 66,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 67,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 68,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 69,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 8,
-          permissionId: 70,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-
-        // // For Role CUSTOMER_SUPPORT
-
-        {
-          roleId: 9,
-          permissionId: 1,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 2,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 3,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 4,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 5,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 6,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 7,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 8,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 9,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 10,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 11,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 12,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 13,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 14,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 15,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 16,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 9,
-          permissionId: 61,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-
-        //Customer SUpport
-        {
-          roleId: 10,
-          permissionId: 1,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 2,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 3,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 4,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 5,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 6,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 7,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 8,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 9,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 10,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 11,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 12,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 13,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 14,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 15,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 16,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 23,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 24,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 25,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 26,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 27,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 28,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 29,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 30,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 31,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 32,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 33,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 34,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 35,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 36,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 37,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 38,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 39,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 40,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 41,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 42,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 43,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 44,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 45,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 46,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 47,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 48,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 49,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 50,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 51,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 52,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 53,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 54,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 55,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 56,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 57,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 58,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 59,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 60,
-          read: true,
-          write: true,
-          isDeleted: false
-        },
-        {
-          roleId: 10,
-          permissionId: 61,
-          read: true,
-          write: true,
           isDeleted: false
         }
+        // {
+        //   roleId: 6,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+
+        // // For Role 
+        // {
+        //   roleId: 7,
+        //   permissionId: 1,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 2,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 3,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 4,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 5,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 6,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 7,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 8,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 9,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 10,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 11,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 12,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 13,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 14,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 15,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 16,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 7,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+
+        // // // For Role SALES_EXECUTIVE
+
+        // {
+        //   roleId: 8,
+        //   permissionId: 1,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 2,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 3,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 4,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 5,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 6,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 7,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 8,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 9,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 10,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 11,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 12,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 13,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 14,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 15,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 16,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 62,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 63,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 64,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 65,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 66,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 67,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 68,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 69,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 8,
+        //   permissionId: 70,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+
+        // // // For Role CUSTOMER_SUPPORT
+
+        // {
+        //   roleId: 9,
+        //   permissionId: 1,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 2,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 3,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 4,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 5,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 6,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 7,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 8,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 9,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 10,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 11,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 12,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 13,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 14,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 15,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 16,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 9,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+
+        // //Customer SUpport
+        // {
+        //   roleId: 10,
+        //   permissionId: 1,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 2,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 3,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 4,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 5,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 6,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 7,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 8,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 9,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 10,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 11,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 12,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 13,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 14,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 15,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 16,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 23,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 24,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 25,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 26,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 27,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 28,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 29,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 30,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 31,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 32,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 33,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 34,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 35,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 36,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 37,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 38,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 39,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 40,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 41,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 42,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 43,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 44,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 45,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 46,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 47,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 48,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 49,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 50,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 51,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 52,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 53,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 54,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 55,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 56,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 57,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 58,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 59,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 60,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 10,
+        //   permissionId: 61,
+        //   read: true,
+        //   write: true,
+        //   isDeleted: false
+        // }
       ];
+      
+      console.log(`Inserting ${rolesPermissionToInsert.length} rolePermission records...`);
       await dbService.createMany(model.rolePermission, rolesPermissionToInsert);
+      console.log('RolePermission data inserted successfully.');
+    } else {
+      console.log('RolePermission data already exists, skipping insertion.');
     }
   } catch (error) {
-    console.log('Settings seeder failed due to ', error.message);
+    console.error('RolePermission seeder failed due to:', error.message);
+    console.error('Full error:', error);
   }
 }
 
@@ -13672,12 +13427,13 @@ async function seedPgCommercials() {
       { select: ['id', 'name'] }
     );
 
-    const roleTypes = [5,4,3,2];
+    const roleTypes = [5,4,3,2,1];
     const roleNames = {
       5: 'RE',
       4: 'DI',
-      3: 'MDI',
-      2: 'AD'
+      3: 'MD',
+      2: 'WU',
+      1: 'AD'
     };
 
     let dataToInsertPgCommercials = [];
@@ -13756,7 +13512,7 @@ async function seedRangeCharges() {
     const roleNames = {
       5: 'RE',
       4: 'DI',
-      3: 'MDI',
+      3: 'MD',
       2: 'AD'
     };
 
@@ -13815,12 +13571,13 @@ async function seedRangeComm() {
       { select: ['id', 'operatorName', 'operatorType'] }
     );
 
-    const roleTypes = [5,4,3,2];
+    const roleTypes = [5,4,3,2,1];
     const roleNames = {
       5: 'RE',
       4: 'DI',
-      3: 'MDI',
-      2: 'AD'
+      3: 'MD',
+      2: 'WU',
+      1: 'AD'
     };
 
     let dataToInsertRangeComm = [];
@@ -13870,14 +13627,11 @@ async function seedRangeComm() {
 
 
 
-
 async function seedUsers() {
   try {
-    const User = require('../models/user');
-    
     // Check if user already exists
-    const existingUser = await User.findOne({
-      where: { email: 'gmaxepay@gmail.com' }
+    const existingUser = await dbService.findOne(model.user, { 
+      email: 'gmaxepay@gmail.com' 
     });
 
     if (!existingUser) {
@@ -13902,7 +13656,7 @@ async function seedUsers() {
         loggedIn: false
       };
 
-      await User.create(userData);
+      await dbService.createOne(model.user, userData);
       console.log('User seeded successfully');
     } else {
       console.log('User already exists');
@@ -13912,27 +13666,81 @@ async function seedUsers() {
   }
 }
 
+async function serviceCharges() {
+  try {
+    console.log('Seeding service charges...');
+    
+    // Get all active services
+    const services = await dbService.findAll(model.services, { isActive: true });
+    
+    if (!services || services.length === 0) {
+      console.log('No services found to create charges for');
+      return;
+    }
+
+    // Role types: 1=SUPER_ADMIN, 2=ADMIN, 3=MASTER_DISTRIBUTOR, 4=DISTRIBUTOR, 5=RETAILER
+    const roleCharges = {
+      1: 0,    // SUPER_ADMIN - no charge
+      2: 100,  // ADMIN - ₹100 per service
+      3: 80,   // MASTER_DISTRIBUTOR - ₹80 per service
+      4: 60,   // DISTRIBUTOR - ₹60 per service
+      5: 40    // RETAILER - ₹40 per service
+    };
+
+    const serviceChargeData = [];
+
+    for (const service of services) {
+      for (const [roleType, chargeAmount] of Object.entries(roleCharges)) {
+        // Check if charge already exists
+        const existingCharge = await dbService.findOne(model.serviceCharge, {
+          serviceId: service.id,
+          roleType: parseInt(roleType)
+        });
+
+        if (!existingCharge) {
+          serviceChargeData.push({
+            serviceId: service.id,
+            roleType: parseInt(roleType),
+            chargeAmount: chargeAmount,
+            isActive: true,
+            addedBy: 1 // Assuming user ID 1 is the system user
+          });
+        }
+      }
+    }
+
+    if (serviceChargeData.length > 0) {
+      await dbService.createMany(model.serviceCharge, serviceChargeData);
+      console.log(`Created ${serviceChargeData.length} service charges`);
+    } else {
+      console.log('All service charges already exist');
+    }
+
+  } catch (error) {
+    console.error('Error seeding service charges:', error);
+  }
+}
+
 async function seedData() {
   
    await roles();
-  //  await permissions();
-  //  await insertPermissions();
-  //  await rolePermission();
+   await permissions();
+   await insertPermissions();
+   await rolePermission();
    await KycDocumentSettings();
-   await servicePush();
+   await createBasicPackage();
+  //  await servicePush();
    await OperatorType();
    await state();
-    await gstState();
-    await bank();
-    await services();
+   await gstState();
+   await bank();
+    // await services();
    
-  
    await cardType();
    await paymentInsturment();
    await seedPgCommercials();
    await seedRangeComm();
    await seedRangeCharges();
    await seedUsers();
-   
 }
 module.exports = seedData;
