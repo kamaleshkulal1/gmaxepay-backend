@@ -37,7 +37,7 @@ app.use(express.urlencoded({ extended: true }));
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || process.env.ALLOWED_ORIGINS.includes(origin)) {
+    if (!origin || process.env.ALLOW_ORIGIN === '*' || process.env.ALLOWED_ORIGINS?.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -172,7 +172,6 @@ if (process.env.NODE_ENV !== 'test') {
   //     // seeder();
   //     name();
   //   });
-  // seeder();
   app.use(routes);
   httpServer.listen(process.env.PORT, () => {
     console.log(`gmaxepay is running on port ${process.env.PORT} successfully.`);

@@ -5,6 +5,7 @@
 
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
+const { reusableModelAttribute } = require('../utils/common');
 
 let Company = sequelize.define(
   'company',
@@ -18,24 +19,20 @@ let Company = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false
     },
-    appName: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
     companyPan: {
       type: DataTypes.STRING,
       allowNull: false
     },
     companyGst: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: true
     },
     logo: {
-      type: DataTypes.JSON,
+      type: DataTypes.STRING,
       allowNull: true
     },
     favicon: {
-      type: DataTypes.JSON,
+      type: DataTypes.STRING,
       allowNull: true
     },
     primaryColor: {
@@ -58,7 +55,28 @@ let Company = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true
     },
+    customerSupportEmail: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    singupPageDesign:{
+      type: DataTypes.INTEGER,
+      defaultValue: 1,
+    },
+    navigationBar:{
+      type: DataTypes.STRING,
+      defaultValue: 'HORIZONTAL',
+      attribute: ['HORIZONTAL', 'VERTICAL'],
+    },
     mobileNo: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    supportPhoneNumbers: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      allowNull: true
+    },
+    BussinessEntity: {
       type: DataTypes.STRING,
       allowNull: true
     },
@@ -77,7 +95,8 @@ let Company = sequelize.define(
     remark: {
       type: DataTypes.TEXT,
       allowNull: true
-    }
+    },
+    ...reusableModelAttribute
   },
   {
     freezeTableName: true,

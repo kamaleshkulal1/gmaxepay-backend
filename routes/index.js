@@ -22,6 +22,10 @@ const router = express.Router();
 // router.use(require('./MainRoute/v1/index'));
 // router.use(require('./retailer/v1/index'));
 
+// Image proxy route - accessible at /api/images/* (no v1 prefix)
+const imageController = require('../controller/company/v1/imageController');
+router.get(/^\/api\/images\/(.+)$/, imageController.serveImage);
+
 // Log routes
 router.use('/api/v1', require('./root'));
 

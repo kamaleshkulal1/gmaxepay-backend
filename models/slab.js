@@ -36,6 +36,14 @@ let Slab = sequelize.define(
         isIn: [['level', 'channel']]
       }
     },
+    slabScope: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'private',
+      validate: {
+        isIn: [['global', 'private']]
+      }
+    },
     remark: {
       type: DataTypes.TEXT,
       allowNull: true

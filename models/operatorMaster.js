@@ -20,6 +20,27 @@ let Operator = sequelize.define(
       allowNull: false,
       unique: true
     },
+    custConvFee: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0
+    },
+    flatFee: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    isCCF1Category: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    percentFee: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    gstRate: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
     commSettingType: {
       type: DataTypes.STRING
     },

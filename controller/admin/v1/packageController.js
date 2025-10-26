@@ -1,25 +1,38 @@
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
+const { USER_TYPES } = require('../../../constants/authConstant');
 
 const registerPackage = async (req, res) => {
   try {
-    let permissions = req.permission;
+    let permissions = req.permission || [];
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 13 &&
         permission.dataValues.write === true
     );
 
     if (!hasPermission) {
       return res.failure({ message: "User doesn't have Permission!" });
     }
-    const companyId = req.companyId;
+    // Only SUPER_ADMIN can create packages
+    if (req.user?.userType !== USER_TYPES.SUPER_ADMIN) {
+      return res.failure({ message: "Only SUPER_ADMIN can create packages" });
+    }
+
+    // Allow companyId to be nullable or explicitly provided by SUPER_ADMIN
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
     let dataToCreate = { ...(req.body || {}) };
+    // If SUPER_ADMIN passes companyId in body, honor it; otherwise keep computed value (may be null)
+    const resolvedCompanyId =
+      req.user?.userType === USER_TYPES.SUPER_ADMIN &&
+      Object.prototype.hasOwnProperty.call(dataToCreate, 'companyId')
+        ? dataToCreate.companyId
+        : companyId;
     dataToCreate = {
       ...dataToCreate,
       addedBy: req.user.id,
       type: req.user.userType,
-      companyId
+      companyId: resolvedCompanyId
     };
 
     if (dataToCreate.isDefault) {
@@ -34,7 +47,7 @@ const registerPackage = async (req, res) => {
       dataToCreate
     );
     if (!createdPackage) {
-      return res.failure({ message: 'Falied to create Package' });
+      return res.failure({ message: 'Failed to create Package' });
     }
     let packageToReturn = {
       ...createdPackage.dataValues
@@ -57,16 +70,16 @@ const registerPackage = async (req, res) => {
 
 const findAllPackage = async (req, res) => {
   try {
-    let permissions = req.permission;
+    let permissions = req.permission || [];
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 13 &&
         permission.dataValues.read === true
     );
     if (!hasPermission) {
       return res.failure({ message: "User doesn't have Permission!" });
     }
-    const companyId = req.companyId;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
     let dataToFind = req.body;
     let options = {};
     let query = {};
@@ -74,10 +87,13 @@ const findAllPackage = async (req, res) => {
     if (dataToFind && dataToFind.query) {
       query = dataToFind.query;
     }
-    query = { ...query, companyId };
+    // Apply company filter only when companyId is not null
+    if (companyId !== null && companyId !== undefined) {
+      query = { ...query, companyId };
+    }
 
     if (dataToFind && dataToFind.isCountOnly) {
-      let countOptions = { ...query,companyId };
+      let countOptions = { ...query };
       foundPackage = await dbService.count(model.packages, countOptions);
       if (!foundPackage) {
         return res.recordNotFound();
@@ -197,10 +213,10 @@ const findAllPackage = async (req, res) => {
 
 const getPackage = async (req, res) => {
   try {
-    let permissions = req.permission;
+    let permissions = req.permission || [];
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 13 &&
         permission.dataValues.read === true
     );
     if (!hasPermission) {
@@ -224,10 +240,10 @@ const getPackage = async (req, res) => {
 
 const partialUpdatePackage = async (req, res) => {
   try {
-    let permissions = req.permission;
+    let permissions = req.permission || [];
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 13 &&
         permission.dataValues.write === true
     );
     if (!hasPermission) {
@@ -280,10 +296,10 @@ const partialUpdatePackage = async (req, res) => {
 
 const deletePackage = async (req, res) => {
   try {
-    let permissions = req.permission;
+    let permissions = req.permission || [];
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 13 &&
         permission.dataValues.write === true
     );
     if (!hasPermission) {

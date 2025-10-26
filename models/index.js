@@ -23,6 +23,8 @@ db.services = require('./service');
 db.packages = require('./packages');
 db.packageService = require('./packageService');
 db.activeServices = require('./activeServices');
+db.subscription = require('./subscription');
+db.serviceCharge = require('./serviceCharge');
 
 // Operator & Category Models
 db.operator = require('./operatorMaster');
@@ -55,7 +57,9 @@ db.paymentInstrument = require('./paymentInsturment');
 
 // Company & KYC Models
 db.company = require('./company');
+db.companyImage = require('./companyImage');
 db.kycDocumentSetting = require('./kycDocument');
+db.ekycHub = require('./ekycHub');
 
 // IP & Network Models
 db.ipInfo = require('./ipInfo');
@@ -146,6 +150,52 @@ db.walletHistory.belongsTo(db.company, {
 db.company.hasMany(db.walletHistory, {
   foreignKey: 'companyId',
   as: 'walletHistories'
+});
+
+// eKYC Hub Relationships
+db.ekycHub.belongsTo(db.user, {
+  foreignKey: 'addedBy',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.ekycHub, {
+  foreignKey: 'addedBy',
+  as: 'ekycRecords',
+  sourceKey: 'id'
+});
+
+db.ekycHub.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.ekycHub, {
+  foreignKey: 'companyId',
+  as: 'ekycRecords',
+  sourceKey: 'id'
+});
+
+// Company Image Relationships
+db.companyImage.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.companyImage, {
+  foreignKey: 'companyId',
+  as: 'images',
+  sourceKey: 'id'
+});
+
+db.companyImage.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.companyImage, {
+  foreignKey: 'userId',
+  as: 'images',
+  sourceKey: 'id'
 });
 
 // BBPS Operator Relationships (commented out as models don't exist yet)

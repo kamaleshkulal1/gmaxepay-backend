@@ -7,7 +7,7 @@ const registerService = async (req, res) => {
     let permissions = req.permission;
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 9 &&
         permission.dataValues.write === true
     );
 
@@ -17,6 +17,20 @@ const registerService = async (req, res) => {
 
     let dataToCreate = { ...(req.body || {}) };
     const companyId = req.companyId;
+
+    // Check if service with same name already exists
+    const existingService = await dbService.findOne(model.services, {
+      serviceName: dataToCreate.serviceName,
+      isDelete: false
+    });
+
+    if (existingService) {
+      return res.failure({
+        message: 'Service already exists',
+        data: existingService.dataValues
+      });
+    }
+
     dataToCreate = {
       ...dataToCreate,
       isActive: true,
@@ -29,14 +43,14 @@ const registerService = async (req, res) => {
       dataToCreate
     );
     if (!createdServices) {
-      return res.failure({ message: 'Falied to create Package' });
+      return res.failure({ message: 'Failed to create Service' });
     }
-    let packageToReturn = {
+    let serviceToReturn = {
       ...createdServices.dataValues
     };
     return res.success({
-      message: 'Package Created Successfully',
-      data: packageToReturn
+      message: 'Service Created Successfully',
+      data: serviceToReturn
     });
   } catch (error) {
     console.log(error);
@@ -68,7 +82,7 @@ const registerServicePackage = async (req, res) => {
     let permissions = req.permission;
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 9 &&
         permission.dataValues.write === true
     );
 
@@ -148,7 +162,7 @@ const getServices = async (req, res) => {
     let permissions = req.permission;
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 9 &&
         permission.dataValues.read === true
     );
 

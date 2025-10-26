@@ -142,7 +142,7 @@ const handle2FA = async (req, res) => {
     try {
         const { otp, latitude, longitude, ipAddress } = req.body;
         const companyId = req.headers['company-id'] || null;
-        const dataToken = req.headers['data-token'];
+        const dataToken = req.headers['token'];
 
         if (!otp) {
             return res.badRequest({ message: '2FA code is required!' });
@@ -253,11 +253,25 @@ const logout = async (req, res) => {
     }
 };
 
+
+const aadharVerification = async (req, res) => {
+    try
+    {
+      const companyId = req.headers['company-id'] || null;
+
+      const {mobileNo}= req.body;
+      
+    } catch{
+
+    }
+}
+
 module.exports = {
     login,
     verifyOTP,
     resetPassword,
     handle2FA,
+    aadharVerification,
     refreshAccessToken,
     resendOTP,
     logout
