@@ -99,7 +99,7 @@ jobs:
             if [ -f /tmp/.env.backup ]; then
               cp /tmp/.env.backup .env
               rm /tmp/.env.backup
-              echo "✅ Restored .env file"
+              echo "✅ Restored .env File"
             fi
             
             echo "✅ Updated to latest code from ${{ github.ref_name }} branch"
