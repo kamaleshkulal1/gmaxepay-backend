@@ -29,29 +29,40 @@ const uploadImage = async (req, res) => {
 
     // Validate subtype for signature type
     if (type === 'signature') {
-      const validSubtypes = ['logo', 'stamp', 'signature'];
+      const validSubtypes = ['logo', 'favicon', 'banner', 'stamp', 'signature'];
       if (!subtype || !validSubtypes.includes(subtype)) {
-        return res.failure({ message: 'Subtype is required for signature type. Must be logo, stamp, or signature' });
+        return res.failure({ message: 'Subtype is required for signature type. Must be one of: logo, favicon, banner, stamp, signature' });
       }
     }
 
-    // For signature type, check if image already exists (only one allowed per subtype)
+    // For signature type only: check if image already exists (only one allowed per subtype)
+    // Login sliders allow multiple images
     if (type === 'signature' && subtype) {
-      const existingImage = await dbService.findOne(model.companyImage, {
+      // Find ALL existing images (active and inactive) for this type, subtype, and company
+      const existingImages = await dbService.findAll(model.companyImage, {
         type: 'signature',
         subtype,
-        companyId,
-        isActive: true
+        companyId
       });
 
-      if (existingImage) {
-        // Delete old image from S3
-        await deleteImageFromS3(existingImage.s3Key);
-        // Mark old image as inactive
-        await dbService.update(model.companyImage, 
-          { id: existingImage.id }, 
-          { isActive: false }
-        );
+      // Delete all old images from S3 and database
+      if (existingImages && existingImages.length > 0) {
+        for (const oldImage of existingImages) {
+          try {
+            // Delete from S3
+            if (oldImage.s3Key) {
+              await deleteImageFromS3(oldImage.s3Key);
+            }
+            // Mark as inactive in database
+            await dbService.update(model.companyImage, 
+              { id: oldImage.id }, 
+              { isActive: false }
+            );
+          } catch (error) {
+            console.error(`Error deleting old image ${oldImage.id}:`, error);
+            // Continue with next image even if one fails
+          }
+        }
       }
     }
 
@@ -280,6 +291,8 @@ const getImagesByCategory = async (req, res) => {
       loginSlider: [],
       signature: {
         logo: null,
+        favicon: null,
+        banner: null,
         stamp: null,
         signature: null
       }
@@ -294,7 +307,10 @@ const getImagesByCategory = async (req, res) => {
       if (img.type === 'loginSlider') {
         groupedImages.loginSlider.push(imageData);
       } else if (img.type === 'signature' && img.subtype) {
-        groupedImages.signature[img.subtype] = imageData;
+        // Only set if subtype exists in our structure to avoid undefined properties
+        if (groupedImages.signature.hasOwnProperty(img.subtype)) {
+          groupedImages.signature[img.subtype] = imageData;
+        }
       }
     });
 

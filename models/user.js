@@ -212,7 +212,7 @@ const User = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     tokenVersion: {
       type: DataTypes.INTEGER,

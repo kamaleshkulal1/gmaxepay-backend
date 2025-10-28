@@ -13,7 +13,7 @@ const s3Client = new S3Client({
 });
 
 const BUCKET_NAME = process.env.AWS_BUCKET || 'gmaxepay';
-const BACKEND_URL = process.env.BACKEND_URL || 'https://api-dev.gmaxepay.in';
+const AWS_CDN_URL = process.env.AWS_CDN_URL || 'https://cdn.gmaxepay.in';
 
 /**
  * Get image URL pointing to backend server
@@ -22,7 +22,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'https://api-dev.gmaxepay.in';
  */
 const getImageUrl = (s3Key) => {
   if (!s3Key) return null;
-  return `${BACKEND_URL}/api/images/${s3Key}`;
+  return `${AWS_CDN_URL}/${s3Key}`;
 };
 
 /**
@@ -45,15 +45,15 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
     // Construct S3 key based on type
     let s3Key;
     if (type === 'loginSlider') {
-      s3Key = `images/${companyId}/loginSlider/${sanitizedFileName}`;
+      s3Key = `images/${companyId||'default'}/loginSlider/${sanitizedFileName}`;
     } else if (type === 'signature' && subtype) {
-      s3Key = `images/${companyId}/signature/${subtype}/${sanitizedFileName}`;
+      s3Key = `images/${companyId||'default'}/signature/${subtype}/${sanitizedFileName}`;
     } else if (type === 'company' && subtype) {
-      s3Key = `images/company/${companyId}/${subtype}/${sanitizedFileName}`;
+      s3Key = `images/company/${companyId||'default'}/${subtype}/${sanitizedFileName}`;
     } else if (type === 'profile' && subtype) {
       s3Key = `images/profile/${subtype}/${sanitizedFileName}`;
     } else {
-      s3Key = `images/${companyId}/other/${sanitizedFileName}`;
+      s3Key = `images/${companyId||'default'}/other/${sanitizedFileName}`;
     }
     
     // Upload to S3

@@ -10,6 +10,66 @@ const iv = Buffer.from(process.env.AES_IV, 'hex');
 const { decrypt, doubleEncrypt } = require('../../../utils/doubleCheckUp');
 
 
+// Helper function to check IP address
+const checkDomainIP = async (domain) => {
+  const dns = require('dns').promises;
+  
+  // Get whitelisted IPs from environment variable
+  const companyCheckIp = process.env.COMPANY_CHECK_IP;
+  
+  if (!companyCheckIp) {
+    throw new Error('COMPANY_CHECK_IP environment variable is not configured');
+  }
+
+  // Parse the IP array from environment variable
+  const whitelistedIPs = companyCheckIp
+    .replace(/[\[\]]/g, '') // Remove brackets
+    .split(',')
+    .map(ip => ip.trim())
+    .filter(ip => ip.length > 0);
+
+  if (whitelistedIPs.length === 0) {
+    throw new Error('No whitelisted IPs configured');
+  }
+
+  // Resolve domain to IPv4 addresses
+  const resolvedIPs = await dns.resolve4(domain);
+  
+  console.log(`Domain ${domain} resolved to IPs: ${resolvedIPs.join(', ')}`);
+  console.log(`Whitelisted IPs: ${whitelistedIPs.join(', ')}`);
+  
+  // Check if any resolved IP matches whitelisted IPs
+  const matchedIPs = resolvedIPs.filter(ip => whitelistedIPs.includes(ip));
+  
+  if (matchedIPs.length === 0) {
+    // Additional check: Try to find IPs in the same network range (first 3 octets match)
+    const networkMatches = resolvedIPs.filter(resolvedIP => {
+      const resolvedParts = resolvedIP.split('.');
+      return whitelistedIPs.some(whitelistedIP => {
+        const whitelistedParts = whitelistedIP.split('.');
+        // Check if first 3 octets match (same network)
+        return resolvedParts[0] === whitelistedParts[0] && 
+               resolvedParts[1] === whitelistedParts[1] && 
+               resolvedParts[2] === whitelistedParts[2];
+      });
+    });
+
+    if (networkMatches.length > 0) {
+      console.log(`Network match found but exact IP mismatch. Resolved: ${networkMatches.join(', ')}`);
+      throw new Error(`Domain ${domain} resolves to IPs in the same network but not exact match. Resolved IPs: ${resolvedIPs.join(', ')}. Whitelisted IPs: ${whitelistedIPs.join(', ')}. Please update your DNS records or whitelist configuration.`);
+    }
+    
+    throw new Error(`Domain ${domain} does not resolve to any whitelisted IP. Resolved IPs: ${resolvedIPs.join(', ')}. Whitelisted IPs: ${whitelistedIPs.join(', ')}`);
+  }
+
+  return {
+    success: true,
+    resolvedIPs,
+    matchedIPs,
+    whitelistedIPs
+  };
+};
+
 const createCompany = async (req, res) => {
   try {
     let data = req.body;
@@ -79,6 +139,56 @@ const createCompany = async (req, res) => {
     if(!data.Remarks) {
       return res.failure({
         message: 'Remarks are required'
+      });
+    }
+
+    // Validate verification token
+    if (!data.verificationToken) {
+      return res.failure({
+        message: 'Verification token is required. Please verify your IP first.'
+      });
+    }
+
+    // Decrypt and validate the verification token
+    try {
+      const decodedToken = Buffer.from(data.verificationToken, 'base64').toString('utf-8');
+      const encryptedToken = JSON.parse(decodedToken);
+      const decryptedToken = decrypt(encryptedToken, key);
+      
+      if (!decryptedToken) {
+        throw new Error('Invalid token format');
+      }
+
+      const tokenData = JSON.parse(decryptedToken);
+      
+      // Check if token is expired (valid for 1 hour)
+      const tokenAge = Date.now() - tokenData.timestamp;
+      const TOKEN_VALIDITY = 60 * 60 * 1000; // 1 hour in milliseconds
+      
+      if (tokenAge > TOKEN_VALIDITY) {
+        return res.failure({
+          message: 'Verification token has expired. Please verify your IP again.'
+        });
+      }
+
+      // Check if token is verified
+      if (!tokenData.verified) {
+        return res.failure({
+          message: 'Invalid verification token'
+        });
+      }
+
+      // Check if domain matches
+      if (tokenData.domain !== data.customDomain) {
+        return res.failure({
+          message: 'Domain mismatch. Verification token is for a different domain.'
+        });
+      }
+
+    } catch (tokenError) {
+      console.error('Token validation error:', tokenError);
+      return res.failure({
+        message: 'Invalid verification token. Please verify your IP again.'
       });
     }
     
@@ -688,6 +798,74 @@ const deleteCompany = async (req, res) => {
   }
 };
 
+
+const getIpCheck = async (req, res)=>{
+  try{
+    const { domain } = req.body;
+    
+    if (!domain) {
+      return res.failure({
+        message: 'Domain is required'
+      });
+    }
+
+    // Use the helper function to check IP
+    try {
+      const ipCheckResult = await checkDomainIP(domain);
+      
+      // Store IP info in database
+      for (const ip of ipCheckResult.matchedIPs) {
+        const existingIp = await dbService.findOne(model.ipInfo, {
+          ipAddress: ip,
+          ipType: 'WHITELIST'
+        });
+
+        if (!existingIp) {
+          await dbService.createOne(model.ipInfo, {
+            ipAddress: ip,
+            ipType: 'WHITELIST'
+          });
+        }
+      }
+
+      // Generate verification token with encrypted data
+      const tokenData = {
+        domain: domain,
+        timestamp: Date.now(),
+        verified: true
+      };
+
+      // Encrypt the token
+      const encryptedToken = doubleEncrypt(JSON.stringify(tokenData), key);
+
+      // Convert encrypted token object to string for easier handling
+      const verificationToken = Buffer.from(JSON.stringify(encryptedToken)).toString('base64');
+
+      return res.success({
+        message: 'IP verified successfully',
+        data: {
+          domain: domain,
+          status: 'VERIFIED',
+          verificationToken: verificationToken
+        }
+      });
+    } catch (ipError) {
+      return res.failure({
+        message: 'IP verification failed - please check your IP',
+        data: {
+          domain: domain,
+          status: 'FAILED'
+        }
+      });
+    }
+  } catch(error){
+    console.error('IP check error:', error);
+    return res.failure({
+      message: error.message || 'IP verification failed'
+    });
+  }
+}
+
 module.exports = {
   createCompany,
   getCompanyById,
@@ -697,5 +875,6 @@ module.exports = {
   uploadProfileImage,
   deleteCompany,
   getPincodeByCity,
-  getCityByPincode
+  getCityByPincode,
+  getIpCheck
 };

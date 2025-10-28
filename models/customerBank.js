@@ -29,7 +29,7 @@ let CustomerBank = sequelize.define('customerBank', {
       model: 'company',
       key: 'id'
     },
-    allowNull: true
+    allowNull: false
   },
   bankName: {
     type: DataTypes.STRING,

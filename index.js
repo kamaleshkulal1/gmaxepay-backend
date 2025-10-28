@@ -59,7 +59,7 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Use custom logging middleware instead of default morgan
 app.use(morganMiddleware);
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(requestLogger);
 app.use(responseInterceptor);
 app.use(express.static(path.join(__dirname, 'public')));

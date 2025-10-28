@@ -13627,13 +13627,47 @@ async function seedRangeComm() {
 
 
 
-async function seedUsers() {
+async function seedCompany() {
+  try {
+    // Check if company already exists
+    const existingCompany = await dbService.findOne(model.company, { 
+      companyPan: 'NGEPK6607L' 
+    });
+
+    if (!existingCompany) {
+      const companyData = {
+        companyName: 'GmaxePay',
+        companyPan: 'NGEPK6607L',
+        customDomain: 'app.gmaxepay.in',
+        remark: 'Company registration remarks',
+        singupPageDesign: 1,
+        navigationBar: 'HORIZONTAL',
+        BussinessEntity: 'Company',
+        isActive: true,
+        isDeleted: false
+      };
+
+      const company = await dbService.createOne(model.company, companyData);
+      console.log('Company seeded successfully with ID:', company.id);
+      return company;
+    } else {
+      console.log('Company already exists with ID:', existingCompany.id);
+      return existingCompany;
+    }
+  } catch (error) {
+    console.error('Error seeding company:', error);
+    return null;
+  }
+}
+
+async function seedUsers(companyId) {
   try {
     // Check if user already exists
     const existingUser = await dbService.findOne(model.user, { 
       email: 'gmaxepay@gmail.com' 
     });
 
+    let user;
     if (!existingUser) {
       const userData = {
         name: 'Gmaxepay Admin',
@@ -13643,6 +13677,7 @@ async function seedUsers() {
         userRole: 1, // Super Admin
         kycStatus: 1, // Approved
         userType: 1, // Admin type
+        companyId: companyId,
         isActive: true,
         isDeleted: false,
         mobileVerify: true,
@@ -13656,13 +13691,39 @@ async function seedUsers() {
         loggedIn: false
       };
 
-      await dbService.createOne(model.user, userData);
-      console.log('User seeded successfully');
+      user = await dbService.createOne(model.user, userData);
+      console.log('User seeded successfully with ID:', user.id);
     } else {
-      console.log('User already exists');
+      console.log('User already exists with ID:', existingUser.id);
+      user = existingUser;
     }
+
+    // Create wallet for the user
+    if (user && user.id) {
+      const existingWallet = await dbService.findOne(model.wallet, { 
+        refId: user.id 
+      });
+
+      if (!existingWallet) {
+        const walletData = {
+          refId: user.id,
+          companyId: companyId,
+          roleType: 1,
+          mainWallet: 0,
+          apesWallet: 0,
+          isActive: true,
+          isDelete: false
+        };
+
+        await dbService.createOne(model.wallet, walletData);
+        console.log('Wallet seeded successfully for user ID:', user.id);
+      } else {
+        console.log('Wallet already exists for user ID:', user.id);
+      }
+    }
+
   } catch (error) {
-    console.error('Error seeding user:', error);
+    console.error('Error seeding user or wallet:', error);
   }
 }
 
@@ -13741,6 +13802,11 @@ async function seedData() {
    await seedPgCommercials();
    await seedRangeComm();
    await seedRangeCharges();
-   await seedUsers();
+   
+   // Create company first, then user and wallet
+   const company = await seedCompany();
+   if (company && company.id) {
+     await seedUsers(company.id);
+   }
 }
 module.exports = seedData;

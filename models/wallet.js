@@ -28,7 +28,7 @@ let Wallet = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     roleType: {
       type: DataTypes.INTEGER
@@ -37,14 +37,14 @@ let Wallet = sequelize.define(
       type: DataTypes.FLOAT,
       defaultValue: 0,
       set(value) {
-        this.setDataValue('prepaid', parseFloat(value.toFixed(2)));
+        this.setDataValue('mainWallet', parseFloat(value.toFixed(2)));
       }
     },
     apesWallet: {
       type: DataTypes.FLOAT,
       defaultValue: 0,
       set(value) {
-        this.setDataValue('mobikwik', parseFloat(value.toFixed(2)));
+        this.setDataValue('apesWallet', parseFloat(value.toFixed(2)));
       }
     },
     ...reusableSMSAttribute

@@ -18,6 +18,42 @@ const getCompanyDettails = async (req, res) => {
         if(!companyDomain) return res.failure({ message: 'Company domain is required' });
         const company = await dbService.findOne(model.company, { customDomain: companyDomain });
         if(!company) return res.failure({ message: 'Company not found' });
+        
+        // Fetch slider images for the company
+        const sliderImages = await dbService.findAll(
+            model.companyImage, 
+            { 
+                companyId: company.id, 
+                type: 'loginSlider',
+                isActive: true 
+            },
+            {
+                order: [['createdAt', 'ASC']]
+            }
+        );
+        
+        const logoImage = await dbService.findOne(model.companyImage, {
+            companyId: company.id,
+            type: 'signature',
+            subtype: 'logo',
+            isActive: true
+        });
+        const faviconImage = await dbService.findOne(model.companyImage, {
+            companyId: company.id,
+            type: 'signature',
+            subtype: 'favicon',
+            isActive: true
+        });
+        
+        // Format slider images with full domain URL
+        const formattedSliderImages = sliderImages.map(img => ({
+            id: img.id,
+            name: img.name,
+            type: img.type,
+            image: `${process.env.AWS_CDN_URL}/${img.s3Key}`
+        }));
+
+        
         const data = {
             companyId: company.id,
             companyDomain: company.customDomain,
@@ -31,6 +67,9 @@ const getCompanyDettails = async (req, res) => {
             supportPhoneNumbers: company.supportPhoneNumbers,
             customerSupportEmail: company.customerSupportEmail,
             isActive: company.isActive,
+            sliderImages: formattedSliderImages,
+            logo: logoImage ? `${process.env.AWS_CDN_URL}/${logoImage.s3Key}` : null,
+            favicon: faviconImage ? `${process.env.AWS_CDN_URL}/${faviconImage.s3Key}` : null,
         }
         return res.success({ message: 'Company details fetched successfully', data });
     } catch (error) {
@@ -38,5 +77,6 @@ const getCompanyDettails = async (req, res) => {
         return res.failure({ message: error.message });
     }
 }
+
 
 module.exports = { getCompanyDettails };

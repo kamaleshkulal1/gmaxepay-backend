@@ -22,7 +22,7 @@ let Slab = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     slabName: {
       type: DataTypes.STRING,

@@ -18,7 +18,7 @@ let Ledger = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     credit: {
       allowNull: true,

@@ -21,7 +21,7 @@ let RangeCharges = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     slabId: {
       allowNull: false,

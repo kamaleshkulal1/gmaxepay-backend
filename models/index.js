@@ -7,6 +7,12 @@ const dbConnection = require('../config/dbConnection');
 const db = {};
 db.sequelize = dbConnection;
 
+// Company & KYC Models (Load first as other models reference it)
+db.company = require('./company');
+db.companyImage = require('./companyImage');
+db.kycDocumentSetting = require('./kycDocument');
+db.ekycHub = require('./ekycHub');
+
 // User Management Models
 db.user = require('./user');
 db.userLogin = require('./userLogin');
@@ -54,12 +60,6 @@ db.bank = require('./bank');
 db.customerBank = require('./customerBank');
 db.cardType = require('./cardType');
 db.paymentInstrument = require('./paymentInsturment');
-
-// Company & KYC Models
-db.company = require('./company');
-db.companyImage = require('./companyImage');
-db.kycDocumentSetting = require('./kycDocument');
-db.ekycHub = require('./ekycHub');
 
 // IP & Network Models
 db.ipInfo = require('./ipInfo');

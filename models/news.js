@@ -22,7 +22,7 @@ let news = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     title: {
       type: DataTypes.STRING

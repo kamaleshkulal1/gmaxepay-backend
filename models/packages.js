@@ -22,7 +22,7 @@ let Package = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     packageName: {
       type: DataTypes.STRING,

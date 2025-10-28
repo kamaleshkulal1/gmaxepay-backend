@@ -39,7 +39,7 @@ const ekycHub = sequelize.define(
     },
     companyId: {
       type: DataTypes.INTEGER,
-      allowNull: true,
+      allowNull: false,
       references: {
         model: 'company',
         key: 'id'

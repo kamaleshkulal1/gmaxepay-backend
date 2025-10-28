@@ -24,5 +24,6 @@ router.post('/upload-profile-image', authentication, upload.single('image'), com
 router.post('/create-company', authentication,upload.single('profileImage'), companyController.createCompany );
 router.put('/update-company/:id', authentication, companyController.updateCompany );
 router.put('/update-logo-favicon/:id', authentication, upload.single('image'), companyController.updateCompanyLogoAndFavicon );
+router.post('/ip-check', authentication, companyController.getIpCheck );
 
 module.exports = router;

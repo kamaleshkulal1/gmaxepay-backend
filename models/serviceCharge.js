@@ -31,7 +31,7 @@ let ServiceCharge = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     userId: {
       type: DataTypes.INTEGER,

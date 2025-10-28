@@ -34,11 +34,11 @@ let CompanyImage = sequelize.define(
     subtype: {
       type: DataTypes.STRING,
       allowNull: true,
-      comment: 'For signature type: logo, stamp, signature'
+      comment: 'For signature type: logo,favicon, banner, stamp, signature'
     },
     companyId: {
       type: DataTypes.INTEGER,
-      allowNull: true,
+      allowNull: false,
       references: {
         model: 'company',
         key: 'id'

@@ -40,7 +40,7 @@ let Subscription = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     subscriptionType: {
       type: DataTypes.ENUM('one_time', 'monthly', 'yearly'),

@@ -31,7 +31,7 @@ let Outlet = sequelize.define(
         model: 'company',
         key: 'id'
       },   
-      allowNull: true
+      allowNull: false
     },
     shopName: { type: DataTypes.STRING, allowNull: false },
     shopAddress: { type: DataTypes.STRING, allowNull: false },

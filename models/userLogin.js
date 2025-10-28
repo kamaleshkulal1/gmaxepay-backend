@@ -22,7 +22,7 @@ let userLogin = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: true
+      allowNull: false
     },
     user_type: {
       type: DataTypes.INTEGER,
