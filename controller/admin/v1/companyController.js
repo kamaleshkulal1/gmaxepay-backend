@@ -436,7 +436,7 @@ const createCompany = async (req, res) => {
     }
 
     // Get mail icons URL
-    const backendUrl = process.env.BACKEND_URL || process.env.API_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const backendUrl = process.env.BASE_URL;
     const iconUrl = `${backendUrl}/mailicons.png`;
 
     // Send welcome email with onboarding link

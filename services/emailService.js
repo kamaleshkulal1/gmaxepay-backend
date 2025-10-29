@@ -27,21 +27,15 @@ const sendWelcomeEmail = async ({
     const templatePath = path.join(__dirname, '../mailTemplate/welcomeEmail.html');
     let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
 
+    console.log("logoUrl", logoUrl);
+    console.log("iconUrl", iconUrl);
     // Replace placeholders in template
     htmlTemplate = htmlTemplate.replace(/{{USER_NAME}}/g, userName || 'Valued Customer');
     htmlTemplate = htmlTemplate.replace(/{{ONBOARDING_LINK}}/g, onboardingLink);
     htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
-    htmlTemplate = htmlTemplate.replace(/{{EXPIRY_TIME}}/g, expiryTime || '6 days');
+    htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, iconUrl || '');
     htmlTemplate = htmlTemplate.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
     
-    // Replace icon URL in template
-    htmlTemplate = htmlTemplate.replace(/{{ICON_URL}}/g, iconUrl || '');
-    
-    // Ensure logo URL is set even if empty
-    if (!logoUrl) {
-      logoUrl = iconUrl || '';
-    }
-
     // Email options
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
