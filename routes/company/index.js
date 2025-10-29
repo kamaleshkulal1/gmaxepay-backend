@@ -1,12 +1,9 @@
 const express = require('express');
-const companyController = require('../../controller/company/v1/companyController');
-const imageRoutes = require('./v1/imageRoutes');
 const router = express.Router();
+const authentication = require('../../middleware/authentication');
 
-
-router.post('/getCompanyDetails', companyController.getCompanyDettails);
-
+router.use('/companyDetails', require('./v1/companyRoutes'));
 // Image routes
-router.use('/images', imageRoutes);
+router.use('/images',authentication, require('./v1/imageRoutes'));
 
 module.exports = router;
