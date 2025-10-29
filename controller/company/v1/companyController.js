@@ -287,4 +287,5 @@ const updateCompany = async (req, res) => {
     }
 };
 
+
 module.exports = { getCompanyDettails, updateCompany };

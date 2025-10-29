@@ -16,7 +16,7 @@ let Company = sequelize.define(
       autoIncrement: true
     },
     companyName: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(500),
       allowNull: false
     },
     companyPan: {
@@ -44,7 +44,7 @@ let Company = sequelize.define(
       allowNull: true
     },
     customDomain: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(500),
       allowNull: true
     },
     contactName: {
@@ -77,7 +77,7 @@ let Company = sequelize.define(
       allowNull: true
     },
     BussinessEntity: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(500),
       allowNull: true
     },
     billingAddress: {

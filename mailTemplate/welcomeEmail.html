@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to GMAXEPAY</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .logo-container {
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        .logo-container img {
+            max-width: 150px;
+            height: auto;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .message {
+            font-size: 16px;
+            color: #666666;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .cta-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .cta-button {
+            display: inline-block;
+            padding: 15px 40px;
+            background-color: #667eea;
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        .cta-button:hover {
+            background-color: #5568d3;
+        }
+        .illustration {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .illustration img {
+            max-width: 100%;
+            height: auto;
+        }
+        .icons-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+        .icon-item {
+            text-align: center;
+        }
+        .icon-item img {
+            width: 48px;
+            height: 48px;
+        }
+        .footer {
+            background-color: #f9f9f9;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #999999;
+            border-top: 1px solid #eeeeee;
+        }
+        .note {
+            font-size: 14px;
+            color: #888888;
+            margin-top: 20px;
+            text-align: center;
+            font-style: italic;
+        }
+        .expiry-note {
+            font-size: 12px;
+            color: #ff6b6b;
+            margin-top: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo-container">
+                <img src="{{LOGO_URL}}" alt="GMAXEPAY Logo" />
+            </div>
+        </div>
+        <div class="content">
+            <div class="greeting">Dear {{USER_NAME}},</div>
+            <div class="message">
+                Welcome to GMAXEPAY! We're excited to have you on board.
+            </div>
+            <div class="message">
+                Click on the button below to complete your onboarding process and activate your account.
+            </div>
+            <div class="cta-container">
+                <a href="{{ONBOARDING_LINK}}" class="cta-button">Complete Onboarding</a>
+            </div>
+            <div class="icons-section">
+                <div class="icon-item">
+                    <img src="{{ICON_URL}}" alt="Feature Icon" />
+                </div>
+                <div class="icon-item">
+                    <img src="{{ICON_URL}}" alt="Feature Icon" />
+                </div>
+                <div class="icon-item">
+                    <img src="{{ICON_URL}}" alt="Feature Icon" />
+                </div>
+            </div>
+            <div class="expiry-note">
+                ⚠️ This link will expire in {{EXPIRY_TIME}}. Please complete your onboarding before it expires.
+            </div>
+            <div class="note">
+                If you did not request this email, please ignore it or contact our support team.
+            </div>
+        </div>
+        <div class="footer">
+            <p>&copy; {{YEAR}} GMAXEPAY. All rights reserved.</p>
+            <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+    </div>
+</body>
+</html>
+

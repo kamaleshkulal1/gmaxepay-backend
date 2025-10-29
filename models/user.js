@@ -25,10 +25,10 @@ const User = sequelize.define(
       autoIncrement: true
     },
     name: {
-      type: DataTypes.STRING
+      type: DataTypes.STRING(500)
     },
     fullAddress: {
-      type: DataTypes.STRING
+      type: DataTypes.TEXT
     },
     city: {
       type: DataTypes.STRING

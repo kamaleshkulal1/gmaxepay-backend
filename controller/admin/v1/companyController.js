@@ -8,6 +8,8 @@ const { uploadImageToS3, deleteImageFromS3, getImageUrl } = imageService;
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 const iv = Buffer.from(process.env.AES_IV, 'hex');
 const { decrypt, doubleEncrypt } = require('../../../utils/doubleCheckUp');
+const { generateOnboardingToken } = require('../../../utils/onboardingToken');
+const { sendWelcomeEmail } = require('../../../services/emailService');
 
 
 // Helper function to check IP address
@@ -400,6 +402,59 @@ const createCompany = async (req, res) => {
 
     const wallet = await dbService.createOne(model.wallet, walletData);
 
+    // Generate onboarding token
+    const onboardingExpiry = process.env.ON_BOARDING_EXPIRY || '6d';
+    const tokenData = generateOnboardingToken({
+      userId: user.id,
+      name: user.name,
+      companyId: company.id,
+      mobileNo: user.mobileNo,
+      userRole: user.userRole
+    }, onboardingExpiry);
+
+    // Save onboarding token to database
+    const onboardingTokenData = {
+      userId: user.id,
+      companyId: company.id,
+      token: tokenData.token,
+      expiresAt: tokenData.expiresAt,
+      isUsed: false
+    };
+
+    await dbService.createOne(model.onboardingToken, onboardingTokenData);
+
+    // Construct onboarding URL
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.gmaxepay.in';
+    const onboardingLink = `${frontendUrl}/onboarding/${tokenData.token}`;
+
+    // Get company logo URL (from company.logo or default)
+    let logoUrl = company.logo ? getImageUrl(company.logo) : null;
+    if (!logoUrl) {
+      // Use default logo from public folder
+      const backendUrl = process.env.BASE_URL;
+      logoUrl = `${backendUrl}/gmaxepay.png`;
+    }
+
+    // Get mail icons URL
+    const backendUrl = process.env.BACKEND_URL || process.env.API_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const iconUrl = `${backendUrl}/mailicons.png`;
+
+    // Send welcome email with onboarding link
+    try {
+      await sendWelcomeEmail({
+        to: user.email,
+        userName: user.name,
+        onboardingLink: onboardingLink,
+        logoUrl: logoUrl,
+        iconUrl: iconUrl,
+        expiryTime: tokenData.expiryDisplay
+      });
+      console.log('Welcome email sent successfully to:', user.email);
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError);
+      // Don't fail the entire request if email fails, just log it
+    }
+
     return res.success({
       message: 'Company created successfully',
       data: {
@@ -415,7 +470,8 @@ const createCompany = async (req, res) => {
           id: wallet.id,
           mainWallet: wallet.mainWallet,
           apesWallet: wallet.apesWallet
-        }
+        },
+        onboardingLink: onboardingLink // Include in response for testing
       }
     });
   } catch (error) {

@@ -18,6 +18,7 @@ db.user = require('./user');
 db.userLogin = require('./userLogin');
 db.userVerification = require('./userVerification');
 db.userPackage = require('./userPackage');
+db.onboardingToken = require('./onboardingToken');
 
 // Role & Permission Models
 db.permission = require('./permissions');
@@ -195,6 +196,29 @@ db.companyImage.belongsTo(db.user, {
 db.user.hasMany(db.companyImage, {
   foreignKey: 'userId',
   as: 'images',
+  sourceKey: 'id'
+});
+
+// Onboarding Token Relationships
+db.onboardingToken.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.onboardingToken, {
+  foreignKey: 'userId',
+  as: 'onboardingTokens',
+  sourceKey: 'id'
+});
+
+db.onboardingToken.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.onboardingToken, {
+  foreignKey: 'companyId',
+  as: 'onboardingTokens',
   sourceKey: 'id'
 });
 
