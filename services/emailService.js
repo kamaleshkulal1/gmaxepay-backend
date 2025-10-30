@@ -85,7 +85,7 @@ module.exports = {
  * @param {string} options.otp
  * @param {number} options.expiryMinutes
  */
-module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, logoUrl }) => {
+module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, logoUrl, illustrationUrl }) => {
   try {
     const templatePath = path.join(__dirname, '../mailTemplate/emailOtp.html');
     let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
@@ -95,11 +95,12 @@ module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, log
     htmlTemplate = htmlTemplate.replace(/{{EXPIRY_MINUTES}}/g, String(expiryMinutes));
     htmlTemplate = htmlTemplate.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
     htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
+    htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, illustrationUrl || '');
 
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
       to,
-      subject: 'Request for Otp from Gmaxepay',
+      subject: 'OTP Request from Gmaxepay for Email Verification',
       html: htmlTemplate,
       text: `Request for OTP from Gmaxepay. Your verification code is ${otp}. It expires in ${expiryMinutes} minutes.`
     };

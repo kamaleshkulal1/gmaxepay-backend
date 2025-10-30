@@ -7,6 +7,7 @@ const random = require('../../../utils/common');
 const amezesmsApi = require('../../../services/amezesmsApi');
 const { JWT } = require('../../../constants/authConstant');
 const emailService = require('../../../services/emailService');
+const imageService = require('../../../services/imageService');
 
 // Allowed Origin for onboarding flows
 const getOrigin = (req) => req.get('origin') || req.get('referer') || '';
@@ -372,7 +373,12 @@ const sendEmailOtp = async (req, res) => {
 
     await dbService.update(model.user, { id: user.id }, { otpEmail: `${hashedCode}~${expireOTP}` });
 
-    await emailService.sendOtpEmail({ to: user.email, userName: user.name || 'User', otp: String(code), expiryMinutes: 3 });
+    // Build logo and illustration URLs similar to welcome email
+    const backendUrl = process.env.BASE_URL;
+    const logoUrl = `${backendUrl}/gmaxepay.png`;
+    const illustrationUrl = `${backendUrl}/otp.png`;
+
+    await emailService.sendOtpEmail({ to: user.email, userName: user.name || 'User', otp: String(code), expiryMinutes: 3, logoUrl, illustrationUrl });
 
     const pendingInfo = getPendingSteps({ userDetails: ctx.userDetails, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails });
     return res.success({ message: 'OTP sent to registered email', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
@@ -453,7 +459,11 @@ const resetEmailOtp = async (req, res) => {
     const expireOTP = moment().add(3, 'minutes').toISOString();
 
     await dbService.update(model.user, { id: user.id }, { otpEmail: `${hashedCode}~${expireOTP}` });
-    await emailService.sendOtpEmail({ to: user.email, userName: user.name || 'User', otp: String(code), expiryMinutes: 3 });
+
+    const backendUrl = process.env.BASE_URL;
+    const logoUrl = (ctx.company && ctx.company.logo) ? imageService.getImageUrl(ctx.company.logo) : `${backendUrl}/gmaxepay.png`;
+    const illustrationUrl = `${backendUrl}/otp.png`;
+    await emailService.sendOtpEmail({ to: user.email, userName: user.name || 'User', otp: String(code), expiryMinutes: 3, logoUrl, illustrationUrl });
 
     return res.success({ message: 'New OTP sent to registered email' });
   } catch (error) {
