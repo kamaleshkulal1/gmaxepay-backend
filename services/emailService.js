@@ -77,3 +77,38 @@ module.exports = {
   sendWelcomeEmail
 };
 
+/**
+ * Send OTP email for verification
+ * @param {Object} options
+ * @param {string} options.to
+ * @param {string} options.userName
+ * @param {string} options.otp
+ * @param {number} options.expiryMinutes
+ */
+module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, logoUrl }) => {
+  try {
+    const templatePath = path.join(__dirname, '../mailTemplate/emailOtp.html');
+    let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
+
+    htmlTemplate = htmlTemplate.replace(/{{USER_NAME}}/g, userName || 'User');
+    htmlTemplate = htmlTemplate.replace(/{{OTP_CODE}}/g, otp);
+    htmlTemplate = htmlTemplate.replace(/{{EXPIRY_MINUTES}}/g, String(expiryMinutes));
+    htmlTemplate = htmlTemplate.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
+    htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
+      to,
+      subject: 'Request for Otp from Gmaxepay',
+      html: htmlTemplate,
+      text: `Request for OTP from Gmaxepay. Your verification code is ${otp}. It expires in ${expiryMinutes} minutes.`
+    };
+
+    const info = await transport.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId, response: info.response };
+  } catch (error) {
+    console.error('Error sending OTP email:', error);
+    throw new Error(`Failed to send OTP email: ${error.message}`);
+  }
+};
+

@@ -67,9 +67,9 @@ db.ipInfo = require('./ipInfo');
 db.ipListType = require('./ipListType');
 
 // Commented out models that don't exist yet
-// db.outlet = require('./outlet');
+db.outlet = require('./outlet');
 db.news = require('./news');
-// db.customer = require('./customer');
+db.customer = require('./customer');
 // db.bbpsOperatorCategory = require('./bbpsOperatorCategory');
 // db.bbpsOperator = require('./bbpsOperator');
 db.eService = require('./eServiceReport');

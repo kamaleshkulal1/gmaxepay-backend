@@ -25,7 +25,6 @@ const generateOnboardingToken = (userData, expiryString = '6d') => {
       userId: userData.userId,
       name: userData.name,
       companyId: userData.companyId,
-      mobileNo: userData.mobileNo,
       userRole: userData.userRole,
       timestamp: Date.now(),
       expiresAt: expiresAt.getTime()
@@ -97,7 +96,6 @@ const decryptOnboardingToken = (token) => {
       userId: tokenData.userId,
       name: tokenData.name,
       companyId: tokenData.companyId,
-      mobileNo: tokenData.mobileNo,
       userRole: tokenData.userRole,
       expiresAt: tokenData.expiresAt
     };

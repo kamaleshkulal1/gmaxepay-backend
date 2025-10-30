@@ -408,7 +408,6 @@ const createCompany = async (req, res) => {
       userId: user.id,
       name: user.name,
       companyId: company.id,
-      mobileNo: user.mobileNo,
       userRole: user.userRole
     }, onboardingExpiry);
 
@@ -458,20 +457,14 @@ const createCompany = async (req, res) => {
     return res.success({
       message: 'Company created successfully',
       data: {
-        company,
+        company: companyData,
         user: {
           id: user.id,
           userId: user.userId,
           mobileNo: user.mobileNo,
           email: user.email,
           profileImageUrl: getImageUrl(user.profileImage)
-        },
-        wallet: {
-          id: wallet.id,
-          mainWallet: wallet.mainWallet,
-          apesWallet: wallet.apesWallet
-        },
-        onboardingLink: onboardingLink // Include in response for testing
+        }
       }
     });
   } catch (error) {
