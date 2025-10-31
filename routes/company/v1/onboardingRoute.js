@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const onboardingController = require('../../../controller/auth/v1/onboardingController');
+const onboardingCors = require('../../../middleware/onboardingCors');
+
+// Apply CORS middleware to all onboarding routes
+router.use(onboardingCors);
 // step 1
 router.post('/:token', onboardingController.verifyOnboardingLink);
 router.post('/:token/sendSmsOtp', onboardingController.sendSmsMobile);
@@ -19,5 +23,9 @@ router.post('/:token/getDigilockerDocuments', onboardingController.getDigilocker
 
 //step 4
 router.post('/:token/postShopDetails', onboardingController.postShopDetails);
+router.post('/:token/postBankDetails', onboardingController.postBankDetails);
+router.post('/:token/postProfile', onboardingController.postProfile);
+router.post('/:token/getPending', onboardingController.getPending);
+router.post('/:token/complete', onboardingController.completeOnboarding);
 
 module.exports = router;

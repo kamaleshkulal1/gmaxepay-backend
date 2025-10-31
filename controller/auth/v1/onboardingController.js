@@ -9,16 +9,57 @@ const { JWT } = require('../../../constants/authConstant');
 const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
 const ekycHub = require('../../../services/eKycHub');
+const { failure } = require('../../../utils/response');
 // Allowed Origin for onboarding flows
 const getOrigin = (req) => req.get('origin') || req.get('referer') || '';
 
-const ensureAllowedOrigin = (req) => {
-  // In non-production, allow all origins for local testing
-  if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
-    return true;
+const isAllowedOrigin = (origin) => {
+  if (!origin) return false;
+  
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+    const protocol = url.protocol.toLowerCase();
+    
+    // Allow localhost with any port (http://localhost:*, http://127.0.0.1:*, http://::1:*)
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+      return protocol === 'http:' || protocol === 'https:';
+    }
+    
+    // Allow https://app.gmaxepay.in
+    if (hostname === 'app.gmaxepay.in') {
+      return protocol === 'https:';
+    }
+    
+    // Allow subdomains of app.gmaxepay.in (e.g., www.app.gmaxepay.in)
+    if (hostname.endsWith('.app.gmaxepay.in')) {
+      return protocol === 'https:';
+    }
+    
+    return false;
+  } catch (error) {
+    // If origin is not a valid URL, deny access
+    return false;
   }
+};
+
+const ensureAllowedOrigin = (req) => {
   const origin = getOrigin(req);
-  return origin && origin.startsWith(process.env.FRONTEND_URL);
+  
+  // If no origin header, allow only in development (for API testing tools)
+  // Browsers always send Origin header for cross-origin requests
+  if (!origin) {
+    const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+    return !isProduction;
+  }
+  
+  return isAllowedOrigin(origin);
+};
+
+const isAllowedCompanyDomain = (domain) => {
+  if (!domain) return false;
+  const normalizedDomain = domain.toString().trim().toLowerCase();
+  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in';
 };
 
 const getRequestedDomain = (req) => {
@@ -28,10 +69,19 @@ const getRequestedDomain = (req) => {
 
 const ensureDomainMatches = (req, company) => {
   const requested = getRequestedDomain(req);
-  if (!requested) return true; // allow if not provided
+  // If x-company-domain header is provided, it must be localhost or app.gmaxepay.in
+  if (requested) {
+    if (!isAllowedCompanyDomain(requested)) {
+      return false;
+    }
+  }
+  // If company has a customDomain stored, validate against it
   const expected = (company?.customDomain || '').toString().trim().toLowerCase();
-  if (!expected) return true; // if company has no domain stored, skip
-  return requested === expected;
+  if (expected && requested) {
+    return requested === expected;
+  }
+  // If no domain specified or no company domain stored, allow
+  return true;
 };
 
 const getTokenFromReq = (req) => {
