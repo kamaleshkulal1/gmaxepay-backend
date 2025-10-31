@@ -8,7 +8,7 @@ const amezesmsApi = require('../../../services/amezesmsApi');
 const { JWT } = require('../../../constants/authConstant');
 const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
-
+const ekycHub = require('../../../services/eKycHub');
 // Allowed Origin for onboarding flows
 const getOrigin = (req) => req.get('origin') || req.get('referer') || '';
 
@@ -161,7 +161,7 @@ const completeOnboarding = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     await dbService.update(
       model.onboardingToken,
@@ -190,10 +190,10 @@ const sendSmsMobile = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     if(mobileNo != ctx.userDetails.mobileNo) {
-      return res.failure({ message: 'Mobile number mismatch' });
+      return res.failure({ message: 'Invalid Mobile Number' });
     }
 
     // Fetch full user instance
@@ -240,7 +240,7 @@ const verifySmsOtp = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     if (!otp) return res.failure({ message: 'OTP is required' });
 
@@ -290,10 +290,10 @@ const resetSmsOtp = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     if(mobileNo != ctx.userDetails.mobileNo) {
-      return res.failure({ message: 'Mobile number mismatch' });
+      return res.failure({ message: 'Invalid Mobile Number' });
     }
 
     const user = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
@@ -323,28 +323,6 @@ const resetSmsOtp = async (req, res) => {
 };
 
 // Step 2: Email verification
-const postEmailVerification = async (req, res) => {
-  try {
-    if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
-    const token = getTokenFromReq(req);
-    const { email, otpVerified } = req.body || {};
-    const ctx = await loadContextByToken(token);
-    if (ctx.error) return res.failure({ message: ctx.error });
-    if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
-    }
-    const updates = {};
-    if (email) updates.email = email;
-    if (otpVerified === true) updates.emailVerify = true;
-    if (Object.keys(updates).length === 0) return res.failure({ message: 'No updates provided' });
-    await dbService.update(model.user, { id: ctx.user.id }, updates);
-    const pendingInfo = getPendingSteps({ user: { ...ctx.user, ...updates }, outlet: ctx.outlet, customerBank: ctx.customerBank });
-    return res.success({ message: 'Email verification updated', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
-  } catch (error) {
-    console.error('Error in email verification:', error);
-    return res.failure({ message: 'Failed to update email verification', error: error.message });
-  }
-};
 
 // Email OTP: send
 const sendEmailOtp = async (req, res) => {
@@ -355,11 +333,11 @@ const sendEmailOtp = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     const user = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
     if(email != user.email){
-      return res.failure({ message: 'Email mismatch' });
+      return res.failure({ message: 'Invalid Email Address' });
     }
     
     if (!user) return res.failure({ message: 'User not found' });
@@ -397,7 +375,7 @@ const verifyEmailOtp = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     if (!otp) return res.failure({ message: 'OTP is required' });
 
@@ -444,11 +422,14 @@ const resetEmailOtp = async (req, res) => {
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
+    const { email } = req.body 
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
-
     const user = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
+    if(email != user.email){
+      return res.failure({ message: 'Invalid Email Address' });
+    }
     if (!user) return res.failure({ message: 'User not found' });
     if (!user.email) return res.failure({ message: 'Email not set for user' });
 
@@ -472,33 +453,73 @@ const resetEmailOtp = async (req, res) => {
   }
 };
 
-// Step 3: Aadhaar and PAN verification
-const postKycVerification = async (req, res) => {
-  try {
+// Step 4: Aadhaar verification
+const connectAadhaarVerification = async (req, res) => {
+  try{
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
     const token = getTokenFromReq(req);
-    const { aadharVerified, panVerified, aadharInfo, panInfo } = req.body || {};
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
+    const {redirect_url} = req.body || {};
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
-    const updates = {};
-    if (aadharVerified === true) updates.aadharVerify = true;
-    if (panVerified === true) updates.panVerify = true;
-    if (aadharInfo) updates.aadharInfo = aadharInfo;
-    if (panInfo) updates.panInfo = panInfo;
-    if (Object.keys(updates).length === 0) return res.failure({ message: 'No updates provided' });
-    await dbService.update(model.user, { id: ctx.user.id }, updates);
-    const pendingInfo = getPendingSteps({ user: { ...ctx.user, ...updates }, outlet: ctx.outlet, customerBank: ctx.customerBank });
-    return res.success({ message: 'KYC updated', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
+    if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
+    const  existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
+    if(!existingUser) return res.failure({ message: 'User not found' });
+    const response = await ekycHub.createAadharVerificationUrl(redirect_url);
+    console.log("response", response);
+    return res.success({ message: 'Aadhaar Connection Successful' , data: response });
   } catch (error) {
-    console.error('Error in KYC verification:', error);
-    return res.failure({ message: 'Failed to update KYC verification', error: error.message });
+    console.error('Error connecting Aadhaar and PAN verification:', error);
+    return res.failure({ message: 'Failed to connect Aadhaar and PAN verification', error: error.message });
   }
-};
+}
 
-// Step 4: Shop details (Outlet)
+// Step 5: PAN verification
+const connectPanVerification = async (req, res) => {
+  try{
+    if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
+    const token = getTokenFromReq(req);
+    const ctx = await loadContextByToken(token);
+    if (ctx.error) return res.failure({ message: ctx.error });
+    const {redirect_url} = req.body || {};
+    if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
+    const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
+    if(!existingUser) return res.failure({ message: 'User not found' });
+    const response = await ekycHub.createPanVerificationUrl(redirect_url);
+    console.log("response", response);
+    return res.success({ message: 'PAN Connection Successful' , data: response });  
+  }
+  catch (error) {
+    console.error('Error connecting PAN verification:', error);
+    return res.failure({ message: 'Failed to connect PAN verification', error: error.message });
+  }
+}
+
+// Get Digilocker Both Pan and Aadhaar Documents
+const getDigilockerDocuments = async (req, res) => {
+  try{
+    if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
+    const token = getTokenFromReq(req);
+    const ctx = await loadContextByToken(token);
+    if (ctx.error) return res.failure({ message: ctx.error });
+    const { verification_id  ,reference_id, document_type} = req.body || {};
+    if (!verification_id) return res.failure({ message: 'Verification ID is required' });
+    const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
+    if(!existingUser) return res.failure({ message: 'User not found' });
+    const response = await ekycHub.getDocuments(verification_id,  reference_id, document_type);
+    console.log("response", response);
+    return res.success({ message: 'Aadhaar Verification Downloaded' , data: response });
+  }
+  catch (error) {
+    console.error('Error downloading Aadhaar verification:', error);
+    return res.failure({ message: 'Failed to download Aadhaar verification', error: error.message });
+  }
+}
+
+
+// Step 6: Shop details (Outlet)
 const postShopDetails = async (req, res) => {
   try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
@@ -506,24 +527,15 @@ const postShopDetails = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
-    const { shopName, shopAddress, gstNo, mobileNo, zipCode } = req.body || {};
-    if (!shopName || !shopAddress) return res.failure({ message: 'shopName and shopAddress are required' });
+    const { shopName, ipAddress,latitude,longitude } = req.body || {};
+    if (!shopName || !ipAddress || !latitude || !longitude) return res.failure({ message: 'shopName, ipAddress, latitude and longitude are required' });
     let outlet = ctx.outlet;
     if (outlet) {
-      outlet = await dbService.update(model.outlet, { id: outlet.id }, { shopName, shopAddress, gstNo, mobileNo, zipCode });
+      outlet = await dbService.update(model.outlet, { id: outlet.id }, { shopName, ipAddress, latitude, longitude });
     } else {
-      outlet = await dbService.createOne(model.outlet, {
-        refId: ctx.user.id,
-        companyId: ctx.company.id,
-        userRole: ctx.user.userRole,
-        shopName,
-        shopAddress,
-        gstNo: gstNo || null,
-        mobileNo: mobileNo || ctx.user.mobileNo,
-        zipCode: zipCode || ctx.user.zipcode
-      });
+      outlet = await dbService.createOne(model.outlet, { refId: ctx.user.id, companyId: ctx.company.id, userRole: ctx.user.userRole, shopName, ipAddress, latitude, longitude });
     }
     const pendingInfo = getPendingSteps({ user: ctx.user, outlet, customerBank: ctx.customerBank });
     return res.success({ message: 'Shop details saved', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
@@ -533,7 +545,7 @@ const postShopDetails = async (req, res) => {
   }
 };
 
-// Step 5: Bank details (CustomerBank)
+// Step 7: Bank details (CustomerBank)
 const postBankDetails = async (req, res) => {
   try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
@@ -541,7 +553,7 @@ const postBankDetails = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     const { bankName, beneficiaryName, accountNumber, ifsc, city, branch } = req.body || {};
     if (!bankName || !accountNumber || !ifsc) return res.failure({ message: 'bankName, accountNumber and ifsc are required' });
@@ -570,7 +582,7 @@ const postBankDetails = async (req, res) => {
   }
 };
 
-// Step 6: Profile
+// Step 8: Profile
 const postProfile = async (req, res) => {
   try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
@@ -579,7 +591,7 @@ const postProfile = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     const updates = {};
     if (name) updates.name = name;
@@ -606,7 +618,7 @@ const getPending = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Domain mismatch' });
+      return res.failure({ message: 'Invalid Domain' });
     }
     const pendingInfo = getPendingSteps({ user: ctx.user, outlet: ctx.outlet, customerBank: ctx.customerBank });
     return res.success({ message: 'Pending steps fetched', data: pendingInfo });
@@ -625,8 +637,9 @@ module.exports = {
   sendEmailOtp,
   verifyEmailOtp,
   resetEmailOtp,
-  postEmailVerification,
-  postKycVerification,
+  connectAadhaarVerification,
+  connectPanVerification,
+  getDigilockerDocuments,
   postShopDetails,
   postBankDetails,
   postProfile,

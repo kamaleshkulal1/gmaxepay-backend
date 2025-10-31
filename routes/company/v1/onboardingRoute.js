@@ -12,6 +12,12 @@ router.post('/:token/sendEmailOtp', onboardingController.sendEmailOtp);
 router.post('/:token/verifyEmailOtp', onboardingController.verifyEmailOtp);
 router.post('/:token/resetEmailOtp', onboardingController.resetEmailOtp);
 
+//step 3
+router.post('/:token/connectAadhaarVerification', onboardingController.connectAadhaarVerification);
+router.post('/:token/connectPanVerification', onboardingController.connectPanVerification);
+router.post('/:token/getDigilockerDocuments', onboardingController.getDigilockerDocuments);
 
+//step 4
+router.post('/:token/postShopDetails', onboardingController.postShopDetails);
 
 module.exports = router;

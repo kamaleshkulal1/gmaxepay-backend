@@ -29,7 +29,8 @@ const  balanceEnquiry = async () => {
     });
 }
 
-const createAadharVerificationUrl = async () => {
+const createAadharVerificationUrl = async (redirect_url) => {
+  const orderid = generateSystemReference();
     let config = {
       method: 'get',
       url: `${ekychubUrl}/digilocker/create_url_aadhaar?`,
@@ -56,7 +57,8 @@ const createAadharVerificationUrl = async () => {
       });
 };
 
-const createPanVerificationUrl = async () => {
+const createPanVerificationUrl = async (redirect_url) => {
+  const orderid = generateSystemReference();
     let config = {
       method: 'get',
       url: `${ekychubUrl}/digilocker/create_url_pan?`,
@@ -73,6 +75,7 @@ const createPanVerificationUrl = async () => {
     return axios
       .request(config)
       .then((response) => {
+        console.log("response", response);
         console.log(response.data);
         return response.data;
       })
@@ -86,7 +89,7 @@ const getDocuments = async(verification_id, reference_id, document_type)=>{
   const orderid = generateSystemReference();
     let config = {
       method: 'get',
-      url: `${ekychubUrl}/digilocker/get_documents?`,
+      url: `${ekychubUrl}/digilocker/get_document?`,
       headers: {
         'Content-Type': 'application/json'
       },
@@ -99,9 +102,11 @@ const getDocuments = async(verification_id, reference_id, document_type)=>{
         document_type
       }
     };
+
     return axios
       .request(config)
       .then((response) => {
+        console.log("response", response);
         console.log(response.data);
         return response.data;
       })
@@ -109,7 +114,7 @@ const getDocuments = async(verification_id, reference_id, document_type)=>{
         console.log(error.response);
         return error.response.data;
       });
- }
+}
 
 const panVerification = async (pan) => {
     const orderid = generateSystemReference();
