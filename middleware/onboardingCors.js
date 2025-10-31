@@ -61,5 +61,20 @@ const onboardingCorsOptions = {
   maxAge: 86400 // 24 hours
 };
 
-module.exports = cors(onboardingCorsOptions);
+// Create a wrapper middleware that handles CORS errors gracefully
+const corsMiddleware = cors(onboardingCorsOptions);
+
+module.exports = (req, res, next) => {
+  corsMiddleware(req, res, (err) => {
+    if (err) {
+      // Return custom JSON error response instead of default HTML error page
+      return res.status(403).json({
+        status: 'FAILURE',
+        message: 'Sorry, you don\'t have access. We are recording your activity.',
+        data: null
+      });
+    }
+    next();
+  });
+};
 
