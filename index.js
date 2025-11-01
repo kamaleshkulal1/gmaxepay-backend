@@ -63,6 +63,24 @@ app.use(cookieParser());
 // Trust proxy to get real client IP
 app.set('trust proxy', true);
 
+// CORS configuration - Allow all origins
+// MUST be early in middleware chain to handle preflight OPTIONS requests
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow all origins - no validation
+    callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id'],
+  exposedHeaders: ['x-request-id'],
+  maxAge: 86400, // Cache preflight for 24 hours
+  optionsSuccessStatus: 200
+};
+
+// Apply CORS middleware - MUST be early to handle all requests including OPTIONS
+app.use(cors(corsOptions));
+
 // SECURITY: Request ID for tracking
 app.use(requestId);
 
@@ -74,19 +92,6 @@ app.use(validateContentType);
 const httpServer = require('http').createServer(app);
 // SECURITY: Limit URL-encoded payload size
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
-
-// CORS configuration - Allow all origins
-const corsOptions = {
-  origin: true, // Allow all origins
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id'],
-  exposedHeaders: ['x-request-id'],
-  maxAge: 86400, // Cache preflight for 24 hours
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
