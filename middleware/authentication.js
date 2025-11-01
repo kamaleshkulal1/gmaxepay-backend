@@ -38,7 +38,7 @@ const authentication = async (req, res, next) => {
       algorithms: [JWT.ALGORITHM], 
       issuer: JWT.ISSUER,
       audience: JWT.AUDIENCE,
-      clockTolerance: 5, // Allow 5 seconds clock skew
+      clockTolerance: 5, 
       maxAge: JWT.EXPIRES_IN ? `${JWT.EXPIRES_IN * 60}s` : undefined
     });
 

@@ -16,8 +16,16 @@ const hostCheck = async (req, res, next) => {
   const rawOrigin = req.headers.origin || req.headers.referer || '';
   let hostname = rawOrigin.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   hostname = hostname.split(':')[0];
-  if (hostname === 'localhost' || hostname === '') {
-    hostname = 'gmax-admin-frontend.vercel.app';
+  
+  // Map localhost to app.gmaxepay.in for development (similar to companyController.js)
+  // This allows localhost to work with the default company domain
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    hostname = 'app.gmaxepay.in';
+  }
+  
+  // Fallback for empty hostname (development)
+  if (!hostname || hostname === '') {
+    hostname = 'app.gmaxepay.in';
   }
 
   try {
