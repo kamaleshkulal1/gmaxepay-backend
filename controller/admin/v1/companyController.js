@@ -1,7 +1,6 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
-const axios = require('axios');
 const { where, cast, col } = require('sequelize');
 const imageService = require('../../../services/imageService');
 const { uploadImageToS3, deleteImageFromS3, getImageUrl } = imageService;
@@ -10,6 +9,7 @@ const { decrypt, doubleEncrypt } = require('../../../utils/doubleCheckUp');
 const { generateOnboardingToken } = require('../../../utils/onboardingToken');
 const { sendWelcomeEmail } = require('../../../services/emailService');
 const googleMap = require('../../../services/googleMap');
+const postalPincode = require('../../../services/postalPincode');
 
 
 // Helper function to check IP address
@@ -486,21 +486,13 @@ const getPincodeByCity = async (req, res) => {
     
     if (!city) return res.failure({ message: 'City is required' });
     
-    // Fetch pincode from external API
-    const url = `${process.env.POSTAL_PINCODE_URL}/postoffice/${city}`;
-    const response = await axios.get(url);
-    const data = response.data;
+    // Fetch pincode using postal pincode service
+    const result = await postalPincode.getPincodeByCity(city);
     
-    if (data[0].Status === 'Success') {
-      return res.success({ 
-        message: 'Pincode fetched successfully', 
-        data: data[0].PostOffice 
-      });
-    } else {
-      return res.failure({ 
-        message: 'No pincode found for the given city. Try different spelling or district name.' 
-      });
-    }
+    return res.success({ 
+      message: 'Pincode fetched successfully', 
+      data: result.data 
+    });
   } catch (error) {
     console.error(error);
     return res.failure({ message: error.message });
@@ -513,40 +505,13 @@ const getCityByPincode = async (req, res) => {
     
     if (!pincode) return res.failure({ message: 'Pincode is required' });
     
-    // Fetch city details from external API
-    const url = `${process.env.POSTAL_PINCODE_URL}/pincode/${pincode}`;
-    const response = await axios.get(url);
-    const data = response.data;
+    // Fetch city details using postal pincode service
+    const result = await postalPincode.getCityByPincode(pincode);
     
-    if (data[0].Status === 'Success' && data[0].PostOffice && data[0].PostOffice.length > 0) {
-      const postOffices = data[0].PostOffice;
-      
-      // Extract unique city/district/state information
-      const cityInfo = {
-        pincode: postOffices[0].Pincode,
-        state: postOffices[0].State,
-        district: postOffices[0].District,
-        postOffices: postOffices.map(office => ({
-          name: office.Name,
-          city: office.District,
-          state: office.State,
-          pincode: office.Pincode,
-          division: office.Division,
-          region: office.Region,
-          circle: office.Circle
-        })),
-        totalPostOffices: postOffices.length
-      };
-      
-      return res.success({ 
-        message: 'City fetched successfully', 
-        data: cityInfo
-      });
-    } else {
-      return res.failure({ 
-        message: 'Invalid pincode or no data found for the given pincode.'
-      });
-    }
+    return res.success({ 
+      message: 'City fetched successfully', 
+      data: result.data
+    });
   } catch (error) {
     console.error(error);
     return res.failure({ message: error.message });

@@ -39,7 +39,7 @@ const authentication = async (req, res, next) => {
       issuer: JWT.ISSUER,
       audience: JWT.AUDIENCE,
       clockTolerance: 5, // Allow 5 seconds clock skew
-      maxAge: JWT.EXPIRES_IN ? `${JWT.EXPIRES_IN}s` : undefined
+      maxAge: JWT.EXPIRES_IN ? `${JWT.EXPIRES_IN * 60}s` : undefined
     });
 
     if (!decodedUser?.id) {
