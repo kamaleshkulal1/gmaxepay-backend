@@ -71,8 +71,12 @@ class S3Transport extends winston.Transport {
     this.bucket = options.bucket || 'gmaxepay';
     this.s3Client = options.s3Client || s3Client;
     this.logBuffer = []; // Buffer to store logs
-    this.bufferSize = 1; // Upload every log for live debugging
+    this.bufferSize = 100; // Batch logs to reduce S3 requests
+    this.uploadInterval = 60000; // Upload every 60 seconds (was 5 seconds)
     this.uploadTimer = null;
+    this.isUploading = false; // Prevent concurrent uploads
+    this.retryAttempts = 0;
+    this.maxRetries = 3;
   }
 
   log(info, callback) {
@@ -87,28 +91,44 @@ class S3Transport extends winston.Transport {
       return;
     }
 
-    // Format log entry in terminal style for S3
+    // Format log entry in terminal style for S3 with prominent IP and API info
     let logLine;
     
-    // Check if this is an API log (data is directly in info, not info.meta)
-    if (info.type && (info.type === 'api_request' || info.type === 'api_response' || info.type === 'console_log')) {
+    // Check if this is an API log - handle both info.type (direct) and info.meta.type (winston format)
+    const logType = info.type || (info.meta && info.meta.type);
+    const metaData = info.meta || info; // Use meta if available, otherwise use info directly
+    
+    if (logType && (logType === 'api_request' || logType === 'api_response' || logType === 'api_error' || logType === 'console_log')) {
+      const ip = metaData.ip || 'unknown';
+      const method = metaData.method || 'N/A';
+      const apiPath = metaData.apiPath || metaData.url || 'N/A';
+      const statusCode = metaData.statusCode || 'N/A';
+      const responseTime = metaData.responseTime || 'N/A';
+      
+      // Create a human-readable prefix with IP and API info prominently displayed
+      const apiInfo = `[IP:${ip}] ${method} ${apiPath}`;
+      const statusInfo = statusCode !== 'N/A' ? ` | Status: ${statusCode}` : '';
+      const timeInfo = responseTime !== 'N/A' ? ` | Time: ${responseTime}ms` : '';
+      
       const logData = {
-        apiPath: info.apiPath || 'N/A',
-        headers: redactSensitiveData(info.headers || '{}'),
-        ip: info.ip || 'unknown',
-        method: info.method || 'N/A',
-        queryParams: redactSensitiveData(info.queryParams || '{}'),
-        referrer: info.referrer || '',
-        requestBody: redactSensitiveData(info.requestBody || ''),
-        responseBody: redactSensitiveData(info.responseBody || ''),
-        responseTime: info.responseTime || 'N/A',
-        statusCode: info.statusCode || 'N/A',
-        timestamp: info.timestamp,
-        type: info.type,
-        url: info.url || 'N/A',
-        userAgent: info.userAgent || ''
+        apiPath: apiPath,
+        headers: redactSensitiveData(metaData.headers || '{}'),
+        ip: ip,
+        method: method,
+        queryParams: redactSensitiveData(metaData.queryParams || '{}'),
+        referrer: metaData.referrer || '',
+        requestBody: redactSensitiveData(metaData.requestBody || ''),
+        responseBody: redactSensitiveData(metaData.responseBody || ''),
+        responseTime: responseTime,
+        statusCode: statusCode,
+        timestamp: metaData.timestamp || info.timestamp || new Date().toISOString(),
+        type: logType,
+        url: metaData.url || 'N/A',
+        userAgent: metaData.userAgent || ''
       };
-      logLine = `${info.level}: ${redactSensitiveData(info.message)} ${JSON.stringify(logData)}`;
+      
+      // Format: [IP] METHOD API_PATH | Status: XXX | Time: XXXms | Full JSON data
+      logLine = `${info.level}: ${apiInfo}${statusInfo}${timeInfo} | ${JSON.stringify(logData)}`;
     } else {
       logLine = `${info.level}: ${redactSensitiveData(info.message)}`;
     }
@@ -116,22 +136,30 @@ class S3Transport extends winston.Transport {
     // Add to buffer
     this.logBuffer.push(logLine);
 
-    // Upload immediately for live debugging
-    if (this.logBuffer.length >= this.bufferSize) {
+    // Upload when buffer reaches size limit (batched for rate limiting)
+    if (this.logBuffer.length >= this.bufferSize && !this.isUploading) {
       this.uploadLogs();
-    } else if (!this.uploadTimer) {
-      // Set timer to upload after 5 seconds for live debugging
+    } else if (!this.uploadTimer && !this.isUploading) {
+      // Set timer to upload periodically (reduced frequency to avoid rate limits)
       this.uploadTimer = setTimeout(() => {
         this.uploadLogs();
-      }, 5000);
+      }, this.uploadInterval);
     }
 
     callback(null, true);
   }
 
   async uploadLogs() {
+    // Prevent concurrent uploads
+    if (this.isUploading) return;
+    
+    // Check if there are logs to upload
     if (this.logBuffer.length === 0) return;
-
+    
+    this.isUploading = true;
+    const logsToUpload = [...this.logBuffer]; // Copy buffer
+    this.logBuffer = []; // Clear buffer immediately to allow new logs
+    
     try {
       // Get existing logs from S3
       let existingLogs = '';
@@ -148,7 +176,7 @@ class S3Transport extends winston.Transport {
       }
 
       // Append new logs to existing logs (terminal format)
-      const allLogs = existingLogs + (existingLogs ? '\n' : '') + this.logBuffer.join('\n');
+      const allLogs = existingLogs + (existingLogs ? '\n' : '') + logsToUpload.join('\n');
 
       // Upload combined logs as text
       const params = {
@@ -161,44 +189,90 @@ class S3Transport extends winston.Transport {
 
       await this.s3Client.send(new PutObjectCommand(params));
       
-      // Clear buffer and timer
-      this.logBuffer = [];
+      // Reset retry attempts on success
+      this.retryAttempts = 0;
+      
+      // Clear timer
       if (this.uploadTimer) {
         clearTimeout(this.uploadTimer);
         this.uploadTimer = null;
       }
     } catch (err) {
-      console.error('S3 upload error:', err.message || err);
+      // Put logs back in buffer if upload failed (unless it's a rate limit and we've retried)
+      const isRateLimitError = err.message && err.message.includes('reduce your request rate');
+      
+      if (isRateLimitError && this.retryAttempts < this.maxRetries) {
+        // Exponential backoff for rate limit errors
+        this.retryAttempts++;
+        const backoffDelay = Math.min(30000 * Math.pow(2, this.retryAttempts), 300000); // Max 5 minutes
+        
+        // Put logs back in buffer
+        this.logBuffer.unshift(...logsToUpload);
+        
+        console.error(`S3 upload error (rate limit): ${err.message}. Retrying in ${backoffDelay/1000}s (attempt ${this.retryAttempts}/${this.maxRetries})`);
+        
+        // Retry with exponential backoff
+        setTimeout(() => {
+          this.isUploading = false;
+          this.uploadLogs();
+        }, backoffDelay);
+        return;
+      } else {
+        // For non-rate-limit errors or max retries reached, log and continue
+        console.error('S3 upload error:', err.message || err);
+        // Don't put logs back to avoid infinite retry loop for non-rate-limit errors
+        
+        // Reset retry attempts after max retries or non-rate-limit errors
+        // so next upload cycle can retry if needed
+        if (!isRateLimitError || this.retryAttempts >= this.maxRetries) {
+          this.retryAttempts = 0;
+        }
+      }
+    } finally {
+      this.isUploading = false;
     }
   }
 }
 
-// Custom format for terminal-style logging
+// Custom format for terminal-style logging with prominent IP and API path
 const logFormat = winston.format.combine(
   winston.format.timestamp({
     format: 'YYYY-MM-DD HH:mm:ss'
   }),
   winston.format.errors({ stack: true }),
   winston.format.printf(({ level, message, timestamp, meta }) => {
-    // Format for terminal-style output
+    // Format for terminal-style output with prominent IP and API information
     if (meta && meta.type) {
+      const ip = meta.ip || 'unknown';
+      const method = meta.method || 'N/A';
+      const apiPath = meta.apiPath || meta.url || 'N/A';
+      const statusCode = meta.statusCode || 'N/A';
+      const responseTime = meta.responseTime || 'N/A';
+      
+      // Create a human-readable prefix with IP and API info prominently displayed
+      const apiInfo = `[IP:${ip}] ${method} ${apiPath}`;
+      const statusInfo = statusCode !== 'N/A' ? ` | Status: ${statusCode}` : '';
+      const timeInfo = responseTime !== 'N/A' ? ` | Time: ${responseTime}ms` : '';
+      
       const logData = {
-        apiPath: meta.apiPath || 'N/A',
+        apiPath: apiPath,
         headers: meta.headers || '{}',
-        ip: meta.ip || 'unknown',
-        method: meta.method || 'N/A',
+        ip: ip,
+        method: method,
         queryParams: meta.queryParams || '{}',
         referrer: meta.referrer || '',
         requestBody: meta.requestBody || '',
         responseBody: meta.responseBody || '',
-        responseTime: meta.responseTime || 'N/A',
-        statusCode: meta.statusCode || 'N/A',
+        responseTime: responseTime,
+        statusCode: statusCode,
         timestamp: timestamp,
         type: meta.type,
         url: meta.url || 'N/A',
         userAgent: meta.userAgent || ''
       };
-      return `${level}: ${message} ${JSON.stringify(logData)}`;
+      
+      // Format: [IP] METHOD API_PATH | Status: XXX | Time: XXXms | Full JSON data
+      return `${level}: ${apiInfo}${statusInfo}${timeInfo} | ${JSON.stringify(logData)}`;
     }
     return `${level}: ${message}`;
   })
@@ -206,11 +280,31 @@ const logFormat = winston.format.combine(
 
 // Create transports array
 const transports = [
-  // Console transport for development
+  // Console transport for development with prominent IP and API info
   new winston.transports.Console({
     format: winston.format.combine(
       winston.format.colorize(),
-      winston.format.simple()
+      winston.format.timestamp({
+        format: 'YYYY-MM-DD HH:mm:ss'
+      }),
+      winston.format.printf(({ level, message, timestamp, meta }) => {
+        // Format for console with prominent IP and API information
+        if (meta && meta.type) {
+          const ip = meta.ip || 'unknown';
+          const method = meta.method || 'N/A';
+          const apiPath = meta.apiPath || meta.url || 'N/A';
+          const statusCode = meta.statusCode || 'N/A';
+          const responseTime = meta.responseTime || 'N/A';
+          
+          // Create a human-readable prefix with IP and API info prominently displayed
+          const apiInfo = `[IP:${ip}] ${method} ${apiPath}`;
+          const statusInfo = statusCode !== 'N/A' ? ` | Status: ${statusCode}` : '';
+          const timeInfo = responseTime !== 'N/A' ? ` | Time: ${responseTime}ms` : '';
+          
+          return `${timestamp} ${level}: ${apiInfo}${statusInfo}${timeInfo} - ${message}`;
+        }
+        return `${timestamp} ${level}: ${message}`;
+      })
     )
   }),
   // Custom file transport for terminal-style format
@@ -228,26 +322,39 @@ const transports = [
         this.emit('logged', info);
       });
 
-      // Format log entry in terminal style
+      // Format log entry in terminal style with prominent IP and API info
       let logLine;
       if (info.meta && info.meta.type) {
+        const ip = info.meta.ip || 'unknown';
+        const method = info.meta.method || 'N/A';
+        const apiPath = info.meta.apiPath || info.meta.url || 'N/A';
+        const statusCode = info.meta.statusCode || 'N/A';
+        const responseTime = info.meta.responseTime || 'N/A';
+        
+        // Create a human-readable prefix with IP and API info prominently displayed
+        const apiInfo = `[IP:${ip}] ${method} ${apiPath}`;
+        const statusInfo = statusCode !== 'N/A' ? ` | Status: ${statusCode}` : '';
+        const timeInfo = responseTime !== 'N/A' ? ` | Time: ${responseTime}ms` : '';
+        
         const logData = {
-          apiPath: info.meta.apiPath || 'N/A',
+          apiPath: apiPath,
           headers: redactSensitiveData(info.meta.headers || '{}'),
-          ip: info.meta.ip || 'unknown',
-          method: info.meta.method || 'N/A',
+          ip: ip,
+          method: method,
           queryParams: redactSensitiveData(info.meta.queryParams || '{}'),
           referrer: info.meta.referrer || '',
           requestBody: redactSensitiveData(info.meta.requestBody || ''),
           responseBody: redactSensitiveData(info.meta.responseBody || ''),
-          responseTime: info.meta.responseTime || 'N/A',
-          statusCode: info.meta.statusCode || 'N/A',
+          responseTime: responseTime,
+          statusCode: statusCode,
           timestamp: info.timestamp,
           type: info.meta.type,
           url: info.meta.url || 'N/A',
           userAgent: info.meta.userAgent || ''
         };
-        logLine = `${info.level}: ${redactSensitiveData(info.message)} ${JSON.stringify(logData)}`;
+        
+        // Format: [IP] METHOD API_PATH | Status: XXX | Time: XXXms | Full JSON data
+        logLine = `${info.level}: ${apiInfo}${statusInfo}${timeInfo} | ${JSON.stringify(logData)}`;
       } else {
         logLine = `${info.level}: ${redactSensitiveData(info.message)}`;
       }
@@ -357,6 +464,7 @@ logger.logAPIError = (data) => {
     ip: data.ip || 'unknown',
     method: data.method || 'N/A',
     url: data.url || 'N/A',
+    apiPath: data.apiPath || data.url || 'N/A',
     statusCode: data.error?.status || 500,
     responseTime: 'N/A',
     userAgent: data.userAgent || '',

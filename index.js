@@ -20,32 +20,109 @@ const seeder = require('./seeder/seeder');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const { morganMiddleware, requestLogger, responseInterceptor, errorLogger } = require('./middleware/loggingMiddleware');
+const { 
+  sanitizeInput, 
+  preventNoSqlInjection, 
+  requestId, 
+  secureErrorHandler,
+  validateContentType 
+} = require('./middleware/security');
 
 const app = express();
+// SECURITY: Enhanced helmet configuration
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles if needed
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginEmbedderPolicy: false, // Set to true if you don't use iframes/embeds
+    hsts: {
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: true
+    },
+    xFrameOptions: { action: 'deny' }, // Prevent clickjacking
+    xContentTypeOptions: true, // Prevent MIME type sniffing
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    permittedCrossDomainPolicies: false
   })
 );
 app.use(cookieParser());
 
 // Trust proxy to get real client IP
 app.set('trust proxy', true);
+
+// SECURITY: Request ID for tracking
+app.use(requestId);
+
+// IMPORTANT: responseHandler must run before any middleware that uses res.failure, res.internalServerError, etc.
 app.use(require('./utils/response/responseHandler'));
+
+// SECURITY: Validate Content-Type (now safe to use res.failure)
+app.use(validateContentType);
 const httpServer = require('http').createServer(app);
-app.use(express.urlencoded({ extended: true }));
+// SECURITY: Limit URL-encoded payload size
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+
+// SECURITY: Secure CORS configuration
+const getAllowedOrigins = () => {
+  if (process.env.ALLOW_ORIGIN === '*') {
+    // SECURITY WARNING: Only allow * in development
+    if (process.env.NODE_ENV === 'production') {
+      console.error('SECURITY WARNING: CORS wildcard (*) is not allowed in production!');
+      return []; // Deny all in production if misconfigured
+    }
+    return true; // Allow all in development only
+  }
+  
+  // Parse allowed origins from environment variable (comma-separated)
+  const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+    : [];
+  
+  // SECURITY: If no origins specified and in production, deny all
+  if (allowedOrigins.length === 0 && process.env.NODE_ENV === 'production') {
+    console.error('SECURITY ERROR: No ALLOWED_ORIGINS configured in production!');
+    return [];
+  }
+  
+  return allowedOrigins;
+};
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || process.env.ALLOW_ORIGIN === '*' || process.env.ALLOWED_ORIGINS?.includes(origin)) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    const allowedOrigins = getAllowedOrigins();
+    
+    if (allowedOrigins === true || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      // SECURITY: Log unauthorized CORS attempts
+      console.warn(`CORS: Blocked request from origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id'],
+  exposedHeaders: ['x-request-id'],
+  maxAge: 86400, // Cache preflight for 24 hours
+  optionsSuccessStatus: 200
 };
 // app.post(
 //   '/retailer/payment/zaakapay/callback',
@@ -59,11 +136,21 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Use custom logging middleware instead of default morgan
 app.use(morganMiddleware);
-app.use(express.json({ limit: '10mb' }));
+// SECURITY: Limit request body size to prevent DoS attacks
+app.use(express.json({ limit: '5mb' })); // Reduced from 10mb for security
+
+// SECURITY: Input sanitization and NoSQL injection prevention
+app.use(sanitizeInput);
+app.use(preventNoSqlInjection);
+
 app.use(requestLogger);
 app.use(responseInterceptor);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static('uploads'));
+
+// SECURITY: Apply general rate limiting before routes
+const { generalLimit } = require('./middleware/ratelimiter');
+app.use(generalLimit);
 
 // Favicon route
 app.get('/favicon.ico', (req, res) => {
@@ -112,49 +199,24 @@ function detectIPType(ip) {
   return 'unknown';
 }
 
-// Test endpoint for IP tracking
-app.get('/test-ip', (req, res) => {
-  const ipSources = {
-    'req.ip': req.ip,
-    'req.connection.remoteAddress': req.connection?.remoteAddress,
-    'req.socket.remoteAddress': req.socket?.remoteAddress,
-    'req.connection.socket.remoteAddress': req.connection?.socket?.remoteAddress,
-    'x-forwarded-for': req.headers['x-forwarded-for'],
-    'x-real-ip': req.headers['x-real-ip'],
-    'x-client-ip': req.headers['x-client-ip'],
-    'cf-connecting-ip': req.headers['cf-connecting-ip'],
-    'x-cluster-client-ip': req.headers['x-cluster-client-ip'],
-    'x-forwarded': req.headers['x-forwarded'],
-    'forwarded-for': req.headers['forwarded-for'],
-    'forwarded': req.headers['forwarded']
-  };
-  
-  // Debug: log all headers
-  console.log('All headers received:', req.headers);
-  console.log('IP sources:', ipSources);
-  console.log('CF-Connecting-IP:', req.headers['cf-connecting-ip']);
-  console.log('CF-IPCountry:', req.headers['cf-ipcountry']);
-  console.log('CF-Ray:', req.headers['cf-ray']);
-  
-  res.json({
-    message: 'IP tracking test',
-    detectedIP: req.ip,
-    detectedIPType: detectIPType(req.ip),
-    allIPSources: ipSources,
-    userAgent: req.headers['user-agent'],
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    trustProxy: app.get('trust proxy'),
-    allHeaders: req.headers,
-    cloudflareHeaders: {
-      'cf-connecting-ip': req.headers['cf-connecting-ip'],
-      'cf-ipcountry': req.headers['cf-ipcountry'],
-      'cf-ray': req.headers['cf-ray']
-    }
+// SECURITY: Test endpoint removed - exposes sensitive information
+// If needed for debugging, add authentication and only enable in development
+if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
+  // Add authentication middleware here if you need this endpoint
+  app.get('/test-ip', require('./middleware/authentication'), (req, res) => {
+    res.json({
+      message: 'IP tracking test (development only)',
+      detectedIP: req.ip,
+      detectedIPType: detectIPType(req.ip),
+      timestamp: new Date().toISOString()
+    });
   });
-});
+}
 // Error handling middleware
 app.use(errorLogger);
+
+// SECURITY: Secure error handler (must be last error handler)
+app.use(secureErrorHandler);
 
 app.use((req, res, next) => {
   next();

@@ -6,10 +6,10 @@ const { where, cast, col } = require('sequelize');
 const imageService = require('../../../services/imageService');
 const { uploadImageToS3, deleteImageFromS3, getImageUrl } = imageService;
 const key = Buffer.from(process.env.AES_KEY, 'hex');
-const iv = Buffer.from(process.env.AES_IV, 'hex');
 const { decrypt, doubleEncrypt } = require('../../../utils/doubleCheckUp');
 const { generateOnboardingToken } = require('../../../utils/onboardingToken');
 const { sendWelcomeEmail } = require('../../../services/emailService');
+const googleMap = require('../../../services/googleMap');
 
 
 // Helper function to check IP address
@@ -915,6 +915,36 @@ const getIpCheck = async (req, res)=>{
   }
 }
 
+const testCompletedAddress = async (req, res) => {
+  try {
+    const { ip, latitude, longitude } = req.body || {};
+    if (!ip || !latitude || !longitude) {
+      return res.failure({ message: 'IP, latitude and longitude are required' });
+    }
+
+    // Use Google Maps service for reverse geocoding
+    const addressData = await googleMap.reverseGeocode(latitude, longitude);
+
+    // Add IP and address field to response
+    const response = {
+      ...addressData,
+      address: addressData.complete_address || addressData.formatted_address,
+      ip: ip
+    };
+
+    return res.success({ 
+      message: 'Complete address retrieved successfully', 
+      data: response 
+    });
+  } catch (error) {
+    console.error('Error in test completed address:', error);
+    return res.failure({ 
+      message: error.message || 'Failed to get complete address', 
+      error: error.response?.data?.error_message || error.message 
+    });
+  }
+}
+
 module.exports = {
   createCompany,
   getCompanyById,
@@ -925,5 +955,6 @@ module.exports = {
   deleteCompany,
   getPincodeByCity,
   getCityByPincode,
-  getIpCheck
+  getIpCheck,
+  testCompletedAddress
 };

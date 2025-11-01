@@ -6,6 +6,15 @@ const model = require('../models/index');
 
 const authentication = async (req, res, next) => {
   try {
+    // SECURITY: Validate JWT secret exists
+    if (!JWT.SECRET || JWT.SECRET.length < 32) {
+      console.error('SECURITY ERROR: JWT_SECRET is missing or too weak!');
+      return res.internalServerError({
+        data: null,
+        message: 'Authentication service unavailable'
+      });
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return res.unAuthorized({
@@ -15,11 +24,22 @@ const authentication = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1]?.trim();
+    
+    // SECURITY: Validate token format (basic check)
+    if (!token || token.length < 50) {
+      return res.unAuthorized({
+        data: null,
+        message: 'Invalid token format'
+      });
+    }
 
+    // SECURITY: Verify token with strict options
     const decodedUser = jwt.verify(token, JWT.SECRET, {
-      algorithms: [JWT.ALGORITHM],
+      algorithms: [JWT.ALGORITHM], 
       issuer: JWT.ISSUER,
-      audience: JWT.AUDIENCE
+      audience: JWT.AUDIENCE,
+      clockTolerance: 5, // Allow 5 seconds clock skew
+      maxAge: JWT.EXPIRES_IN ? `${JWT.EXPIRES_IN}s` : undefined
     });
 
     if (!decodedUser?.id) {
@@ -96,10 +116,25 @@ const authentication = async (req, res, next) => {
 
     next();
   } catch (err) {
-    console.error('Authentication Error:', err);
+    // SECURITY: Don't log full token in error logs
+    console.error('Authentication Error:', {
+      name: err.name,
+      message: err.message,
+      path: req.path,
+      ip: req.ip
+    });
+    
     if (err.name === 'TokenExpiredError') {
       return res.unAuthorized({ message: MESSAGE.MIDDLEWARE.TOKEN_EXPIRE });
     }
+    if (err.name === 'JsonWebTokenError') {
+      return res.unAuthorized({ message: 'Invalid token. Please login again.' });
+    }
+    if (err.name === 'NotBeforeError') {
+      return res.unAuthorized({ message: 'Token not yet valid.' });
+    }
+    
+    // Generic error for other JWT errors
     return res.unAuthorized({ message: MESSAGE.MIDDLEWARE.UNAUTH_USER });
   }
 };

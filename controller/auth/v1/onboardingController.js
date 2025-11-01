@@ -9,7 +9,10 @@ const { JWT } = require('../../../constants/authConstant');
 const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
 const ekycHub = require('../../../services/eKycHub');
-const { failure } = require('../../../utils/response');
+const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const key = Buffer.from(process.env.AES_KEY, 'hex');
+
+
 // Allowed Origin for onboarding flows
 const getOrigin = (req) => req.get('origin') || req.get('referer') || '';
 
@@ -518,7 +521,6 @@ const connectAadhaarVerification = async (req, res) => {
     const  existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
     if(!existingUser) return res.failure({ message: 'User not found' });
     const response = await ekycHub.createAadharVerificationUrl(redirect_url);
-    console.log("response", response);
     return res.success({ message: 'Aadhaar Connection Successful' , data: response });
   } catch (error) {
     console.error('Error connecting Aadhaar and PAN verification:', error);
@@ -579,7 +581,7 @@ const postShopDetails = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const { shopName, ipAddress,latitude,longitude } = req.body || {};
+    const { shopName,longitude } = req.body || {};
     if (!shopName || !ipAddress || !latitude || !longitude) return res.failure({ message: 'shopName, ipAddress, latitude and longitude are required' });
     let outlet = ctx.outlet;
     if (outlet) {
@@ -605,8 +607,71 @@ const postBankDetails = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const { bankName, beneficiaryName, accountNumber, ifsc, city, branch } = req.body || {};
-    if (!bankName || !accountNumber || !ifsc) return res.failure({ message: 'bankName, accountNumber and ifsc are required' });
+    const {account_number, ifsc } = req.body || {};
+    if(!account_number) return res.failure({ message: 'Account number is required' });
+    if(!ifsc) return res.failure({ message: 'IFSC is required' });
+
+    // Encrypt the request data
+    const encryptionKey = Buffer.from(key, 'hex');
+    const requestData = { account_number, ifsc };
+    const encryptedRequest = doubleEncrypt(JSON.stringify(requestData), encryptionKey);
+    
+    // Check if bank details already exist in our database
+    const existingBank = await dbService.findOne(model.ekycHub, {
+      identityNumber1: account_number,
+      identityNumber2: ifsc,
+      identityType: 'BANK'
+    });
+
+    let bankVerification;
+
+    if(existingBank){
+      // Decrypt the cached response
+      try {
+        const encryptedData = JSON.parse(existingBank.response);
+        if (encryptedData && encryptedData.encrypted) {
+          const decryptedResponse = decrypt(encryptedData, Buffer.from(key, 'hex'));
+          if (decryptedResponse) {
+            bankVerification = JSON.parse(decryptedResponse);
+          } else {
+            bankVerification = encryptedData;
+          }
+        } else {
+          bankVerification = JSON.parse(existingBank.response);
+        }
+      } catch (e) {
+        // If not encrypted or not JSON, return as is
+        bankVerification = existingBank.response;
+      }
+    } else {
+      bankVerification = await ekycHub.bankVerification(account_number, ifsc);
+
+      // Only save if verification is successful
+      if(bankVerification && bankVerification.status === 'Success'){
+        // Encrypt the response before saving
+        const encryptedResponse = doubleEncrypt(JSON.stringify(bankVerification), encryptionKey);
+
+        await dbService.createOne(model.ekycHub, {
+          identityNumber1: account_number,
+          identityNumber2: ifsc,
+          request: JSON.stringify(encryptedRequest),
+          response: JSON.stringify(encryptedResponse),
+          identityType: 'BANK',
+          companyId: ctx.company.id || null,
+          addedBy: ctx.user.id
+        });
+      }
+    }
+
+    if(bankVerification.status !== 'Success') return res.failure({ message: 'Bank verification failed' });
+    
+    // Extract bank details from verification response
+    const bankName = bankVerification.bank_name || bankVerification.bankName || null;
+    const beneficiaryName = bankVerification.beneficiary_name || bankVerification.beneficiaryName || ctx.user.name;
+    const accountNumber = bankVerification.account_number || account_number;
+    const city = bankVerification.city || null;
+    const branch = bankVerification.branch || null;
+
     let customerBank = ctx.customerBank;
     const payload = {
       refId: ctx.user.id,
@@ -659,6 +724,8 @@ const postProfile = async (req, res) => {
     return res.failure({ message: 'Failed to update profile', error: error.message });
   }
 };
+
+
 
 // Utility endpoint: get pending steps only
 const getPending = async (req, res) => {

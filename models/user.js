@@ -141,7 +141,11 @@ const User = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true
     },
-    panCardImage: {
+    panCardFrontImage: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    panCardBackImage: {
       type: DataTypes.JSON,
       allowNull: true
     },

@@ -136,16 +136,30 @@ const morganMiddleware = morgan('combined', {
   }
 });
 
+// Helper function to extract clean API path
+function extractAPIPath(url) {
+  if (!url) return 'N/A';
+  // Remove query parameters and hash
+  const cleanPath = url.split('?')[0].split('#')[0];
+  // Ensure it starts with / if it's a path
+  return cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath;
+}
+
 // Custom request logging middleware
 const requestLogger = (req, res, next) => {
   const startTime = Date.now();
   
-  // Log the request with enhanced details
+  // Get full URL path (use originalUrl if available, otherwise url)
+  const fullUrl = req.originalUrl || req.url || '/';
+  const apiPath = extractAPIPath(fullUrl);
+  const clientIP = getClientIP(req);
+  
+  // Log the request with enhanced details including prominent IP
   logger.logAPIRequest({
-    ip: getClientIP(req),
+    ip: clientIP,
     method: req.method,
-    url: req.url,
-    apiPath: req.url.includes('/api/') ? req.url.split('?')[0] : req.url, // Clean API path
+    url: fullUrl,
+    apiPath: apiPath,
     statusCode: 'N/A', // Will be updated in response
     responseTime: 'N/A', // Will be updated in response
     userAgent: req.get('User-Agent') || '',
@@ -156,7 +170,9 @@ const requestLogger = (req, res, next) => {
       'content-type': req.get('Content-Type'),
       'authorization': req.get('Authorization') ? '[REDACTED]' : undefined,
       'x-forwarded-for': req.get('X-Forwarded-For'),
-      'x-real-ip': req.get('X-Real-IP')
+      'x-real-ip': req.get('X-Real-IP'),
+      'cf-connecting-ip': req.get('CF-Connecting-IP'),
+      'x-client-ip': req.get('X-Client-IP')
     }))
   });
   
@@ -245,11 +261,16 @@ const responseInterceptor = (req, res, next) => {
       redactedResponseBody = JSON.stringify(redactSensitiveData(data));
     }
     
+    // Get full URL path (use originalUrl if available, otherwise url)
+    const fullUrl = req.originalUrl || req.url || '/';
+    const apiPath = extractAPIPath(fullUrl);
+    const clientIP = getClientIP(req);
+    
     logger.logAPIResponse({
-      ip: getClientIP(req),
+      ip: clientIP,
       method: req.method,
-      url: req.url,
-      apiPath: req.url.includes('/api/') ? req.url.split('?')[0] : req.url, // Clean API path
+      url: fullUrl,
+      apiPath: apiPath,
       statusCode: res.statusCode,
       responseTime: responseTime.toString(),
       responseBody: redactedResponseBody,
@@ -272,10 +293,15 @@ const responseInterceptor = (req, res, next) => {
 
 // Error logging middleware
 const errorLogger = (err, req, res, next) => {
+  const fullUrl = req.originalUrl || req.url || '/';
+  const apiPath = extractAPIPath(fullUrl);
+  const clientIP = getClientIP(req);
+  
   logger.logAPIError({
-    ip: getClientIP(req),
+    ip: clientIP,
     method: req.method,
-    url: req.url,
+    url: fullUrl,
+    apiPath: apiPath,
     userAgent: req.get('User-Agent'),
     referrer: req.get('Referer'),
     requestBody: JSON.stringify(redactSensitiveData(req.body || {})),

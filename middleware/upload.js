@@ -15,24 +15,32 @@ let storage = multer.diskStorage({
   }
 });
 
+// SECURITY: Enhanced file upload validation
 let uploadKyc = multer({
   storage: storage,
   fileFilter: function (req, file, callback) {
-    if (
-      file.mimetype == 'image/png' ||
-      file.mimetype == 'image/jpg' ||
-      file.mimetype == 'image/jpeg' ||
-      file.mimetype == 'image/gif' ||
-      file.mimetype == 'application/octet-stream'
-    ) {
+    // SECURITY: Whitelist only safe image MIME types (removed application/octet-stream)
+    const allowedMimeTypes = [
+      'image/png',
+      'image/jpg',
+      'image/jpeg',
+      'image/gif'
+    ];
+    
+    // SECURITY: Validate both MIME type and file extension
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const allowedExtensions = ['.png', '.jpg', '.jpeg', '.gif'];
+    
+    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(fileExtension)) {
       callback(null, true);
     } else {
-      console.log('Only jpeg and png extension allowed !');
-      callback(null, false);
+      console.warn(`SECURITY: Blocked file upload - MIME: ${file.mimetype}, Extension: ${fileExtension}`);
+      callback(new Error('Only PNG, JPG, JPEG, and GIF images are allowed!'), false);
     }
   },
   limits: {
-    fileSize: 1024 * 1024 * 20
+    fileSize: 5 * 1024 * 1024, // SECURITY: Reduced to 5MB (was 20MB)
+    files: 5 // Maximum 5 files per request
   }
 });
 

@@ -13,6 +13,7 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024 // 5MB limit
   }
 });
+router.post('/testCompletedAddress', companyController.testCompletedAddress);
 
 router.post('/pan-verification', authentication, ekycHubController.ekycHubPanVerification );
 router.post('/bank-verification', authentication, ekycHubController.ekycHubBankVerification );
