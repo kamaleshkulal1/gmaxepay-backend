@@ -34,10 +34,6 @@ const isAllowedOrigin = (origin) => {
       return protocol === 'https:';
     }
     
-    // Allow subdomains of app.gmaxepay.in (e.g., www.app.gmaxepay.in)
-    if (hostname.endsWith('.app.gmaxepay.in')) {
-      return protocol === 'https:';
-    }
     
     return false;
   } catch (error) {
@@ -66,24 +62,24 @@ const isAllowedCompanyDomain = (domain) => {
 };
 
 const getRequestedDomain = (req) => {
-  const d =  req.get('x-company-domain') || '';
-  return (d || '').toString().trim().toLowerCase();
+  const d = req.get('x-company-domain') || '';
+  const domain = (d || '').toString().trim().toLowerCase();
+  // Default to app.gmaxepay.in if no domain provided
+  return domain || 'app.gmaxepay.in';
 };
 
 const ensureDomainMatches = (req, company) => {
   const requested = getRequestedDomain(req);
-  // If x-company-domain header is provided, it must be localhost or app.gmaxepay.in
-  if (requested) {
-    if (!isAllowedCompanyDomain(requested)) {
-      return false;
-    }
+  // Always validate that the requested domain is allowed (localhost or app.gmaxepay.in)
+  if (!isAllowedCompanyDomain(requested)) {
+    return false;
   }
   // If company has a customDomain stored, validate against it
   const expected = (company?.customDomain || '').toString().trim().toLowerCase();
   if (expected && requested) {
     return requested === expected;
   }
-  // If no domain specified or no company domain stored, allow
+  // Domain is allowed, allow access
   return true;
 };
 
@@ -178,6 +174,9 @@ const verifyOnboardingLink = async (req, res) => {
     const ctx = await loadContextByToken(token);
     if (ctx.error) {
       return res.failure({ message: ctx.error });
+    }
+    if (!ensureDomainMatches(req, ctx.company)) {
+      return res.failure({ message: 'Invalid Domain' });
     }
     const { tokenData, userDetails, outletDetails, customerBankDetails } = ctx;
     const pendingInfo = getPendingSteps({ userDetails, outletDetails, customerBankDetails });
@@ -535,6 +534,9 @@ const connectPanVerification = async (req, res) => {
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
+    if (!ensureDomainMatches(req, ctx.company)) {
+      return res.failure({ message: 'Invalid Domain' });
+    }
     const {redirect_url} = req.body || {};
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
     const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
@@ -556,6 +558,9 @@ const getDigilockerDocuments = async (req, res) => {
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
+    if (!ensureDomainMatches(req, ctx.company)) {
+      return res.failure({ message: 'Invalid Domain' });
+    }
     const { verification_id  ,reference_id, document_type} = req.body || {};
     if (!verification_id) return res.failure({ message: 'Verification ID is required' });
     const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });

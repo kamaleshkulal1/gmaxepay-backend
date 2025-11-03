@@ -56,6 +56,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     };
 
     const geocodeResponse = await axios.request(config);
+    console.log('Geocode response:', JSON.stringify(geocodeResponse.data, null, 2));
     
     if (geocodeResponse.data.status === 'ZERO_RESULTS') {
       throw new Error('No address found for the given coordinates');
@@ -76,7 +77,8 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     const streetName = getAddressComponent(addressComponents, ['route']);
     const sublocality = getAddressComponent(addressComponents, ['sublocality', 'sublocality_level_1']);
     const locality = getAddressComponent(addressComponents, ['locality']);
-    const city = getAddressComponent(addressComponents, ['administrative_area_level_2', 'administrative_area_level_3']);
+    const city = getAddressComponent(addressComponents, ['administrative_area_level_2']);
+    const district = getAddressComponent(addressComponents, ['administrative_area_level_3']);
     const state = getAddressComponent(addressComponents, ['administrative_area_level_1']);
     const postalCode = getAddressComponent(addressComponents, ['postal_code']);
     const country = getAddressComponent(addressComponents, ['country']);
@@ -88,11 +90,14 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     if (sublocality) addressParts.push(sublocality);
     if (locality) addressParts.push(locality);
     if (city) addressParts.push(city);
+    if (district) addressParts.push(district);
     if (state) addressParts.push(state);
     if (postalCode) addressParts.push(postalCode);
     if (country) addressParts.push(country);
 
-    const completeAddress = addressParts.join(', ');
+    // Build complete address from parts, use formatted_address as fallback
+    const addressFromParts = addressParts.join(', ');
+    const completeAddress = addressFromParts || result.formatted_address;
 
     // Extract plus code if available
     const plusCode = geocodeResponse.data.plus_code || result.plus_code || null;
@@ -150,6 +155,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
         sublocality: sublocality,
         locality: locality,
         city: city,
+        district: district,
         state: state,
         postal_code: postalCode,
         country: country
@@ -225,8 +231,8 @@ const forwardGeocode = async (address, options = {}) => {
           street_name: getAddressComponent(addressComponents, ['route']),
           sublocality: getAddressComponent(addressComponents, ['sublocality', 'sublocality_level_1']),
           locality: getAddressComponent(addressComponents, ['locality']),
-          city: getAddressComponent(addressComponents, ['administrative_area_level_2', 'administrative_area_level_3']),
-          state: getAddressComponent(addressComponents, ['administrative_area_level_1']),
+          city: getAddressComponent(addressComponents, ['administrative_area_level_2',]),
+          state: getAddressComponent(addressComponents, ['administrative_area_level_3']),
           postal_code: getAddressComponent(addressComponents, ['postal_code']),
           country: getAddressComponent(addressComponents, ['country'])
         }

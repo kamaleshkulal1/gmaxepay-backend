@@ -10,6 +10,7 @@ const { generateOnboardingToken } = require('../../../utils/onboardingToken');
 const { sendWelcomeEmail } = require('../../../services/emailService');
 const googleMap = require('../../../services/googleMap');
 const postalPincode = require('../../../services/postalPincode');
+const mapplesMap = require('../../../services/mapplesMap');
 
 
 // Helper function to check IP address
@@ -910,6 +911,36 @@ const testCompletedAddress = async (req, res) => {
   }
 }
 
+const testMappplesMap = async (req, res) => {
+  try {
+    const { ip, latitude, longitude } = req.body;
+    if (!ip || !latitude || !longitude) {
+      return res.failure({ message: 'IP, latitude and longitude are required' });
+    }
+
+    // Use Mappls service for reverse geocoding
+    const addressData = await mapplesMap.reverseGeocode(latitude, longitude);
+
+    // Add IP and address field to response
+    const response = {
+      ...addressData,
+      address: addressData.complete_address || addressData.formatted_address,
+      ip: ip
+    };
+
+    return res.success({ 
+      message: 'Complete address retrieved successfully from Mappls', 
+      data: response 
+    });
+  } catch (error) {
+    console.error('Error in test mappples modules:', error);
+    return res.failure({ 
+      message: error.message || 'Failed to get complete address from Mappls', 
+      error: error.response?.data?.error_message || error.message 
+    });
+  }
+}
+
 module.exports = {
   createCompany,
   getCompanyById,
@@ -921,5 +952,6 @@ module.exports = {
   getPincodeByCity,
   getCityByPincode,
   getIpCheck,
-  testCompletedAddress
+  testCompletedAddress,
+  testMappplesMap
 };

@@ -12,6 +12,7 @@ db.company = require('./company');
 db.companyImage = require('./companyImage');
 db.kycDocumentSetting = require('./kycDocument');
 db.ekycHub = require('./ekycHub');
+db.aadhaarCard = require('./aadhaarCard');
 
 // User Management Models
 db.user = require('./user');
