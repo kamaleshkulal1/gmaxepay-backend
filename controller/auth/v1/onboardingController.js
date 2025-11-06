@@ -8,6 +8,7 @@ const amezesmsApi = require('../../../services/amezesmsApi');
 const { JWT } = require('../../../constants/authConstant');
 const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
+const googleMap = require('../../../services/googleMap');
 const ekycHub = require('../../../services/eKycHub');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
@@ -591,16 +592,52 @@ const postShopDetails = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const { shopName,longitude } = req.body || {};
-    if (!shopName || !ipAddress || !latitude || !longitude) return res.failure({ message: 'shopName, ipAddress, latitude and longitude are required' });
-    let outlet = ctx.outlet;
-    if (outlet) {
-      outlet = await dbService.update(model.outlet, { id: outlet.id }, { shopName, ipAddress, latitude, longitude });
-    } else {
-      outlet = await dbService.createOne(model.outlet, { refId: ctx.user.id, companyId: ctx.company.id, userRole: ctx.user.userRole, shopName, ipAddress, latitude, longitude });
+    const { shopName, longitude, ipAddress, latitude } = req.body || {};
+  
+    if(!shopName) return res.failure({ message: 'Shop name is required' });
+    if(!longitude) return res.failure({ message: 'Longitude is required' });
+    if(!ipAddress) return res.failure({ message: 'IP address is required' });
+    if(!latitude) return res.failure({ message: 'Latitude is required' });
+
+    // Reverse geocode to get complete address
+    const addressData = await googleMap.reverseGeocode(latitude, longitude);
+    const formatted_address = addressData.formatted_address;
+    const completeAddress = addressData.complete_address;
+
+    // Optional shop image upload (multer memory storage)
+    let shopImageKey = null;
+    if (req.file && req.file.buffer) {
+      const uploadResult = await imageService.uploadImageToS3(
+        req.file.buffer,
+        req.file.originalname || 'shop.jpg',
+        'shop',
+        ctx.company.id
+      );
+      shopImageKey = uploadResult.key;
     }
+
+    const outletPayload = {
+      shopName,
+      shopAddress: formatted_address||completeAddress,
+      ...(shopImageKey ? { shopImage: shopImageKey } : {}),
+      outletGoogleMapsLink: addressData?.place_google_maps_link,
+      shopCity: addressData?.address_components?.city,
+      shopDistrict: addressData?.address_components?.district,
+      shopState: addressData?.address_components?.state,
+      shopPincode: addressData?.address_components?.postal_code
+    };
+
+    // Allow creating shop details only once per user/company
+    if (ctx.outlet) {
+      return res.failure({ message: 'Shop details already submitted' });
+    }
+
+    const outlet = await dbService.createOne(
+      model.outlet,
+      { refId: ctx.user.id, companyId: ctx.company.id, userRole: ctx.user.userRole, ...outletPayload }
+    );
     const pendingInfo = getPendingSteps({ user: ctx.user, outlet, customerBank: ctx.customerBank });
-    return res.success({ message: 'Shop details saved', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
+    return res.success({ message: 'Shop details saved', data: { address: completeAddress, steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error in shop details:', error);
     return res.failure({ message: 'Failed to save shop details', error: error.message });

@@ -326,7 +326,7 @@ const getImagesByCategory = async (req, res) => {
 
 /**
  * Serve image from S3
- * @description Proxy endpoint to serve images from S3 bucket
+ * @description Proxy endpoint to serve images from S3 bucket with CORS support
  */
 const serveImage = async (req, res) => {
   try {
@@ -344,11 +344,43 @@ const serveImage = async (req, res) => {
     // Get image from S3
     const imageBuffer = await getImageFromS3(s3Key);
     
-    // Set appropriate content type
-    res.set({
-      'Content-Type': 'image/jpeg',
+    // Detect content type based on file extension
+    const path = require('path');
+    const ext = path.extname(s3Key).toLowerCase();
+    let contentType = 'image/jpeg'; // default
+    
+    switch (ext) {
+      case '.ico':
+        contentType = 'image/x-icon';
+        break;
+      case '.png':
+        contentType = 'image/png';
+        break;
+      case '.jpg':
+      case '.jpeg':
+        contentType = 'image/jpeg';
+        break;
+      case '.gif':
+        contentType = 'image/gif';
+        break;
+      case '.webp':
+        contentType = 'image/webp';
+        break;
+      case '.svg':
+        contentType = 'image/svg+xml';
+        break;
+      default:
+        contentType = 'image/jpeg';
+    }
+    
+    // Set headers - CORS is handled by global middleware, but we set content type explicitly
+    // The global CORS middleware will add proper CORS headers based on the origin
+    const headers = {
+      'Content-Type': contentType,
       'Cache-Control': 'public, max-age=31536000' // Cache for 1 year
-    });
+    };
+    
+    res.set(headers);
     
     res.send(imageBuffer);
   } catch (error) {

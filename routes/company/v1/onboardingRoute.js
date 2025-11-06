@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const onboardingController = require('../../../controller/auth/v1/onboardingController');
 const onboardingCors = require('../../../middleware/onboardingCors');
-
+const { upload, multer } = require('../../../middleware/multerConfig');
 // step 1
 router.post('/:token', onboardingCors, onboardingController.verifyOnboardingLink);
 router.post('/:token/sendSmsOtp', onboardingCors, onboardingController.sendSmsMobile);
@@ -22,7 +22,8 @@ router.post('/:token/connectPanVerification', onboardingCors, onboardingControll
 router.post('/:token/getDigilockerDocuments', onboardingCors, onboardingController.getDigilockerDocuments);
 
 //step 5
-router.post('/:token/postShopDetails', onboardingCors, onboardingController.postShopDetails);
+router.post('/:token/postShopDetails', upload.single('shopImage'), multer, onboardingController.postShopDetails);
+
 
 router.post('/:token/postBankDetails', onboardingCors, onboardingController.postBankDetails);
 

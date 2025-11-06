@@ -56,7 +56,6 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     };
 
     const geocodeResponse = await axios.request(config);
-    console.log('Geocode response:', JSON.stringify(geocodeResponse.data, null, 2));
     
     if (geocodeResponse.data.status === 'ZERO_RESULTS') {
       throw new Error('No address found for the given coordinates');
@@ -99,19 +98,20 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     const addressFromParts = addressParts.join(', ');
     const completeAddress = addressFromParts || result.formatted_address;
 
-    // Extract plus code if available
-    const plusCode = geocodeResponse.data.plus_code || result.plus_code || null;
-    const globalCode = plusCode ? (plusCode.global_code || '') : '';
-    const plusCodeData = plusCode ? {
+    // Extract plus code if available (prefer the result-level code, fallback to top-level)
+    const resultPlusCode = result.plus_code || null;
+    const topLevelPlusCode = geocodeResponse.data.plus_code || null;
+    const selectedPlusCode = resultPlusCode || topLevelPlusCode;
+    const globalCode = selectedPlusCode ? (selectedPlusCode.global_code || '') : '';
+    const compoundCode = selectedPlusCode ? (selectedPlusCode.compound_code || '') : '';
+
+    const plusCodeData = {
       global_code: globalCode,
-      compound_code: plusCode.compound_code || '',
-      plus_code_link: globalCode ? `https://plus.codes/${globalCode}` : '',
-      google_maps_link: globalCode ? `https://maps.google.com/?q=${encodeURIComponent(globalCode)}` : ''
-    } : {
-      global_code: '',
-      compound_code: '',
-      plus_code_link: '',
-      google_maps_link: ''
+      compound_code: compoundCode,
+      // Use encoded path to avoid '+' being treated as space in some clients
+      plus_code_link: globalCode ? `https://plus.codes/${encodeURIComponent(globalCode)}` : '',
+      // Provide a Google Maps search URL using the Plus Code (works without location permission)
+      google_maps_link: globalCode ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(globalCode)}` : ''
     };
 
     // Extract exact location bounds/viewport
@@ -148,6 +148,8 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     return {
       formatted_address: result.formatted_address,
       complete_address: completeAddress,
+      // Convenience alias often consumed by callers
+      address: completeAddress,
       address_components: {
         door_number: doorNumber,
         street_name: streetName,
@@ -166,6 +168,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
       },
       exact_location: exactLocation,
       plus_code: plusCodeData,
+      place_google_maps_link: result.place_id ? `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(result.place_id)}` : '',
       location_type: result.geometry.location_type,
       place_id: result.place_id
     };

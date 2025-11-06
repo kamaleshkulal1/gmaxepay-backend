@@ -9,6 +9,7 @@ const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
 const ekycHub = require('../../../services/eKycHub');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const googleMap = require('../../../services/googleMap');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 
 // Get company ID and domain from headers
@@ -601,23 +602,37 @@ const postShopDetails = async (req, res) => {
       });
     }
 
+    // Reverse geocode to get complete address
+    const addressData = await googleMap.reverseGeocode(latitude, longitude);
+    const completeAddress = addressData.complete_address || addressData.formatted_address;
+
+    // Handle optional shop image upload (multer memory storage)
+    let shopImageKey = null;
+    if (req.file && req.file.buffer) {
+      const uploadResult = await imageService.uploadImageToS3(
+        req.file.buffer,
+        req.file.originalname || 'shop.jpg',
+        'shop',
+        company.id
+      );
+      shopImageKey = uploadResult.key;
+    }
+
+    const outletPayload = {
+      shopName,
+      shopAddress: completeAddress,
+      ...(shopImageKey ? { shopImage: shopImageKey } : {})
+    };
+
     let updatedOutlet = outlet;
     if (outlet) {
-      updatedOutlet = await dbService.update(model.outlet, { id: outlet.id }, { 
-        shopName, 
-        ipAddress, 
-        latitude, 
-        longitude 
-      });
+      updatedOutlet = await dbService.update(model.outlet, { id: outlet.id }, outletPayload);
     } else {
-      updatedOutlet = await dbService.createOne(model.outlet, { 
-        refId: user.id, 
-        companyId: company.id, 
-        userRole: user.userRole, 
-        shopName, 
-        ipAddress, 
-        latitude, 
-        longitude 
+      updatedOutlet = await dbService.createOne(model.outlet, {
+        refId: user.id,
+        companyId: company.id,
+        userRole: user.userRole,
+        ...outletPayload
       });
     }
 

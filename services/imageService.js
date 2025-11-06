@@ -16,13 +16,16 @@ const BUCKET_NAME = process.env.AWS_BUCKET || 'gmaxepay';
 const AWS_CDN_URL = process.env.AWS_CDN_URL || 'https://cdn.gmaxepay.in';
 
 /**
- * Get image URL pointing to backend server
+ * Get image URL pointing to backend server (proxy endpoint with CORS support)
  * @param {String} s3Key - S3 object key (already includes 'images/' prefix)
- * @returns {String} - Backend URL for the image
+ * @returns {String} - Backend API URL for the image (with CORS headers)
  */
 const getImageUrl = (s3Key) => {
   if (!s3Key) return null;
-  return `${AWS_CDN_URL}/${s3Key}`;
+  // Use backend API proxy endpoint instead of CDN to avoid CORS issues
+  // The proxy endpoint at /api/images/* has CORS headers configured
+  const backendUrl = process.env.BASE_URL || process.env.API_URL || 'http://localhost:3000';
+  return `${backendUrl}/api/images/${s3Key}`;
 };
 
 /**
@@ -52,6 +55,8 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
       s3Key = `images/company/${companyId||'default'}/${subtype}/${sanitizedFileName}`;
     } else if (type === 'profile' && subtype) {
       s3Key = `images/profile/${subtype}/${sanitizedFileName}`;
+    } else if (type === 'shop') {
+      s3Key = `images/${companyId||'default'}/shop/${sanitizedFileName}`;
     } else {
       s3Key = `images/${companyId||'default'}/other/${sanitizedFileName}`;
     }

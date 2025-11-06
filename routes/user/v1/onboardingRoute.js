@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const onboardingController = require('../../../controller/user/v1/onboarding');
+const { upload, multer } = require('../../../middleware/multerConfig');
 
 // Step 1: Mobile verification
 router.post('/onboarding/sendSmsOtp', onboardingController.sendSmsMobile);
@@ -20,7 +21,7 @@ router.post('/onboarding/connectPanVerification', onboardingController.connectPa
 router.post('/onboarding/getDigilockerDocuments', onboardingController.getDigilockerDocuments);
 
 // Step 5: Shop details
-router.post('/onboarding/postShopDetails', onboardingController.postShopDetails);
+router.post('/onboarding/postShopDetails', upload.single('shopImage'), multer, onboardingController.postShopDetails);
 
 // Step 6: Bank details
 router.post('/onboarding/postBankDetails', onboardingController.postBankDetails);

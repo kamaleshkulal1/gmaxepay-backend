@@ -25,6 +25,10 @@ let Outlet = sequelize.define(
         key: 'id'
       }
     },
+    outletGoogleMapsLink: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     companyId: {
       type: DataTypes.INTEGER,
       references: {
@@ -95,6 +99,22 @@ let Outlet = sequelize.define(
     },
     holderName: {
       type: DataTypes.STRING
+    },
+    shopCity:{
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    shopDistrict:{
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    shopState:{
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    shopPincode:{
+      type: DataTypes.STRING,
+      allowNull: true
     },
     ...reusableTransactionAttribute
   },

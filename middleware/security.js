@@ -217,7 +217,12 @@ const secureErrorHandler = (err, req, res, next) => {
 const validateContentType = (req, res, next) => {
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
     const contentType = req.headers['content-type'];
-    
+
+    // Allow multipart/form-data (file uploads)
+    if (contentType && contentType.includes('multipart/form-data')) {
+      return next();
+    }
+
     // For JSON endpoints, require JSON content type
     if (req.path.includes('/api/') && !contentType?.includes('application/json')) {
       if (typeof res.failure === 'function') {

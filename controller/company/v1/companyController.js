@@ -1,7 +1,7 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const imageService = require('../../../services/imageService');
-const { uploadImageToS3, deleteImageFromS3 } = imageService;
+const { uploadImageToS3, deleteImageFromS3, getImageUrl } = imageService;
 
 const getCompanyDettails = async (req, res) => {
     try {
@@ -47,12 +47,12 @@ const getCompanyDettails = async (req, res) => {
             isActive: true
         });
         
-        // Format slider images with full domain URL
+        // Format slider images with backend API URL (proxy endpoint with CORS)
         const formattedSliderImages = sliderImages.map(img => ({
             id: img.id,
             name: img.name,
             type: img.type,
-            image: `${process.env.AWS_CDN_URL}/${img.s3Key}`
+            image: getImageUrl(img.s3Key)
         }));
 
         
@@ -60,8 +60,8 @@ const getCompanyDettails = async (req, res) => {
             companyId: company.id,
             companyDomain: company.customDomain,
             companyName: company.companyName,
-            logo: logoImage ? `${process.env.AWS_CDN_URL}/${logoImage.s3Key}` : null,
-            favicon: faviconImage ? `${process.env.AWS_CDN_URL}/${faviconImage.s3Key}` : null,
+            logo: logoImage ? getImageUrl(logoImage.s3Key) : null,
+            favicon: faviconImage ? getImageUrl(faviconImage.s3Key) : null,
             primaryColor: company.primaryColor,
             secondaryColor: company.secondaryColor,
             singupPageDesign: company.singupPageDesign,
