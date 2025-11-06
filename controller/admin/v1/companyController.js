@@ -941,6 +941,142 @@ const testMappplesMap = async (req, res) => {
   }
 }
 
+// Deactivate an onboarding token by token string
+const deactivateOnboarding = async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!token) {
+      return res.failure({ message: 'Token is required' });
+    }
+
+    const existing = await dbService.findOne(model.onboardingToken, {
+      token: token
+    });
+
+    if (!existing) {
+      return res.failure({ message: 'Onboarding token not found' });
+    }
+
+    if (existing.isUsed) {
+      return res.failure({ message: 'Onboarding link is already deactivated' });
+    }
+
+    await dbService.update(
+      model.onboardingToken,
+      { id: existing.id },
+      { isUsed: true, usedAt: new Date() }
+    );
+
+    return res.success({ message: 'Onboarding link deactivated successfully' });
+  } catch (error) {
+    console.error('deactivateOnboarding error:', error);
+    return res.failure({ message: error.message || 'Failed to deactivate onboarding link' });
+  }
+};
+
+// Resend onboarding link for a company (generates a new token and emails it)
+const resendOnboardingLink = async (req, res) => {
+  try {
+    const { companyid } = req.params;
+    if (!companyid) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    const company = await dbService.findOne(model.company, { id: companyid });
+    if (!company) {
+      return res.failure({ message: 'Company not found' });
+    }
+
+    // Find primary admin user for the company (role 2)
+    const user = await dbService.findOne(model.user, {
+      companyId: company.id,
+      userRole: 2,
+      isDeleted: false
+    });
+
+    if (!user) {
+      return res.failure({ message: 'Primary user not found for this company' });
+    }
+
+    // Deactivate any existing active tokens for this user/company
+    try {
+      const existingActive = await dbService.findAll(
+        model.onboardingToken,
+        { userId: user.id, companyId: company.id, isUsed: false },
+        {}
+      );
+      if (Array.isArray(existingActive)) {
+        for (const t of existingActive) {
+          await dbService.update(
+            model.onboardingToken,
+            { id: t.id },
+            { isUsed: true, usedAt: new Date() }
+          );
+        }
+      }
+    } catch (ignore) {
+      // best effort; continue even if listing/updating old tokens fails
+    }
+
+    // Generate a fresh token
+    const onboardingExpiry = process.env.ON_BOARDING_EXPIRY || '6d';
+    const tokenData = generateOnboardingToken({
+      userId: user.id,
+      name: user.name,
+      companyId: company.id,
+      userRole: user.userRole
+    }, onboardingExpiry);
+
+    // Save the new token
+    await dbService.createOne(model.onboardingToken, {
+      userId: user.id,
+      companyId: company.id,
+      token: tokenData.token,
+      expiresAt: tokenData.expiresAt,
+      isUsed: false
+    });
+
+    // Build URLs for email
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.gmaxepay.in';
+    const onboardingLink = `${frontendUrl}/onboarding/${tokenData.token}`;
+
+    let logoUrl = company.logo ? getImageUrl(company.logo) : null;
+    if (!logoUrl) {
+      const backendUrl = process.env.BASE_URL;
+      logoUrl = `${backendUrl}/gmaxepay.png`;
+    }
+    const backendUrl = process.env.BASE_URL;
+    const iconUrl = `${backendUrl}/mailicons.png`;
+
+    // Send email
+    try {
+      await sendWelcomeEmail({
+        to: user.email,
+        userName: user.name,
+        onboardingLink: onboardingLink,
+        logoUrl: logoUrl,
+        iconUrl: iconUrl,
+        expiryTime: tokenData.expiryDisplay
+      });
+    } catch (emailError) {
+      console.error('Failed to send onboarding email:', emailError);
+      // proceed; email failure shouldn't block token generation
+    }
+
+    return res.success({
+      message: 'Onboarding link resent successfully',
+      data: {
+        onboardingLink,
+        expiresAt: tokenData.expiresAt,
+        expiryDisplay: tokenData.expiryDisplay
+      }
+    });
+  } catch (error) {
+    console.error('resendOnboardingLink error:', error);
+    return res.failure({ message: error.message || 'Failed to resend onboarding link' });
+  }
+};
+
 module.exports = {
   createCompany,
   getCompanyById,
@@ -953,5 +1089,7 @@ module.exports = {
   getCityByPincode,
   getIpCheck,
   testCompletedAddress,
-  testMappplesMap
+  testMappplesMap,
+  deactivateOnboarding,
+  resendOnboardingLink
 };
