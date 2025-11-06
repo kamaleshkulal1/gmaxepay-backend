@@ -994,6 +994,8 @@ const resendOnboardingLink = async (req, res) => {
       isDeleted: false
     });
 
+    console.log('user', user);
+
     if (!user) {
       return res.failure({ message: 'Primary user not found for this company' });
     }

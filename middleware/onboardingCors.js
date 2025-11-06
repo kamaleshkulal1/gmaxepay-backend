@@ -19,7 +19,7 @@ const isAllowedOrigin = (origin) => {
     }
     
     // Allow subdomains of app.gmaxepay.in (e.g., www.app.gmaxepay.in)
-    if (hostname.endsWith('.app.gmaxepay.in')) {
+    if (hostname.endsWith('app.gmaxepay.in')) {
       return protocol === 'https:';
     }
     

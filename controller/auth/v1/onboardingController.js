@@ -74,12 +74,16 @@ const ensureDomainMatches = (req, company) => {
   if (!isAllowedCompanyDomain(requested)) {
     return false;
   }
-  // If company has a customDomain stored, validate against it
+  // If the request is coming from core allowed domains, allow regardless of company's customDomain
+  if (requested === 'app.gmaxepay.in' || requested === 'localhost') {
+    return true;
+  }
+  // Otherwise, if company has a customDomain stored, validate against it
   const expected = (company?.customDomain || '').toString().trim().toLowerCase();
   if (expected && requested) {
     return requested === expected;
   }
-  // Domain is allowed, allow access
+  // No expected domain stored; allow
   return true;
 };
 
