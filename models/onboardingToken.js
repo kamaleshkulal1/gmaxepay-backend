@@ -40,6 +40,10 @@ let OnboardingToken = sequelize.define(
       type: DataTypes.DATE,
       allowNull: false
     },
+    isDeactivated: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     isUsed: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

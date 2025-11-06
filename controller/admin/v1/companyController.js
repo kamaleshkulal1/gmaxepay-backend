@@ -964,7 +964,7 @@ const deactivateOnboarding = async (req, res) => {
     await dbService.update(
       model.onboardingToken,
       { id: existing.id },
-      { isUsed: true, usedAt: new Date() }
+      { isDeactivated: true, isUsed: true, usedAt: new Date() }
     );
 
     return res.success({ message: 'Onboarding link deactivated successfully' });

@@ -104,6 +104,7 @@ const loadContextByToken = async (token) => {
     isDeleted: false
   });
   if (!tokenRecord) return { error: 'Invalid or expired onboarding link' };
+  if (tokenRecord.isDeactivated) return { error: 'This onboarding link has been deactivated' };
   if (tokenRecord.isUsed) return { error: 'This onboarding link has already been used' };
   if (new Date() > tokenRecord.expiresAt) return { error: 'This onboarding link has expired' };
   const tokenData = decryptOnboardingToken(token);
