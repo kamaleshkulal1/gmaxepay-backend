@@ -72,7 +72,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id', 'token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id', 'token','x-company-id'],
   exposedHeaders: ['x-request-id'],
   maxAge: 86400, // Cache preflight for 24 hours
   optionsSuccessStatus: 200

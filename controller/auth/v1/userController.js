@@ -10,8 +10,15 @@ const { JWT, TYPES } = require('../../../constants/authConstant');
 const login = async (req, res) => {
     try {
         const { mobileNo, password, latitude, longitude, userType } = req.body;
-        const companyId = req.headers['company-id'] || null;
+        const companyId = req.headers['x-company-id'];
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
 
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
         if (!mobileNo) {
             return res.failure({ message: 'Mobile number is required!' });
         }
@@ -67,8 +74,16 @@ const login = async (req, res) => {
 const verifyOTP = async (req, res) => {
     try {
         const { otp } = req.body;
-        const companyId = req.headers['company-id'] || null;
+        const companyId = req.headers['x-company-id'];
         const token = req.headers['token'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
 
         if (!otp) {
             return res.failure({ message: 'OTP is required!' });
@@ -102,8 +117,16 @@ const verifyOTP = async (req, res) => {
 const resetPassword = async (req, res) => {
     try {
         const { newPassword, confirmPassword } = req.body;
-        const companyId = req.headers['company-id'] || null;
+        const companyId = req.headers['x-company-id'];
         const token = req.headers['token'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
 
         if (!newPassword || !confirmPassword) {
             return res.failure({ message: 'New password and confirm password are required!!' });
@@ -141,8 +164,16 @@ const resetPassword = async (req, res) => {
 const handle2FA = async (req, res) => {
     try {
         const { otp, latitude, longitude, ipAddress } = req.body;
-        const companyId = req.headers['company-id'] || null;
+        const companyId = req.headers['x-company-id'];
         const dataToken = req.headers['token'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
 
         if (!otp) {
             return res.badRequest({ message: '2FA code is required!' });
@@ -178,9 +209,15 @@ const handle2FA = async (req, res) => {
 
 const resendOTP = async(req,res)=>{
     try{
-        const companyId = req.headers['company-id'] || null;
+        const companyId = req.headers['x-company-id'];
         const token = req.headers['token'];
-
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
         if (!token) {
             return res.failure({ message: 'Data token is required!' });
         }
@@ -207,7 +244,14 @@ const resendOTP = async(req,res)=>{
 const refreshAccessToken = async (req, res) => {
     try {
         const { refreshToken } = req.body;
-
+        const companyId = req.headers['x-company-id'];
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
         if (!refreshToken) {
             return res.badRequest({ message: 'Refresh token is required!' });
         }
@@ -232,7 +276,14 @@ const refreshAccessToken = async (req, res) => {
 const logout = async (req, res) => {
     try {
         const userId = req.user?.id; // User is attached to req by authentication middleware
-        
+        const companyId = req.headers['x-company-id'];
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
         if (!userId) {
             return res.unAuthorized({ message: 'User not authenticated!' });
         }
@@ -254,24 +305,11 @@ const logout = async (req, res) => {
 };
 
 
-const aadharVerification = async (req, res) => {
-    try
-    {
-      const companyId = req.headers['company-id'] || null;
-
-      const {mobileNo}= req.body;
-      
-    } catch{
-
-    }
-}
-
 module.exports = {
     login,
     verifyOTP,
     resetPassword,
     handle2FA,
-    aadharVerification,
     refreshAccessToken,
     resendOTP,
     logout
