@@ -315,7 +315,7 @@ const loginUser = async (
     if (!user) {
       return {
         flag: true,
-        msg: 'User does not exist!'
+        msg: 'Invalid credentials!'
       };
     }
     
