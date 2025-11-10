@@ -11,7 +11,7 @@ const getProfile = async (req, res) => {
     const userDetails = {
         userId: user.id,
         mobileNo: user.mobileNo,
-        email: user.email,
+        name: user.name,
         profileImage: user.profileImage ? `${process.env.AWS_CDN_URL}/${user.profileImage}` : null,
     }
     return res.success({ message: 'User profile retrieved successfully', data: userDetails });
