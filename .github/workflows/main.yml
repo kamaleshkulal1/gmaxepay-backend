@@ -153,7 +153,7 @@ jobs:
                 HEALTH_CHECK_SUCCESS=true
                 break
               else
-                echo "⚠️ HTTP 200 but JSON status not 'ok': $RESPONSE_BODY"
+                echo "⚠️ HTTP  200 but JSON status not 'ok': $RESPONSE_BODY"
               fi
             else
               echo "❌ HTTP status not 200: $HTTP_STATUS"
