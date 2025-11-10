@@ -153,7 +153,7 @@ const sendSmsMobile = async (req, res) => {
     // Generate OTP and store with expiry
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
-    const expireOTP = moment().add(JWT.OTP_EXPIRES_IN || 120, 'seconds').toISOString();
+    const expireOTP = moment().add(JWT.OTP_EXPIRES_IN || 180, 'seconds').toISOString();
 
     await dbService.update(
       model.user,

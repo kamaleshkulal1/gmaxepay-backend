@@ -12,7 +12,7 @@ const s3Client = new S3Client({
   }
 });
 
-const BUCKET_NAME = process.env.AWS_BUCKET || 'gmaxepay';
+const BUCKET_NAME = process.env.AWS_BUCKET || 'gmaxepaybucket';
 const AWS_CDN_URL = process.env.AWS_CDN_URL || 'https://cdn.gmaxepay.in';
 
 /**

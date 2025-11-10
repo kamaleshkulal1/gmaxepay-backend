@@ -12,7 +12,7 @@ const s3Client = new S3Client({
 
 class LogService {
   constructor() {
-    this.bucket = 'gmaxepay';
+    this.bucket = process.env.AWS_BUCKET || 'gmaxepaybucket';
     this.folder = 'development';
   }
 

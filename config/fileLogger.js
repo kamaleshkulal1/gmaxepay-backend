@@ -68,7 +68,7 @@ if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY &&
 class S3Transport extends winston.Transport {
   constructor(options) {
     super(options);
-    this.bucket = options.bucket || 'gmaxepay';
+    this.bucket = options.bucket || process.env.AWS_BUCKET || 'gmaxepaybucket';
     this.s3Client = options.s3Client || s3Client;
     this.logBuffer = []; // Buffer to store logs
     this.bufferSize = 100; // Batch logs to reduce S3 requests
@@ -403,10 +403,11 @@ const transports = [
 
 // Add S3 transport if credentials are available
 if (s3Client) {
+  const bucketName = process.env.AWS_BUCKET || 'gmaxepaybucket';
   transports.push(new S3Transport({
-    bucket: 'gmaxepay'
+    bucket: bucketName
   }));
-  console.log('S3 logging enabled: Logs will be uploaded to gmaxepay bucket as server.logs');
+  console.log(`S3 logging enabled: Logs will be uploaded to ${bucketName} bucket as server.logs`);
 } else {
   console.warn('S3 logging disabled: AWS credentials not configured or invalid. Only file logging will be available.');
   console.warn('To enable S3 logging, set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION environment variables.');

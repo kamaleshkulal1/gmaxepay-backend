@@ -16,6 +16,9 @@ const s3Client = new S3Client({
     secretAccessKey: S3_SECRET_ACCESS_KEY,
   }
 });
+
+const BUCKET_NAME = process.env.AWS_BUCKET || 'gmaxepaybucket';
+
 /**
  * upload File
  * @param {file} file
@@ -24,7 +27,7 @@ const s3Client = new S3Client({
 const uploadFile = async (file, id) => {
   const fileContent = fs.readFileSync(file.path);
   const params = {
-    Bucket: process.env.AWS_BUCKET,
+    Bucket: BUCKET_NAME,
     Key: `${process.env.AWS_FOLDER}/${file.filename}`, // File name you want to save as in S3
     Body: fileContent,
     ContentType: file.mimetype,
@@ -42,7 +45,7 @@ const uploadFile = async (file, id) => {
 
 const uploadBinaryFiles = async (file, filename) => {
   const params = {
-    Bucket: process.env.AWS_BUCKET,
+    Bucket: BUCKET_NAME,
     Key: `${process.env.AWS_FOLDER}/${file.filename}`, // File name you want to save as in S3
     Body: file.buffer,
     ContentType: file.mimetype,
