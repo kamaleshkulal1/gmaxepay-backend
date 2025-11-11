@@ -13,6 +13,7 @@ db.companyImage = require('./companyImage');
 db.kycDocumentSetting = require('./kycDocument');
 db.ekycHub = require('./ekycHub');
 db.aadhaarCard = require('./aadhaarCard');
+db.digilockerDocument = require('./digilockerDocument');
 
 // User Management Models
 db.user = require('./user');
@@ -220,6 +221,29 @@ db.onboardingToken.belongsTo(db.company, {
 db.company.hasMany(db.onboardingToken, {
   foreignKey: 'companyId',
   as: 'onboardingTokens',
+  sourceKey: 'id'
+});
+
+// Digilocker Document Relationships
+db.digilockerDocument.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.digilockerDocument, {
+  foreignKey: 'userId',
+  as: 'digilockerDocuments',
+  sourceKey: 'id'
+});
+
+db.digilockerDocument.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.digilockerDocument, {
+  foreignKey: 'companyId',
+  as: 'digilockerDocuments',
   sourceKey: 'id'
 });
 

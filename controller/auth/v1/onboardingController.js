@@ -526,6 +526,48 @@ const connectAadhaarVerification = async (req, res) => {
     const  existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
     if(!existingUser) return res.failure({ message: 'User not found' });
     const response = await ekycHub.createAadharVerificationUrl(redirect_url);
+    
+    // Store verification_id and reference_id if response is successful
+    if (response && response.status === 'SUCCESS' && response.data) {
+      const { verification_id, reference_id } = response.data;
+      if (verification_id) {
+        // Check if document already exists
+        const existingDoc = await dbService.findOne(model.digilockerDocument, {
+          userId: ctx.tokenData.userId,
+          companyId: ctx.tokenData.companyId,
+          documentType: 'AADHAAR',
+          verificationId: verification_id,
+          isDeleted: false
+        });
+        
+        if (!existingDoc) {
+          // Create new document record with verification details
+          await dbService.createOne(model.digilockerDocument, {
+            refId: ctx.tokenData.userId,
+            companyId: ctx.tokenData.companyId,
+            documentType: 'AADHAAR',
+            verificationId: verification_id,
+            referenceId: reference_id || null,
+            status: response.data.status || null,
+            fullResponse: response.data,
+            addedBy: ctx.user.id,
+            isActive: true
+          });
+        } else {
+          // Update existing record with new reference_id if needed
+          await dbService.update(
+            model.digilockerDocument,
+            { id: existingDoc.id },
+            {
+              referenceId: reference_id || existingDoc.referenceId,
+              status: response.data.status || existingDoc.status,
+              fullResponse: response.data
+            }
+          );
+        }
+      }
+    }
+    
     return res.success({ message: 'Aadhaar Connection Successful' , data: response });
   } catch (error) {
     console.error('Error connecting Aadhaar and PAN verification:', error);
@@ -549,6 +591,48 @@ const connectPanVerification = async (req, res) => {
     if(!existingUser) return res.failure({ message: 'User not found' });
     const response = await ekycHub.createPanVerificationUrl(redirect_url);
     console.log("response", response);
+    
+    // Store verification_id and reference_id if response is successful
+    if (response && response.status === 'SUCCESS' && response.data) {
+      const { verification_id, reference_id } = response.data;
+      if (verification_id) {
+        // Check if document already exists
+        const existingDoc = await dbService.findOne(model.digilockerDocument, {
+          refId: ctx.tokenData.userId,
+          companyId: ctx.tokenData.companyId,
+          documentType: 'PAN',
+          verificationId: verification_id,
+          isDeleted: false
+        });
+        
+        if (!existingDoc) {
+          // Create new document record with verification details
+          await dbService.createOne(model.digilockerDocument, {
+            refId: ctx.tokenData.userId,
+            companyId: ctx.tokenData.companyId,
+            documentType: 'PAN',
+            verificationId: verification_id,
+            referenceId: reference_id || null,
+            status: response.data.status || null,
+            fullResponse: response.data,
+            addedBy: ctx.user.id,
+            isActive: true
+          });
+        } else {
+          // Update existing record with new reference_id if needed
+          await dbService.update(
+            model.digilockerDocument,
+            { id: existingDoc.id },
+            {
+              referenceId: reference_id || existingDoc.referenceId,
+              status: response.data.status || existingDoc.status,
+              fullResponse: response.data
+            }
+          );
+        }
+      }
+    }
+    
     return res.success({ message: 'PAN Connection Successful' , data: response });  
   }
   catch (error) {
@@ -567,17 +651,139 @@ const getDigilockerDocuments = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const { verification_id  ,reference_id, document_type} = req.body || {};
+    const { verification_id, reference_id, document_type } = req.body || {};
     if (!verification_id) return res.failure({ message: 'Verification ID is required' });
+    if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
+    
     const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
     if(!existingUser) return res.failure({ message: 'User not found' });
-    const response = await ekycHub.getDocuments(verification_id,  reference_id, document_type);
-    console.log("response", response);
-    return res.success({ message: 'Aadhaar Verification Downloaded' , data: response });
+    
+    // Normalize document_type to uppercase
+    const docType = document_type.toUpperCase();
+    if (docType !== 'AADHAAR' && docType !== 'PAN') {
+      return res.failure({ message: 'Invalid document type. Must be AADHAAR or PAN' });
+    }
+    
+    // Check if document already exists in database with full data
+    let existingDoc = await dbService.findOne(model.digilockerDocument, {
+      refId: ctx.tokenData.userId,
+      companyId: ctx.tokenData.companyId,
+      documentType: docType,
+      verificationId: verification_id,
+      isDeleted: false
+    });
+    
+    let response;
+    let shouldFetchFromApi = true;
+    
+    // If document exists and has full data (name or panNumber), use it
+    if (existingDoc && ((docType === 'AADHAAR' && existingDoc.name) || (docType === 'PAN' && existingDoc.panNumber))) {
+      // Return existing data
+      response = {
+        status: 'SUCCESS',
+        message: `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} Verification Downloaded`,
+        data: {
+          reference_id: existingDoc.referenceId,
+          verification_id: existingDoc.verificationId,
+          status: existingDoc.status,
+          ...(docType === 'AADHAAR' ? {
+            name: existingDoc.name,
+            uid: existingDoc.uid,
+            dob: existingDoc.dob,
+            gender: existingDoc.gender,
+            care_of: existingDoc.careOf,
+            address: existingDoc.address,
+            split_address: existingDoc.splitAddress,
+            year_of_birth: existingDoc.yearOfBirth,
+            photo_link: existingDoc.photoLink,
+            xml_file: existingDoc.xmlFile
+          } : {
+            pan_number: existingDoc.panNumber,
+            name: existingDoc.panName,
+            father_name: existingDoc.panFatherName,
+            dob: existingDoc.panDob
+          }),
+          message: existingDoc.message,
+          txid: existingDoc.txid
+        }
+      };
+      shouldFetchFromApi = false;
+    }
+    
+    // Fetch from API if needed
+    if (shouldFetchFromApi) {
+      response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
+      console.log("API response", response);
+      
+      // Store the response in database if successful
+      if (response && response.status === 'SUCCESS' && response.data) {
+        const docData = response.data;
+        const updateData = {
+          referenceId: docData.reference_id || reference_id || existingDoc?.referenceId,
+          status: docData.status || 'Success',
+          message: docData.message || null,
+          txid: docData.txid || null,
+          fullResponse: docData
+        };
+        
+        if (docType === 'AADHAAR') {
+          // Store Aadhaar specific fields
+          updateData.name = docData.name || null;
+          updateData.uid = docData.uid || null;
+          updateData.dob = docData.dob || null;
+          updateData.gender = docData.gender || null;
+          updateData.careOf = docData.care_of || null;
+          updateData.address = docData.address || null;
+          updateData.splitAddress = docData.split_address || null;
+          updateData.yearOfBirth = docData.year_of_birth || null;
+          updateData.photoLink = docData.photo_link || null; // Base64 encoded photo
+          updateData.xmlFile = docData.xml_file || null;
+        } else if (docType === 'PAN') {
+          // Store PAN specific fields
+          updateData.panNumber = docData.pan_number || docData.pan || null;
+          updateData.panName = docData.name || null;
+          updateData.panFatherName = docData.father_name || null;
+          updateData.panDob = docData.dob || null;
+        }
+        
+        if (existingDoc) {
+          // Update existing document
+          await dbService.update(
+            model.digilockerDocument,
+            { id: existingDoc.id },
+            updateData
+          );
+        } else {
+          // Create new document record
+          await dbService.createOne(model.digilockerDocument, {
+            userId: ctx.tokenData.userId,
+            companyId: ctx.tokenData.companyId,
+            documentType: docType,
+            verificationId: verification_id,
+            ...updateData,
+            addedBy: ctx.user.id,
+            isActive: true
+          });
+        }
+        
+        // Update user verification status
+        if (docType === 'AADHAAR') {
+          await dbService.update(model.user, { id: ctx.user.id }, { aadharVerify: true });
+        } else if (docType === 'PAN') {
+          await dbService.update(model.user, { id: ctx.user.id }, { panVerify: true });
+        }
+      }
+    }
+
+    const message = docType === 'AADHAAR' 
+      ? 'Aadhaar Verification Downloaded' 
+      : 'PAN Verification Downloaded';
+    
+    return res.success({ message, data: response.data || response });
   }
   catch (error) {
-    console.error('Error downloading Aadhaar verification:', error);
-    return res.failure({ message: 'Failed to download Aadhaar verification', error: error.message });
+    console.error('Error downloading Digilocker verification:', error);
+    return res.failure({ message: 'Failed to download verification', error: error.message });
   }
 }
 
@@ -772,7 +978,26 @@ const postProfile = async (req, res) => {
   }
 };
 
+// const uploadAadharDocuments = async (req, res) => {
+//   try {
+//     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
+//     const token = getTokenFromReq(req);
+//     const ctx = await loadContextByToken(token);
+//     if (ctx.error) return res.failure({ message: ctx.error });
+//     if (!ensureDomainMatches(req, ctx.company)) {
+//       return res.failure({ message: 'Invalid Domain' });
+//     }
+//    if(req.body.front_photo) return res.failure({ message: 'Front photo is required' });
+//    if(req.body.back_photo) return res.failure({ message: 'Back photo is required' });
+//     const response = await ekycHub.uploadAadharDocuments(req.body);
+//     return res.success({ message: 'Aadhar documents uploaded', data: response });
+//   }
 
+//   catch (error) {
+//     console.error('Error in upload Aadhar documents:', error);
+//     return res.failure({ message: 'Failed to upload Aadhar documents', error: error.message });
+//   }
+// }
 
 // Utility endpoint: get pending steps only
 const getPending = async (req, res) => {
@@ -791,6 +1016,8 @@ const getPending = async (req, res) => {
     return res.failure({ message: 'Failed to fetch pending steps', error: error.message });
   }
 };
+
+
 
 module.exports = {
   verifyOnboardingLink,
