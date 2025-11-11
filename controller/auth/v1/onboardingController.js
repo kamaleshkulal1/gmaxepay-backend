@@ -541,10 +541,6 @@ const connectAadhaarVerification = async (req, res) => {
     }
     
     const response = await ekycHub.createAadharVerificationUrl(redirect_url);
-    console.log("response", response);
-    console.log("response.status", response.status);
-    console.log("response.data", response.data);
-    
     // Only store verification_id and reference_id if response is successful
     if (response && response.status === 'Success') {
       const { verification_id, reference_id } = response;
@@ -720,7 +716,6 @@ const getDigilockerDocuments = async (req, res) => {
     // Fetch from API if needed (document exists but doesn't have full data yet - only once)
     if (shouldFetchFromApi) {
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
-      console.log("API response", response);
       
       // Store the response in database only if successful (only once)
       if (response && response.status === 'Success') {
@@ -973,6 +968,82 @@ const postProfile = async (req, res) => {
   }
 };
 
+const extractS3Key = (imageData) => {
+  if (!imageData) return null;
+  if (typeof imageData === 'string') {
+    try {
+      const parsed = JSON.parse(imageData);
+      return parsed.key || parsed;
+    } catch {
+      return imageData;
+    }
+  } else if (typeof imageData === 'object') {
+    return imageData.key || imageData;
+  }
+  return null;
+};
+
+const getLast4Digits = (aadhaarNumber) => {
+  if (!aadhaarNumber) return null;
+  const digits = aadhaarNumber.toString().replace(/\D/g, '');
+  return digits.length >= 4 ? digits.slice(-4) : null;
+};
+
+const normalizeDate = (dateString) => {
+  if (!dateString) return null;
+  const dateStr = dateString.toString().trim();
+  const match = dateStr.match(/(\d{1,4})[-\/\.](\d{1,2})[-\/\.](\d{2,4})/);
+  if (!match) return dateStr;
+  
+  let day, month, year;
+  const part1 = match[1];
+  const part2 = match[2];
+  const part3 = match[3];
+  
+  if (part1.length === 4) {
+    year = part1;
+    month = part2.padStart(2, '0');
+    day = part3.padStart(2, '0');
+  } else if (part3.length === 4) {
+    day = part1.padStart(2, '0');
+    month = part2.padStart(2, '0');
+    year = part3;
+  } else {
+    day = part1.padStart(2, '0');
+    month = part2.padStart(2, '0');
+    const yy = parseInt(part3);
+    year = yy < 50 ? `20${part3.padStart(2, '0')}` : `19${part3.padStart(2, '0')}`;
+  }
+  
+  return `${day}-${month}-${year}`;
+};
+
+const extractBase64FromImage = (imageString) => {
+  if (!imageString) return null;
+  return imageString.startsWith('data:image') 
+    ? imageString.split(',')[1] 
+    : imageString;
+};
+
+const cleanupOldImages = async (oldFrontKey, oldBackKey, newFrontKey, newBackKey) => {
+  const cleanupPromises = [];
+  if (oldFrontKey && oldFrontKey !== newFrontKey) {
+    cleanupPromises.push(
+      imageService.deleteImageFromS3(oldFrontKey).catch(err => 
+        console.error('Error deleting old front image from S3:', err)
+      )
+    );
+  }
+  if (oldBackKey && oldBackKey !== newBackKey) {
+    cleanupPromises.push(
+      imageService.deleteImageFromS3(oldBackKey).catch(err => 
+        console.error('Error deleting old back image from S3:', err)
+      )
+    );
+  }
+  await Promise.all(cleanupPromises);
+};
+
 const uploadAadharDocuments = async (req, res) => {
   try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
@@ -986,18 +1057,11 @@ const uploadAadharDocuments = async (req, res) => {
     const front_photo = req.files?.front_photo?.[0];
     const back_photo = req.files?.back_photo?.[0];
     
-    if (!front_photo) {
+    if (!front_photo || !back_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
       return res.failure({ 
-        message: 'Front photo is required', 
+        message: !front_photo ? 'Front photo is required' : 'Back photo is required',
         receivedFields: receivedFields || 'none',
-        expectedFields: ['front_photo', 'back_photo']
-      });
-    }
-    if (!back_photo) {
-      return res.failure({ 
-        message: 'Back photo is required',
-        receivedFields: req.files ? Object.keys(req.files).join(', ') : 'none',
         expectedFields: ['front_photo', 'back_photo']
       });
     }
@@ -1011,21 +1075,6 @@ const uploadAadharDocuments = async (req, res) => {
         isDeleted: false 
       })
     ]);
-    
-    const extractS3Key = (imageData) => {
-      if (!imageData) return null;
-      if (typeof imageData === 'string') {
-        try {
-          const parsed = JSON.parse(imageData);
-          return parsed.key || parsed;
-        } catch {
-          return imageData;
-        }
-      } else if (typeof imageData === 'object') {
-        return imageData.key || imageData;
-      }
-      return null;
-    };
     
     const oldFrontImageKey = extractS3Key(existingUser?.aadharFrontImage);
     const oldBackImageKey = extractS3Key(existingUser?.aadharBackImage);
@@ -1057,16 +1106,7 @@ const uploadAadharDocuments = async (req, res) => {
         aadharBackImage: backImageS3Key
       }).catch(err => console.error('Error updating user images:', err));
       
-      if (oldFrontImageKey && oldFrontImageKey !== frontImageS3Key) {
-        imageService.deleteImageFromS3(oldFrontImageKey).catch(err => 
-          console.error('Error deleting old front image from S3:', err)
-        );
-      }
-      if (oldBackImageKey && oldBackImageKey !== backImageS3Key) {
-        imageService.deleteImageFromS3(oldBackImageKey).catch(err => 
-          console.error('Error deleting old back image from S3:', err)
-        );
-      }
+      await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
       
       const errorMessage = llmResponse?.message || llmResponse?.error || 'Failed to extract Aadhar data';
       return res.failure({ message: errorMessage });
@@ -1079,115 +1119,57 @@ const uploadAadharDocuments = async (req, res) => {
       aadhaar_numbers_match: llmResponse.aadhaar_numbers_match || false
     };
 
-    let validationResults = {
+    const validationResults = {
       aadhaarLast4Match: false,
       dobMatch: false,
+      dobOptional: true,
       photoMatch: false,
       allValidationsPassed: false
     };
 
     if (existingAadharDetails) {
-      const getLast4Digits = (aadhaarNumber) => {
-        if (!aadhaarNumber) return null;
-        const digits = aadhaarNumber.toString().replace(/\D/g, '');
-        return digits.length >= 4 ? digits.slice(-4) : null;
-      };
-
       if (existingAadharDetails.uid && extractedData.aadhaar_number) {
         const existingLast4 = getLast4Digits(existingAadharDetails.uid);
         const extractedLast4 = getLast4Digits(extractedData.aadhaar_number);
         
         if (existingLast4 && extractedLast4) {
           if (existingLast4 !== extractedLast4) {
-            validationResults.aadhaarLast4Match = false;
-            try {
-              await dbService.update(model.user, { id: ctx.user.id }, {
-                aadharFrontImage: frontImageS3Key,
-                aadharBackImage: backImageS3Key
-              });
-              
-              if (oldFrontImageKey && oldFrontImageKey !== frontImageS3Key) {
-                imageService.deleteImageFromS3(oldFrontImageKey).catch(err => 
-                  console.error('Error deleting old front image from S3:', err)
-                );
-              }
-              if (oldBackImageKey && oldBackImageKey !== backImageS3Key) {
-                imageService.deleteImageFromS3(oldBackImageKey).catch(err => 
-                  console.error('Error deleting old back image from S3:', err)
-                );
-              }
-            } catch (updateError) {
-              console.error('Error updating user images during validation failure:', updateError);
-            }
+            await dbService.update(model.user, { id: ctx.user.id }, {
+              aadharFrontImage: frontImageS3Key,
+              aadharBackImage: backImageS3Key
+            }).catch(err => console.error('Error updating user images:', err));
+            
+            await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
             
             return res.failure({ message: 'pls check your uploaded image' });
-          } else {
-            validationResults.aadhaarLast4Match = true;
           }
-        } else {
-          validationResults.aadhaarLast4Match = false;
+          validationResults.aadhaarLast4Match = true;
         }
       }
 
-      const normalizeDate = (dateString) => {
-        if (!dateString) return null;
-        const dateStr = dateString.toString().trim();
-        const match = dateStr.match(/(\d{1,4})[-\/\.](\d{1,2})[-\/\.](\d{2,4})/);
-        if (!match) return dateStr;
-        
-        let day, month, year;
-        const part1 = match[1];
-        const part2 = match[2];
-        const part3 = match[3];
-        
-        if (part1.length === 4) {
-          year = part1;
-          month = part2.padStart(2, '0');
-          day = part3.padStart(2, '0');
-        } else if (part3.length === 4) {
-          day = part1.padStart(2, '0');
-          month = part2.padStart(2, '0');
-          year = part3;
-        } else {
-          day = part1.padStart(2, '0');
-          month = part2.padStart(2, '0');
-          const yy = parseInt(part3);
-          year = yy < 50 ? `20${part3.padStart(2, '0')}` : `19${part3.padStart(2, '0')}`;
-        }
-        
-        return `${day}-${month}-${year}`;
-      };
-
-      if (existingAadharDetails.dob && extractedData.dob) {
+      const hasExistingDob = !!existingAadharDetails.dob;
+      const hasExtractedDob = !!extractedData.dob;
+      
+      if (hasExistingDob && hasExtractedDob) {
         const existingDob = normalizeDate(existingAadharDetails.dob);
         const extractedDob = normalizeDate(extractedData.dob);
         validationResults.dobMatch = existingDob === extractedDob;
+        validationResults.dobOptional = false;
+      } else {
+        validationResults.dobMatch = true;
+        validationResults.dobOptional = true;
       }
 
       if (existingAadharDetails.photoLink && extractedData.photo) {
         try {
-          const photoLinkBase64 = existingAadharDetails.photoLink.startsWith('data:image') 
-            ? existingAadharDetails.photoLink.split(',')[1] 
-            : existingAadharDetails.photoLink;
-          
-          console.log("photoLinkBase64",photoLinkBase64);
-
-          const extractedPhotoBase64 = extractedData.photo.startsWith('data:image')
-            ? extractedData.photo.split(',')[1]
-            : extractedData.photo;
-
-          console.log("extractedPhotoBase64",extractedPhotoBase64);
+          const photoLinkBase64 = extractBase64FromImage(existingAadharDetails.photoLink);
+          const extractedPhotoBase64 = extractBase64FromImage(extractedData.photo);
 
           const faceComparison = await rekognitionService.compareFaces(photoLinkBase64, extractedPhotoBase64);
-          console.log("faceComparison",faceComparison);
           
-          if (faceComparison.success && faceComparison.matched) {
-            validationResults.photoMatch = true;
-          } else {
-            validationResults.photoMatch = false;
-            if (!faceComparison.success) {
-              console.error('AWS Rekognition error:', faceComparison.error);
-            }
+          validationResults.photoMatch = faceComparison.success && faceComparison.matched;
+          if (!faceComparison.success) {
+            console.error('AWS Rekognition error:', faceComparison.error);
           }
         } catch (faceError) {
           console.error('Error comparing faces:', faceError);
@@ -1205,13 +1187,9 @@ const uploadAadharDocuments = async (req, res) => {
         validationResults.photoMatch;
     }
 
-    const aadharLast4 = extractedData.aadhaar_number 
-      ? extractedData.aadhaar_number.toString().slice(-4) 
-      : '';
-    
+    const aadharLast4 = extractedData.aadhaar_number?.toString().slice(-4) || '';
     const matchStatus = extractedData.aadhaar_numbers_match ? '1' : '0';
     const validationPassed = existingAadharDetails && validationResults.allValidationsPassed ? '1' : '0';
-    
     const aadharDetailsString = `${aadharLast4},${matchStatus},${validationPassed}`;
 
     const updateData = {
@@ -1249,17 +1227,7 @@ const uploadAadharDocuments = async (req, res) => {
       }
     }
     
-    if (oldFrontImageKey && oldFrontImageKey !== frontImageS3Key) {
-      imageService.deleteImageFromS3(oldFrontImageKey).catch(err => 
-        console.error('Error deleting old front image from S3:', err)
-      );
-    }
-    
-    if (oldBackImageKey && oldBackImageKey !== backImageS3Key) {
-      imageService.deleteImageFromS3(oldBackImageKey).catch(err => 
-        console.error('Error deleting old back image from S3:', err)
-      );
-    }
+    await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
     
     let responseMessage = 'Aadhar documents processed and uploaded successfully';
     if (existingAadharDetails) {
@@ -1270,13 +1238,15 @@ const uploadAadharDocuments = async (req, res) => {
         if (!validationResults.aadhaarLast4Match) {
           failedValidations.push('Last 4 digits of Aadhaar number do not match');
         }
-        if (!validationResults.dobMatch) {
+        if (!validationResults.dobMatch && !validationResults.dobOptional) {
           failedValidations.push('Date of birth does not match');
         }
         if (!validationResults.photoMatch) {
           failedValidations.push('Photo does not match');
         }
-        responseMessage = `Aadhar documents uploaded successfully. However, some validations failed: ${failedValidations.join(', ')}`;
+        if (failedValidations.length > 0) {
+          responseMessage = `Aadhar documents uploaded successfully. However, some validations failed: ${failedValidations.join(', ')}`;
+        }
       }
     }
 
