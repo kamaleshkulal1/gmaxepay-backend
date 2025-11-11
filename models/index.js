@@ -226,12 +226,12 @@ db.company.hasMany(db.onboardingToken, {
 
 // Digilocker Document Relationships
 db.digilockerDocument.belongsTo(db.user, {
-  foreignKey: 'userId',
+  foreignKey: 'refId',
   as: 'user',
   targetKey: 'id'
 });
 db.user.hasMany(db.digilockerDocument, {
-  foreignKey: 'userId',
+  foreignKey: 'refId',
   as: 'digilockerDocuments',
   sourceKey: 'id'
 });

@@ -651,66 +651,83 @@ const getDigilockerDocuments = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const { verification_id, reference_id, document_type } = req.body || {};
-    if (!verification_id) return res.failure({ message: 'Verification ID is required' });
-    if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
+    const { document_type } = req.body || {};
     
-    const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
-    if(!existingUser) return res.failure({ message: 'User not found' });
+    // Validate document_type first
+    if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
     
     // Normalize document_type to uppercase
     const docType = document_type.toUpperCase();
     if (docType !== 'AADHAAR' && docType !== 'PAN') {
       return res.failure({ message: 'Invalid document type. Must be AADHAAR or PAN' });
     }
-    
-    // Check if document already exists in database with full data
-    let existingDoc = await dbService.findOne(model.digilockerDocument, {
+
+    const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
+    if(!existingUser) return res.failure({ message: 'User not found' });
+
+    // Find existing document record (created when connectAadhaarVerification or connectPanVerification was called)
+    const existingDigilockerDocument = await dbService.findOne(model.digilockerDocument, {
       refId: ctx.tokenData.userId,
       companyId: ctx.tokenData.companyId,
       documentType: docType,
-      verificationId: verification_id,
       isDeleted: false
     });
+
+    // Check if verification was initiated (verificationId and referenceId should exist)
+    if (!existingDigilockerDocument) {
+      return res.failure({ message: `Please connect ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} verification first` });
+    }
+
+    if (!existingDigilockerDocument.verificationId) {
+      return res.failure({ message: 'Verification ID is required. Please connect verification first' });
+    }
+
+    if (!existingDigilockerDocument.referenceId) {
+      return res.failure({ message: 'Reference ID is required. Please connect verification first' });
+    }
+
+    // Extract verification_id and reference_id from stored document
+    const verification_id = existingDigilockerDocument.verificationId;
+    const reference_id = existingDigilockerDocument.referenceId;
     
     let response;
     let shouldFetchFromApi = true;
     
-    // If document exists and has full data (name or panNumber), use it
-    if (existingDoc && ((docType === 'AADHAAR' && existingDoc.name) || (docType === 'PAN' && existingDoc.panNumber))) {
+    // If document already has full data (name for Aadhaar or panNumber for PAN), return it
+    if ((docType === 'AADHAAR' && existingDigilockerDocument.name) || (docType === 'PAN' && existingDigilockerDocument.panNumber)) {
       // Return existing data
       response = {
         status: 'SUCCESS',
         message: `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} Verification Downloaded`,
         data: {
-          reference_id: existingDoc.referenceId,
-          verification_id: existingDoc.verificationId,
-          status: existingDoc.status,
+          reference_id: existingDigilockerDocument.referenceId,
+          verification_id: existingDigilockerDocument.verificationId,
+          status: existingDigilockerDocument.status,
           ...(docType === 'AADHAAR' ? {
-            name: existingDoc.name,
-            uid: existingDoc.uid,
-            dob: existingDoc.dob,
-            gender: existingDoc.gender,
-            care_of: existingDoc.careOf,
-            address: existingDoc.address,
-            split_address: existingDoc.splitAddress,
-            year_of_birth: existingDoc.yearOfBirth,
-            photo_link: existingDoc.photoLink,
-            xml_file: existingDoc.xmlFile
+            name: existingDigilockerDocument.name,
+            uid: existingDigilockerDocument.uid,
+            dob: existingDigilockerDocument.dob,
+            gender: existingDigilockerDocument.gender,
+            care_of: existingDigilockerDocument.careOf,
+            address: existingDigilockerDocument.address,
+            split_address: existingDigilockerDocument.splitAddress,
+            year_of_birth: existingDigilockerDocument.yearOfBirth,
+            photo_link: existingDigilockerDocument.photoLink,
+            xml_file: existingDigilockerDocument.xmlFile
           } : {
-            pan_number: existingDoc.panNumber,
-            name: existingDoc.panName,
-            father_name: existingDoc.panFatherName,
-            dob: existingDoc.panDob
+            pan_number: existingDigilockerDocument.panNumber,
+            name: existingDigilockerDocument.panName,
+            father_name: existingDigilockerDocument.panFatherName,
+            dob: existingDigilockerDocument.panDob
           }),
-          message: existingDoc.message,
-          txid: existingDoc.txid
+          message: existingDigilockerDocument.message,
+          txid: existingDigilockerDocument.txid
         }
       };
       shouldFetchFromApi = false;
     }
     
-    // Fetch from API if needed
+    // Fetch from API if needed (document exists but doesn't have full data yet)
     if (shouldFetchFromApi) {
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
       console.log("API response", response);
@@ -719,7 +736,7 @@ const getDigilockerDocuments = async (req, res) => {
       if (response && response.status === 'SUCCESS' && response.data) {
         const docData = response.data;
         const updateData = {
-          referenceId: docData.reference_id || reference_id || existingDoc?.referenceId,
+          referenceId: docData.reference_id || reference_id || existingDigilockerDocument.referenceId,
           status: docData.status || 'Success',
           message: docData.message || null,
           txid: docData.txid || null,
@@ -746,25 +763,12 @@ const getDigilockerDocuments = async (req, res) => {
           updateData.panDob = docData.dob || null;
         }
         
-        if (existingDoc) {
-          // Update existing document
-          await dbService.update(
-            model.digilockerDocument,
-            { id: existingDoc.id },
-            updateData
-          );
-        } else {
-          // Create new document record
-          await dbService.createOne(model.digilockerDocument, {
-            userId: ctx.tokenData.userId,
-            companyId: ctx.tokenData.companyId,
-            documentType: docType,
-            verificationId: verification_id,
-            ...updateData,
-            addedBy: ctx.user.id,
-            isActive: true
-          });
-        }
+        // Update existing document with full data
+        await dbService.update(
+          model.digilockerDocument,
+          { id: existingDigilockerDocument.id },
+          updateData
+        );
         
         // Update user verification status
         if (docType === 'AADHAAR') {
