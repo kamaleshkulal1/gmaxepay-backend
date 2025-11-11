@@ -16,16 +16,16 @@ const BUCKET_NAME = process.env.AWS_BUCKET || 'gmaxepaybucket';
 const AWS_CDN_URL = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
 
 /**
- * Get image URL pointing to backend server (proxy endpoint with CORS support)
+ * Get image URL pointing to CDN (assets.gmaxepay.in)
  * @param {String} s3Key - S3 object key (already includes 'images/' prefix)
- * @returns {String} - Backend API URL for the image (with CORS headers)
+ * @returns {String} - CDN URL for the image
  */
 const getImageUrl = (s3Key) => {
   if (!s3Key) return null;
-  // Use backend API proxy endpoint instead of CDN to avoid CORS issues
-  // The proxy endpoint at /api/images/* has CORS headers configured
-  const backendUrl = process.env.BASE_URL || process.env.API_URL || 'http://localhost:3000';
-  return `${backendUrl}/api/images/${s3Key}`;
+  // Use CDN domain for image URLs
+  // s3Key already includes 'images/' prefix, so just append to CDN URL
+  const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+  return `${cdnUrl}/${s3Key}`;
 };
 
 /**
@@ -57,16 +57,25 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
       s3Key = `images/profile/${subtype}/${sanitizedFileName}`;
     } else if (type === 'shop') {
       s3Key = `images/${companyId||'default'}/shop/${sanitizedFileName}`;
+    } else if (type === 'aadhaar' && subtype) {
+      s3Key = `images/${companyId||'default'}/aadhaar/${subtype}/${sanitizedFileName}`;
     } else {
       s3Key = `images/${companyId||'default'}/other/${sanitizedFileName}`;
     }
+    
+    // Determine content type from file extension
+    let contentType = 'image/jpeg';
+    const fileExt = ext.toLowerCase();
+    if (fileExt === '.png') contentType = 'image/png';
+    else if (fileExt === '.gif') contentType = 'image/gif';
+    else if (fileExt === '.webp') contentType = 'image/webp';
     
     // Upload to S3
     const params = {
       Bucket: BUCKET_NAME,
       Key: s3Key,
       Body: fileBuffer,
-      ContentType: 'image/jpeg' // Adjust based on your needs
+      ContentType: contentType
     };
     
     await s3Client.send(new PutObjectCommand(params));

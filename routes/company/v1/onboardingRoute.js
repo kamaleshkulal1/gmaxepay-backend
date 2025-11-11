@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const onboardingController = require('../../../controller/auth/v1/onboardingController');
 const onboardingCors = require('../../../middleware/onboardingCors');
-const { upload, multer } = require('../../../middleware/multerConfig');
+const { upload, uploadSingle, uploadFields, multer } = require('../../../middleware/multerConfig');
 // step 1
 router.post('/:token', onboardingCors, onboardingController.verifyOnboardingLink);
 router.post('/:token/sendSmsOtp', onboardingCors, onboardingController.sendSmsMobile);
@@ -21,10 +21,13 @@ router.post('/:token/connectAadhaarVerification', onboardingCors, onboardingCont
 router.post('/:token/connectPanVerification', onboardingCors, onboardingController.connectPanVerification);
 router.post('/:token/getDigilockerDocuments', onboardingCors, onboardingController.getDigilockerDocuments);
 
-// router.post('/:token/uploadAadharDocuments', upload.single('documents'), multer, onboardingController.uploadAadharDocuments);
+router.post('/:token/uploadAadharDocuments', uploadFields([
+  { name: 'front_photo', maxCount: 1 },
+  { name: 'back_photo', maxCount: 1 }
+]), multer, onboardingController.uploadAadharDocuments);
 
 //step 5
-router.post('/:token/postShopDetails', upload.single('shopImage'), multer, onboardingController.postShopDetails);
+router.post('/:token/postShopDetails', uploadSingle('shopImage'), multer, onboardingController.postShopDetails);
 
 
 router.post('/:token/postBankDetails', onboardingCors, onboardingController.postBankDetails);
