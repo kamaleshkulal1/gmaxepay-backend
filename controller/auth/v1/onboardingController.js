@@ -533,7 +533,7 @@ const connectAadhaarVerification = async (req, res) => {
       if (verification_id) {
         // Check if document already exists
         const existingDoc = await dbService.findOne(model.digilockerDocument, {
-          userId: ctx.tokenData.userId,
+          refId: ctx.tokenData.userId,
           companyId: ctx.tokenData.companyId,
           documentType: 'AADHAAR',
           verificationId: verification_id,
