@@ -525,53 +525,49 @@ const connectAadhaarVerification = async (req, res) => {
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
     const  existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
     if(!existingUser) return res.failure({ message: 'User not found' });
-    const response = await ekycHub.createAadharVerificationUrl(redirect_url);
     
-    // Store verification_id and reference_id if response is successful
-    if (response && response.status === 'SUCCESS' && response.data) {
-      const { verification_id, reference_id } = response.data;
+    // Check if document already exists (already processed)
+    const existingDoc = await dbService.findOne(model.digilockerDocument, {
+      refId: ctx.tokenData.userId,
+      companyId: ctx.tokenData.companyId,
+      documentType: 'AADHAAR',
+      isDeleted: false
+    });
+    
+    if (existingDoc) {
+      return res.failure({ message: 'Aadhaar verification already processed. Please download from digilocker' });
+    }
+    
+    const response = await ekycHub.createAadharVerificationUrl(redirect_url);
+    console.log("response", response);
+    console.log("response.status", response.status);
+    console.log("response.data", response.data);
+    
+    // Only store verification_id and reference_id if response is successful
+    if (response && response.status === 'Success') {
+      const { verification_id, reference_id } = response;
       if (verification_id) {
-        // Check if document already exists
-        const existingDoc = await dbService.findOne(model.digilockerDocument, {
+        // Create new document record with verification details (only once)
+        await dbService.createOne(model.digilockerDocument, {
           refId: ctx.tokenData.userId,
           companyId: ctx.tokenData.companyId,
           documentType: 'AADHAAR',
           verificationId: verification_id,
-          isDeleted: false
+          referenceId: reference_id || null,
+          status: response.status || null,
+          fullResponse: response,
+          addedBy: ctx.user.id,
+          isActive: true
         });
-        
-        if (!existingDoc) {
-          // Create new document record with verification details
-          await dbService.createOne(model.digilockerDocument, {
-            refId: ctx.tokenData.userId,
-            companyId: ctx.tokenData.companyId,
-            documentType: 'AADHAAR',
-            verificationId: verification_id,
-            referenceId: reference_id || null,
-            status: response.data.status || null,
-            fullResponse: response.data,
-            addedBy: ctx.user.id,
-            isActive: true
-          });
-        } else {
-          // Update existing record with new reference_id if needed
-          await dbService.update(
-            model.digilockerDocument,
-            { id: existingDoc.id },
-            {
-              referenceId: reference_id || existingDoc.referenceId,
-              status: response.data.status || existingDoc.status,
-              fullResponse: response.data
-            }
-          );
-        }
       }
+      return res.success({ message: 'Aadhaar Connection Successful' , data: response });
+    } else {
+      // If response is not successful, don't save anything
+      return res.failure({ message: 'Failed to connect Aadhaar verification', data: response });
     }
-    
-    return res.success({ message: 'Aadhaar Connection Successful' , data: response });
   } catch (error) {
-    console.error('Error connecting Aadhaar and PAN verification:', error);
-    return res.failure({ message: 'Failed to connect Aadhaar and PAN verification', error: error.message });
+    console.error('Error connecting Aadhaar verification:', error);
+    return res.failure({ message: 'Failed to connect Aadhaar verification', error: error.message });
   }
 }
 
@@ -589,51 +585,43 @@ const connectPanVerification = async (req, res) => {
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
     const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
     if(!existingUser) return res.failure({ message: 'User not found' });
-    const response = await ekycHub.createPanVerificationUrl(redirect_url);
-    console.log("response", response);
     
-    // Store verification_id and reference_id if response is successful
-    if (response && response.status === 'SUCCESS' && response.data) {
-      const { verification_id, reference_id } = response.data;
+    // Check if document already exists (already processed)
+    const existingDoc = await dbService.findOne(model.digilockerDocument, {
+      refId: ctx.tokenData.userId,
+      companyId: ctx.tokenData.companyId,
+      documentType: 'PAN',
+      isDeleted: false
+    });
+    
+    if (existingDoc) {
+      return res.failure({ message: 'PAN verification already processed. Please download from digilocker' });
+    }
+    
+    const response = await ekycHub.createPanVerificationUrl(redirect_url);
+    
+    // Only store verification_id and reference_id if response is successful
+    if (response && response.status === 'Success') {
+      const { verification_id, reference_id } = response;
       if (verification_id) {
-        // Check if document already exists
-        const existingDoc = await dbService.findOne(model.digilockerDocument, {
+        // Create new document record with verification details (only once)
+        await dbService.createOne(model.digilockerDocument, {
           refId: ctx.tokenData.userId,
           companyId: ctx.tokenData.companyId,
           documentType: 'PAN',
           verificationId: verification_id,
-          isDeleted: false
+          referenceId: reference_id || null,
+          status: response?.status || null,
+          fullResponse: response,
+          addedBy: ctx.user.id,
+          isActive: true
         });
-        
-        if (!existingDoc) {
-          // Create new document record with verification details
-          await dbService.createOne(model.digilockerDocument, {
-            refId: ctx.tokenData.userId,
-            companyId: ctx.tokenData.companyId,
-            documentType: 'PAN',
-            verificationId: verification_id,
-            referenceId: reference_id || null,
-            status: response.data.status || null,
-            fullResponse: response.data,
-            addedBy: ctx.user.id,
-            isActive: true
-          });
-        } else {
-          // Update existing record with new reference_id if needed
-          await dbService.update(
-            model.digilockerDocument,
-            { id: existingDoc.id },
-            {
-              referenceId: reference_id || existingDoc.referenceId,
-              status: response.data.status || existingDoc.status,
-              fullResponse: response.data
-            }
-          );
-        }
       }
+      return res.success({ message: 'PAN Connection Successful' , data: response });
+    } else {
+      // If response is not successful, don't save anything
+      return res.failure({ message: 'Failed to connect PAN verification', data: response });
     }
-    
-    return res.success({ message: 'PAN Connection Successful' , data: response });  
   }
   catch (error) {
     console.error('Error connecting PAN verification:', error);
@@ -673,9 +661,9 @@ const getDigilockerDocuments = async (req, res) => {
       isDeleted: false
     });
 
-    // Check if verification was initiated (verificationId and referenceId should exist)
+    // Check if verification was initiated - if no record found, tell them to connect first
     if (!existingDigilockerDocument) {
-      return res.failure({ message: `Please connect ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} verification first` });
+      return res.failure({ message: `Please connect your ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} to digilocker first` });
     }
 
     if (!existingDigilockerDocument.verificationId) {
@@ -693,12 +681,12 @@ const getDigilockerDocuments = async (req, res) => {
     let response;
     let shouldFetchFromApi = true;
     
-    // If document already has full data (name for Aadhaar or panNumber for PAN), return it
+    // If document already has full data (name for Aadhaar or panNumber for PAN), it's already processed
     if ((docType === 'AADHAAR' && existingDigilockerDocument.name) || (docType === 'PAN' && existingDigilockerDocument.panNumber)) {
-      // Return existing data
+      // Already processed - return existing data
       response = {
         status: 'SUCCESS',
-        message: `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} Verification Downloaded`,
+        message: `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} Verification Already Processed`,
         data: {
           reference_id: existingDigilockerDocument.referenceId,
           verification_id: existingDigilockerDocument.verificationId,
@@ -727,14 +715,14 @@ const getDigilockerDocuments = async (req, res) => {
       shouldFetchFromApi = false;
     }
     
-    // Fetch from API if needed (document exists but doesn't have full data yet)
+    // Fetch from API if needed (document exists but doesn't have full data yet - only once)
     if (shouldFetchFromApi) {
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
       console.log("API response", response);
       
-      // Store the response in database if successful
-      if (response && response.status === 'SUCCESS' && response.data) {
-        const docData = response.data;
+      // Store the response in database only if successful (only once)
+      if (response && response.status === 'Success') {
+        const docData = response;
         const updateData = {
           referenceId: docData.reference_id || reference_id || existingDigilockerDocument.referenceId,
           status: docData.status || 'Success',
@@ -763,7 +751,7 @@ const getDigilockerDocuments = async (req, res) => {
           updateData.panDob = docData.dob || null;
         }
         
-        // Update existing document with full data
+        // Update existing document with full data (only once)
         await dbService.update(
           model.digilockerDocument,
           { id: existingDigilockerDocument.id },
