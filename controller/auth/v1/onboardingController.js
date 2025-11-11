@@ -1166,8 +1166,12 @@ const uploadAadharDocuments = async (req, res) => {
           const extractedPhotoBase64 = extractBase64FromImage(extractedData.photo);
 
           const faceComparison = await rekognitionService.compareFaces(photoLinkBase64, extractedPhotoBase64);
+          console.log("faceComparison",faceComparison);
           
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
+          if(!validationResults.photoMatch){
+            return res.failure({ message: 'pls check your uploaded image' });
+          }
           if (!faceComparison.success) {
             console.error('AWS Rekognition error:', faceComparison.error);
           }
