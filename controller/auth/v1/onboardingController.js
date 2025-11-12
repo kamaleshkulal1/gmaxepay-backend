@@ -12,6 +12,7 @@ const googleMap = require('../../../services/googleMap');
 const ekycHub = require('../../../services/eKycHub');
 const llmService = require('../../../services/llmService');
 const rekognitionService = require('../../../services/rekognitionService');
+const razorpayApi = require('../../../services/razorpayApi');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
 const axios = require('axios');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
@@ -121,7 +122,21 @@ const loadContextByToken = async (token) => {
   const company = await dbService.findOne(model.company, { id: tokenData.companyId, isDeleted: false });
   if (!company) return { error: 'Company not found' };
   const outlet = await dbService.findOne(model.outlet, { refId: user.id, companyId: company.id });
-  const customerBank = await dbService.findOne(model.customerBank, { refId: user.id, companyId: company.id });
+  
+  // Find customer record to lookup customerBank (customerBank.refId references customer table)
+  const customer = await dbService.findOne(model.customer, {
+    mobile: user.mobileNo
+  });
+  
+  // Find customerBank using customer.id if customer exists, otherwise try user.id for backward compatibility
+  let customerBank = null;
+  if (customer) {
+    customerBank = await dbService.findOne(model.customerBank, { refId: customer.id, companyId: company.id });
+  }
+  // Fallback: try with user.id for backward compatibility with old data
+  if (!customerBank) {
+    customerBank = await dbService.findOne(model.customerBank, { refId: user.id, companyId: company.id });
+  }
   
   // Fetch digilocker documents for Aadhaar and PAN
   const [aadhaarDoc, panDoc] = await Promise.all([
@@ -1007,16 +1022,54 @@ const postBankDetails = async (req, res) => {
 
     if(bankVerification.status !== 'Success') return res.failure({ message: 'Bank verification failed' });
     
+    // Fetch bank details from Razorpay API using IFSC
+    let razorpayBankData = null;
+    try {
+      razorpayBankData = await razorpayApi.bankDetails(ifsc);
+    } catch (error) {
+      console.error('Error fetching bank details from Razorpay:', error);
+      // Continue without Razorpay data if API fails
+    }
+    
     // Extract bank details from verification response
-    const bankName = bankVerification.bank_name || bankVerification.bankName || null;
+    // Use Razorpay BANK name as primary source, fallback to eKYC response
+    const bankName = (razorpayBankData && razorpayBankData.BANK) 
+      ? razorpayBankData.BANK 
+      : (bankVerification.bank_name || bankVerification.bankName || null);
     const beneficiaryName = bankVerification.beneficiary_name || bankVerification.beneficiaryName || ctx.user.name;
     const accountNumber = bankVerification.account_number || account_number;
-    const city = bankVerification.city || null;
-    const branch = bankVerification.branch || null;
+    // Use Razorpay city/branch if available, otherwise use eKYC response
+    const city = (razorpayBankData && razorpayBankData.CITY) 
+      ? razorpayBankData.CITY 
+      : (bankVerification.city || null);
+    const branch = (razorpayBankData && razorpayBankData.BRANCH) 
+      ? razorpayBankData.BRANCH 
+      : (bankVerification.branch || null);
+
+    // Find or create customer record (customerBank.refId references customer table, not user)
+    let customer = await dbService.findOne(model.customer, {
+      mobile: ctx.user.mobileNo
+    });
+
+    if (!customer) {
+      // Create customer record from user data
+      const customerName = ctx.user.name || '';
+      const nameParts = customerName.split(' ');
+      const firstName = nameParts[0] || customerName;
+      const lastName = nameParts.slice(1).join(' ') || null;
+
+      customer = await dbService.createOne(model.customer, {
+        firstName,
+        lastName,
+        email: ctx.user.email || null,
+        mobile: ctx.user.mobileNo,
+        isActive: true
+      });
+    }
 
     let customerBank = ctx.customerBank;
     const payload = {
-      refId: ctx.user.id,
+      refId: customer.id, 
       companyId: ctx.company.id,
       bankName,
       beneficiaryName: beneficiaryName || ctx.user.name,
