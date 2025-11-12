@@ -48,11 +48,9 @@ const createAadharVerificationUrl = async (redirect_url) => {
     return axios
       .request(config)
       .then((response) => {
-        console.log(response.data);
         return response.data;
       })
       .catch((error) => {
-        console.log(error.response);
         return error.response.data;
       });
 };
@@ -75,12 +73,9 @@ const createPanVerificationUrl = async (redirect_url) => {
     return axios
       .request(config)
       .then((response) => {
-        console.log("response", response);
-        console.log(response.data);
         return response.data;
       })
       .catch((error) => {
-        console.log(error.response);
         return error.response.data;
       });
 }  
@@ -106,12 +101,9 @@ const getDocuments = async(verification_id, reference_id, document_type)=>{
     return axios
       .request(config)
       .then((response) => {
-        console.log("response", response);
-        console.log(response.data);
         return response.data;
       })
       .catch((error) => {
-        console.log(error.response);
         return error.response.data;
       });
 }
@@ -164,7 +156,6 @@ const bankVerification = async (account_number, ifsc) => {
         return response.data;
       })
       .catch((error) => { 
-        console.log(error.response);
         return error.response.data;
       });
 }

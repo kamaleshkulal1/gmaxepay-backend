@@ -13,6 +13,7 @@ const ekycHub = require('../../../services/eKycHub');
 const llmService = require('../../../services/llmService');
 const rekognitionService = require('../../../services/rekognitionService');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const axios = require('axios');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 
 
@@ -943,25 +944,145 @@ const postBankDetails = async (req, res) => {
 // Step 8: Profile
 const postProfile = async (req, res) => {
   try {
+    // Early validation
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
+    
     const token = getTokenFromReq(req);
-    const { name, fullAddress, city, state, zipcode, profileImage } = req.body || {};
+    const hasImage = req.file && req.file.buffer;
+    
+    if (!hasImage) {
+      return res.failure({ 
+        message: 'Profile image is required. Please upload a profile image.' 
+      });
+    }
+    
+    // Load context
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
+    
+    // Validate profile image early (before any async operations)
+    const imageBuffer = req.file.buffer;
+    if (!imageBuffer || imageBuffer.length < 100) {
+      return res.failure({ message: 'Invalid profile image. Please upload a valid image.' });
+    }
+    
+    // Validate image format
+    const isJPEG = imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 && imageBuffer[2] === 0xFF;
+    const isPNG = imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47;
+    if (!isJPEG && !isPNG) {
+      return res.failure({ message: 'Invalid image format. Please upload a JPEG or PNG image.' });
+    }
+    
+    // Check size limit
+    if (imageBuffer.length > 15 * 1024 * 1024) {
+      return res.failure({ message: 'Image too large. Maximum size is 15MB.' });
+    }
+    
+    // Fetch Aadhaar document (required for face comparison)
+    const existingAadharDetails = await dbService.findOne(model.digilockerDocument, { 
+      refId: ctx.user.id, 
+      companyId: ctx.company.id, 
+      documentType: 'AADHAAR', 
+      isDeleted: false 
+    });
+    
+    if (!existingAadharDetails) {
+      return res.failure({ message: 'Aadhaar verification is required before profile update' });
+    }
+    
     const updates = {};
-    if (name) updates.name = name;
-    if (fullAddress) updates.fullAddress = fullAddress;
-    if (city) updates.city = city;
-    if (state) updates.state = state;
-    if (zipcode) updates.zipcode = zipcode;
-    if (profileImage) updates.profileImage = profileImage; // expects S3 key from upload API
-    if (Object.keys(updates).length === 0) return res.failure({ message: 'No updates provided' });
+    const imageFileName = req.file.originalname || 'profile.jpg';
+    
+    try {
+      // Convert profile image to base64 for Rekognition
+      const profilePhotoBase64ForRekognition = imageBuffer.toString('base64');
+      
+      // Step 1: Check liveness first
+      const livenessResult = await rekognitionService.detectLiveness(profilePhotoBase64ForRekognition);
+      
+      if (!livenessResult.success) {
+        throw new Error('Failed to verify profile photo liveness. Please try again.');
+      }
+      
+      if (!livenessResult.isLive) {
+        return res.failure({ 
+          message: 'Your face is not live. Please try again.' 
+        });
+      }
+      
+      // Step 2: Perform face comparison (extract Aadhaar photo first)
+      let faceComparisonResult = null;
+      if (existingAadharDetails?.photoLink) {
+        // Extract and validate Aadhaar photo
+        const aadhaarPhotoBase64 = await extractBase64FromImage(existingAadharDetails.photoLink);
+        if (!aadhaarPhotoBase64) {
+          throw new Error('Invalid Aadhaar photo data. Please re-verify your Aadhaar.');
+        }
+        
+        const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
+        if (!aadhaarBuffer) {
+          throw new Error('Invalid Aadhaar photo format. Please re-verify your Aadhaar.');
+        }
+        
+        // Convert to base64 for Rekognition
+        const aadhaarPhotoBase64ForRekognition = aadhaarBuffer.toString('base64');
+        
+        // Perform face comparison
+        faceComparisonResult = await rekognitionService.compareFaces(
+          aadhaarPhotoBase64ForRekognition, 
+          profilePhotoBase64ForRekognition
+        );
+        
+        if (!faceComparisonResult.success) {
+          throw new Error('Failed to verify profile photo. Please try again.');
+        }
+        
+        if (!faceComparisonResult.matched) {
+          throw new Error('Your face is not recognized by Aadhaar card. Please check it.');
+        }
+      }
+      
+      // Step 3: Upload to S3 after liveness and comparison checks pass
+      const uploadResult = await imageService.uploadImageToS3(
+        imageBuffer,
+        imageFileName,
+        'profile',
+        ctx.company.id,
+        'user',
+        ctx.user.id
+      );
+      
+      updates.profileImage = uploadResult.key;
+      updates.imageVerify = true;
+    } catch (imageError) {
+      console.error('Error processing profile image:', imageError);
+      // Return user-friendly error message
+      if (imageError.message.includes('not recognized')) {
+        return res.failure({ message: imageError.message });
+      }
+      return res.failure({ message: 'Failed to process profile image', error: imageError.message });
+    }
+    
+    // Update user in database
     await dbService.update(model.user, { id: ctx.user.id }, updates);
-    const pendingInfo = getPendingSteps({ user: { ...ctx.user, ...updates }, outlet: ctx.outlet, customerBank: ctx.customerBank });
-    return res.success({ message: 'Profile updated', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
+    
+    // Prepare response
+    const updatedUser = { ...ctx.user, ...updates };
+    const pendingInfo = getPendingSteps({ 
+      user: updatedUser, 
+      outlet: ctx.outlet, 
+      customerBank: ctx.customerBank 
+    });
+    
+    const responseData = {
+      steps: pendingInfo.steps,
+      pending: pendingInfo.pending
+    };
+    
+    return res.success({ message: 'Your Profile is updated and matched with Aadhaar card', data: responseData });
   } catch (error) {
     console.error('Error in profile update:', error);
     return res.failure({ message: 'Failed to update profile', error: error.message });
@@ -1018,11 +1139,99 @@ const normalizeDate = (dateString) => {
   return `${day}-${month}-${year}`;
 };
 
-const extractBase64FromImage = (imageString) => {
+const extractBase64FromImage = async (imageString) => {
   if (!imageString) return null;
-  return imageString.startsWith('data:image') 
-    ? imageString.split(',')[1] 
-    : imageString;
+  
+  // Handle data URL format: data:image/jpeg;base64,/9j/4AAQ...
+  if (imageString.startsWith('data:image')) {
+    return imageString.split(',')[1];
+  }
+  
+  // Check if it's a URL (S3, CDN, or HTTP/HTTPS)
+  if (imageString.startsWith('http://') || imageString.startsWith('https://')) {
+    try {
+      // Download the image from URL
+      const response = await axios.get(imageString, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(response.data);
+      
+      // Validate it's a valid image
+      const isJPEG = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+      const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+      
+      if (!isJPEG && !isPNG) {
+        console.error('Downloaded image is not JPEG or PNG. URL:', imageString);
+        return null;
+      }
+      
+      // Convert to base64
+      return buffer.toString('base64');
+    } catch (error) {
+      console.error('Error downloading image from URL:', imageString, error.message);
+      return null;
+    }
+  }
+  
+  // If it's already a base64 string, return as is
+  // Validate it's a valid base64 string
+  try {
+    // Check if it's a valid base64 string (basic validation)
+    const base64Regex = /^[A-Za-z0-9+/=]+$/;
+    const cleaned = imageString.replace(/\s/g, '');
+    if (base64Regex.test(cleaned)) {
+      return cleaned;
+    }
+  } catch (e) {
+    console.error('Error validating base64 string:', e);
+  }
+  
+  return null;
+};
+
+// Helper function to validate and convert base64 to buffer
+const validateAndConvertBase64 = (base64String) => {
+  if (!base64String) return null;
+  
+  try {
+    // Remove any whitespace
+    const cleanBase64 = base64String.replace(/\s/g, '');
+    
+    // Validate base64 format
+    if (!/^[A-Za-z0-9+/=]+$/.test(cleanBase64)) {
+      console.error('Invalid base64 format');
+      return null;
+    }
+    
+    // Convert to buffer
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    
+    // Validate buffer is not empty and has minimum size (at least 100 bytes for a valid image)
+    if (buffer.length < 100) {
+      console.error('Image buffer too small:', buffer.length);
+      return null;
+    }
+    
+    // Validate it's a valid image format (JPEG or PNG)
+    // JPEG starts with FF D8 FF
+    // PNG starts with 89 50 4E 47
+    const isJPEG = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+    const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+    
+    if (!isJPEG && !isPNG) {
+      console.error('Invalid image format. Expected JPEG or PNG. First bytes:', buffer.slice(0, 4));
+      return null;
+    }
+    
+    // AWS Rekognition has a 15MB limit
+    if (buffer.length > 15 * 1024 * 1024) {
+      console.error('Image too large:', buffer.length, 'bytes');
+      return null;
+    }
+    
+    return buffer;
+  } catch (error) {
+    console.error('Error converting base64 to buffer:', error);
+    return null;
+  }
 };
 
 const cleanupOldImages = async (oldFrontKey, oldBackKey, newFrontKey, newBackKey) => {
@@ -1164,10 +1373,31 @@ const uploadAadharDocuments = async (req, res) => {
 
       if (existingAadharDetails.photoLink && extractedData.photo) {
         try {
-          const photoLinkBase64 = extractBase64FromImage(existingAadharDetails.photoLink);
-          const extractedPhotoBase64 = extractBase64FromImage(extractedData.photo);
+          const photoLinkBase64 = await extractBase64FromImage(existingAadharDetails.photoLink);
+          const extractedPhotoBase64 = await extractBase64FromImage(extractedData.photo);
 
-          const faceComparison = await rekognitionService.compareFaces(photoLinkBase64, extractedPhotoBase64);
+          if (!photoLinkBase64 || !extractedPhotoBase64) {
+            console.error('Failed to extract base64 from photos');
+            return res.failure({ message: 'Invalid photo data. Please try again.' });
+          }
+
+          // Validate and convert base64 to buffers
+          const photoLinkBuffer = validateAndConvertBase64(photoLinkBase64);
+          const extractedPhotoBuffer = validateAndConvertBase64(extractedPhotoBase64);
+
+          if (!photoLinkBuffer || !extractedPhotoBuffer) {
+            console.error('Failed to convert photo base64 to buffer');
+            return res.failure({ message: 'Invalid photo format. Please try again.' });
+          }
+
+          // Convert buffers to base64 for Rekognition service
+          const photoLinkBase64ForRekognition = photoLinkBuffer.toString('base64');
+          const extractedPhotoBase64ForRekognition = extractedPhotoBuffer.toString('base64');
+
+          const faceComparison = await rekognitionService.compareFaces(
+            photoLinkBase64ForRekognition, 
+            extractedPhotoBase64ForRekognition
+          );
           console.log("faceComparison",faceComparison);
           
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
@@ -1338,6 +1568,8 @@ const uploadPanDocuments = async (req, res) => {
     return res.failure({ message: 'Failed to upload PAN documents', error: error.message });
   }
 };
+
+
 
 // Utility endpoint: get pending steps only
 const getPending = async (req, res) => {

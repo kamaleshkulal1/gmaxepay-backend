@@ -27,8 +27,6 @@ const sendWelcomeEmail = async ({
     const templatePath = path.join(__dirname, '../mailTemplate/welcomeEmail.html');
     let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
 
-    console.log("logoUrl", logoUrl);
-    console.log("iconUrl", iconUrl);
     // Replace placeholders in template
     htmlTemplate = htmlTemplate.replace(/{{USER_NAME}}/g, userName || 'Valued Customer');
     htmlTemplate = htmlTemplate.replace(/{{ONBOARDING_LINK}}/g, onboardingLink);

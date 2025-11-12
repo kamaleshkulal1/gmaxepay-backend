@@ -30,13 +30,14 @@ router.post('/:token/uploadPanDocuments', uploadFields([
   { name: 'front_photo', maxCount: 1 },
   { name: 'back_photo', maxCount: 1 }
 ]), multer, onboardingController.uploadPanDocuments);
+
 //step 5
 router.post('/:token/postShopDetails', uploadSingle('shopImage'), multer, onboardingController.postShopDetails);
 
 
 router.post('/:token/postBankDetails', onboardingCors, onboardingController.postBankDetails);
 
-router.post('/:token/postProfile', onboardingCors, onboardingController.postProfile);
+router.post('/:token/postProfile', uploadSingle('profileImageWithShop'), multer, onboardingCors, onboardingController.postProfile);
 router.post('/:token/getPending', onboardingCors, onboardingController.getPending);
 router.post('/:token/complete', onboardingCors, onboardingController.completeOnboarding);
 
