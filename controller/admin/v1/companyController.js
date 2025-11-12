@@ -103,11 +103,6 @@ const createCompany = async (req, res) => {
         message: 'Email is required'
       });
     }
-    if(!data.companyGst){
-      return res.failure({
-        message: 'Company GST is required'
-      });
-    }
     // Check if profileImage is provided either as S3 key or as file upload
     if(!data.profileImage && !req.file) {
       return res.failure({

@@ -1085,14 +1085,16 @@ const uploadAadharDocuments = async (req, res) => {
         front_photo.originalname || 'front_photo.jpg',
         'aadhaar',
         ctx.company.id,
-        'front'
+        'front',
+        ctx.user.id
       ),
       imageService.uploadImageToS3(
         back_photo.buffer,
         back_photo.originalname || 'back_photo.jpg',
         'aadhaar',
         ctx.company.id,
-        'back'
+        'back',
+        ctx.user.id
       ),
       llmService.llmAadhaarOcr(front_photo, back_photo)
     ]);
@@ -1267,6 +1269,76 @@ const uploadAadharDocuments = async (req, res) => {
 };
 
 
+const uploadPanDocuments = async (req, res) => {
+  try {
+    if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
+    const token = getTokenFromReq(req);
+    const ctx = await loadContextByToken(token);
+    if (ctx.error) return res.failure({ message: ctx.error });
+    if (!ensureDomainMatches(req, ctx.company)) {
+      return res.failure({ message: 'Invalid Domain' });
+    }
+    
+    const front_photo = req.files?.front_photo?.[0];
+    const back_photo = req.files?.back_photo?.[0];
+    
+    if (!front_photo || !back_photo) {
+      const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
+      return res.failure({ 
+        message: !front_photo ? 'Front photo is required' : 'Back photo is required',
+        receivedFields: receivedFields || 'none',
+        expectedFields: ['front_photo', 'back_photo']
+      });
+    }
+    
+    const existingUser = await dbService.findOne(model.user, { id: ctx.user.id });
+    const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
+    const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
+    
+    const [frontUploadResult, backUploadResult] = await Promise.all([
+      imageService.uploadImageToS3(
+        front_photo.buffer,
+        front_photo.originalname || 'front_photo.jpg',
+        'pan',
+        ctx.company.id,
+        'front',
+        ctx.user.id
+      ),
+      imageService.uploadImageToS3(
+        back_photo.buffer,
+        back_photo.originalname || 'back_photo.jpg',
+        'pan',
+        ctx.company.id,
+        'back',
+        ctx.user.id
+      )
+    ]);
+    
+    const frontImageS3Key = frontUploadResult.key;
+    const backImageS3Key = backUploadResult.key;
+    
+    const updateData = {
+      panCardFrontImage: frontImageS3Key,
+      panCardBackImage: backImageS3Key
+    };
+    
+    await dbService.update(model.user, { id: ctx.user.id }, updateData);
+    
+    await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+    
+    return res.success({ 
+      message: 'PAN documents uploaded successfully',
+      data: {
+        panCardFrontImage: frontImageS3Key,
+        panCardBackImage: backImageS3Key
+      }
+    });
+  } catch (error) {
+    console.error('Error uploading PAN documents:', error);
+    return res.failure({ message: 'Failed to upload PAN documents', error: error.message });
+  }
+};
+
 // Utility endpoint: get pending steps only
 const getPending = async (req, res) => {
   try {
@@ -1303,7 +1375,6 @@ module.exports = {
   postBankDetails,
   postProfile,
   getPending,
-  uploadAadharDocuments
+  uploadAadharDocuments,
+  uploadPanDocuments
 };
-
-

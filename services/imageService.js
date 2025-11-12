@@ -35,9 +35,10 @@ const getImageUrl = (s3Key) => {
  * @param {String} type - Image type (loginSlider, signature)
  * @param {String} companyId - Company ID
  * @param {String} subtype - For signature type (logo, stamp, signature)
+ * @param {String} userId - User ID (required for aadhaar and pan types)
  * @returns {Promise<Object>} - Returns S3 URL and key
  */
-const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = null) => {
+const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = null, userId = null) => {
   try {
     // Generate unique file name
     const timestamp = Date.now();
@@ -57,8 +58,10 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
       s3Key = `images/profile/${subtype}/${sanitizedFileName}`;
     } else if (type === 'shop') {
       s3Key = `images/${companyId||'default'}/shop/${sanitizedFileName}`;
-    } else if (type === 'aadhaar' && subtype) {
-      s3Key = `images/${companyId||'default'}/aadhaar/${subtype}/${sanitizedFileName}`;
+    } else if (type === 'aadhaar' && subtype && userId) {
+      s3Key = `images/${companyId||'default'}/aadhaar/${userId}/${subtype}/${sanitizedFileName}`;
+    } else if (type === 'pan' && subtype && userId) {
+      s3Key = `images/${companyId||'default'}/pan/${userId}/${subtype}/${sanitizedFileName}`;
     } else {
       s3Key = `images/${companyId||'default'}/other/${sanitizedFileName}`;
     }
