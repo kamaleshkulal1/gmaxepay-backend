@@ -1085,7 +1085,7 @@ const postBankDetails = async (req, res) => {
       customerBank = await dbService.createOne(model.customerBank, payload);
     }
     const pendingInfo = getPendingSteps({ user: ctx.user, outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
-    return res.success({ message: 'Bank details saved', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
+    return res.success({ message: 'Bank details Verified', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error in bank details:', error);
     return res.failure({ message: 'Failed to save bank details', error: error.message });
