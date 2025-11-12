@@ -33,7 +33,7 @@ let CustomerBank = sequelize.define('customerBank', {
   },
   bankName: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true
   },
   beneficiaryName: {
     type: DataTypes.STRING
