@@ -122,6 +122,23 @@ const loadContextByToken = async (token) => {
   if (!company) return { error: 'Company not found' };
   const outlet = await dbService.findOne(model.outlet, { refId: user.id, companyId: company.id });
   const customerBank = await dbService.findOne(model.customerBank, { refId: user.id, companyId: company.id });
+  
+  // Fetch digilocker documents for Aadhaar and PAN
+  const [aadhaarDoc, panDoc] = await Promise.all([
+    dbService.findOne(model.digilockerDocument, {
+      refId: user.id,
+      companyId: company.id,
+      documentType: 'AADHAAR',
+      isDeleted: false
+    }),
+    dbService.findOne(model.digilockerDocument, {
+      refId: user.id,
+      companyId: company.id,
+      documentType: 'PAN',
+      isDeleted: false
+    })
+  ]);
+  
   const userDetails = {
     userId: user.id,
     mobileVerify: user.mobileVerify,
@@ -131,6 +148,10 @@ const loadContextByToken = async (token) => {
     mobileNo: user.mobileNo,
     email: user.email,
     profileImage: user.profileImage,
+    aadharFrontImage: user.aadharFrontImage,
+    aadharBackImage: user.aadharBackImage,
+    panCardFrontImage: user.panCardFrontImage,
+    panCardBackImage: user.panCardBackImage,
   }
   const outletDetails = outlet ? {
     outletId: outlet.id || null,
@@ -150,18 +171,95 @@ const loadContextByToken = async (token) => {
     companyName: company.companyName,
   }
 
-  return { tokenRecord, tokenData, company, user, outlet, customerBank, companyDetails, userDetails, outletDetails, customerBankDetails };
+  return { 
+    tokenRecord, 
+    tokenData, 
+    company, 
+    user, 
+    outlet, 
+    customerBank, 
+    companyDetails, 
+    userDetails, 
+    outletDetails, 
+    customerBankDetails,
+    aadhaarDoc,
+    panDoc
+  };
 };
 
 const getPendingSteps = (ctx) => {
   const userDetails = ctx.userDetails || ctx.user || {};
   const outletDetails = ctx.outletDetails || ctx.outlet || null;
   const customerBankDetails = ctx.customerBankDetails || ctx.customerBank || null;
+  const aadhaarDoc = ctx.aadhaarDoc || null;
+  const panDoc = ctx.panDoc || null;
+  
+  // Helper to extract S3 key from JSON field
+  const extractS3Key = (imageData) => {
+    if (!imageData) return null;
+    if (typeof imageData === 'string') {
+      try {
+        const parsed = JSON.parse(imageData);
+        return parsed.key || parsed;
+      } catch {
+        return imageData;
+      }
+    } else if (typeof imageData === 'object') {
+      return imageData.key || imageData;
+    }
+    return null;
+  };
+  
+  // Get image fields from userDetails or user
+  const aadharFrontImage = userDetails?.aadharFrontImage || ctx.user?.aadharFrontImage;
+  const aadharBackImage = userDetails?.aadharBackImage || ctx.user?.aadharBackImage;
+  const panCardFrontImage = userDetails?.panCardFrontImage || ctx.user?.panCardFrontImage;
+  const panCardBackImage = userDetails?.panCardBackImage || ctx.user?.panCardBackImage;
+  
+  // Check Aadhaar sub-steps
+  const aadhaarConnect = !!(aadhaarDoc && aadhaarDoc.verificationId);
+  const aadhaarDownload = !!(aadhaarDoc && aadhaarDoc.name); // If name exists, document is downloaded
+  const aadhaarFrontImageKey = extractS3Key(aadharFrontImage);
+  const aadhaarBackImageKey = extractS3Key(aadharBackImage);
+  const aadhaarUpload = !!(aadhaarFrontImageKey && aadhaarBackImageKey);
+  
+  // Check PAN sub-steps
+  const panConnect = !!(panDoc && panDoc.verificationId);
+  const panDownload = !!(panDoc && panDoc.panNumber); // If panNumber exists, document is downloaded
+  const panFrontImageKey = extractS3Key(panCardFrontImage);
+  const panBackImageKey = extractS3Key(panCardBackImage);
+  const panUpload = !!(panFrontImageKey && panBackImageKey);
+  
+  const aadhaarSubSteps = [
+    { key: 'connect', label: 'Connect Aadhaar', done: aadhaarConnect },
+    { key: 'download', label: 'Download Aadhaar', done: aadhaarDownload },
+    { key: 'upload', label: 'Upload Aadhaar Images', done: aadhaarUpload }
+  ];
+  
+  const panSubSteps = [
+    { key: 'connect', label: 'Connect PAN', done: panConnect },
+    { key: 'download', label: 'Download PAN', done: panDownload },
+    { key: 'upload', label: 'Upload PAN Images', done: panUpload }
+  ];
+  
+  const aadhaarAllDone = aadhaarConnect && aadhaarDownload && aadhaarUpload;
+  const panAllDone = panConnect && panDownload && panUpload;
+  
   const steps = [
     { key: 'mobileVerification', label: 'Mobile verification', done: !!userDetails?.mobileVerify },
     { key: 'emailVerification', label: 'Email verification', done: !!userDetails?.emailVerify },
-    { key: 'aadharVerification', label: 'Aadhaar verification', done: !!userDetails?.aadharVerify },
-    { key: 'panVerification', label: 'PAN verification', done: !!userDetails?.panVerify },
+    { 
+      key: 'aadharVerification', 
+      label: 'Aadhaar verification', 
+      done: aadhaarAllDone,
+      subSteps: aadhaarSubSteps
+    },
+    { 
+      key: 'panVerification', 
+      label: 'PAN verification', 
+      done: panAllDone,
+      subSteps: panSubSteps
+    },
     { key: 'shopDetails', label: 'Shop/outlet details', done: !!outletDetails },
     { key: 'bankVerification', label: 'Bank verification', done: !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc) },
     { key: 'profile', label: 'Profile setup', done: !!userDetails?.profileImage }
@@ -187,8 +285,8 @@ const verifyOnboardingLink = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const { tokenData, userDetails, outletDetails, customerBankDetails } = ctx;
-    const pendingInfo = getPendingSteps({ userDetails, outletDetails, customerBankDetails });
+    const { tokenData, userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc } = ctx;
+    const pendingInfo = getPendingSteps({ userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc });
     const isOnboardingCompleted = pendingInfo.allCompleted;
     return res.success({
       message: isOnboardingCompleted ? 'Onboarding is completed' : 'Onboarding is pending',
@@ -284,7 +382,7 @@ const sendSmsMobile = async (req, res) => {
     const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;
     await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
 
-    const pendingInfo = getPendingSteps({ userDetails: ctx.userDetails, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails });
+    const pendingInfo = getPendingSteps({ userDetails: ctx.userDetails, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'OTP sent to registered mobile number', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error in mobile verification:', error);
@@ -334,7 +432,7 @@ const verifySmsOtp = async (req, res) => {
     await dbService.update(model.user, { id: user.id }, { mobileVerify: true, otpMobile: null });
     await user.resetOtpAttempts();
 
-    const pendingInfo = getPendingSteps({ userDetails: { ...ctx.userDetails, mobileVerify: true }, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails });
+    const pendingInfo = getPendingSteps({ userDetails: { ...ctx.userDetails, mobileVerify: true }, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Mobile verified successfully', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error verifying mobile OTP:', error);
@@ -419,7 +517,7 @@ const sendEmailOtp = async (req, res) => {
 
     await emailService.sendOtpEmail({ to: user.email, userName: user.name || 'User', otp: String(code), expiryMinutes: 3, logoUrl, illustrationUrl });
 
-    const pendingInfo = getPendingSteps({ userDetails: ctx.userDetails, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails });
+    const pendingInfo = getPendingSteps({ userDetails: ctx.userDetails, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'OTP sent to registered email', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error sending email OTP:', error);
@@ -468,7 +566,7 @@ const verifyEmailOtp = async (req, res) => {
     await dbService.update(model.user, { id: user.id }, { emailVerify: true, otpEmail: null });
     await user.resetOtpAttempts();
 
-    const pendingInfo = getPendingSteps({ userDetails: { ...ctx.userDetails, emailVerify: true }, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails });
+    const pendingInfo = getPendingSteps({ userDetails: { ...ctx.userDetails, emailVerify: true }, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Email verified successfully', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error verifying email OTP:', error);
@@ -833,7 +931,7 @@ const postShopDetails = async (req, res) => {
       model.outlet,
       { refId: ctx.user.id, companyId: ctx.company.id, userRole: ctx.user.userRole, ...outletPayload }
     );
-    const pendingInfo = getPendingSteps({ user: ctx.user, outlet, customerBank: ctx.customerBank });
+    const pendingInfo = getPendingSteps({ user: ctx.user, outlet, customerBank: ctx.customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Shop details saved', data: { address: completeAddress, steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error in shop details:', error);
@@ -933,7 +1031,7 @@ const postBankDetails = async (req, res) => {
     } else {
       customerBank = await dbService.createOne(model.customerBank, payload);
     }
-    const pendingInfo = getPendingSteps({ user: ctx.user, outlet: ctx.outlet, customerBank });
+    const pendingInfo = getPendingSteps({ user: ctx.user, outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Bank details saved', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error in bank details:', error);
@@ -1074,7 +1172,9 @@ const postProfile = async (req, res) => {
     const pendingInfo = getPendingSteps({ 
       user: updatedUser, 
       outlet: ctx.outlet, 
-      customerBank: ctx.customerBank 
+      customerBank: ctx.customerBank,
+      aadhaarDoc: ctx.aadhaarDoc,
+      panDoc: ctx.panDoc
     });
     
     const responseData = {
@@ -1581,7 +1681,7 @@ const getPending = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const pendingInfo = getPendingSteps({ user: ctx.user, outlet: ctx.outlet, customerBank: ctx.customerBank });
+    const pendingInfo = getPendingSteps({ user: ctx.user, outlet: ctx.outlet, customerBank: ctx.customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Pending steps fetched', data: pendingInfo });
   } catch (error) {
     console.error('Error fetching pending steps:', error);
