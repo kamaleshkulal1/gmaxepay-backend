@@ -1171,6 +1171,7 @@ const resendOnboardingLink = async (req, res) => {
   }
 };
 
+
 module.exports = {
   createCompany,
   getCompanyById,

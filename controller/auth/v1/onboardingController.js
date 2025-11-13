@@ -15,6 +15,8 @@ const rekognitionService = require('../../../services/rekognitionService');
 const razorpayApi = require('../../../services/razorpayApi');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 
 
@@ -2059,16 +2061,19 @@ const uploadPanDocuments = async (req, res) => {
     }
     
     const front_photo = req.files?.front_photo?.[0];
-    const back_photo = req.files?.back_photo?.[0];
     
-    if (!front_photo || !back_photo) {
+    if (!front_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
       return res.failure({ 
-        message: !front_photo ? 'Front photo is required' : 'Back photo is required',
+        message: 'Front photo is required',
         receivedFields: receivedFields || 'none',
-        expectedFields: ['front_photo', 'back_photo']
+        expectedFields: ['front_photo']
       });
     }
+    
+    // Read static back image file
+    const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
+    const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
     
     const existingUser = await dbService.findOne(model.user, { id: ctx.user.id });
     const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
@@ -2084,8 +2089,8 @@ const uploadPanDocuments = async (req, res) => {
         ctx.user.id
       ),
       imageService.uploadImageToS3(
-        back_photo.buffer,
-        back_photo.originalname || 'back_photo.jpg',
+        staticBackImageBuffer,
+        'panbackside.jpeg',
         'pan',
         ctx.company.id,
         'back',
@@ -2105,11 +2110,35 @@ const uploadPanDocuments = async (req, res) => {
     
     await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
     
+    // Call LLM service for PAN verification with front image and static back image
+    const llmResult = await llmService.llmPanVerification(front_photo);
+    
+    // Log only relevant data (exclude base64 image to avoid log bloat)
+    const logData = {
+      success: llmResult?.success,
+      session_id: llmResult?.session_id,
+      pan_number: llmResult?.data?.pan_number,
+      confidence: llmResult?.data?.confidence,
+      message: llmResult?.message,
+      has_photo: !!llmResult?.data?.photo_b64
+    };
+    console.log("llmResult", logData);
+    
+    // Prepare response data without base64 image (to avoid large response payload)
+    const llmVerificationResponse = {
+      success: llmResult?.success,
+      session_id: llmResult?.session_id,
+      pan_number: llmResult?.data?.pan_number,
+      confidence: llmResult?.data?.confidence,
+      message: llmResult?.message
+    };
+    
     return res.success({ 
       message: 'PAN documents uploaded successfully',
       data: {
         panCardFrontImage: frontImageS3Key,
-        panCardBackImage: backImageS3Key
+        panCardBackImage: backImageS3Key,
+        llmVerification: llmVerificationResponse
       }
     });
   } catch (error) {

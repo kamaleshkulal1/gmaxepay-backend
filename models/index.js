@@ -13,6 +13,7 @@ db.companyImage = require('./companyImage');
 db.kycDocumentSetting = require('./kycDocument');
 db.ekycHub = require('./ekycHub');
 db.aadhaarCard = require('./aadhaarCard');
+db.panCard = require('./panCard');
 db.digilockerDocument = require('./digilockerDocument');
 
 // User Management Models
@@ -21,6 +22,7 @@ db.userLogin = require('./userLogin');
 db.userVerification = require('./userVerification');
 db.userPackage = require('./userPackage');
 db.onboardingToken = require('./onboardingToken');
+db.aepsOnboarding = require('./aepsOnboarding');
 
 // Role & Permission Models
 db.permission = require('./permissions');
@@ -244,6 +246,29 @@ db.digilockerDocument.belongsTo(db.company, {
 db.company.hasMany(db.digilockerDocument, {
   foreignKey: 'companyId',
   as: 'digilockerDocuments',
+  sourceKey: 'id'
+});
+
+// AEPS Onboarding Relationships
+db.aepsOnboarding.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.aepsOnboarding, {
+  foreignKey: 'userId',
+  as: 'aepsOnboardings',
+  sourceKey: 'id'
+});
+
+db.aepsOnboarding.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.aepsOnboarding, {
+  foreignKey: 'companyId',
+  as: 'aepsOnboardings',
   sourceKey: 'id'
 });
 

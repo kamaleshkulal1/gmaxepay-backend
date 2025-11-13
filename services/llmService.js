@@ -37,6 +37,33 @@ const  llmAadhaarOcr = async (front_image, back_image) => {
     }
   }
 
+  const llmPanVerification = async (panFrontImage) => {
+    try{
+      // Create FormData instance
+      const formData = new FormData();
+      
+      // Append file with its buffer
+      // panFrontImage is a multer file object with buffer property
+      formData.append('panFrontImage', panFrontImage.buffer, {
+        filename: panFrontImage.originalname || 'front_photo.jpg',
+        contentType: panFrontImage.mimetype || 'image/jpeg'
+      });
+      
+      const response = await axios.post(`${llmUrl}/api/pan/upload`,
+        formData, {
+          headers: {
+            ...formData.getHeaders(),
+            'X-API-Key': apiKey,
+            'X-API-Token': apiToken
+          }
+        });
+      return response.data;
+    } catch (error) {
+      console.log("error",error);
+      return error.response?.data || { success: false, error: error.message };
+    }
+  } 
 module.exports = {
-    llmAadhaarOcr
+    llmAadhaarOcr,
+    llmPanVerification
 }
