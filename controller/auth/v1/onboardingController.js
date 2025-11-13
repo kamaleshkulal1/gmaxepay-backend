@@ -2266,7 +2266,6 @@ const uploadPanDocuments = async (req, res) => {
   }
 };
 
-
 // Utility endpoint: get pending steps only
 const getPending = async (req, res) => {
   try {
@@ -2284,8 +2283,6 @@ const getPending = async (req, res) => {
     return res.failure({ message: 'Failed to fetch pending steps', error: error.message });
   }
 };
-
-
 
 module.exports = {
   verifyOnboardingLink,

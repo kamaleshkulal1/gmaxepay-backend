@@ -192,9 +192,13 @@ const User = sequelize.define(
       values: convertObjectToEnum(authConstantEnum.PLATFORM)
     },
     kycStatus: {
+      type: DataTypes.STRING,
+      attribute: ['NO_KYC', 'HALF_KYC', 'FULL_KYC', 'REJECTED'],
+      defaultValue: 'NO_KYC'
+    },
+    kycSteps: {
       type: DataTypes.INTEGER,
-      required: true,
-      values: convertObjectToEnum(authConstantEnum.KYC_STATUS)
+      defaultValue: 0
     },
     otpEmail: {
       type: DataTypes.STRING,
@@ -267,6 +271,14 @@ const User = sequelize.define(
     aadharFrontImage: {
       type: DataTypes.JSON,
       allowNull: true
+    },
+    firstTimeOnboarding: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+    firstTimeOnboardingComplete: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
     },
     aadharBackImage: {
       type: DataTypes.JSON,
