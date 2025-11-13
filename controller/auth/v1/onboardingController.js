@@ -2090,7 +2090,26 @@ const uploadPanDocuments = async (req, res) => {
       const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
       const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
       
-      const existingUser = await dbService.findOne(model.user, { id: ctx.user.id });
+      // Parallelize: Get existing user data and check digilocker PAN
+      const [existingUser, digilockerPanDoc] = await Promise.all([
+        dbService.findOne(model.user, { id: ctx.user.id }),
+        dbService.findOne(model.digilockerDocument, {
+          refId: ctx.user.id,
+          companyId: ctx.company.id,
+          documentType: 'PAN',
+          panNumber: extractedPanNumber,
+          isDeleted: false
+        })
+      ]);
+      
+      // Get Aadhaar doc (use from context if available, otherwise fetch)
+      const aadhaarDoc = ctx.aadhaarDoc || await dbService.findOne(model.digilockerDocument, {
+        refId: ctx.user.id,
+        companyId: ctx.company.id,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      });
+      
       const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
       const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
       
@@ -2117,52 +2136,43 @@ const uploadPanDocuments = async (req, res) => {
       frontImageS3Key = frontUploadResult.key;
       backImageS3Key = backUploadResult.key;
       
-      // Check if PAN number exists in digilocker
-      const digilockerPanDoc = await dbService.findOne(model.digilockerDocument, {
-        refId: ctx.user.id,
-        companyId: ctx.company.id,
-        documentType: 'PAN',
-        panNumber: extractedPanNumber,
-        isDeleted: false
-      });
-      
+      // Check if PAN exists in digilocker
       if (digilockerPanDoc) {
         panExistsInDigilocker = true;
-        
-        // Get Aadhaar photo from digilocker for comparison
-        const aadhaarDoc = ctx.aadhaarDoc || await dbService.findOne(model.digilockerDocument, {
-          refId: ctx.user.id,
-          companyId: ctx.company.id,
-          documentType: 'AADHAAR',
-          isDeleted: false
-        });
-        
-        // Compare Aadhaar photo with PAN photo if both are available
-        if (aadhaarDoc?.photoLink && llmResult?.data?.photo_b64) {
-          try {
-            const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
-            const panPhotoBase64 = await extractBase64FromImage(llmResult.data.photo_b64);
+      }
+      
+      // Always try face comparison if Aadhaar photo is available (regardless of PAN in digilocker)
+      // Use front_photo.buffer directly instead of base64 from LLM result
+      if (aadhaarDoc?.photoLink && front_photo.buffer) {
+        try {
+          // Extract base64 from Aadhaar photo
+          const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
+          
+          // Use front_photo.buffer directly for PAN photo (convert to base64)
+          const panPhotoBase64 = front_photo.buffer.toString('base64');
+          
+          if (aadhaarPhotoBase64 && panPhotoBase64) {
+            const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
+            const panBuffer = validateAndConvertBase64(panPhotoBase64);
             
-            if (aadhaarPhotoBase64 && panPhotoBase64) {
-              const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
-              const panBuffer = validateAndConvertBase64(panPhotoBase64);
+            if (aadhaarBuffer && panBuffer) {
+              faceComparisonResult = await rekognitionService.compareFaces(
+                aadhaarBuffer.toString('base64'),
+                panBuffer.toString('base64')
+              );
               
-              if (aadhaarBuffer && panBuffer) {
-                faceComparisonResult = await rekognitionService.compareFaces(
-                  aadhaarBuffer.toString('base64'),
-                  panBuffer.toString('base64')
-                );
-                
-                if (faceComparisonResult?.success && faceComparisonResult?.matched) {
-                  uploaded = true;
-                  verificationMessage = 'PAN verification success';
-                } else {
-                  verificationMessage = 'PAN verification failed';
-                }
+              // Set message and uploaded status based on results
+              if (faceComparisonResult?.success && faceComparisonResult?.matched) {
+                uploaded = true;
+                verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';
+              } else {
+                verificationMessage = panExistsInDigilocker ? 'PAN verification failed' : 'PAN card processed successfully';
               }
             }
-          } catch (comparisonError) {
-            console.error('Error comparing faces:', comparisonError);
+          }
+        } catch (comparisonError) {
+          console.error('Error comparing faces:', comparisonError);
+          if (panExistsInDigilocker) {
             verificationMessage = 'PAN verification failed';
           }
         }
