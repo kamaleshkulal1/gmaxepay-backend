@@ -2082,7 +2082,7 @@ const uploadPanDocuments = async (req, res) => {
     let uploaded = false;
     let verificationMessage = llmResult?.message || 'PAN card processed successfully';
     
-    // Only proceed with image upload if LLM verification succeeds
+    // Only proceed if LLM verification succeeds
     if (llmResult?.success && llmResult?.data?.pan_number) {
       const extractedPanNumber = llmResult.data.pan_number;
       
@@ -2090,7 +2090,7 @@ const uploadPanDocuments = async (req, res) => {
       const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
       const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
       
-      // Parallelize: Get existing user data and check digilocker PAN
+      // Parallelize: Get existing user data, check digilocker PAN, and fetch Aadhaar doc
       const [existingUser, digilockerPanDoc, aadhaarDocResult] = await Promise.all([
         dbService.findOne(model.user, { id: ctx.user.id }),
         dbService.findOne(model.digilockerDocument, {
@@ -2115,35 +2115,12 @@ const uploadPanDocuments = async (req, res) => {
       const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
       const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
       
-      // Upload images to S3
-      const [frontUploadResult, backUploadResult] = await Promise.all([
-        imageService.uploadImageToS3(
-          front_photo.buffer,
-          front_photo.originalname || 'front_photo.jpg',
-          'pan',
-          ctx.company.id,
-          'front',
-          ctx.user.id
-        ),
-        imageService.uploadImageToS3(
-          staticBackImageBuffer,
-          'panbackside.jpeg',
-          'pan',
-          ctx.company.id,
-          'back',
-          ctx.user.id
-        )
-      ]);
-      
-      frontImageS3Key = frontUploadResult.key;
-      backImageS3Key = backUploadResult.key;
-      
       // Check if PAN exists in digilocker
       if (digilockerPanDoc) {
         panExistsInDigilocker = true;
       }
       
-      // Always try face comparison if Aadhaar photo is available (regardless of PAN in digilocker)
+      // Perform face comparison first (before uploading to S3)
       // Use front_photo.buffer directly instead of base64 from LLM result
       if (aadhaarDoc?.photoLink && front_photo.buffer) {
         try {
@@ -2163,12 +2140,44 @@ const uploadPanDocuments = async (req, res) => {
                 panBuffer.toString('base64')
               );
               
-              // If face matches, upload the image
+              // Only proceed with S3 upload if face matches
               if (faceComparisonResult?.success && faceComparisonResult?.matched) {
                 uploaded = true;
                 verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';
+                
+                // Upload images to S3 only if face comparison matches
+                const [frontUploadResult, backUploadResult] = await Promise.all([
+                  imageService.uploadImageToS3(
+                    front_photo.buffer,
+                    front_photo.originalname || 'front_photo.jpg',
+                    'pan',
+                    ctx.company.id,
+                    'front',
+                    ctx.user.id
+                  ),
+                  imageService.uploadImageToS3(
+                    staticBackImageBuffer,
+                    'panbackside.jpeg',
+                    'pan',
+                    ctx.company.id,
+                    'back',
+                    ctx.user.id
+                  )
+                ]);
+                
+                frontImageS3Key = frontUploadResult.key;
+                backImageS3Key = backUploadResult.key;
+                
+                // Update user records with uploaded image keys
+                const updateData = {
+                  panCardFrontImage: frontImageS3Key,
+                  panCardBackImage: backImageS3Key
+                };
+                
+                await dbService.update(model.user, { id: ctx.user.id }, updateData);
+                await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
               } else {
-                // If face doesn't match, set verification failed message
+                // If face doesn't match, set verification failed message (no S3 upload)
                 verificationMessage = 'PAN verification failed';
               }
             }
@@ -2177,17 +2186,9 @@ const uploadPanDocuments = async (req, res) => {
           console.error('Error comparing faces:', comparisonError);
           verificationMessage = 'PAN verification failed';
         }
-      }
-      
-      // Update user records if face comparison matches (uploaded = true)
-      if (uploaded) {
-        const updateData = {
-          panCardFrontImage: frontImageS3Key,
-          panCardBackImage: backImageS3Key
-        };
-        
-        await dbService.update(model.user, { id: ctx.user.id }, updateData);
-        await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+      } else {
+        // If Aadhaar photo is not available, set appropriate message
+        verificationMessage = 'Aadhaar photo not available for verification';
       }
     }
     
