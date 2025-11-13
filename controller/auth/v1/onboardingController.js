@@ -2192,15 +2192,60 @@ const uploadPanDocuments = async (req, res) => {
       }
     }
     
-    // Prepare response data
+    // Handle failure cases - return failure response
+    // Case 1: LLM verification failed
+    if (!llmResult?.success) {
+      return res.failure({
+        message: llmResult?.message || 'PAN verification failed',
+        data: {
+          llmVerification: {
+            success: false,
+            session_id: llmResult?.session_id || null,
+            message: llmResult?.message || 'PAN verification failed',
+            faceComparison: null
+          }
+        }
+      });
+    }
+    
+    // Case 2: Face comparison failed (matched: false)
+    if (faceComparisonResult && !faceComparisonResult.matched) {
+      return res.failure({
+        message: verificationMessage || 'PAN verification failed',
+        data: {
+          llmVerification: {
+            success: llmResult?.success || false,
+            session_id: llmResult?.session_id || null,
+            message: verificationMessage || 'PAN verification failed',
+            faceComparison: {
+              matched: faceComparisonResult.matched,
+              similarity: faceComparisonResult.similarity
+            }
+          }
+        }
+      });
+    }
+    
+    // Case 3: Aadhaar photo not available (face comparison couldn't be performed)
+    if (!faceComparisonResult && llmResult?.success) {
+      return res.failure({
+        message: verificationMessage || 'Aadhaar photo not available for verification',
+        data: {
+          llmVerification: {
+            success: llmResult?.success || false,
+            session_id: llmResult?.session_id || null,
+            message: verificationMessage || 'Aadhaar photo not available for verification',
+            faceComparison: null
+          }
+        }
+      });
+    }
+    
+    // Success case: Face comparison matched - prepare simplified response
     const llmVerificationResponse = {
       success: llmResult?.success || false,
       session_id: llmResult?.session_id || null,
-      pan_number: llmResult?.data?.pan_number || null,
-      confidence: llmResult?.data?.confidence || null,
       message: verificationMessage,
-      panExistsInDigilocker: panExistsInDigilocker,
-      uploaded: uploaded,
       faceComparison: faceComparisonResult ? {
         matched: faceComparisonResult.matched,
         similarity: faceComparisonResult.similarity
