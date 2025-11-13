@@ -2124,13 +2124,95 @@ const uploadPanDocuments = async (req, res) => {
     };
     console.log("llmResult", logData);
     
+    // Check if PAN number exists in digilocker and compare photos
+    let faceComparisonResult = null;
+    let panExistsInDigilocker = false;
+    let uploaded = false;
+    
+    if (llmResult?.success && llmResult?.data?.pan_number) {
+      const extractedPanNumber = llmResult.data.pan_number;
+      
+      // Check if PAN number exists in digilocker
+      const digilockerPanDoc = await dbService.findOne(model.digilockerDocument, {
+        refId: ctx.user.id,
+        companyId: ctx.company.id,
+        documentType: 'PAN',
+        panNumber: extractedPanNumber,
+        isDeleted: false
+      });
+      
+      if (digilockerPanDoc) {
+        panExistsInDigilocker = true;
+        console.log('PAN number found in digilocker:', extractedPanNumber);
+        
+        // Get Aadhaar photo from digilocker for comparison
+        const aadhaarDoc = ctx.aadhaarDoc || await dbService.findOne(model.digilockerDocument, {
+          refId: ctx.user.id,
+          companyId: ctx.company.id,
+          documentType: 'AADHAAR',
+          isDeleted: false
+        });
+        
+        // Compare Aadhaar photo with PAN photo if both are available
+        if (aadhaarDoc?.photoLink && llmResult?.data?.photo_b64) {
+          try {
+            // Extract base64 from Aadhaar photo
+            const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
+            const panPhotoBase64 = await extractBase64FromImage(llmResult.data.photo_b64);
+            
+            if (aadhaarPhotoBase64 && panPhotoBase64) {
+              // Validate and convert to buffers
+              const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
+              const panBuffer = validateAndConvertBase64(panPhotoBase64);
+              
+              if (aadhaarBuffer && panBuffer) {
+                // Convert to base64 for Rekognition
+                const aadhaarPhotoBase64ForRekognition = aadhaarBuffer.toString('base64');
+                const panPhotoBase64ForRekognition = panBuffer.toString('base64');
+                
+                // Perform face comparison
+                faceComparisonResult = await rekognitionService.compareFaces(
+                  aadhaarPhotoBase64ForRekognition,
+                  panPhotoBase64ForRekognition
+                );
+                console.log("faceComparisonResult",faceComparisonResult);
+                
+                if (faceComparisonResult?.success && faceComparisonResult?.matched) {
+                  uploaded = true;
+                  console.log('Face comparison successful. Similarity:', faceComparisonResult.similarity);
+                } else {
+                  console.log('Face comparison failed or faces do not match');
+                }
+              } else {
+                console.log('Failed to validate photo buffers for comparison');
+              }
+            } else {
+              console.log('Failed to extract base64 from photos');
+            }
+          } catch (comparisonError) {
+            console.error('Error comparing faces:', comparisonError);
+          }
+        } else {
+          console.log('Aadhaar photo or PAN photo not available for comparison');
+        }
+      } else {
+        console.log('PAN number not found in digilocker:', extractedPanNumber);
+      }
+    }
+    
     // Prepare response data without base64 image (to avoid large response payload)
     const llmVerificationResponse = {
       success: llmResult?.success,
       session_id: llmResult?.session_id,
       pan_number: llmResult?.data?.pan_number,
       confidence: llmResult?.data?.confidence,
-      message: llmResult?.message
+      message: llmResult?.message,
+      panExistsInDigilocker: panExistsInDigilocker,
+      uploaded: uploaded,
+      faceComparison: faceComparisonResult ? {
+        matched: faceComparisonResult.matched,
+        similarity: faceComparisonResult.similarity
+      } : null
     };
     
     return res.success({ 
