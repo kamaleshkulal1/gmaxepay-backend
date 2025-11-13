@@ -56,7 +56,7 @@ const createUser = async (req, res) => {
 
 const findAllUsers = async (req, res) => {
   try {
-    let permissions = req.permission;
+    let permissions = req.permission || [];
     let hasPermission = permissions.some(
       (permission) =>
         permission.dataValues.permissionId === 1 &&
@@ -68,8 +68,16 @@ const findAllUsers = async (req, res) => {
     }
 
     let query = {};
-    const companyId = req.companyId;
-    query.companyId = companyId;
+    const userRole = req.user.userRole;
+    const userCompanyId = req.user.companyId;
+    if (userRole === 1 && userCompanyId === 1) {
+      // Don't filter by companyId - show all users
+      query = {};
+    } else {
+      // Filter by companyId for userRole = 2 or other cases
+      const companyId = req.companyId || userCompanyId;
+      query.companyId = companyId;
+    }
 
     let foundUsers = await dbService.findAll(user, query);
     if (!foundUsers) {

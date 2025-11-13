@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-
+const authentication = require('../../middleware/authentication');
 // Apply authentication middleware to all admin routes
 
 // Import admin controllers
@@ -22,7 +22,7 @@ const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 
 // User management routes
 router.post('/users', userController.createUser);
-router.get('/users', userController.findAllUsers);
+router.get('/users',authentication, userController.findAllUsers);
 router.get('/users/:id', userController.getUser);
 router.put('/users/:id', userController.updateUser);
 router.delete('/users/:id', userController.deleteUser);
@@ -34,16 +34,16 @@ router.post('/roles/permissions', rolePermissionController.createPermission);
 router.post('/roles/permission', rolePermissionController.createRolePermission);
 
 // Services routes
-router.post('/services', servicesController.registerService);
+router.post('/services', authentication, servicesController.registerService);
 router.get('/services', servicesController.findAllServices);
-router.post('/services/packages', servicesController.registerServicePackage);
+router.post('/services/packages', authentication, servicesController.registerServicePackage);
 router.get('/services/:id', servicesController.getServices);
 router.put('/services/:id', servicesController.updateUserPackage);
 router.get('/services/:id/packages', servicesController.listUserPackage);
 router.put('/services/:id/update', servicesController.updateUserService);
 
 // Slab routes
-router.post('/slabs', slabController.registerService);
+router.post('/slabs', authentication, slabController.registerService);
 router.put('/slabs/:id', slabController.updateService);
 router.get('/slabs', slabController.findAllService);
 router.get('/slabs/:id', slabController.getService);
@@ -62,7 +62,7 @@ router.get('/slabs/all', slabController.getAllSlab);
 router.get('/slabs/commission/credit-card', slabController.creditCardSlabComm);
 
 // Package routes
-router.post('/packages', packageController.registerPackage);
+router.post('/packages', authentication, packageController.registerPackage);
 router.get('/packages', packageController.findAllPackage);
 router.get('/packages/:id', packageController.getPackage);
 router.patch('/packages/:id', packageController.partialUpdatePackage);
@@ -84,7 +84,7 @@ router.put('/subscriptions/:id/cancel', subscriptionController.cancelSubscriptio
 router.get('/subscriptions/company/services', subscriptionController.getCompanySubscribedServices);
 
 // Operator routes
-router.post('/operators', operatorController.registerService);
+router.post('/operators', authentication, operatorController.registerService);
 router.get('/operators', operatorController.findAllService);
 router.get('/operators/:id', operatorController.getService);
 router.patch('/operators/:id', operatorController.partialUpdateService);

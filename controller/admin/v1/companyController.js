@@ -255,6 +255,65 @@ const createCompany = async (req, res) => {
       });
     }
     
+    // Check for duplicate PAN number
+    // First try direct query (in case PAN is stored as plain text)
+    const existingPanCompany = await dbService.findOne(model.company, {
+      companyPan: data.PanNumber,
+      isDeleted: false
+    });
+    
+    if (existingPanCompany) {
+      return res.failure({
+        message: 'PAN number already exists',
+        data: {
+          panNumber: data.PanNumber
+        }
+      });
+    }
+    
+    // Also check if PAN is stored encrypted by fetching all companies and decrypting
+    // This handles the case where PAN might be encrypted in the database
+    try {
+      const allCompanies = await dbService.findAll(model.company, {
+        isDeleted: false,
+        attributes: ['id', 'companyPan']
+      });
+      
+      for (const company of allCompanies) {
+        let decryptedPan = null;
+        try {
+          // Try to parse as JSON (encrypted format)
+          const panData = typeof company.companyPan === 'string' 
+            ? JSON.parse(company.companyPan) 
+            : company.companyPan;
+          
+          if (panData && panData.encrypted) {
+            // It's encrypted, decrypt it
+            decryptedPan = decrypt(panData, key);
+          } else {
+            // It's plain text
+            decryptedPan = company.companyPan;
+          }
+        } catch (e) {
+          // If parsing fails, assume it's plain text
+          decryptedPan = company.companyPan;
+        }
+        
+        // Compare with input PAN (case-insensitive)
+        if (decryptedPan && decryptedPan.toLowerCase().trim() === data.PanNumber.toLowerCase().trim()) {
+          return res.failure({
+            message: 'PAN number already exists',
+            data: {
+              panNumber: data.PanNumber
+            }
+          });
+        }
+      }
+    } catch (panCheckError) {
+      console.error('Error checking duplicate PAN:', panCheckError);
+      // Don't fail the entire request if PAN check fails, but log it
+    }
+    
   const encryptedPanNumber = doubleEncrypt(data.PanNumber, key);
 
   // Declare panNameFromAPI outside the if block so it's accessible throughout the function
@@ -332,32 +391,10 @@ const createCompany = async (req, res) => {
     });
   }
 
-  // Handle profile image upload if file is provided
+  // Handle profile image upload - will be done after user creation to get userId
   let profileImageKey = data.profileImage;
-  
-  if (req.file && !data.profileImage) {
-    try {
-      // Upload the file to S3
-      const fileBuffer = req.file.buffer;
-      const fileName = req.file.originalname;
-      const uploadResult = await uploadImageToS3(
-        fileBuffer,
-        fileName,
-        'profile',
-        null,
-        'profileImage'
-      );
-      profileImageKey = uploadResult.key;
-    } catch (uploadError) {
-      console.error('Profile image upload error:', uploadError);
-      return res.failure({
-        message: 'Failed to upload profile image. Please try again.',
-        error: uploadError.message
-      });
-    }
-  }
 
-    // Prepare company data
+  // Prepare company data
     const companyData = {
       companyName: data.companyName,
       companyPan: data.PanNumber,
@@ -375,11 +412,11 @@ const createCompany = async (req, res) => {
     // Create company first
     const company = await dbService.createOne(model.company, companyData);
 
-    // Create user with role 2 and profileImage
+    // Create user first (to get userId for profile image path)
     const userData = {
       mobileNo: data.MobileNo,
       email: data.email,
-      profileImage: profileImageKey, // S3 key from upload or provided
+      profileImage: profileImageKey, // Will be updated if file is uploaded
       userRole: 2, // Role 2 as specified
       companyId: company.id,
       name: panNameFromAPI || data.PanName, // Use API name or fallback to provided PAN name
@@ -391,7 +428,36 @@ const createCompany = async (req, res) => {
       isActive: true,
     };
 
-    const user = await dbService.createOne(model.user, userData);
+    let user = await dbService.createOne(model.user, userData);
+
+    // Upload profile image if file is provided (after user creation to get userId)
+    if (req.file && !data.profileImage) {
+      try {
+        // Upload profile image with path pattern: images/{userId}/{companyId}/profile/
+        const fileBuffer = req.file.buffer;
+        const fileName = req.file.originalname;
+        const uploadResult = await uploadImageToS3(
+          fileBuffer,
+          fileName,
+          'profile',
+          company.id, // companyId
+          null, // subtype not needed
+          user.id // userId for path pattern: images/{userId}/{companyId}/profile/
+        );
+        profileImageKey = uploadResult.key;
+        
+        // Update user with profile image
+        await dbService.update(model.user, { id: user.id }, { profileImage: profileImageKey });
+        // Reload user to get updated profileImage
+        user = await dbService.findOne(model.user, { id: user.id });
+      } catch (uploadError) {
+        console.error('Profile image upload error:', uploadError);
+        return res.failure({
+          message: 'Failed to upload profile image. Please try again.',
+          error: uploadError.message
+        });
+      }
+    }
 
     // Create wallet for the user
     const walletData = {
@@ -465,7 +531,21 @@ const createCompany = async (req, res) => {
           userId: user.userId,
           mobileNo: user.mobileNo,
           email: user.email,
-          profileImageUrl: getImageUrl(user.profileImage)
+          profileImageUrl: user.profileImage ? (() => {
+            // For profile images, use simple CDN URL (no secure proxy)
+            const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+            // Extract plain key (already decrypted by model hooks)
+            let plainKey = user.profileImage;
+            if (typeof plainKey === 'string' && !plainKey.startsWith('images/')) {
+              try {
+                const { decrypt } = require('../../../utils/encryption');
+                plainKey = decrypt(plainKey);
+              } catch (e) {
+                // If decryption fails, use as is
+              }
+            }
+            return plainKey ? `${cdnUrl}/${plainKey}` : null;
+          })() : null
         }
       }
     });
@@ -772,22 +852,33 @@ const uploadProfileImage = async (req, res) => {
       return res.failure({ message: 'Image file is required' });
     }
     
-    // Upload image to S3
+    // Get user and company info for path pattern
+    const { userId, companyId } = req.body;
+    if (!userId || !companyId) {
+      return res.failure({ message: 'userId and companyId are required' });
+    }
+    
+    // Upload image to S3 with path pattern: images/{userId}/{companyId}/profile/
     const fileBuffer = req.file.buffer;
     const fileName = req.file.originalname;
     const uploadResult = await uploadImageToS3(
       fileBuffer,
       fileName,
       'profile',
-      null,
-      'profileImage'
+      companyId, // companyId
+      null, // subtype not needed
+      userId // userId for path pattern: images/{userId}/{companyId}/profile/
     );
+    
+    // Return simple CDN URL (no secure proxy for profile images)
+    const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+    const profileImageUrl = `${cdnUrl}/${uploadResult.key}`;
     
     return res.success({
       message: 'Profile image uploaded successfully',
       data: {
         profileImage: uploadResult.key,
-        profileImageUrl: getImageUrl(uploadResult.key)
+        profileImageUrl: profileImageUrl
       }
     });
   } catch (error) {

@@ -325,7 +325,7 @@ const getImagesByCategory = async (req, res) => {
 };
 
 /**
- * Serve image from S3
+ * Serve image from S3 (direct path - for backward compatibility)
  * @description Proxy endpoint to serve images from S3 bucket with CORS support
  */
 const serveImage = async (req, res) => {
@@ -334,15 +334,12 @@ const serveImage = async (req, res) => {
     // The route is /images/*, so everything after /images/ is captured
     const s3Key = req.params[0];
     
-    console.log('Image request - s3Key:', s3Key);
-    console.log('Image request - full path:', req.path);
-    
     if (!s3Key) {
       return res.status(404).send('Image not found');
     }
 
-    // Get image from S3
-    const imageBuffer = await getImageFromS3(s3Key);
+    // Get image from S3 (s3Key is already decrypted/plain)
+    const imageBuffer = await imageService.getImageFromS3(s3Key);
     
     // Detect content type based on file extension
     const path = require('path');
@@ -374,17 +371,93 @@ const serveImage = async (req, res) => {
     }
     
     // Set headers - CORS is handled by global middleware, but we set content type explicitly
-    // The global CORS middleware will add proper CORS headers based on the origin
     const headers = {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=31536000' // Cache for 1 year
     };
     
     res.set(headers);
-    
     res.send(imageBuffer);
   } catch (error) {
     console.error('Error serving image:', error);
+    res.status(404).send('Image not found');
+  }
+};
+
+/**
+ * Serve secure image from S3 (encrypted key)
+ * @description Secure proxy endpoint to serve images from S3 bucket using encrypted keys
+ */
+const serveSecureImage = async (req, res) => {
+  try {
+    // Extract encrypted key from the path
+    // The route is /images/secure/:encryptedKey
+    const encryptedKey = req.params.encryptedKey;
+    
+    if (!encryptedKey) {
+      return res.status(404).send('Image not found');
+    }
+
+    try {
+      // Decrypt the key
+      const { decrypt } = require('../../utils/encryption');
+      const decodedKey = decodeURIComponent(encryptedKey);
+      const s3Key = decrypt(decodedKey);
+      
+      if (!s3Key || !s3Key.startsWith('images/')) {
+        return res.status(404).send('Invalid image key');
+      }
+
+      // Get image from S3 (s3Key is already decrypted, so pass it directly)
+      // getImageFromS3 will handle it correctly (extractS3Key returns plain keys as-is)
+      const imageBuffer = await imageService.getImageFromS3(s3Key);
+      
+      // Detect content type based on file extension
+      const path = require('path');
+      const ext = path.extname(s3Key).toLowerCase();
+      let contentType = 'image/jpeg'; // default
+      
+      switch (ext) {
+        case '.ico':
+          contentType = 'image/x-icon';
+          break;
+        case '.png':
+          contentType = 'image/png';
+          break;
+        case '.jpg':
+        case '.jpeg':
+          contentType = 'image/jpeg';
+          break;
+        case '.gif':
+          contentType = 'image/gif';
+          break;
+        case '.webp':
+          contentType = 'image/webp';
+          break;
+        case '.svg':
+          contentType = 'image/svg+xml';
+          break;
+        default:
+          contentType = 'image/jpeg';
+      }
+      
+      // Set headers with CORS support
+      const headers = {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=31536000', // Cache for 1 year
+        'Access-Control-Allow-Origin': '*', // Allow all origins for images
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      };
+      
+      res.set(headers);
+      res.send(imageBuffer);
+    } catch (decryptError) {
+      console.error('Error decrypting image key:', decryptError);
+      return res.status(404).send('Invalid image key');
+    }
+  } catch (error) {
+    console.error('Error serving secure image:', error);
     res.status(404).send('Image not found');
   }
 };
@@ -396,6 +469,7 @@ module.exports = {
   updateImage,
   deleteImage,
   getImagesByCategory,
-  serveImage
+  serveImage,
+  serveSecureImage
 };
 

@@ -26,21 +26,28 @@ module.exports.transport = nodemailer.createTransport({
     user: process.env.EMAIL_USERNAME,
     pass: process.env.EMAIL_PASSWORD
   },
-  // Add connection timeout and retry options
-  connectionTimeout: 5000,
-  greetingTimeout: 5000,
-  socketTimeout: 5000
+  // Increased connection timeout and retry options for better reliability
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,   // 10 seconds
+  socketTimeout: 10000       // 10 seconds
 });
 
-// Optional: Verify connection on startup (comment out if not needed)
-// This will throw an error if configuration is invalid
+// Optional: Verify connection on startup (non-blocking)
+// This will log a warning if configuration is invalid but won't block server startup
 if (missingVars.length === 0) {
-  module.exports.transport.verify(function (error, success) {
-    if (error) {
-      console.error('SMTP configuration error:', error.message);
-      console.error('Please check your EMAIL_HOST, EMAIL_PORT, EMAIL_USERNAME, and EMAIL_PASSWORD in .env file');
-    } else {
-      console.log('SMTP server is ready to send emails');
-    }
-  });
+  // Use setTimeout to defer verification and not block module loading
+  setTimeout(() => {
+    module.exports.transport.verify(function (error, success) {
+      if (error) {
+        // Log as warning instead of error - server can still run without email
+        console.warn('SMTP verification warning:', error.message);
+        console.warn('Email functionality may not work. Please check your EMAIL_HOST, EMAIL_PORT, EMAIL_USERNAME, and EMAIL_PASSWORD in .env file');
+        console.warn('Server will continue to run, but email sending may fail.');
+      } else {
+        console.log('SMTP server is ready to send emails');
+      }
+    });
+  }, 1000); // Wait 1 second after module load to verify
+} else {
+  console.warn('SMTP configuration incomplete. Email functionality will not work.');
 }

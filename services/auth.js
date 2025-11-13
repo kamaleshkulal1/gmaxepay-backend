@@ -15,6 +15,44 @@ let random = require('random-string-alphanumeric-generator');
 const amezesmsApi = require('../services/amezesmsApi');
 const crypto = require('crypto');
 
+// Helper function to load user permissions based on role
+const loadUserPermissions = async (userRole) => {
+  try {
+    if (!userRole) {
+      return [];
+    }
+    
+    const rolePermissions = await dbService.findAll(
+      model.rolePermission,
+      { roleId: userRole },
+      {
+        include: [
+          {
+            model: model.permission,
+            attributes: ['id', 'moduleName', 'isParent', 'parentId']
+          }
+        ]
+      }
+    );
+    
+    const permissions = rolePermissions.map(rp => ({
+      permissionId: rp.permissionId,
+      read: rp.read,
+      write: rp.write,
+      dataValues: {
+        permissionId: rp.permissionId,
+        read: rp.read,
+        write: rp.write
+      }
+    }));
+    
+    return permissions;
+  } catch (error) {
+    console.error('Error loading user permissions:', error);
+    return [];
+  }
+};
+
 // Helper function to validate and decrypt dataToken with expiration check
 const validateAndDecryptDataToken = (dataToken) => {
   try {

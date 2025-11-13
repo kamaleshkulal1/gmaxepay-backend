@@ -104,8 +104,19 @@ const getTokenFromReq = (req) => {
 
 const loadContextByToken = async (token) => {
   if (!token) return { error: 'Onboarding token is required' };
+  
+  // Encrypt the token before searching (since tokens are stored encrypted in database)
+  const { encrypt } = require('../../../utils/encryption');
+  let encryptedToken;
+  try {
+    encryptedToken = encrypt(token);
+  } catch (error) {
+    console.error('Error encrypting token for search:', error);
+    return { error: 'Invalid token format' };
+  }
+  
   const tokenRecord = await dbService.findOne(model.onboardingToken, {
-    token,
+    token: encryptedToken,
     isDeleted: false
   });
   if (!tokenRecord) return { error: 'Invalid or expired onboarding link' };
@@ -154,27 +165,74 @@ const loadContextByToken = async (token) => {
     })
   ]);
   
+  // Get image URLs (keys are already decrypted by model hooks)
+  // Profile images use simple CDN URLs, other images use secure proxy
+  const getImageUrl = (imageData, isProfileImage = false) => {
+    if (!imageData) return null;
+    // Extract plain key from image data (already decrypted by model hooks)
+    const extractKey = (data) => {
+      if (typeof data === 'object' && data?.key) return data.key;
+      if (typeof data === 'string') {
+        try {
+          const parsed = JSON.parse(data);
+          return parsed.key || data;
+        } catch {
+          return data;
+        }
+      }
+      return data;
+    };
+    const plainKey = extractKey(imageData);
+    if (!plainKey) return null;
+    // For profile images, use simple CDN URL (no secure proxy)
+    // For other images, use secure proxy
+    return imageService.getImageUrl(plainKey, !isProfileImage);
+  };
+
   const userDetails = {
     userId: user.id,
     mobileVerify: user.mobileVerify,
     emailVerify: user.emailVerify,
     aadharVerify: user.aadharVerify,
     panVerify: user.panVerify,
+    shopDetailsVerify: user.shopDetailsVerify,
+    bankDetailsVerify: user.bankDetailsVerify,
     mobileNo: user.mobileNo,
     email: user.email,
-    profileImage: user.profileImage,
-    aadharFrontImage: user.aadharFrontImage,
-    aadharBackImage: user.aadharBackImage,
-    panCardFrontImage: user.panCardFrontImage,
-    panCardBackImage: user.panCardBackImage,
+    profileImage: getImageUrl(user.profileImage, true), 
+    aadharFrontImage: getImageUrl(user.aadharFrontImage, false),
+    aadharBackImage: getImageUrl(user.aadharBackImage, false),
+    panCardFrontImage: getImageUrl(user.panCardFrontImage, false),
+    panCardBackImage: getImageUrl(user.panCardBackImage, false),
   }
+  // Get secure shop image URL
+  const getSecureShopImageUrl = (shopImage) => {
+    if (!shopImage) return null;
+    const extractKey = (data) => {
+      if (typeof data === 'object' && data?.key) return data.key;
+      if (typeof data === 'string') {
+        try {
+          const parsed = JSON.parse(data);
+          return parsed.key || data;
+        } catch {
+          return data;
+        }
+      }
+      return data;
+    };
+    const plainKey = extractKey(shopImage);
+    if (!plainKey) return null;
+    return imageService.getImageUrl(plainKey, true); 
+  };
+
   const outletDetails = outlet ? {
     outletId: outlet.id || null,
     shopName: outlet.shopName,
     shopAddress: outlet.shopAddress,
     gstNo: outlet.gstNo,
     mobileNo: outlet.mobileNo,
-    zipCode: outlet.zipCode
+    zipCode: outlet.zipCode,
+    shopImage: getSecureShopImageUrl(outlet.shopImage)
   } : null;
   const customerBankDetails = customerBank ? {
     customerBankId: customerBank.id,
@@ -204,6 +262,7 @@ const loadContextByToken = async (token) => {
 
 const getPendingSteps = (ctx) => {
   const userDetails = ctx.userDetails || ctx.user || {};
+  const user = ctx.user || {};
   const outletDetails = ctx.outletDetails || ctx.outlet || null;
   const customerBankDetails = ctx.customerBankDetails || ctx.customerBank || null;
   const aadhaarDoc = ctx.aadhaarDoc || null;
@@ -260,6 +319,13 @@ const getPendingSteps = (ctx) => {
   const aadhaarAllDone = aadhaarConnect && aadhaarDownload && aadhaarUpload;
   const panAllDone = panConnect && panDownload && panUpload;
   
+  // Check shop details verification using shopDetailsVerify field from user
+  const shopDetailsDone = !!(user.shopDetailsVerify || userDetails?.shopDetailsVerify);
+  
+  // Check bank verification using bankDetailsVerify field from user AND customerBankDetails
+  const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) || 
+                          !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
+  
   const steps = [
     { key: 'mobileVerification', label: 'Mobile verification', done: !!userDetails?.mobileVerify },
     { key: 'emailVerification', label: 'Email verification', done: !!userDetails?.emailVerify },
@@ -275,8 +341,8 @@ const getPendingSteps = (ctx) => {
       done: panAllDone,
       subSteps: panSubSteps
     },
-    { key: 'shopDetails', label: 'Shop/outlet details', done: !!outletDetails },
-    { key: 'bankVerification', label: 'Bank verification', done: !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc) },
+    { key: 'shopDetails', label: 'Shop/outlet details', done: shopDetailsDone },
+    { key: 'bankVerification', label: 'Bank verification', done: bankDetailsDone },
     { key: 'profile', label: 'Profile setup', done: !!userDetails?.profileImage }
   ];
   const pending = steps.filter(s => !s.done).map(s => s.key);
@@ -300,8 +366,8 @@ const verifyOnboardingLink = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const { tokenData, userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc } = ctx;
-    const pendingInfo = getPendingSteps({ userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc });
+    const { tokenData, user, userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc } = ctx;
+    const pendingInfo = getPendingSteps({ user, userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc });
     const isOnboardingCompleted = pendingInfo.allCompleted;
     return res.success({
       message: isOnboardingCompleted ? 'Onboarding is completed' : 'Onboarding is pending',
@@ -639,27 +705,53 @@ const connectAadhaarVerification = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
-    const  existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
+    
+    const existingUser = await dbService.findOne(model.user, { 
+      id: ctx.tokenData.userId, 
+      companyId: ctx.tokenData.companyId, 
+      isDeleted: false 
+    });
     if(!existingUser) return res.failure({ message: 'User not found' });
     
-    // Check if document already exists (already processed)
-    const existingDoc = await dbService.findOne(model.digilockerDocument, {
+    console.log(`[connectAadhaarVerification] User ID: ${ctx.tokenData.userId}, Company ID: ${ctx.tokenData.companyId}`);
+    
+    const allDigilockerDocuments = await dbService.findAll(model.digilockerDocument, {
       refId: ctx.tokenData.userId,
       companyId: ctx.tokenData.companyId,
       documentType: 'AADHAAR',
       isDeleted: false
+    }, {
+      sort: { id: -1 }
     });
     
-    if (existingDoc) {
-      return res.failure({ message: 'Aadhaar verification already processed. Please download from digilocker' });
+    const existingDoc = allDigilockerDocuments && allDigilockerDocuments.length > 0 ? allDigilockerDocuments[0] : null;
+    
+    if (existingDoc && existingUser.aadharVerify) {
+      console.log(`[connectAadhaarVerification] Aadhaar already verified for user ${ctx.tokenData.userId}`);
+      // Use existing context with the existingDoc
+      const pendingInfo = getPendingSteps({ 
+        userDetails: ctx.userDetails, 
+        outletDetails: ctx.outletDetails, 
+        customerBankDetails: ctx.customerBankDetails, 
+        aadhaarDoc: existingDoc, 
+        panDoc: ctx.panDoc 
+      });
+      return res.success({ 
+        message: 'Aadhaar verification already processed. Please download from digilocker',
+        data: { 
+          steps: pendingInfo.steps, 
+          pending: pendingInfo.pending 
+        }
+      });
     }
     
+    console.log(`[connectAadhaarVerification] Creating Aadhaar verification URL for user ${ctx.tokenData.userId}`);
     const response = await ekycHub.createAadharVerificationUrl(redirect_url);
-    // Only store verification_id and reference_id if response is successful
+    console.log(`[connectAadhaarVerification] API Response status: ${response?.status}`);
+    
     if (response && response.status === 'Success') {
       const { verification_id, reference_id } = response;
       if (verification_id) {
-        // Create new document record with verification details (only once)
         await dbService.createOne(model.digilockerDocument, {
           refId: ctx.tokenData.userId,
           companyId: ctx.tokenData.companyId,
@@ -671,14 +763,15 @@ const connectAadhaarVerification = async (req, res) => {
           addedBy: ctx.user.id,
           isActive: true
         });
+        console.log(`[connectAadhaarVerification] Document record created for user ${ctx.tokenData.userId}, verification_id: ${verification_id}`);
       }
       return res.success({ message: 'Aadhaar Connection Successful' , data: response });
     } else {
-      // If response is not successful, don't save anything
+      console.error(`[connectAadhaarVerification] Failed response:`, response);
       return res.failure({ message: 'Failed to connect Aadhaar verification', data: response });
     }
   } catch (error) {
-    console.error('Error connecting Aadhaar verification:', error);
+    console.error('[connectAadhaarVerification] Error:', error);
     return res.failure({ message: 'Failed to connect Aadhaar verification', error: error.message });
   }
 }
@@ -695,10 +788,16 @@ const connectPanVerification = async (req, res) => {
     }
     const {redirect_url} = req.body || {};
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
-    const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
+    
+    const existingUser = await dbService.findOne(model.user, { 
+      id: ctx.tokenData.userId, 
+      companyId: ctx.tokenData.companyId, 
+      isDeleted: false 
+    });
     if(!existingUser) return res.failure({ message: 'User not found' });
     
-    // Check if document already exists (already processed)
+    console.log(`[connectPanVerification] User ID: ${ctx.tokenData.userId}, Company ID: ${ctx.tokenData.companyId}`);
+    
     const existingDoc = await dbService.findOne(model.digilockerDocument, {
       refId: ctx.tokenData.userId,
       companyId: ctx.tokenData.companyId,
@@ -706,17 +805,32 @@ const connectPanVerification = async (req, res) => {
       isDeleted: false
     });
     
-    if (existingDoc) {
-      return res.failure({ message: 'PAN verification already processed. Please download from digilocker' });
+    if (existingDoc && existingUser.panVerify) {
+      console.log(`[connectPanVerification] PAN already verified for user ${ctx.tokenData.userId}`);
+      // Use existing context with the existingDoc
+      const pendingInfo = getPendingSteps({ 
+        userDetails: ctx.userDetails, 
+        outletDetails: ctx.outletDetails, 
+        customerBankDetails: ctx.customerBankDetails, 
+        aadhaarDoc: ctx.aadhaarDoc, 
+        panDoc: existingDoc 
+      });
+      return res.success({ 
+        message: 'PAN verification already processed. Please download from digilocker',
+        data: { 
+          steps: pendingInfo.steps, 
+          pending: pendingInfo.pending 
+        }
+      });
     }
     
+    console.log(`[connectPanVerification] Creating PAN verification URL for user ${ctx.tokenData.userId}`);
     const response = await ekycHub.createPanVerificationUrl(redirect_url);
+    console.log(`[connectPanVerification] API Response status: ${response?.status}`);
     
-    // Only store verification_id and reference_id if response is successful
     if (response && response.status === 'Success') {
       const { verification_id, reference_id } = response;
       if (verification_id) {
-        // Create new document record with verification details (only once)
         await dbService.createOne(model.digilockerDocument, {
           refId: ctx.tokenData.userId,
           companyId: ctx.tokenData.companyId,
@@ -728,15 +842,16 @@ const connectPanVerification = async (req, res) => {
           addedBy: ctx.user.id,
           isActive: true
         });
+        console.log(`[connectPanVerification] Document record created for user ${ctx.tokenData.userId}, verification_id: ${verification_id}`);
       }
       return res.success({ message: 'PAN Connection Successful' , data: response });
     } else {
-      // If response is not successful, don't save anything
+      console.error(`[connectPanVerification] Failed response:`, response);
       return res.failure({ message: 'Failed to connect PAN verification', data: response });
     }
   }
   catch (error) {
-    console.error('Error connecting PAN verification:', error);
+    console.error('[connectPanVerification] Error:', error);
     return res.failure({ message: 'Failed to connect PAN verification', error: error.message });
   }
 }
@@ -753,49 +868,78 @@ const getDigilockerDocuments = async (req, res) => {
     }
     const { document_type } = req.body || {};
     
-    // Validate document_type first
     if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
     
-    // Normalize document_type to uppercase
     const docType = document_type.toUpperCase();
     if (docType !== 'AADHAAR' && docType !== 'PAN') {
       return res.failure({ message: 'Invalid document type. Must be AADHAAR or PAN' });
     }
 
-    const existingUser = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
-    if(!existingUser) return res.failure({ message: 'User not found' });
+    const userId = ctx.tokenData.userId;
+    const companyId = ctx.tokenData.companyId;
+    
+    console.log(`[getDigilockerDocuments] Request - User ID: ${userId}, Company ID: ${companyId}, Document Type: ${docType}`);
 
-    // Find existing document record (created when connectAadhaarVerification or connectPanVerification was called)
-    const existingDigilockerDocument = await dbService.findOne(model.digilockerDocument, {
-      refId: ctx.tokenData.userId,
-      companyId: ctx.tokenData.companyId,
+    const existingUser = await dbService.findOne(model.user, { 
+      id: userId, 
+      companyId: companyId, 
+      isDeleted: false 
+    });
+    if(!existingUser) {
+      console.error(`[getDigilockerDocuments] User not found - User ID: ${userId}, Company ID: ${companyId}`);
+      return res.failure({ message: 'User not found' });
+    }
+
+    const allDigilockerDocuments = await dbService.findAll(model.digilockerDocument, {
+      refId: userId,
+      companyId: companyId,
       documentType: docType,
       isDeleted: false
+    }, {
+      sort: { id: -1 }
     });
 
-    // Check if verification was initiated - if no record found, tell them to connect first
-    if (!existingDigilockerDocument) {
+    if (!allDigilockerDocuments || allDigilockerDocuments.length === 0) {
+      console.log(`[getDigilockerDocuments] No document record found for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: `Please connect your ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} to digilocker first` });
     }
 
+    const existingDigilockerDocument = allDigilockerDocuments[0];
+    console.log(`[getDigilockerDocuments] Found ${allDigilockerDocuments.length} document(s), using latest - ID: ${existingDigilockerDocument.id}`);
+
+    if (existingDigilockerDocument.refId !== userId || existingDigilockerDocument.companyId !== companyId || existingDigilockerDocument.documentType !== docType) {
+      console.error(`[getDigilockerDocuments] Security check failed - Document ownership mismatch`);
+      console.error(`[getDigilockerDocuments] Expected - User: ${userId}, Company: ${companyId}, Type: ${docType}`);
+      console.error(`[getDigilockerDocuments] Found - User: ${existingDigilockerDocument.refId}, Company: ${existingDigilockerDocument.companyId}, Type: ${existingDigilockerDocument.documentType}`);
+      return res.failure({ message: 'Document access denied. Data mismatch detected.' });
+    }
+
     if (!existingDigilockerDocument.verificationId) {
+      console.error(`[getDigilockerDocuments] Missing verificationId for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: 'Verification ID is required. Please connect verification first' });
     }
 
     if (!existingDigilockerDocument.referenceId) {
+      console.error(`[getDigilockerDocuments] Missing referenceId for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: 'Reference ID is required. Please connect verification first' });
     }
 
-    // Extract verification_id and reference_id from stored document
     const verification_id = existingDigilockerDocument.verificationId;
     const reference_id = existingDigilockerDocument.referenceId;
+    
+    console.log(`[getDigilockerDocuments] Document found - ID: ${existingDigilockerDocument.id}, Verification ID: ${verification_id}, Reference ID: ${reference_id}`);
     
     let response;
     let shouldFetchFromApi = true;
     
-    // If document already has full data (name for Aadhaar or panNumber for PAN), it's already processed
-    if ((docType === 'AADHAAR' && existingDigilockerDocument.name) || (docType === 'PAN' && existingDigilockerDocument.panNumber)) {
-      // Already processed - return existing data
+    const isUserVerified = docType === 'AADHAAR' ? existingUser.aadharVerify : existingUser.panVerify;
+    console.log(`[getDigilockerDocuments] User verification status: ${isUserVerified}`);
+    
+    const hasFullData = (docType === 'AADHAAR' && existingDigilockerDocument.name) || (docType === 'PAN' && existingDigilockerDocument.panNumber);
+    console.log(`[getDigilockerDocuments] Document has full data: ${hasFullData}`);
+    
+    if (isUserVerified && hasFullData) {
+      console.log(`[getDigilockerDocuments] Returning existing data for User ID: ${userId}, Document Type: ${docType}`);
       response = {
         status: 'SUCCESS',
         message: `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} Verification Already Processed`,
@@ -827,23 +971,27 @@ const getDigilockerDocuments = async (req, res) => {
       shouldFetchFromApi = false;
     }
     
-    // Fetch from API if needed (document exists but doesn't have full data yet - only once)
     if (shouldFetchFromApi) {
+      console.log(`[getDigilockerDocuments] Fetching latest data from API for User ID: ${userId}, Document Type: ${docType}`);
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
+      console.log(`[getDigilockerDocuments] API Response status: ${response?.status}`);
       
-      // Store the response in database only if successful (only once)
-      if (response && response.status === 'Success') {
-        const docData = response;
+      // Handle both 'Success' and 'SUCCESS' status, and check if data is nested
+      const responseStatus = (response?.status || '').toString().toUpperCase();
+      const isSuccess = responseStatus === 'SUCCESS' || responseStatus === 'SUCCEED' || responseStatus === 'Success';
+      
+      if (response && isSuccess) {
+        // Extract data from response.data if it exists, otherwise use response directly
+        const docData = response.data || response;
         const updateData = {
           referenceId: docData.reference_id || reference_id || existingDigilockerDocument.referenceId,
-          status: docData.status || 'Success',
-          message: docData.message || null,
+          status: docData.status || response.status || 'Success',
+          message: docData.message || response.message || null,
           txid: docData.txid || null,
-          fullResponse: docData
+          fullResponse: response
         };
         
         if (docType === 'AADHAAR') {
-          // Store Aadhaar specific fields
           updateData.name = docData.name || null;
           updateData.uid = docData.uid || null;
           updateData.dob = docData.dob || null;
@@ -852,30 +1000,65 @@ const getDigilockerDocuments = async (req, res) => {
           updateData.address = docData.address || null;
           updateData.splitAddress = docData.split_address || null;
           updateData.yearOfBirth = docData.year_of_birth || null;
-          updateData.photoLink = docData.photo_link || null; // Base64 encoded photo
+          updateData.photoLink = docData.photo_link || null;
           updateData.xmlFile = docData.xml_file || null;
         } else if (docType === 'PAN') {
-          // Store PAN specific fields
-          updateData.panNumber = docData.pan_number || docData.pan || null;
-          updateData.panName = docData.name || null;
-          updateData.panFatherName = docData.father_name || null;
+          // Map API response fields to database fields
+          // API returns: pan, name_pan_card, dob, type, gender, xml_file
+          updateData.panNumber = docData.pan || docData.pan_number || null;
+          updateData.panName = docData.name_pan_card || docData.name || null;
+          updateData.panFatherName = docData.father_name || docData.fatherName || null;
           updateData.panDob = docData.dob || null;
+          // Store additional fields if needed (type, gender, xml_file)
+          // Note: xml_file is stored in xmlFile field (shared with Aadhaar)
+          if (docData.xml_file) {
+            updateData.xmlFile = docData.xml_file;
+          }
         }
         
-        // Update existing document with full data (only once)
+        console.log(`[getDigilockerDocuments] Update data for ${docType}:`, JSON.stringify(updateData, null, 2));
+        
         await dbService.update(
           model.digilockerDocument,
-          { id: existingDigilockerDocument.id },
+          { 
+            id: existingDigilockerDocument.id,
+            refId: userId,
+            companyId: companyId,
+            documentType: docType,
+            isDeleted: false
+          },
           updateData
         );
+        console.log(`[getDigilockerDocuments] Document updated successfully for User ID: ${userId}, Document Type: ${docType}`);
         
-        // Update user verification status
         if (docType === 'AADHAAR') {
-          await dbService.update(model.user, { id: ctx.user.id }, { aadharVerify: true });
-          await dbService.update(model.user, { id: ctx.user.id }, { name: updateData.name });
+          const userUpdateData = {
+            aadharVerify: true,
+            name: updateData.name
+          };
+          if (updateData.dob) {
+            userUpdateData.dob = updateData.dob;
+          }
+          await dbService.update(model.user, { 
+            id: userId,
+            companyId: companyId,
+            isDeleted: false
+          }, userUpdateData);
+          console.log(`[getDigilockerDocuments] User Aadhaar verification updated for User ID: ${userId}`);
         } else if (docType === 'PAN') {
-          await dbService.update(model.user, { id: ctx.user.id }, { panVerify: true });
+          await dbService.update(model.user, { 
+            id: userId,
+            companyId: companyId,
+            isDeleted: false
+          }, { panVerify: true });
+          console.log(`[getDigilockerDocuments] User PAN verification updated for User ID: ${userId}`);
         }
+      } else {
+        console.error(`[getDigilockerDocuments] API fetch failed for User ID: ${userId}, Document Type: ${docType}`, response);
+        return res.failure({ 
+          message: `Failed to fetch ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} document from digilocker`, 
+          data: response 
+        });
       }
     }
 
@@ -883,10 +1066,11 @@ const getDigilockerDocuments = async (req, res) => {
       ? 'Aadhaar Verification Downloaded' 
       : 'PAN Verification Downloaded';
     
+    console.log(`[getDigilockerDocuments] Successfully completed for User ID: ${userId}, Document Type: ${docType}`);
     return res.success({ message, data: response.data || response });
   }
   catch (error) {
-    console.error('Error downloading Digilocker verification:', error);
+    console.error('[getDigilockerDocuments] Error:', error);
     return res.failure({ message: 'Failed to download verification', error: error.message });
   }
 }
@@ -914,6 +1098,28 @@ const postShopDetails = async (req, res) => {
     const formatted_address = addressData.formatted_address;
     const completeAddress = addressData.complete_address;
 
+    // Helper function to extract S3 key from JSON field
+    const extractShopImageKey = (imageData) => {
+      if (!imageData) return null;
+      if (typeof imageData === 'string') {
+        try {
+          const parsed = JSON.parse(imageData);
+          return parsed.key || parsed;
+        } catch {
+          return imageData;
+        }
+      } else if (typeof imageData === 'object') {
+        return imageData.key || imageData;
+      }
+      return null;
+    };
+
+    // Extract old shop image key if outlet exists
+    let oldShopImageKey = null;
+    if (ctx.outlet && ctx.outlet.shopImage) {
+      oldShopImageKey = extractShopImageKey(ctx.outlet.shopImage);
+    }
+
     // Optional shop image upload (multer memory storage)
     let shopImageKey = null;
     if (req.file && req.file.buffer) {
@@ -921,9 +1127,26 @@ const postShopDetails = async (req, res) => {
         req.file.buffer,
         req.file.originalname || 'shop.jpg',
         'shop',
-        ctx.company.id
+        ctx.company.id,
+        null, // subtype
+        ctx.user.id // userId for new pattern: companyId/userId/shopImage/
       );
       shopImageKey = uploadResult.key;
+
+      // Delete old shop image if it exists and is different from new one
+      if (oldShopImageKey && oldShopImageKey !== shopImageKey) {
+        try {
+          await imageService.deleteImageFromS3(oldShopImageKey);
+        } catch (error) {
+          console.error('Error deleting old shop image from S3:', error);
+          // Continue even if deletion fails
+        }
+      }
+    }
+
+    // Check if shop details are already verified for this user (prevent multiple shops)
+    if (ctx.user.shopDetailsVerify) {
+      return res.failure({ message: 'Shop details already verified.' });
     }
 
     const outletPayload = {
@@ -934,19 +1157,24 @@ const postShopDetails = async (req, res) => {
       shopCity: addressData?.address_components?.city,
       shopDistrict: addressData?.address_components?.district,
       shopState: addressData?.address_components?.state,
-      shopPincode: addressData?.address_components?.postal_code
-    };
+      shopPincode: addressData?.address_components?.postal_code,
+      shopLatitude: latitude,
+      shopLongitude: longitude,
+      shopCountry: addressData?.address_components?.country
 
-    // Allow creating shop details only once per user/company
-    if (ctx.outlet) {
-      return res.failure({ message: 'Shop details already submitted' });
-    }
+    };
 
     const outlet = await dbService.createOne(
       model.outlet,
       { refId: ctx.user.id, companyId: ctx.company.id, userRole: ctx.user.userRole, ...outletPayload }
     );
-    const pendingInfo = getPendingSteps({ user: ctx.user, outlet, customerBank: ctx.customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
+
+    // Set shopDetailsVerify to true in user table (prevents multiple shops)
+    await dbService.update(model.user, { id: ctx.user.id }, { shopDetailsVerify: true });
+
+    // Reload user context to get updated shopDetailsVerify
+    const updatedUser = await dbService.findOne(model.user, { id: ctx.user.id });
+    const pendingInfo = getPendingSteps({ user: updatedUser, outlet, customerBank: ctx.customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Shop details saved', data: { address: completeAddress, steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
     console.error('Error in shop details:', error);
@@ -955,6 +1183,56 @@ const postShopDetails = async (req, res) => {
 };
 
 // Step 7: Bank details (CustomerBank)
+const calculateStringSimilarity = (str1, str2) => {
+  if (!str1 || !str2) return 0;
+  
+  // Normalize strings: trim, lowercase, remove extra spaces
+  const normalize = (str) => {
+    return (str || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+  };
+  
+  const s1 = normalize(str1);
+  const s2 = normalize(str2);
+  
+  // If both strings are empty after normalization
+  if (!s1 && !s2) return 100;
+  if (!s1 || !s2) return 0;
+  
+  // If strings are exactly equal
+  if (s1 === s2) return 100;
+  
+  // Calculate Levenshtein distance
+  const len1 = s1.length;
+  const len2 = s2.length;
+  
+  // Create a matrix for dynamic programming
+  const matrix = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  
+  // Initialize first row and column
+  for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+  
+  // Fill the matrix
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // deletion
+        matrix[i][j - 1] + 1,      // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  
+  const distance = matrix[len1][len2];
+  const maxLen = Math.max(len1, len2);
+  
+  // Calculate similarity percentage
+  const similarity = maxLen === 0 ? 100 : ((maxLen - distance) / maxLen) * 100;
+  
+  return Math.round(similarity * 100) / 100; // Round to 2 decimal places
+};
+
 const postBankDetails = async (req, res) => {
   try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
@@ -982,29 +1260,47 @@ const postBankDetails = async (req, res) => {
 
     let bankVerification;
 
+
     if(existingBank){
+      console.log('Using cached bank verification from database');
       // Decrypt the cached response
       try {
         const encryptedData = JSON.parse(existingBank.response);
+        console.log('Encrypted Data Type:', typeof encryptedData);
+        console.log('Encrypted Data Has Encrypted Property:', !!(encryptedData && encryptedData.encrypted));
+        
         if (encryptedData && encryptedData.encrypted) {
           const decryptedResponse = decrypt(encryptedData, Buffer.from(key, 'hex'));
+          console.log('Decryption Successful:', !!decryptedResponse);
           if (decryptedResponse) {
             bankVerification = JSON.parse(decryptedResponse);
+            console.log('Bank Verification (from cache, decrypted):', JSON.stringify(bankVerification, null, 2));
           } else {
             bankVerification = encryptedData;
+            console.log('Bank Verification (from cache, using encryptedData as fallback):', JSON.stringify(bankVerification, null, 2));
           }
         } else {
           bankVerification = JSON.parse(existingBank.response);
+          console.log('Bank Verification (from cache, not encrypted):', JSON.stringify(bankVerification, null, 2));
         }
       } catch (e) {
+        console.error('Error parsing cached bank verification:', e.message);
+        console.log('Cached Response (raw):', existingBank.response);
         // If not encrypted or not JSON, return as is
         bankVerification = existingBank.response;
+        console.log('Bank Verification (from cache, raw response):', bankVerification);
       }
     } else {
+      console.log('Fetching bank verification from eKYC Hub API...');
       bankVerification = await ekycHub.bankVerification(account_number, ifsc);
+      console.log('Bank Verification (from API):', JSON.stringify(bankVerification, null, 2));
+      console.log('Bank Verification Type:', typeof bankVerification);
+      console.log('Bank Verification Status:', bankVerification?.status);
+      console.log('Bank Verification Status Check (=== "Success"):', bankVerification?.status === 'Success');
 
       // Only save if verification is successful
       if(bankVerification && bankVerification.status === 'Success'){
+        console.log('Saving successful bank verification to cache');
         // Encrypt the response before saving
         const encryptedResponse = doubleEncrypt(JSON.stringify(bankVerification), encryptionKey);
 
@@ -1017,10 +1313,24 @@ const postBankDetails = async (req, res) => {
           companyId: ctx.company.id || null,
           addedBy: ctx.user.id
         });
+        console.log('Bank verification saved to cache successfully');
+      } else {
+        console.log('Bank verification not saved to cache (status is not Success)');
       }
     }
 
-    if(bankVerification.status !== 'Success') return res.failure({ message: 'Bank verification failed' });
+    console.log('=== Final Bank Verification Check ===');
+    console.log('Bank Verification Object:', JSON.stringify(bankVerification, null, 2));
+    console.log('Bank Verification Status:', bankVerification?.status);
+    console.log('Bank Verification Status Type:', typeof bankVerification?.status);
+    console.log('Status Check (status !== "Success"):', bankVerification?.status !== 'Success');
+    console.log('====================================');
+
+    if(!bankVerification || bankVerification.status !== 'Success') {
+      console.error('Bank verification failed - Status:', bankVerification?.status);
+      console.error('Bank verification failed - Full Response:', JSON.stringify(bankVerification, null, 2));
+      return res.failure({ message: 'Bank verification failed' });
+    }
     
     // Fetch bank details from Razorpay API using IFSC
     let razorpayBankData = null;
@@ -1036,8 +1346,82 @@ const postBankDetails = async (req, res) => {
     const bankName = (razorpayBankData && razorpayBankData.BANK) 
       ? razorpayBankData.BANK 
       : (bankVerification.bank_name || bankVerification.bankName || null);
-    const beneficiaryName = bankVerification.beneficiary_name || bankVerification.beneficiaryName || ctx.user.name;
-    const accountNumber = bankVerification.account_number || account_number;
+    
+    // Get beneficiary name from bank verification - check multiple possible field names
+    const beneficiaryName = bankVerification.nameAtBank 
+      || bankVerification.beneficiary_name 
+      || bankVerification.beneficiaryName 
+      || bankVerification['nameAtBank']
+      || null;
+    
+    const accountNumber = bankVerification.account_number || bankVerification['Account Number'] || account_number;
+    
+    // Get Aadhaar name for comparison
+    const aadhaarName = (ctx.aadhaarDoc && ctx.aadhaarDoc.name) ? ctx.aadhaarDoc.name : '';
+    const bankBeneficiaryName = beneficiaryName || '';
+    
+    console.log('=== Bank Name Matching Analysis ===');
+    console.log('Aadhaar Name:', aadhaarName);
+    console.log('Bank Verification Fields Available:', Object.keys(bankVerification));
+    console.log('nameAtBank:', bankVerification.nameAtBank);
+    console.log('beneficiary_name:', bankVerification.beneficiary_name);
+    console.log('beneficiaryName:', bankVerification.beneficiaryName);
+    console.log('Account Number field:', bankVerification['Account Number']);
+    console.log('Extracted Bank Beneficiary Name:', bankBeneficiaryName);
+    console.log('Bank Beneficiary Name Type:', typeof bankBeneficiaryName);
+    console.log('Bank Beneficiary Name is null/empty:', !bankBeneficiaryName);
+    
+    // Compare Aadhaar name with bank beneficiary name
+    const nameSimilarityPercentage = calculateStringSimilarity(aadhaarName, bankBeneficiaryName);
+    console.log('Name Similarity Percentage:', nameSimilarityPercentage + '%');
+    console.log('Similarity Threshold Check (<= 60%):', nameSimilarityPercentage <= 60);
+    console.log('====================================');
+    
+    // Check if similarity is greater than 60%, if not return failure
+    if (!bankBeneficiaryName) {
+      console.error('Bank beneficiary name is missing');
+      return res.failure({ 
+        message: 'Bank account holder name not found in verification response',
+        data: {
+          aadhaarName: aadhaarName || null,
+          bankHolderName: null,
+          similarityPercentage: 0
+        }
+      });
+    }
+    
+    if (nameSimilarityPercentage <= 60) {
+      console.error('Name similarity is below threshold (60%)');
+      return res.failure({ 
+        message: 'Your name does not match with the bank account holder name. Please verify your bank account details.',
+        data: {
+          aadhaarName: aadhaarName || null,
+          bankHolderName: bankBeneficiaryName,
+          similarityPercentage: nameSimilarityPercentage
+        }
+      });
+    }
+    
+    console.log('Name similarity check passed (> 60%), proceeding with bank verification');
+    
+    // Update user with bank verification status and name similarity percentage
+    await dbService.update(model.user, { 
+      id: ctx.user.id,
+      companyId: ctx.company.id,
+      isDeleted: false
+    }, {
+      bankDetailsVerify: true,
+      nameSimilarity: nameSimilarityPercentage.toString()
+    });
+    console.log('User bank verification status updated - bankDetailsVerify: true, nameSimilarity:', nameSimilarityPercentage);
+    
+    // Reload user to get updated bankDetailsVerify and nameSimilarity
+    const updatedUser = await dbService.findOne(model.user, { 
+      id: ctx.user.id,
+      companyId: ctx.company.id,
+      isDeleted: false
+    });
+    
     // Use Razorpay city/branch if available, otherwise use eKYC response
     const city = (razorpayBankData && razorpayBankData.CITY) 
       ? razorpayBankData.CITY 
@@ -1084,8 +1468,19 @@ const postBankDetails = async (req, res) => {
     } else {
       customerBank = await dbService.createOne(model.customerBank, payload);
     }
-    const pendingInfo = getPendingSteps({ user: ctx.user, outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
-    return res.success({ message: 'Bank details Verified', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
+    const pendingInfo = getPendingSteps({ user: updatedUser, outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
+    return res.success({ 
+      message: 'Bank details Verified', 
+      data: { 
+        steps: pendingInfo.steps, 
+        pending: pendingInfo.pending,
+        nameMatching: {
+          aadhaarName: aadhaarName || null,
+          bankHolderName: bankBeneficiaryName,
+          similarityPercentage: nameSimilarityPercentage
+        }
+      } 
+    });
   } catch (error) {
     console.error('Error in bank details:', error);
     return res.failure({ message: 'Failed to save bank details', error: error.message });
@@ -1197,13 +1592,14 @@ const postProfile = async (req, res) => {
       }
       
       // Step 3: Upload to S3 after liveness and comparison checks pass
+      // Use simple path pattern: images/{userId}/{companyId}/profile/
       const uploadResult = await imageService.uploadImageToS3(
         imageBuffer,
         imageFileName,
         'profile',
         ctx.company.id,
-        'user',
-        ctx.user.id
+        null, // subtype not needed for new pattern
+        ctx.user.id // userId required for new pattern
       );
       
       updates.profileImage = uploadResult.key;
@@ -1721,7 +2117,6 @@ const uploadPanDocuments = async (req, res) => {
     return res.failure({ message: 'Failed to upload PAN documents', error: error.message });
   }
 };
-
 
 
 // Utility endpoint: get pending steps only

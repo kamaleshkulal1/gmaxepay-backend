@@ -11,7 +11,7 @@ const registerService = async (req, res) => {
     
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 12 &&
+        permission.dataValues.permissionId === 13 &&
         permission.dataValues.write === true
     );
     
@@ -30,8 +30,7 @@ const registerService = async (req, res) => {
     }
 
     let dataToCreate = { ...(req.body || {}) };
-    const companyId = req.companyId ?? req.user?.companyId ?? null;
-
+    const companyId = req.user?.companyId ;
     // Set default slabType if not provided
     if (!dataToCreate.slabType) {
       dataToCreate.slabType = 'level'; // Default to 'level' type
@@ -62,6 +61,7 @@ const registerService = async (req, res) => {
 
     dataToCreate = {
       ...dataToCreate,
+      companyId: companyId,
       isActive: true,
       addedBy: req.user.id,
       type: req.user.userType

@@ -7,7 +7,7 @@ const registerPackage = async (req, res) => {
     let permissions = req.permission || [];
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 13 &&
+        permission.dataValues.permissionId === 14 &&
         permission.dataValues.write === true
     );
 
@@ -20,7 +20,7 @@ const registerPackage = async (req, res) => {
     }
 
     // Allow companyId to be nullable or explicitly provided by SUPER_ADMIN
-    const companyId = req.companyId ?? req.user?.companyId ?? null;
+    const companyId = req.user?.companyId
     let dataToCreate = { ...(req.body || {}) };
     // If SUPER_ADMIN passes companyId in body, honor it; otherwise keep computed value (may be null)
     const resolvedCompanyId =
@@ -30,6 +30,7 @@ const registerPackage = async (req, res) => {
         : companyId;
     dataToCreate = {
       ...dataToCreate,
+      companyId:req.user?.companyId,
       addedBy: req.user.id,
       type: req.user.userType,
       companyId: resolvedCompanyId

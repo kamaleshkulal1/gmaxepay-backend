@@ -19,7 +19,7 @@ const registerService = async (req, res) => {
 
     let dataToCreate = { ...(req.body || {}) };
     let { operator_image } = req.files || {};
-    const companyId = req.companyId || req.user.companyId || null;
+    const companyId = req.user.companyId ;
 
     if (operator_image) {
       operator_image.map((file) => ({
@@ -33,6 +33,7 @@ const registerService = async (req, res) => {
 
     dataToCreate = {
       ...dataToCreate,
+      companyId: companyId,
       image: operator_image,
       addedBy: req.user.id,
       type: req.user.userType
@@ -49,7 +50,7 @@ const registerService = async (req, res) => {
       dbService.findAll(model.slab, {
         [Op.or]: [
           { companyId: companyId },
-          { companyId: null } // Include global slabs
+          { companyId: 1 } // Include global slabs
         ]
       }, { select: ['id'] }),
       dbService.findAll(
@@ -79,6 +80,7 @@ const registerService = async (req, res) => {
     const dataToInsert = slabs.flatMap((slab) =>
       roleTypes.map((roleType, index) => ({
         slabId: slab.id,
+        companyId: companyId,
         operatorId: userToReturn.id,
         operatorName: userToReturn.operatorName,
         operatorType: userToReturn.operatorType,
@@ -86,8 +88,7 @@ const registerService = async (req, res) => {
         roleName: roleNames[index],
         commAmt: 0,
         commType: 'com',
-        amtType: 'fix',
-        companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
+        amtType: 'fix'
       }))
     );
 
@@ -95,6 +96,7 @@ const registerService = async (req, res) => {
       ranges.flatMap((range) =>
         roleTypes.map((roleType, index) => ({
           slabId: slab.id,
+          companyId: companyId,
           operatorId: userToReturn.id,
           operatorName: userToReturn.operatorName,
           operatorType: userToReturn.operatorType,
@@ -105,8 +107,7 @@ const registerService = async (req, res) => {
           roleName: roleNames[index],
           commAmt: 0,
           commType: 'com',
-          amtType: 'fix',
-          companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
+          amtType: 'fix'
         }))
       )
     );
@@ -115,6 +116,7 @@ const registerService = async (req, res) => {
       ranges.flatMap((range) =>
         roleTypes.map((roleType, index) => ({
           slabId: slab.id,
+          companyId: companyId,
           operatorId: userToReturn.id,
           operatorName: userToReturn.operatorName,
           operatorType: userToReturn.operatorType,
@@ -125,8 +127,7 @@ const registerService = async (req, res) => {
           roleName: roleNames[index],
           commAmt: 0,
           commType: 'com',
-          amtType: 'fix',
-          companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
+          amtType: 'fix'
         }))
       )
     );
@@ -141,6 +142,7 @@ const registerService = async (req, res) => {
               for (const cardType of cardTypes) {
                 dataToInsertPgCommercials.push({
                   slabId: slab.id,
+                  companyId: companyId,
                   operatorId: userToReturn.id,
                   operatorName: userToReturn.operatorName,
                   operatorType: userToReturn.operatorType,
@@ -152,13 +154,13 @@ const registerService = async (req, res) => {
                   paymentInstrumentId: paymentInstrument.id,
                   paymentInstrumentName: paymentInstrument.name,
                   cardTypeId: cardType.id,
-                  cardTypeName: cardType.name,
-                  companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
+                  cardTypeName: cardType.name
                 });
               }
             } else {
               dataToInsertPgCommercials.push({
                 slabId: slab.id,
+                companyId: companyId,
                 operatorId: userToReturn.id,
                 operatorName: userToReturn.operatorName,
                 operatorType: userToReturn.operatorType,
@@ -170,8 +172,7 @@ const registerService = async (req, res) => {
                 paymentInstrumentId: paymentInstrument.id,
                 paymentInstrumentName: paymentInstrument.name,
                 cardTypeId: null,
-                cardTypeName: null,
-                companyId: roleType === 1 ? null : companyId // AD (Super Admin) has no companyId, others have companyId
+                cardTypeName: null
               });
             }
           }

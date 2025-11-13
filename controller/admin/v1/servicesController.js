@@ -120,6 +120,7 @@ const registerServicePackage = async (req, res) => {
       }
       dataToCreate = {
         ...dataToCreate,
+        companyId: req.user?.companyId,
         updatedBy: req.user.id,
         isActive: true,
         isDelete: false

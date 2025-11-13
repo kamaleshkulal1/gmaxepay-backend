@@ -16,6 +16,125 @@ const bcrypt = require('bcrypt');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Package = require('./packages');
 
+// Helper function to encrypt image field (handles JSON and STRING)
+// For JSON fields: stores as {key: "encrypted_string"}
+// For STRING fields: stores as "encrypted_string"
+const encryptImageField = (imageData) => {
+  if (!imageData) return null;
+  
+  // If it's a JSON object, extract key and encrypt it
+  if (typeof imageData === 'object') {
+    const key = imageData.key || imageData;
+    if (typeof key === 'string' && key.startsWith('images/')) {
+      return { key: encrypt(key) };
+    }
+    // If key is already encrypted or invalid, return as is
+    return imageData;
+  }
+  
+  // If it's a string
+  if (typeof imageData === 'string') {
+    // Check if it's already JSON string
+    try {
+      const parsed = JSON.parse(imageData);
+      if (parsed.key && typeof parsed.key === 'string') {
+        // Encrypt if it's a plain S3 key, otherwise keep as is (already encrypted)
+        if (parsed.key.startsWith('images/')) {
+          return JSON.stringify({ key: encrypt(parsed.key) });
+        }
+        return imageData; // Already encrypted or invalid
+      }
+      return imageData;
+    } catch {
+      // Not JSON string
+      // If it's a plain S3 key (for JSON fields), convert to {key: "encrypted"}
+      // For STRING fields, encrypt directly
+      if (imageData.startsWith('images/')) {
+        // For JSON fields, return object format
+        // For STRING fields, return encrypted string
+        // Since this is used for JSON fields, return object format
+        return { key: encrypt(imageData) };
+      }
+      // If it doesn't start with 'images/', assume it's already encrypted or invalid
+      return imageData;
+    }
+  }
+  
+  return imageData;
+};
+
+// Helper function to decrypt image field (handles JSON and STRING)
+// For JSON fields: expects {key: "encrypted_string"} or JSON string
+// For STRING fields: expects "encrypted_string"
+const decryptImageField = (imageData) => {
+  if (!imageData) return null;
+  
+  try {
+    // If it's a JSON object, decrypt the key
+    if (typeof imageData === 'object') {
+      const key = imageData.key;
+      if (key && typeof key === 'string') {
+        // Check if it's encrypted (doesn't start with 'images/')
+        if (!key.startsWith('images/')) {
+          try {
+            // It's encrypted, decrypt it
+            const decrypted = decrypt(key);
+            return { key: decrypted };
+          } catch (e) {
+            // Decryption failed, return as is (might be invalid)
+            return imageData;
+          }
+        }
+        // Already decrypted (starts with 'images/')
+        return imageData;
+      }
+      return imageData;
+    }
+    
+    // If it's a string, try to parse as JSON first (for JSON fields stored as string)
+    if (typeof imageData === 'string') {
+      try {
+        const parsed = JSON.parse(imageData);
+        if (parsed.key && typeof parsed.key === 'string') {
+          // Check if it's encrypted
+          if (!parsed.key.startsWith('images/')) {
+            try {
+              // It's encrypted, decrypt it
+              const decrypted = decrypt(parsed.key);
+              return JSON.stringify({ key: decrypted });
+            } catch (e) {
+              return imageData;
+            }
+          }
+          // Already decrypted
+          return imageData;
+        }
+        return imageData;
+      } catch {
+        // Not JSON string
+        // Check if it's an encrypted string that needs decryption
+        if (!imageData.startsWith('images/')) {
+          try {
+            // Try to decrypt (for backward compatibility)
+            const decrypted = decrypt(imageData);
+            return decrypted;
+          } catch (e) {
+            // Decryption failed, return as is
+            return imageData;
+          }
+        }
+        // Already decrypted or invalid
+        return imageData;
+      }
+    }
+    
+    return imageData;
+  } catch (error) {
+    // If decryption fails, return as is (backward compatibility)
+    return imageData;
+  }
+};
+
 const User = sequelize.define(
   'user',
   {
@@ -113,6 +232,10 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    shopDetailsVerify: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     panVerify: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
@@ -125,7 +248,15 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    bankDetailsVerify: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     aadharDetails: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    nameSimilarity: {
       type: DataTypes.STRING,
       allowNull: true
     },
@@ -277,6 +408,23 @@ const User = sequelize.define(
           if (user.panDetails) {
             user.panDetails = encrypt(user.panDetails);
           }
+
+          // Encrypt image fields (JSON or STRING)
+          if (user.profileImage) {
+            user.profileImage = encrypt(user.profileImage);
+          }
+          if (user.aadharFrontImage) {
+            user.aadharFrontImage = encryptImageField(user.aadharFrontImage);
+          }
+          if (user.aadharBackImage) {
+            user.aadharBackImage = encryptImageField(user.aadharBackImage);
+          }
+          if (user.panCardFrontImage) {
+            user.panCardFrontImage = encryptImageField(user.panCardFrontImage);
+          }
+          if (user.panCardBackImage) {
+            user.panCardBackImage = encryptImageField(user.panCardBackImage);
+          }
         },
 
         async function (user, options) {
@@ -336,6 +484,22 @@ const User = sequelize.define(
               if (element.panDetails) {
                 element.panDetails = encrypt(element.panDetails);
               }
+              // Encrypt image fields
+              if (element.profileImage) {
+                element.profileImage = encrypt(element.profileImage);
+              }
+              if (element.aadharFrontImage) {
+                element.aadharFrontImage = encryptImageField(element.aadharFrontImage);
+              }
+              if (element.aadharBackImage) {
+                element.aadharBackImage = encryptImageField(element.aadharBackImage);
+              }
+              if (element.panCardFrontImage) {
+                element.panCardFrontImage = encryptImageField(element.panCardFrontImage);
+              }
+              if (element.panCardBackImage) {
+                element.panCardBackImage = encryptImageField(element.panCardBackImage);
+              }
             }
           }
         }
@@ -347,6 +511,26 @@ const User = sequelize.define(
           }
           if (user.panDetails) {
             user.panDetails = encrypt(user.panDetails);
+          }
+          // Encrypt image fields if they are being updated
+          // Only encrypt if the value is a plain S3 key (starts with 'images/')
+          if (user.changed('profileImage') && user.profileImage) {
+            // profileImage is STRING field, encrypt directly if it's a plain key
+            if (typeof user.profileImage === 'string' && user.profileImage.startsWith('images/')) {
+              user.profileImage = encrypt(user.profileImage);
+            }
+          }
+          if (user.changed('aadharFrontImage') && user.aadharFrontImage) {
+            user.aadharFrontImage = encryptImageField(user.aadharFrontImage);
+          }
+          if (user.changed('aadharBackImage') && user.aadharBackImage) {
+            user.aadharBackImage = encryptImageField(user.aadharBackImage);
+          }
+          if (user.changed('panCardFrontImage') && user.panCardFrontImage) {
+            user.panCardFrontImage = encryptImageField(user.panCardFrontImage);
+          }
+          if (user.changed('panCardBackImage') && user.panCardBackImage) {
+            user.panCardBackImage = encryptImageField(user.panCardBackImage);
           }
           user.updatedAt = new Date();
         }
@@ -361,6 +545,26 @@ const User = sequelize.define(
               if (u.panDetails) {
                 u.panDetails = decrypt(u.panDetails);
               }
+              // Decrypt image fields
+              if (u.profileImage) {
+                try {
+                  u.profileImage = decrypt(u.profileImage);
+                } catch (e) {
+                  // If decryption fails, it might be already decrypted or invalid
+                }
+              }
+              if (u.aadharFrontImage) {
+                u.aadharFrontImage = decryptImageField(u.aadharFrontImage);
+              }
+              if (u.aadharBackImage) {
+                u.aadharBackImage = decryptImageField(u.aadharBackImage);
+              }
+              if (u.panCardFrontImage) {
+                u.panCardFrontImage = decryptImageField(u.panCardFrontImage);
+              }
+              if (u.panCardBackImage) {
+                u.panCardBackImage = decryptImageField(u.panCardBackImage);
+              }
             });
           } else {
             if (user?.aadharDetails) {
@@ -368,6 +572,26 @@ const User = sequelize.define(
             }
             if (user?.panDetails) {
               user.panDetails = decrypt(user.panDetails);
+            }
+            // Decrypt image fields
+            if (user?.profileImage) {
+              try {
+                user.profileImage = decrypt(user.profileImage);
+              } catch (e) {
+                // If decryption fails, it might be already decrypted or invalid
+              }
+            }
+            if (user?.aadharFrontImage) {
+              user.aadharFrontImage = decryptImageField(user.aadharFrontImage);
+            }
+            if (user?.aadharBackImage) {
+              user.aadharBackImage = decryptImageField(user.aadharBackImage);
+            }
+            if (user?.panCardFrontImage) {
+              user.panCardFrontImage = decryptImageField(user.panCardFrontImage);
+            }
+            if (user?.panCardBackImage) {
+              user.panCardBackImage = decryptImageField(user.panCardBackImage);
             }
           }
         }

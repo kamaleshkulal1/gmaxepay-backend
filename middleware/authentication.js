@@ -111,7 +111,7 @@ const authentication = async (req, res, next) => {
       userType: user.userType,
       tokenVersion: user.tokenVersion
     };
-    
+
     req.permission = permissions;
 
     next();

@@ -26,16 +26,25 @@ let EService = sequelize.define(
 sequelizeTransforms(EService);
 sequelizePaginate.paginate(EService);
 
-sequelize.sync().then(async () => {
-  const count = await EService.count();
-
-  if (count === 0) {
-    await EService.bulkCreate([
-      { service: 'SurePass' },
-      { service: 'CashFree' }
-    ]);
-    console.log('Default services have been created.');
+// NOTE: Model syncing should be handled centrally, not in individual model files
+// The sync() call was removed to prevent database timeout issues during startup
+// If you need to seed default data, use a seeder script or initialization function
+// Example initialization function (call manually when needed):
+/*
+async function initializeEServices() {
+  try {
+    const count = await EService.count();
+    if (count === 0) {
+      await EService.bulkCreate([
+        { service: 'SurePass' },
+        { service: 'CashFree' }
+      ]);
+      console.log('Default services have been created.');
+    }
+  } catch (error) {
+    console.error('Error initializing EServices:', error);
   }
-});
+}
+*/
 
 module.exports = EService;
