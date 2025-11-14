@@ -1597,9 +1597,18 @@ const postProfile = async (req, res) => {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
     
     const token = getTokenFromReq(req);
-    const hasImage = req.file && req.file.buffer;
     
-    if (!hasImage) {
+    // Handle multiple file uploads (livenessPhoto and profileImageWithShop)
+    const livenessPhoto = req.files && req.files.livenessPhoto && req.files.livenessPhoto[0];
+    const profileImage = req.files && req.files.profileImageWithShop && req.files.profileImageWithShop[0];
+    
+    if (!livenessPhoto || !livenessPhoto.buffer) {
+      return res.failure({ 
+        message: 'Liveness photo is required. Please upload a liveness photo.' 
+      });
+    }
+    
+    if (!profileImage || !profileImage.buffer) {
       return res.failure({ 
         message: 'Profile image is required. Please upload a profile image.' 
       });
@@ -1612,22 +1621,40 @@ const postProfile = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
     
-    // Validate profile image early (before any async operations)
-    const imageBuffer = req.file.buffer;
-    if (!imageBuffer || imageBuffer.length < 100) {
+    // Validate liveness photo
+    const livenessBuffer = livenessPhoto.buffer;
+    if (!livenessBuffer || livenessBuffer.length < 100) {
+      return res.failure({ message: 'Invalid liveness photo. Please upload a valid image.' });
+    }
+    
+    // Validate profile image
+    const profileBuffer = profileImage.buffer;
+    if (!profileBuffer || profileBuffer.length < 100) {
       return res.failure({ message: 'Invalid profile image. Please upload a valid image.' });
     }
     
-    // Validate image format
-    const isJPEG = imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 && imageBuffer[2] === 0xFF;
-    const isPNG = imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47;
-    if (!isJPEG && !isPNG) {
-      return res.failure({ message: 'Invalid image format. Please upload a JPEG or PNG image.' });
+    // Validate image formats
+    const validateImageFormat = (buffer) => {
+      const isJPEG = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+      const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+      return isJPEG || isPNG;
+    };
+    
+    if (!validateImageFormat(livenessBuffer)) {
+      return res.failure({ message: 'Invalid liveness photo format. Please upload a JPEG or PNG image.' });
     }
     
-    // Check size limit
-    if (imageBuffer.length > 15 * 1024 * 1024) {
-      return res.failure({ message: 'Image too large. Maximum size is 15MB.' });
+    if (!validateImageFormat(profileBuffer)) {
+      return res.failure({ message: 'Invalid profile image format. Please upload a JPEG or PNG image.' });
+    }
+    
+    // Check size limits (15MB each)
+    if (livenessBuffer.length > 15 * 1024 * 1024) {
+      return res.failure({ message: 'Liveness photo too large. Maximum size is 15MB.' });
+    }
+    
+    if (profileBuffer.length > 15 * 1024 * 1024) {
+      return res.failure({ message: 'Profile image too large. Maximum size is 15MB.' });
     }
     
     // Fetch Aadhaar document (required for face comparison)
@@ -1643,17 +1670,19 @@ const postProfile = async (req, res) => {
     }
     
     const updates = {};
-    const imageFileName = req.file.originalname || 'profile.jpg';
+    const livenessFileName = livenessPhoto.originalname || 'liveness.jpg';
+    const profileFileName = profileImage.originalname || 'profile.jpg';
     
     try {
-      // Convert profile image to base64 for Rekognition
-      const profilePhotoBase64ForRekognition = imageBuffer.toString('base64');
+      // Convert images to base64 for Rekognition
+      const livenessPhotoBase64 = livenessBuffer.toString('base64');
+      const profilePhotoBase64 = profileBuffer.toString('base64');
       
-      // Step 1: Check liveness first
-      const livenessResult = await rekognitionService.detectLiveness(profilePhotoBase64ForRekognition);
+      // Step 1: Check liveness on the liveness photo
+      const livenessResult = await rekognitionService.detectLiveness(livenessPhotoBase64);
       
       if (!livenessResult.success) {
-        throw new Error('Failed to verify profile photo liveness. Please try again.');
+        throw new Error('Failed to verify liveness photo. Please try again.');
       }
       
       if (!livenessResult.isLive) {
@@ -1662,7 +1691,23 @@ const postProfile = async (req, res) => {
         });
       }
       
-      // Step 2: Perform face comparison (extract Aadhaar photo first)
+      // Step 2: Compare liveness photo with profile image to ensure they match
+      const livenessProfileComparison = await rekognitionService.compareFaces(
+        livenessPhotoBase64,
+        profilePhotoBase64
+      );
+      
+      if (!livenessProfileComparison.success) {
+        throw new Error('Failed to compare liveness photo with profile image. Please try again.');
+      }
+      
+      if (!livenessProfileComparison.matched) {
+        return res.failure({ 
+          message: 'Liveness photo and profile image do not match. Please ensure both photos are of the same person.' 
+        });
+      }
+      
+      // Step 3: Perform face comparison with Aadhaar photo
       let faceComparisonResult = null;
       if (existingAadharDetails?.photoLink) {
         // Extract and validate Aadhaar photo
@@ -1679,10 +1724,10 @@ const postProfile = async (req, res) => {
         // Convert to base64 for Rekognition
         const aadhaarPhotoBase64ForRekognition = aadhaarBuffer.toString('base64');
         
-        // Perform face comparison
+        // Perform face comparison with profile image
         faceComparisonResult = await rekognitionService.compareFaces(
           aadhaarPhotoBase64ForRekognition, 
-          profilePhotoBase64ForRekognition
+          profilePhotoBase64
         );
         
         if (!faceComparisonResult.success) {
@@ -1694,26 +1739,38 @@ const postProfile = async (req, res) => {
         }
       }
       
-      // Step 3: Upload to S3 after liveness and comparison checks pass
-      // Use simple path pattern: images/{userId}/{companyId}/profile/
-      const uploadResult = await imageService.uploadImageToS3(
-        imageBuffer,
-        imageFileName,
+      // Step 4: Upload both images to S3 after all checks pass
+      // Upload liveness photo
+      const livenessUploadResult = await imageService.uploadImageToS3(
+        livenessBuffer,
+        livenessFileName,
         'profile',
         ctx.company.id,
-        null, // subtype not needed for new pattern
-        ctx.user.id // userId required for new pattern
+        'liveness', // subtype for liveness photo
+        ctx.user.id
       );
       
-      updates.profileImage = uploadResult.key;
+      // Upload profile image
+      const profileUploadResult = await imageService.uploadImageToS3(
+        profileBuffer,
+        profileFileName,
+        'profile',
+        ctx.company.id,
+        null, // subtype not needed for profile image
+        ctx.user.id
+      );
+      
+      updates.profileImage = profileUploadResult.key;
       updates.imageVerify = true;
+      // Note: If you want to store liveness photo key separately, you can add a field to user model
+      // For now, we're uploading it but not storing the key in user model
     } catch (imageError) {
-      console.error('Error processing profile image:', imageError);
+      console.error('Error processing images:', imageError);
       // Return user-friendly error message
-      if (imageError.message.includes('not recognized')) {
+      if (imageError.message.includes('not recognized') || imageError.message.includes('do not match')) {
         return res.failure({ message: imageError.message });
       }
-      return res.failure({ message: 'Failed to process profile image', error: imageError.message });
+      return res.failure({ message: 'Failed to process images', error: imageError.message });
     }
     
     // Update user in database

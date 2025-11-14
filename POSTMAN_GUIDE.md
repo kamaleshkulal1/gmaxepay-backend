@@ -149,3 +149,4 @@ curl -X POST \
 - **Solution**: Reduce file size to under 10MB
 - **Solution**: Compress the images before uploading
 
+

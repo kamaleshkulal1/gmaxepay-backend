@@ -37,7 +37,11 @@ router.post('/:token/postShopDetails', uploadSingle('shopImage'), multer, onboar
 
 router.post('/:token/postBankDetails', onboardingCors, onboardingController.postBankDetails);
 
-router.post('/:token/postProfile', uploadSingle('profileImageWithShop'), multer, onboardingCors, onboardingController.postProfile);
+router.post('/:token/postProfile', uploadFields([
+  { name: 'livenessPhoto', maxCount: 1 },
+  { name: 'profileImageWithShop', maxCount: 1 }
+]), multer, onboardingCors, onboardingController.postProfile);
+
 router.post('/:token/getPending', onboardingCors, onboardingController.getPending);
 router.post('/:token/complete', onboardingCors, onboardingController.completeOnboarding);
 
