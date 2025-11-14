@@ -37,7 +37,20 @@ router.post('/:token/postShopDetails', uploadSingle('shopImage'), multer, onboar
 
 router.post('/:token/postBankDetails', onboardingCors, onboardingController.postBankDetails);
 
-router.post('/:token/postProfile', uploadSingle('profileImageWithShop'), multer, onboardingCors, onboardingController.postProfile);
+router.post('/:token/imageCheck',
+  uploadSingle('photo'),
+  multer,
+  onboardingCors,
+  onboardingController.imageCheck
+);
+
+router.post('/:token/postProfile',
+  uploadSingle('photo'),
+  multer,
+  onboardingCors,
+  onboardingController.postProfile
+);
+
 router.post('/:token/getPending', onboardingCors, onboardingController.getPending);
 router.post('/:token/complete', onboardingCors, onboardingController.completeOnboarding);
 

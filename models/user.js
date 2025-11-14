@@ -252,6 +252,10 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    profileImageWithShopVerify: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     bankDetailsVerify: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

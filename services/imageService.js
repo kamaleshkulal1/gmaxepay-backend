@@ -149,7 +149,12 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
       s3Key = `images/company/${companyId||'default'}/${subtype}/${sanitizedFileName}`;
     } else if (type === 'profile' && userId && companyId) {
       // Simple path pattern: images/{userId}/{companyId}/profile/
-      s3Key = `images/${userId}/${companyId}/profile/${sanitizedFileName}`;
+      // Include subtype if provided (e.g., liveness)
+      if (subtype) {
+        s3Key = `images/${userId}/${companyId}/profile/${subtype}/${sanitizedFileName}`;
+      } else {
+        s3Key = `images/${userId}/${companyId}/profile/${sanitizedFileName}`;
+      }
     } else if (type === 'profile' && subtype) {
       s3Key = `images/profile/${subtype}/${sanitizedFileName}`;
     } else if (type === 'shop') {
