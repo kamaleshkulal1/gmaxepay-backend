@@ -111,3 +111,39 @@ module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, log
   }
 };
 
+/**
+ * Send temporary password email after onboarding completion
+ * @param {Object} options
+ * @param {string} options.to
+ * @param {string} options.userName
+ * @param {string} options.tempPassword
+ * @param {string} options.logoUrl
+ * @param {string} options.illustrationUrl
+ */
+module.exports.sendTempPasswordEmail = async ({ to, userName, tempPassword, logoUrl, illustrationUrl }) => {
+  try {
+    const templatePath = path.join(__dirname, '../mailTemplate/tempPasswordEmail.html');
+    let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
+
+    htmlTemplate = htmlTemplate.replace(/{{USER_NAME}}/g, userName || 'User');
+    htmlTemplate = htmlTemplate.replace(/{{TEMP_PASSWORD}}/g, tempPassword);
+    htmlTemplate = htmlTemplate.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
+    htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
+    htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, illustrationUrl || '');
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
+      to,
+      subject: 'Your Temporary Password - Gmaxepay',
+      html: htmlTemplate,
+      text: `Dear ${userName},\n\nYour details have already been uploaded. Your temporary password is: ${tempPassword}\n\nPlease use this password to login to your account.\n\nBest regards,\nGMAXEPAY Team`
+    };
+
+    const info = await transport.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId, response: info.response };
+  } catch (error) {
+    console.error('Error sending temporary password email:', error);
+    throw new Error(`Failed to send temporary password email: ${error.message}`);
+  }
+};
+
