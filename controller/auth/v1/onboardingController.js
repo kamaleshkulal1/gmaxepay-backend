@@ -1174,7 +1174,6 @@ const getDigilockerDocuments = async (req, res) => {
   }
 }
 
-
 // Step 6: Shop details (Outlet)
 const postShopDetails = async (req, res) => {
   try {
@@ -1344,16 +1343,14 @@ const postBankDetails = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const {account_number, ifsc } = req.body || {};
-    if(!account_number) return res.failure({ message: 'Account number is required' });
-    if(!ifsc) return res.failure({ message: 'IFSC is required' });
+    const { account_number, ifsc } = req.body || {};
+    if (!account_number) return res.failure({ message: 'Account number is required' });
+    if (!ifsc) return res.failure({ message: 'IFSC is required' });
 
-    // Encrypt the request data
     const encryptionKey = Buffer.from(key, 'hex');
     const requestData = { account_number, ifsc };
     const encryptedRequest = doubleEncrypt(JSON.stringify(requestData), encryptionKey);
-    
-    // Check if bank details already exist in our database
+
     const existingBank = await dbService.findOne(model.ekycHub, {
       identityNumber1: account_number,
       identityNumber2: ifsc,
@@ -1362,48 +1359,24 @@ const postBankDetails = async (req, res) => {
 
     let bankVerification;
 
-
-    if(existingBank){
-      console.log('Using cached bank verification from database');
-      // Decrypt the cached response
+    if (existingBank) {
       try {
         const encryptedData = JSON.parse(existingBank.response);
-        console.log('Encrypted Data Type:', typeof encryptedData);
-        console.log('Encrypted Data Has Encrypted Property:', !!(encryptedData && encryptedData.encrypted));
-        
+
         if (encryptedData && encryptedData.encrypted) {
           const decryptedResponse = decrypt(encryptedData, Buffer.from(key, 'hex'));
-          console.log('Decryption Successful:', !!decryptedResponse);
-          if (decryptedResponse) {
-            bankVerification = JSON.parse(decryptedResponse);
-            console.log('Bank Verification (from cache, decrypted):', JSON.stringify(bankVerification, null, 2));
-          } else {
-            bankVerification = encryptedData;
-            console.log('Bank Verification (from cache, using encryptedData as fallback):', JSON.stringify(bankVerification, null, 2));
-          }
+          bankVerification = decryptedResponse ? JSON.parse(decryptedResponse) : encryptedData;
         } else {
           bankVerification = JSON.parse(existingBank.response);
-          console.log('Bank Verification (from cache, not encrypted):', JSON.stringify(bankVerification, null, 2));
         }
       } catch (e) {
         console.error('Error parsing cached bank verification:', e.message);
-        console.log('Cached Response (raw):', existingBank.response);
-        // If not encrypted or not JSON, return as is
         bankVerification = existingBank.response;
-        console.log('Bank Verification (from cache, raw response):', bankVerification);
       }
     } else {
-      console.log('Fetching bank verification from eKYC Hub API...');
       bankVerification = await ekycHub.bankVerification(account_number, ifsc);
-      console.log('Bank Verification (from API):', JSON.stringify(bankVerification, null, 2));
-      console.log('Bank Verification Type:', typeof bankVerification);
-      console.log('Bank Verification Status:', bankVerification?.status);
-      console.log('Bank Verification Status Check (=== "Success"):', bankVerification?.status === 'Success');
 
-      // Only save if verification is successful
-      if(bankVerification && bankVerification.status === 'Success'){
-        console.log('Saving successful bank verification to cache');
-        // Encrypt the response before saving
+      if (bankVerification && bankVerification.status === 'Success') {
         const encryptedResponse = doubleEncrypt(JSON.stringify(bankVerification), encryptionKey);
 
         await dbService.createOne(model.ekycHub, {
@@ -1415,74 +1388,42 @@ const postBankDetails = async (req, res) => {
           companyId: ctx.company.id || null,
           addedBy: ctx.user.id
         });
-        console.log('Bank verification saved to cache successfully');
-      } else {
-        console.log('Bank verification not saved to cache (status is not Success)');
       }
     }
 
-    console.log('=== Final Bank Verification Check ===');
-    console.log('Bank Verification Object:', JSON.stringify(bankVerification, null, 2));
-    console.log('Bank Verification Status:', bankVerification?.status);
-    console.log('Bank Verification Status Type:', typeof bankVerification?.status);
-    console.log('Status Check (status !== "Success"):', bankVerification?.status !== 'Success');
-    console.log('====================================');
-
-    if(!bankVerification || bankVerification.status !== 'Success') {
+    if (!bankVerification || bankVerification.status !== 'Success') {
       console.error('Bank verification failed - Status:', bankVerification?.status);
       console.error('Bank verification failed - Full Response:', JSON.stringify(bankVerification, null, 2));
       return res.failure({ message: 'Bank verification failed' });
     }
-    
-    // Fetch bank details from Razorpay API using IFSC
+
     let razorpayBankData = null;
     try {
       razorpayBankData = await razorpayApi.bankDetails(ifsc);
     } catch (error) {
       console.error('Error fetching bank details from Razorpay:', error);
-      // Continue without Razorpay data if API fails
     }
-    
-    // Extract bank details from verification response
-    // Use Razorpay BANK name as primary source, fallback to eKYC response
-    const bankName = (razorpayBankData && razorpayBankData.BANK) 
-      ? razorpayBankData.BANK 
+
+    const bankName = (razorpayBankData && razorpayBankData.BANK)
+      ? razorpayBankData.BANK
       : (bankVerification.bank_name || bankVerification.bankName || null);
-    
-    // Get beneficiary name from bank verification - check multiple possible field names
-    const beneficiaryName = bankVerification.nameAtBank 
-      || bankVerification.beneficiary_name 
-      || bankVerification.beneficiaryName 
+
+    const beneficiaryName = bankVerification.nameAtBank
+      || bankVerification.beneficiary_name
+      || bankVerification.beneficiaryName
       || bankVerification['nameAtBank']
       || null;
-    
+
     const accountNumber = bankVerification.account_number || bankVerification['Account Number'] || account_number;
-    
-    // Get Aadhaar name for comparison
+
     const aadhaarName = (ctx.aadhaarDoc && ctx.aadhaarDoc.name) ? ctx.aadhaarDoc.name : '';
     const bankBeneficiaryName = beneficiaryName || '';
-    
-    console.log('=== Bank Name Matching Analysis ===');
-    console.log('Aadhaar Name:', aadhaarName);
-    console.log('Bank Verification Fields Available:', Object.keys(bankVerification));
-    console.log('nameAtBank:', bankVerification.nameAtBank);
-    console.log('beneficiary_name:', bankVerification.beneficiary_name);
-    console.log('beneficiaryName:', bankVerification.beneficiaryName);
-    console.log('Account Number field:', bankVerification['Account Number']);
-    console.log('Extracted Bank Beneficiary Name:', bankBeneficiaryName);
-    console.log('Bank Beneficiary Name Type:', typeof bankBeneficiaryName);
-    console.log('Bank Beneficiary Name is null/empty:', !bankBeneficiaryName);
-    
-    // Compare Aadhaar name with bank beneficiary name
+
     const nameSimilarityPercentage = calculateStringSimilarity(aadhaarName, bankBeneficiaryName);
-    console.log('Name Similarity Percentage:', nameSimilarityPercentage + '%');
-    console.log('Similarity Threshold Check (<= 60%):', nameSimilarityPercentage <= 60);
-    console.log('====================================');
-    
-    // Check if similarity is greater than 60%, if not return failure
+
     if (!bankBeneficiaryName) {
       console.error('Bank beneficiary name is missing');
-      return res.failure({ 
+      return res.failure({
         message: 'Bank account holder name not found in verification response',
         data: {
           aadhaarName: aadhaarName || null,
@@ -1491,10 +1432,10 @@ const postBankDetails = async (req, res) => {
         }
       });
     }
-    
+
     if (nameSimilarityPercentage <= 60) {
       console.error('Name similarity is below threshold (60%)');
-      return res.failure({ 
+      return res.failure({
         message: 'Your name does not match with the bank account holder name. Please verify your bank account details.',
         data: {
           aadhaarName: aadhaarName || null,
@@ -1503,11 +1444,8 @@ const postBankDetails = async (req, res) => {
         }
       });
     }
-    
-    console.log('Name similarity check passed (> 60%), proceeding with bank verification');
-    
-    // Update user with bank verification status and name similarity percentage
-    await dbService.update(model.user, { 
+
+    await dbService.update(model.user, {
       id: ctx.user.id,
       companyId: ctx.company.id,
       isDeleted: false
@@ -1515,47 +1453,22 @@ const postBankDetails = async (req, res) => {
       bankDetailsVerify: true,
       nameSimilarity: nameSimilarityPercentage.toString()
     });
-    console.log('User bank verification status updated - bankDetailsVerify: true, nameSimilarity:', nameSimilarityPercentage);
-    
-    // Reload user to get updated bankDetailsVerify and nameSimilarity
-    const updatedUser = await dbService.findOne(model.user, { 
+
+    const updatedUser = await dbService.findOne(model.user, {
       id: ctx.user.id,
       companyId: ctx.company.id,
       isDeleted: false
     });
-    
-    // Use Razorpay city/branch if available, otherwise use eKYC response
-    const city = (razorpayBankData && razorpayBankData.CITY) 
-      ? razorpayBankData.CITY 
+
+    const city = (razorpayBankData && razorpayBankData.CITY)
+      ? razorpayBankData.CITY
       : (bankVerification.city || null);
-    const branch = (razorpayBankData && razorpayBankData.BRANCH) 
-      ? razorpayBankData.BRANCH 
+    const branch = (razorpayBankData && razorpayBankData.BRANCH)
+      ? razorpayBankData.BRANCH
       : (bankVerification.branch || null);
 
-    // Find or create customer record (customerBank.refId references customer table, not user)
-    let customer = await dbService.findOne(model.customer, {
-      mobile: ctx.user.mobileNo
-    });
-
-    if (!customer) {
-      // Create customer record from user data
-      const customerName = ctx.user.name || '';
-      const nameParts = customerName.split(' ');
-      const firstName = nameParts[0] || customerName;
-      const lastName = nameParts.slice(1).join(' ') || null;
-
-      customer = await dbService.createOne(model.customer, {
-        firstName,
-        lastName,
-        email: ctx.user.email || null,
-        mobile: ctx.user.mobileNo,
-        isActive: true
-      });
-    }
-
-    let customerBank = ctx.customerBank;
     const payload = {
-      refId: customer.id, 
+      refId: ctx.user.id,
       companyId: ctx.company.id,
       bankName,
       beneficiaryName: beneficiaryName || ctx.user.name,
@@ -1565,27 +1478,27 @@ const postBankDetails = async (req, res) => {
       branch: branch || null,
       isActive: true
     };
+    let customerBank = ctx.customerBank;
     if (customerBank) {
       customerBank = await dbService.update(model.customerBank, { id: customerBank.id }, payload);
     } else {
       customerBank = await dbService.createOne(model.customerBank, payload);
     }
-    
-    // Update KYC status
+
     await updateKycStatus(ctx.user.id, ctx.company.id, { outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
-    
+
     const pendingInfo = getPendingSteps({ user: updatedUser, outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
-    return res.success({ 
-      message: 'Bank details Verified', 
-      data: { 
-        steps: pendingInfo.steps, 
+    return res.success({
+      message: 'Bank details Verified',
+      data: {
+        steps: pendingInfo.steps,
         pending: pendingInfo.pending,
         nameMatching: {
           aadhaarName: aadhaarName || null,
           bankHolderName: bankBeneficiaryName,
           similarityPercentage: nameSimilarityPercentage
         }
-      } 
+      }
     });
   } catch (error) {
     console.error('Error in bank details:', error);
@@ -2333,7 +2246,8 @@ const uploadPanDocuments = async (req, res) => {
                 // Update user records with uploaded image keys
                 const updateData = {
                   panCardFrontImage: frontImageS3Key,
-                  panCardBackImage: backImageS3Key
+                  panCardBackImage: backImageS3Key,
+                  panVerify: true
                 };
                 
                 await dbService.update(model.user, { id: ctx.user.id }, updateData);
