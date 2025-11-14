@@ -9,7 +9,7 @@ const { JWT, TYPES } = require('../../../constants/authConstant');
 
 const login = async (req, res) => {
     try {
-        const { mobileNo, password, latitude, longitude, userType } = req.body;
+        const { mobileNo, password, latitude, longitude } = req.body;
         const companyId = req.headers['x-company-id'];
         if (!companyId) {
             return res.failure({ message: 'Company ID is required!' });
@@ -33,17 +33,20 @@ const login = async (req, res) => {
         if (!latitude || !longitude) {
             return res.failure({ message: 'Location coordinates are required!' });
         }
+        const existingUser = await dbService.findOne(model.user, { mobileNo });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found!' });
+        }
+
+        const userType = existingUser.userType;
 
         if (!userType) {
             return res.failure({ message: 'User type is required!' });
         }
-
         // Validate userType against valid types
         const validUserTypes = Object.values(TYPES);
-        if (!validUserTypes.includes(parseInt(userType))) {
-            return res.failure({ 
-                message: 'Invalid user type. Valid types are: ' + validUserTypes.join(', ') 
-            });
+        if (!validUserTypes.includes(userType)) {
+            return res.failure({ message: 'Invalid user type. Valid types are: ' + validUserTypes.join(', ') });
         }
 
         const result = await authService.loginUser(

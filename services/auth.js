@@ -364,7 +364,7 @@ const loginUser = async (
         msg: `Account is locked due to multiple failed login attempts. Please contact admin for assistance.`
       };
     }
-
+    
     if (user.userType !== parseInt(userType)) {
       return {
         flag: true,

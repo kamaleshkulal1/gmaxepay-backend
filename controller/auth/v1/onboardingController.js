@@ -1593,60 +1593,6 @@ const postBankDetails = async (req, res) => {
   }
 };
 
-// Step 7.5: Standalone liveness check (optional helper before full profile upload)
-const imageCheck = async (req, res) => {
-  try {
-    if (!ensureAllowedOrigin(req)) {
-      return res.failure({ message: 'Origin not allowed' });
-    }
-
-    const token = getTokenFromReq(req);
-    const ctx = await loadContextByToken(token);
-    if (ctx?.error) {
-      return res.failure({ message: ctx.error });
-    }
-    if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Invalid Domain' });
-    }
-
-    const uploadedPhoto =
-      req.file ||
-      (req.files && req.files.photo && req.files.photo[0]) ||
-      null;
-
-    if (!uploadedPhoto || !uploadedPhoto.buffer) {
-      return res.failure({ message: 'Image is required for liveness check' });
-    }
-
-    if (uploadedPhoto.buffer.length < 100) {
-      return res.failure({ message: 'Invalid image. Please upload a valid photo.' });
-    }
-
-    const imageBase64 = uploadedPhoto.buffer.toString('base64');
-    const livenessResult = await rekognitionService.detectLiveness(imageBase64);
-    console.log('Liveness check result:', livenessResult);
-
-    if (!livenessResult.success) {
-      const failureMessage = livenessResult.message || livenessResult.error || 'Failed to process image';
-      return res.failure({ message: failureMessage });
-    }
-
-    if (!livenessResult.isLive) {
-      return res.failure({
-        message: livenessResult.message || 'No face detected or face quality is too low',
-        data: livenessResult
-      });
-    }
-
-    return res.success({
-      message: 'Liveness check passed',
-      data: livenessResult
-    });
-  } catch (error) {
-    console.error('Error during liveness image check:', error);
-    return res.internalServerError({ message: error.message });
-  }
-};
 
 // Step 8: Profile (single photo used for liveness + Aadhaar comparison)
 const postProfile = async (req, res) => {
@@ -1708,7 +1654,6 @@ const postProfile = async (req, res) => {
       const photoBase64 = photoBuffer.toString('base64');
 
       const livenessResult = await rekognitionService.detectLiveness(photoBase64);
-      console.log('livenessResult', livenessResult);
 
       if (!livenessResult.success) {
         throw new Error('Failed to verify liveness photo. Please try again.');
@@ -1737,7 +1682,6 @@ const postProfile = async (req, res) => {
           aadhaarPhotoBase64ForRekognition,
           photoBase64
         );
-        console.log('faceComparisonResult', faceComparisonResult);
 
         if (!faceComparisonResult.success) {
           throw new Error('Failed to verify profile photo. Please try again.');
@@ -2519,7 +2463,6 @@ module.exports = {
   getDigilockerDocuments,
   postShopDetails,
   postBankDetails,
-  imageCheck,
   postProfile,
   getPending,
   uploadAadharDocuments,

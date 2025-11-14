@@ -37,12 +37,6 @@ router.post('/:token/postShopDetails', uploadSingle('shopImage'), multer, onboar
 
 router.post('/:token/postBankDetails', onboardingCors, onboardingController.postBankDetails);
 
-router.post('/:token/imageCheck',
-  uploadSingle('photo'),
-  multer,
-  onboardingCors,
-  onboardingController.imageCheck
-);
 
 router.post('/:token/postProfile',
   uploadSingle('photo'),
