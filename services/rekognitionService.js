@@ -9,7 +9,7 @@ const rekognitionClient = new RekognitionClient({
 });
 
 const SIMILARITY_THRESHOLD = 80;
-const LIVENESS_CONFIDENCE_THRESHOLD = 50; // Minimum confidence for face detection
+const LIVENESS_CONFIDENCE_THRESHOLD = 10; // Minimum confidence for face detection
 
 /**
  * Detect liveness by checking if a face is detected in the image
@@ -38,17 +38,38 @@ const detectLiveness = async (imageBase64) => {
       
       // Check if face quality is good enough
       const quality = face.Quality;
-      const isGoodQuality = quality && 
-        quality.Brightness && quality.Brightness.Value > 20 &&
-        quality.Sharpness && quality.Sharpness.Value > 20;
+      let brightnessScore = null;
+      let sharpnessScore = null;
+
+      if (quality) {
+        const brightnessRaw = quality.Brightness;
+        const sharpnessRaw = quality.Sharpness;
+
+        brightnessScore = typeof brightnessRaw === 'object' && brightnessRaw !== null
+          ? brightnessRaw.Value ?? null
+          : brightnessRaw ?? null;
+
+        sharpnessScore = typeof sharpnessRaw === 'object' && sharpnessRaw !== null
+          ? sharpnessRaw.Value ?? null
+          : sharpnessRaw ?? null;
+      }
+
+      const isGoodQuality =
+        (brightnessScore === null || brightnessScore > 20) &&
+        (sharpnessScore === null || sharpnessScore > 20);
 
       if (confidence >= LIVENESS_CONFIDENCE_THRESHOLD && isGoodQuality) {
-        return {
+        const responsePayload = {
           success: true,
           isLive: true,
           confidence: confidence,
-          quality: quality
+          quality: {
+            ...quality,
+            Brightness: brightnessScore ?? quality?.Brightness ?? null,
+            Sharpness: sharpnessScore ?? quality?.Sharpness ?? null
+          }
         };
+        return responsePayload;
       }
     }
 

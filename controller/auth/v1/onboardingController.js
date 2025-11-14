@@ -199,6 +199,7 @@ const loadContextByToken = async (token) => {
     panVerify: user.panVerify,
     shopDetailsVerify: user.shopDetailsVerify,
     bankDetailsVerify: user.bankDetailsVerify,
+    profileImageWithShopVerify: user.profileImageWithShopVerify,
     mobileNo: user.mobileNo,
     email: user.email,
     profileImage: getImageUrl(user.profileImage, true), 
@@ -328,6 +329,8 @@ const getPendingSteps = (ctx) => {
   const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) || 
                           !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
   
+  const profileVerified = !!(user.profileImageWithShopVerify || userDetails?.profileImageWithShopVerify);
+
   const steps = [
     { key: 'mobileVerification', label: 'Mobile verification', done: !!userDetails?.mobileVerify },
     { key: 'emailVerification', label: 'Email verification', done: !!userDetails?.emailVerify },
@@ -345,7 +348,7 @@ const getPendingSteps = (ctx) => {
     },
     { key: 'shopDetails', label: 'Shop/outlet details', done: shopDetailsDone },
     { key: 'bankVerification', label: 'Bank verification', done: bankDetailsDone },
-    { key: 'profile', label: 'Profile setup', done: !!userDetails?.profileImage }
+    { key: 'profile', label: 'Profile setup', done: profileVerified }
   ];
   const pending = steps.filter(s => !s.done).map(s => s.key);
   return { steps, pending, allCompleted: pending.length === 0 };
@@ -1590,213 +1593,207 @@ const postBankDetails = async (req, res) => {
   }
 };
 
-// Step 8: Profile
+// Step 7.5: Standalone liveness check (optional helper before full profile upload)
+const imageCheck = async (req, res) => {
+  try {
+    if (!ensureAllowedOrigin(req)) {
+      return res.failure({ message: 'Origin not allowed' });
+    }
+
+    const token = getTokenFromReq(req);
+    const ctx = await loadContextByToken(token);
+    if (ctx?.error) {
+      return res.failure({ message: ctx.error });
+    }
+    if (!ensureDomainMatches(req, ctx.company)) {
+      return res.failure({ message: 'Invalid Domain' });
+    }
+
+    const uploadedPhoto =
+      req.file ||
+      (req.files && req.files.photo && req.files.photo[0]) ||
+      null;
+
+    if (!uploadedPhoto || !uploadedPhoto.buffer) {
+      return res.failure({ message: 'Image is required for liveness check' });
+    }
+
+    if (uploadedPhoto.buffer.length < 100) {
+      return res.failure({ message: 'Invalid image. Please upload a valid photo.' });
+    }
+
+    const imageBase64 = uploadedPhoto.buffer.toString('base64');
+    const livenessResult = await rekognitionService.detectLiveness(imageBase64);
+    console.log('Liveness check result:', livenessResult);
+
+    if (!livenessResult.success) {
+      const failureMessage = livenessResult.message || livenessResult.error || 'Failed to process image';
+      return res.failure({ message: failureMessage });
+    }
+
+    if (!livenessResult.isLive) {
+      return res.failure({
+        message: livenessResult.message || 'No face detected or face quality is too low',
+        data: livenessResult
+      });
+    }
+
+    return res.success({
+      message: 'Liveness check passed',
+      data: livenessResult
+    });
+  } catch (error) {
+    console.error('Error during liveness image check:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
+// Step 8: Profile (single photo used for liveness + Aadhaar comparison)
 const postProfile = async (req, res) => {
   try {
-    // Early validation
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
-    
     const token = getTokenFromReq(req);
-    
-    // Handle multiple file uploads (livenessPhoto and profileImageWithShop)
-    const livenessPhoto = req.files && req.files.livenessPhoto && req.files.livenessPhoto[0];
-    const profileImage = req.files && req.files.profileImageWithShop && req.files.profileImageWithShop[0];
-    
-    if (!livenessPhoto || !livenessPhoto.buffer) {
-      return res.failure({ 
-        message: 'Liveness photo is required. Please upload a liveness photo.' 
+
+    const uploadedPhoto =
+      req.file ||
+      (req.files && req.files.photo && req.files.photo[0]) ||
+      null;
+
+    if (!uploadedPhoto || !uploadedPhoto.buffer) {
+      return res.failure({
+        message: 'Profile photo is required. Please upload a clear selfie with shop background.'
       });
     }
-    
-    if (!profileImage || !profileImage.buffer) {
-      return res.failure({ 
-        message: 'Profile image is required. Please upload a profile image.' 
-      });
-    }
-    
-    // Load context
+
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    
-    // Validate liveness photo
-    const livenessBuffer = livenessPhoto.buffer;
-    if (!livenessBuffer || livenessBuffer.length < 100) {
-      return res.failure({ message: 'Invalid liveness photo. Please upload a valid image.' });
+
+    const photoBuffer = uploadedPhoto.buffer;
+    if (!photoBuffer || photoBuffer.length < 100) {
+      return res.failure({ message: 'Invalid photo. Please upload a valid image.' });
     }
-    
-    // Validate profile image
-    const profileBuffer = profileImage.buffer;
-    if (!profileBuffer || profileBuffer.length < 100) {
-      return res.failure({ message: 'Invalid profile image. Please upload a valid image.' });
-    }
-    
-    // Validate image formats
+
     const validateImageFormat = (buffer) => {
       const isJPEG = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
       const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
       return isJPEG || isPNG;
     };
-    
-    if (!validateImageFormat(livenessBuffer)) {
-      return res.failure({ message: 'Invalid liveness photo format. Please upload a JPEG or PNG image.' });
+
+    if (!validateImageFormat(photoBuffer)) {
+      return res.failure({ message: 'Invalid photo format. Please upload a JPEG or PNG image.' });
     }
-    
-    if (!validateImageFormat(profileBuffer)) {
-      return res.failure({ message: 'Invalid profile image format. Please upload a JPEG or PNG image.' });
+
+    if (photoBuffer.length > 15 * 1024 * 1024) {
+      return res.failure({ message: 'Photo too large. Maximum size is 15MB.' });
     }
-    
-    // Check size limits (15MB each)
-    if (livenessBuffer.length > 15 * 1024 * 1024) {
-      return res.failure({ message: 'Liveness photo too large. Maximum size is 15MB.' });
-    }
-    
-    if (profileBuffer.length > 15 * 1024 * 1024) {
-      return res.failure({ message: 'Profile image too large. Maximum size is 15MB.' });
-    }
-    
-    // Fetch Aadhaar document (required for face comparison)
-    const existingAadharDetails = await dbService.findOne(model.digilockerDocument, { 
-      refId: ctx.user.id, 
-      companyId: ctx.company.id, 
-      documentType: 'AADHAAR', 
-      isDeleted: false 
+
+    const existingAadharDetails = await dbService.findOne(model.digilockerDocument, {
+      refId: ctx.user.id,
+      companyId: ctx.company.id,
+      documentType: 'AADHAAR',
+      isDeleted: false
     });
-    
+
     if (!existingAadharDetails) {
       return res.failure({ message: 'Aadhaar verification is required before profile update' });
     }
-    
+
     const updates = {};
-    const livenessFileName = livenessPhoto.originalname || 'liveness.jpg';
-    const profileFileName = profileImage.originalname || 'profile.jpg';
-    
+    const photoFileName = uploadedPhoto.originalname || 'profile.jpg';
+
     try {
-      // Convert images to base64 for Rekognition
-      const livenessPhotoBase64 = livenessBuffer.toString('base64');
-      const profilePhotoBase64 = profileBuffer.toString('base64');
-      
-      // Step 1: Check liveness on the liveness photo
-      const livenessResult = await rekognitionService.detectLiveness(livenessPhotoBase64);
-      
+      const photoBase64 = photoBuffer.toString('base64');
+
+      const livenessResult = await rekognitionService.detectLiveness(photoBase64);
+      console.log('livenessResult', livenessResult);
+
       if (!livenessResult.success) {
         throw new Error('Failed to verify liveness photo. Please try again.');
       }
-      
+
       if (!livenessResult.isLive) {
-        return res.failure({ 
-          message: 'Your face is not live. Please try again.' 
+        return res.failure({
+          message: livenessResult.message || 'Your face is not live. Please try again.'
         });
       }
-      
-      // Step 2: Compare liveness photo with profile image to ensure they match
-      const livenessProfileComparison = await rekognitionService.compareFaces(
-        livenessPhotoBase64,
-        profilePhotoBase64
-      );
-      
-      if (!livenessProfileComparison.success) {
-        throw new Error('Failed to compare liveness photo with profile image. Please try again.');
-      }
-      
-      if (!livenessProfileComparison.matched) {
-        return res.failure({ 
-          message: 'Liveness photo and profile image do not match. Please ensure both photos are of the same person.' 
-        });
-      }
-      
-      // Step 3: Perform face comparison with Aadhaar photo
+
       let faceComparisonResult = null;
       if (existingAadharDetails?.photoLink) {
-        // Extract and validate Aadhaar photo
         const aadhaarPhotoBase64 = await extractBase64FromImage(existingAadharDetails.photoLink);
         if (!aadhaarPhotoBase64) {
           throw new Error('Invalid Aadhaar photo data. Please re-verify your Aadhaar.');
         }
-        
+
         const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
         if (!aadhaarBuffer) {
           throw new Error('Invalid Aadhaar photo format. Please re-verify your Aadhaar.');
         }
-        
-        // Convert to base64 for Rekognition
+
         const aadhaarPhotoBase64ForRekognition = aadhaarBuffer.toString('base64');
-        
-        // Perform face comparison with profile image
         faceComparisonResult = await rekognitionService.compareFaces(
-          aadhaarPhotoBase64ForRekognition, 
-          profilePhotoBase64
+          aadhaarPhotoBase64ForRekognition,
+          photoBase64
         );
-        
+        console.log('faceComparisonResult', faceComparisonResult);
+
         if (!faceComparisonResult.success) {
           throw new Error('Failed to verify profile photo. Please try again.');
         }
-        
+
         if (!faceComparisonResult.matched) {
           throw new Error('Your face is not recognized by Aadhaar card. Please check it.');
         }
       }
-      
-      // Step 4: Upload both images to S3 after all checks pass
-      // Upload liveness photo
-      const livenessUploadResult = await imageService.uploadImageToS3(
-        livenessBuffer,
-        livenessFileName,
+
+      const photoUploadResult = await imageService.uploadImageToS3(
+        photoBuffer,
+        photoFileName,
         'profile',
         ctx.company.id,
-        'liveness', // subtype for liveness photo
+        null,
         ctx.user.id
       );
-      
-      // Upload profile image
-      const profileUploadResult = await imageService.uploadImageToS3(
-        profileBuffer,
-        profileFileName,
-        'profile',
-        ctx.company.id,
-        null, // subtype not needed for profile image
-        ctx.user.id
-      );
-      
-      updates.profileImage = profileUploadResult.key;
+
+      updates.profileImage = photoUploadResult.key;
       updates.imageVerify = true;
-      // Note: If you want to store liveness photo key separately, you can add a field to user model
-      // For now, we're uploading it but not storing the key in user model
+      updates.profileImageWithShopVerify = true;
     } catch (imageError) {
       console.error('Error processing images:', imageError);
-      // Return user-friendly error message
       if (imageError.message.includes('not recognized') || imageError.message.includes('do not match')) {
         return res.failure({ message: imageError.message });
       }
       return res.failure({ message: 'Failed to process images', error: imageError.message });
     }
-    
-    // Update user in database
+
     await dbService.update(model.user, { id: ctx.user.id }, updates);
-    
-    // Reload user to get updated data
+
+    if (updates.profileImage && ctx.outlet?.id) {
+      await dbService.update(
+        model.outlet,
+        { id: ctx.outlet.id },
+        { shopImage: updates.profileImage, shopImageVerify: true }
+      );
+    }
+
     const updatedUser = await dbService.findOne(model.user, { id: ctx.user.id });
-    
-    // Reload context to get latest data
     const updatedCtx = await loadContextByToken(token);
     const latestUser = updatedCtx.user || updatedUser;
     const latestOutlet = updatedCtx.outlet || ctx.outlet;
     const latestCustomerBank = updatedCtx.customerBank || ctx.customerBank;
     const latestAadhaarDoc = updatedCtx.aadhaarDoc || ctx.aadhaarDoc;
     const latestPanDoc = updatedCtx.panDoc || ctx.panDoc;
-    
-    // Get pending steps with updated data
-    const pendingInfo = getPendingSteps({ 
-      user: latestUser, 
-      outlet: latestOutlet, 
+
+    const pendingInfo = getPendingSteps({
+      user: latestUser,
+      outlet: latestOutlet,
       customerBank: latestCustomerBank,
       aadhaarDoc: latestAadhaarDoc,
       panDoc: latestPanDoc
     });
-    
-    // Calculate and update KYC status
+
     const kycInfo = calculateKycStatus({
       user: latestUser,
       outlet: latestOutlet,
@@ -1804,38 +1801,30 @@ const postProfile = async (req, res) => {
       aadhaarDoc: latestAadhaarDoc,
       panDoc: latestPanDoc
     });
-    
-    // Update KYC status and steps
+
     await dbService.update(model.user, { id: ctx.user.id }, {
       kycStatus: kycInfo.kycStatus,
       kycSteps: kycInfo.kycSteps
     });
-    
-    // Check if all steps are completed and firstTimeOnboarding is true
-    // Reload user to get latest firstTimeOnboarding status
+
     const userForCheck = await dbService.findOne(model.user, { id: ctx.user.id });
     let tempPassword = null;
     if (pendingInfo.allCompleted && userForCheck && userForCheck.firstTimeOnboarding) {
-      // Generate temporary password
       tempPassword = generateTempPassword();
-      
-      // Hash the temporary password
       const hashedTempPassword = await bcrypt.hash(tempPassword, 8);
-      
-      // Update user with temporary password and mark onboarding as complete
+
       await dbService.update(model.user, { id: ctx.user.id }, {
         password: hashedTempPassword,
         firstTimeOnboarding: false,
         firstTimeOnboardingComplete: true,
-        isResetPassword: true // User needs to reset password on first login
+        isResetPassword: true
       });
-      
-      // Send temporary password email
+
       try {
         const backendUrl = process.env.BASE_URL;
         const logoUrl = (ctx.company && ctx.company.logo) ? imageService.getImageUrl(ctx.company.logo) : `${backendUrl}/gmaxepay.png`;
         const illustrationUrl = `${backendUrl}/tempPassword.png`;
-        
+
         await emailService.sendTempPasswordEmail({
           to: userForCheck.email,
           userName: userForCheck.name || 'User',
@@ -1845,10 +1834,9 @@ const postProfile = async (req, res) => {
         });
       } catch (emailError) {
         console.error('Error sending temporary password email:', emailError);
-        // Continue even if email fails
       }
     }
-    
+
     const responseData = {
       steps: pendingInfo.steps,
       pending: pendingInfo.pending,
@@ -1856,10 +1844,10 @@ const postProfile = async (req, res) => {
       kycSteps: kycInfo.kycSteps,
       allCompleted: pendingInfo.allCompleted
     };
-    
-    return res.success({ 
-      message: 'Your Profile is updated and matched with Aadhaar card', 
-      data: responseData 
+
+    return res.success({
+      message: 'Your Profile is updated and matched with Aadhaar card',
+      data: responseData
     });
   } catch (error) {
     console.error('Error in profile update:', error);
@@ -2531,6 +2519,7 @@ module.exports = {
   getDigilockerDocuments,
   postShopDetails,
   postBankDetails,
+  imageCheck,
   postProfile,
   getPending,
   uploadAadharDocuments,
