@@ -351,6 +351,91 @@ const getPendingSteps = (ctx) => {
   return { steps, pending, allCompleted: pending.length === 0 };
 };
 
+// Calculate KYC status and steps based on completed steps
+const calculateKycStatus = (ctx) => {
+  const pendingInfo = getPendingSteps(ctx);
+  const completedSteps = pendingInfo.steps.filter(s => s.done).length;
+  const totalSteps = 7;
+  
+  let kycStatus = 'NO_KYC';
+  let kycSteps = completedSteps;
+  
+  if (completedSteps >= 4 && completedSteps < totalSteps) {
+    kycStatus = 'HALF_KYC';
+  } else if (completedSteps === totalSteps) {
+    kycStatus = 'FULL_KYC';
+  }
+  
+  return { kycStatus, kycSteps, completedSteps, totalSteps };
+};
+
+// Generate temporary password (8-digit numeric)
+const generateTempPassword = () => {
+  const numbers = '0123456789';
+  let password = '';
+  
+  // Generate 8 random digits
+  for (let i = 0; i < 8; i++) {
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+  }
+  
+  return password;
+};
+
+// Helper function to update KYC status after step completion
+const updateKycStatus = async (userId, companyId, ctx) => {
+  try {
+    // Reload user and context to get latest data
+    const user = await dbService.findOne(model.user, { id: userId, companyId: companyId, isDeleted: false });
+    if (!user) return;
+    
+    // Get latest context data
+    const outlet = await dbService.findOne(model.outlet, { refId: userId, companyId: companyId });
+    const customer = await dbService.findOne(model.customer, { mobile: user.mobileNo });
+    let customerBank = null;
+    if (customer) {
+      customerBank = await dbService.findOne(model.customerBank, { refId: customer.id, companyId: companyId });
+    }
+    if (!customerBank) {
+      customerBank = await dbService.findOne(model.customerBank, { refId: userId, companyId: companyId });
+    }
+    const [aadhaarDoc, panDoc] = await Promise.all([
+      dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      }),
+      dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'PAN',
+        isDeleted: false
+      })
+    ]);
+    
+    // Calculate KYC status
+    const kycInfo = calculateKycStatus({
+      user: user,
+      outlet: outlet,
+      customerBank: customerBank,
+      aadhaarDoc: aadhaarDoc || ctx?.aadhaarDoc,
+      panDoc: panDoc || ctx?.panDoc
+    });
+    
+    // Update KYC status and steps
+    await dbService.update(model.user, { id: userId }, {
+      kycStatus: kycInfo.kycStatus,
+      kycSteps: kycInfo.kycSteps
+    });
+    
+    return kycInfo;
+  } catch (error) {
+    console.error('Error updating KYC status:', error);
+    return null;
+  }
+};
+
 /**
  * Verify onboarding token and return user details
  * @route GET /company/onboarding/:token
@@ -515,6 +600,9 @@ const verifySmsOtp = async (req, res) => {
     await dbService.update(model.user, { id: user.id }, { mobileVerify: true, otpMobile: null });
     await user.resetOtpAttempts();
 
+    // Update KYC status
+    await updateKycStatus(user.id, ctx.tokenData.companyId, ctx);
+
     const pendingInfo = getPendingSteps({ userDetails: { ...ctx.userDetails, mobileVerify: true }, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Mobile verified successfully', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
   } catch (error) {
@@ -648,6 +736,9 @@ const verifyEmailOtp = async (req, res) => {
 
     await dbService.update(model.user, { id: user.id }, { emailVerify: true, otpEmail: null });
     await user.resetOtpAttempts();
+
+    // Update KYC status
+    await updateKycStatus(user.id, ctx.tokenData.companyId, ctx);
 
     const pendingInfo = getPendingSteps({ userDetails: { ...ctx.userDetails, emailVerify: true }, outletDetails: ctx.outletDetails, customerBankDetails: ctx.customerBankDetails, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ message: 'Email verified successfully', data: { steps: pendingInfo.steps, pending: pendingInfo.pending } });
@@ -1055,6 +1146,9 @@ const getDigilockerDocuments = async (req, res) => {
           }, { panVerify: true });
           console.log(`[getDigilockerDocuments] User PAN verification updated for User ID: ${userId}`);
         }
+        
+        // Update KYC status after document download
+        await updateKycStatus(userId, companyId, { aadhaarDoc: docType === 'AADHAAR' ? existingDigilockerDocument : ctx?.aadhaarDoc, panDoc: docType === 'PAN' ? existingDigilockerDocument : ctx?.panDoc });
       } else {
         console.error(`[getDigilockerDocuments] API fetch failed for User ID: ${userId}, Document Type: ${docType}`, response);
         return res.failure({ 
@@ -1173,6 +1267,9 @@ const postShopDetails = async (req, res) => {
 
     // Set shopDetailsVerify to true in user table (prevents multiple shops)
     await dbService.update(model.user, { id: ctx.user.id }, { shopDetailsVerify: true });
+
+    // Update KYC status
+    await updateKycStatus(ctx.user.id, ctx.company.id, { outlet, customerBank: ctx.customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
 
     // Reload user context to get updated shopDetailsVerify
     const updatedUser = await dbService.findOne(model.user, { id: ctx.user.id });
@@ -1470,6 +1567,10 @@ const postBankDetails = async (req, res) => {
     } else {
       customerBank = await dbService.createOne(model.customerBank, payload);
     }
+    
+    // Update KYC status
+    await updateKycStatus(ctx.user.id, ctx.company.id, { outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
+    
     const pendingInfo = getPendingSteps({ user: updatedUser, outlet: ctx.outlet, customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
     return res.success({ 
       message: 'Bank details Verified', 
@@ -1618,22 +1719,91 @@ const postProfile = async (req, res) => {
     // Update user in database
     await dbService.update(model.user, { id: ctx.user.id }, updates);
     
-    // Prepare response
-    const updatedUser = { ...ctx.user, ...updates };
+    // Reload user to get updated data
+    const updatedUser = await dbService.findOne(model.user, { id: ctx.user.id });
+    
+    // Reload context to get latest data
+    const updatedCtx = await loadContextByToken(token);
+    const latestUser = updatedCtx.user || updatedUser;
+    const latestOutlet = updatedCtx.outlet || ctx.outlet;
+    const latestCustomerBank = updatedCtx.customerBank || ctx.customerBank;
+    const latestAadhaarDoc = updatedCtx.aadhaarDoc || ctx.aadhaarDoc;
+    const latestPanDoc = updatedCtx.panDoc || ctx.panDoc;
+    
+    // Get pending steps with updated data
     const pendingInfo = getPendingSteps({ 
-      user: updatedUser, 
-      outlet: ctx.outlet, 
-      customerBank: ctx.customerBank,
-      aadhaarDoc: ctx.aadhaarDoc,
-      panDoc: ctx.panDoc
+      user: latestUser, 
+      outlet: latestOutlet, 
+      customerBank: latestCustomerBank,
+      aadhaarDoc: latestAadhaarDoc,
+      panDoc: latestPanDoc
     });
+    
+    // Calculate and update KYC status
+    const kycInfo = calculateKycStatus({
+      user: latestUser,
+      outlet: latestOutlet,
+      customerBank: latestCustomerBank,
+      aadhaarDoc: latestAadhaarDoc,
+      panDoc: latestPanDoc
+    });
+    
+    // Update KYC status and steps
+    await dbService.update(model.user, { id: ctx.user.id }, {
+      kycStatus: kycInfo.kycStatus,
+      kycSteps: kycInfo.kycSteps
+    });
+    
+    // Check if all steps are completed and firstTimeOnboarding is true
+    // Reload user to get latest firstTimeOnboarding status
+    const userForCheck = await dbService.findOne(model.user, { id: ctx.user.id });
+    let tempPassword = null;
+    if (pendingInfo.allCompleted && userForCheck && userForCheck.firstTimeOnboarding) {
+      // Generate temporary password
+      tempPassword = generateTempPassword();
+      
+      // Hash the temporary password
+      const hashedTempPassword = await bcrypt.hash(tempPassword, 8);
+      
+      // Update user with temporary password and mark onboarding as complete
+      await dbService.update(model.user, { id: ctx.user.id }, {
+        password: hashedTempPassword,
+        firstTimeOnboarding: false,
+        firstTimeOnboardingComplete: true,
+        isResetPassword: true // User needs to reset password on first login
+      });
+      
+      // Send temporary password email
+      try {
+        const backendUrl = process.env.BASE_URL;
+        const logoUrl = (ctx.company && ctx.company.logo) ? imageService.getImageUrl(ctx.company.logo) : `${backendUrl}/gmaxepay.png`;
+        const illustrationUrl = `${backendUrl}/tempPassword.png`;
+        
+        await emailService.sendTempPasswordEmail({
+          to: userForCheck.email,
+          userName: userForCheck.name || 'User',
+          tempPassword: tempPassword,
+          logoUrl: logoUrl,
+          illustrationUrl: illustrationUrl
+        });
+      } catch (emailError) {
+        console.error('Error sending temporary password email:', emailError);
+        // Continue even if email fails
+      }
+    }
     
     const responseData = {
       steps: pendingInfo.steps,
-      pending: pendingInfo.pending
+      pending: pendingInfo.pending,
+      kycStatus: kycInfo.kycStatus,
+      kycSteps: kycInfo.kycSteps,
+      allCompleted: pendingInfo.allCompleted
     };
     
-    return res.success({ message: 'Your Profile is updated and matched with Aadhaar card', data: responseData });
+    return res.success({ 
+      message: 'Your Profile is updated and matched with Aadhaar card', 
+      data: responseData 
+    });
   } catch (error) {
     console.error('Error in profile update:', error);
     return res.failure({ message: 'Failed to update profile', error: error.message });
@@ -2016,6 +2186,9 @@ const uploadAadharDocuments = async (req, res) => {
     
     await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
     
+    // Update KYC status after Aadhaar upload
+    await updateKycStatus(ctx.user.id, ctx.company.id, ctx);
+    
     let responseMessage = 'Aadhar documents processed and uploaded successfully';
     if (existingAadharDetails) {
       if (validationResults.allValidationsPassed) {
@@ -2176,6 +2349,9 @@ const uploadPanDocuments = async (req, res) => {
                 
                 await dbService.update(model.user, { id: ctx.user.id }, updateData);
                 await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+                
+                // Update KYC status after PAN upload
+                await updateKycStatus(ctx.user.id, ctx.company.id, { aadhaarDoc: aadhaarDoc });
               } else {
                 // If face doesn't match, set verification failed message (no S3 upload)
                 verificationMessage = 'PAN verification failed';
