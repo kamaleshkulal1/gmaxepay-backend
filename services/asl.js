@@ -118,17 +118,20 @@ const  aslAepsOnboarding = async (data) => {
 // ASL AEPS Validate Agent OTP
 const aslAepsValidateAgentOtp = async (data) => {
   try{
-    const response = await axios.post(`${aslUrl}/aeps/v1/otpValidate`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            Service: 'AEPS',
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+    const payload = {
+      associateId: aslAssociateId,
+      apiToken: aslApiToken,
+      Service: 'AEPS',
+      ...data
+    }
+    console.log('payload', payload);
+    const response = await axios.post(`${aslUrl}/aeps/v1/otpValidate`, {
+      ...payload
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
     console.log("response.data",response.data);
     return response.data;
   } catch (error) {
