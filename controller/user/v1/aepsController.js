@@ -2,6 +2,8 @@ const asl = require('../../../services/asl');
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
 
+
+// Onboarding Agent
 const aepsOnboarding = async (req, res) => {
     try {
         const REQUIRED_FIELD_ERRORS = {
@@ -208,6 +210,7 @@ const aepsOnboarding = async (req, res) => {
     }
 };
 
+// Validate Agent
 const validateAgentOtp = async (req, res) => {
    try{
     const { otp } = req.body;
@@ -229,7 +232,7 @@ const validateAgentOtp = async (req, res) => {
         otpReferenceId: existingAepsOnboarding.otpReferenceId,
         otp,
         hash: existingAepsOnboarding.hash,
-        merchantLoginId: existingAepsOnboarding.merchantLoginId,
+        merchantLoginId: existingAepsOnboarding.superMerchantId,
     }
     const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
     console.log('aepsResponse', aepsResponse);
@@ -278,4 +281,5 @@ const resendAgentOtp = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process AEPS OTP resend' });
     }
 }
+
 module.exports = { aepsOnboarding, validateAgentOtp, resendAgentOtp };
