@@ -245,4 +245,28 @@ const validateAgentOtp = async (req, res) => {
    }
 };
 
-module.exports = { aepsOnboarding, validateAgentOtp };
+const resendAgentOtp = async (req, res) => {
+    try{
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if(!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const payload = {
+            otpReferenceID: existingAepsOnboarding.otpReferenceId,
+            hash: existingAepsOnboarding.hash,
+            merchantLoginID: existingAepsOnboarding.merchantLoginId,
+        }
+        const aepsResponse = await asl.aslAepsResendOtp(payload);
+        console.log('aepsResponse', aepsResponse);
+        const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
+        const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
+        if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+            return res.success({ message: 'AEPS OTP resend successful', data: aepsResponse });
+        }
+    }
+    catch (error) {
+        console.error('AEPS OTP resend error', error);
+        return res.failure({ message: error.message || 'Unable to process AEPS OTP resend' });
+    }
+}
+module.exports = { aepsOnboarding, validateAgentOtp, resendAgentOtp };
