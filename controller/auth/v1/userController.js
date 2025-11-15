@@ -196,7 +196,7 @@ const handle2FA = async (req, res) => {
         );
 
         if (result.flag) {
-            return res.failure({ message: result.msg });
+            return res.badRequest({ message: result.msg });
         }
 
         return res.success({ 
