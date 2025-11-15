@@ -231,7 +231,6 @@ const validateAgentOtp = async (req, res) => {
         hash: existingAepsOnboarding.hash,
         merchantLoginID: existingAepsOnboarding.merchantLoginId,
     }
-    console.log('payload', payload);
     const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
     console.log('aepsResponse', aepsResponse);
     if(aepsResponse.status.toUpperCase() === 'SUCCESS' || aepsResponse.data.status.toUpperCase() === 'SUCCESS') {
