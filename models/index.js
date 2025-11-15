@@ -272,6 +272,40 @@ db.company.hasMany(db.aepsOnboarding, {
   sourceKey: 'id'
 });
 
+// Customer Bank Relationships
+db.customerBank.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.customerBank, {
+  foreignKey: 'refId',
+  as: 'customerBanks',
+  sourceKey: 'id'
+});
+
+db.customerBank.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.customerBank, {
+  foreignKey: 'companyId',
+  as: 'customerBanks',
+  sourceKey: 'id'
+});
+
+db.customerBank.belongsTo(db.customer, {
+  foreignKey: 'customerId',
+  as: 'customer',
+  targetKey: 'id'
+});
+db.customer.hasMany(db.customerBank, {
+  foreignKey: 'customerId',
+  as: 'customerBanks',
+  sourceKey: 'id'
+});
+
 // BBPS Operator Relationships (commented out as models don't exist yet)
 // db.bbpsOperator.belongsTo(db.bbpsOperatorCategory, {
 //   foreignKey: 'categoryId',

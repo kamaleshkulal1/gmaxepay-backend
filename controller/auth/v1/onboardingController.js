@@ -1164,6 +1164,37 @@ const getDigilockerDocuments = async (req, res) => {
     const message = docType === 'AADHAAR' 
       ? 'Aadhaar Verification Downloaded' 
       : 'PAN Verification Downloaded';
+
+    if (docType === 'PAN') {
+      const docData = response.data || response || {};
+      const panDetailsPayload = {
+        status: 'SUCCESS',
+        message,
+        data: {
+          reference_id: docData.reference_id ?? docData.referenceId ?? existingDigilockerDocument.referenceId ?? null,
+          verification_id: docData.verification_id ?? docData.verificationId ?? existingDigilockerDocument.verificationId ?? null,
+          status: docData.status ?? response.status ?? 'Success',
+          pan_number: docData.pan_number ?? docData.pan ?? existingDigilockerDocument.panNumber ?? null,
+          name: docData.name ?? docData.name_pan_card ?? existingDigilockerDocument.panName ?? null,
+          father_name: docData.father_name ?? docData.fatherName ?? existingDigilockerDocument.panFatherName ?? null,
+          dob: docData.dob ?? existingDigilockerDocument.panDob ?? null,
+          message: docData.message ?? response.message ?? existingDigilockerDocument.message ?? null,
+          txid: docData.txid ?? existingDigilockerDocument.txid ?? null
+        }
+      };
+
+      const existingPanDetails = existingUser.panDetails || null;
+      const shouldUpdatePanDetails = !existingPanDetails || JSON.stringify(existingPanDetails) !== JSON.stringify(panDetailsPayload);
+
+      if (shouldUpdatePanDetails) {
+        await dbService.update(
+          model.user,
+          { id: userId, companyId: companyId, isDeleted: false },
+          { panDetails: panDetailsPayload }
+        );
+        console.log(`[getDigilockerDocuments] Stored PAN details for User ID: ${userId}`);
+      }
+    }
     
     console.log(`[getDigilockerDocuments] Successfully completed for User ID: ${userId}, Document Type: ${docType}`);
     return res.success({ message, data: response.data || response });
@@ -2046,16 +2077,28 @@ const uploadAadharDocuments = async (req, res) => {
         validationResults.photoMatch;
     }
 
-    const aadharLast4 = extractedData.aadhaar_number?.toString().slice(-4) || '';
-    const matchStatus = extractedData.aadhaar_numbers_match ? '1' : '0';
-    const validationPassed = existingAadharDetails && validationResults.allValidationsPassed ? '1' : '0';
-    const aadharDetailsString = `${aadharLast4},${matchStatus},${validationPassed}`;
+    const sanitizedAadhaarNumber = extractedData.aadhaar_number
+      ? extractedData.aadhaar_number.toString().replace(/\D/g, '')
+      : '';
+    const aadharLast4 = sanitizedAadhaarNumber ? sanitizedAadhaarNumber.slice(-4) : '';
+    const canPersistFullAadhaarNumber =
+      !!sanitizedAadhaarNumber &&
+      (!existingAadharDetails || validationResults.allValidationsPassed);
+    const aadharDetailsPayload = sanitizedAadhaarNumber
+      ? {
+          aadhaarLast4: aadharLast4 || null,
+          aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
+        }
+      : null;
 
     const updateData = {
       aadharFrontImage: frontImageS3Key, 
-      aadharBackImage: backImageS3Key,
-      aadharDetails: aadharDetailsString
+      aadharBackImage: backImageS3Key
     };
+    
+    if (aadharDetailsPayload) {
+      updateData.aadharDetails = aadharDetailsPayload;
+    }
     
     if (extractedData.aadhaar_number && extractedData.aadhaar_numbers_match) {
       if (existingAadharDetails) {
@@ -2073,11 +2116,19 @@ const uploadAadharDocuments = async (req, res) => {
       const errorMessage = dbError.message || dbError.parent?.message || '';
       if (dbError.name === 'SequelizeDatabaseError' && 
           (errorMessage.includes('too long') || errorMessage.includes('value too long'))) {
-        const minimalDetails = extractedData.aadhaar_numbers_match ? '1' : '0';
-        try {
-          updateData.aadharDetails = minimalDetails;
-          await dbService.update(model.user, { id: ctx.user.id }, updateData);
-        } catch (secondError) {
+        if (aadharDetailsPayload) {
+          const minimalDetails = {
+            aadhaarLast4: aadharDetailsPayload.aadhaarLast4 || null,
+            aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
+          };
+          try {
+            updateData.aadharDetails = minimalDetails;
+            await dbService.update(model.user, { id: ctx.user.id }, updateData);
+          } catch (secondError) {
+            const { aadharDetails, ...updateDataWithoutDetails } = updateData;
+            await dbService.update(model.user, { id: ctx.user.id }, updateDataWithoutDetails);
+          }
+        } else {
           const { aadharDetails, ...updateDataWithoutDetails } = updateData;
           await dbService.update(model.user, { id: ctx.user.id }, updateDataWithoutDetails);
         }

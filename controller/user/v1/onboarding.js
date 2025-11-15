@@ -815,6 +815,63 @@ const getDigilockerDocuments = async (req, res) => {
     
     let response;
     let shouldFetchFromApi = true;
+    const buildPanDetailsPayload = (panSource, storedDoc) => {
+      if (!panSource && !storedDoc) {
+        return null;
+      }
+      const payload = (panSource?.data ?? panSource) || {};
+      const fallback = storedDoc || {};
+      const referenceId =
+        payload.reference_id ||
+        payload.referenceId ||
+        fallback.referenceId ||
+        null;
+      const verificationId =
+        payload.verification_id ||
+        payload.verificationId ||
+        fallback.verificationId ||
+        null;
+      const panNumber =
+        payload.pan_number ||
+        payload.panNumber ||
+        payload.pan ||
+        fallback.panNumber ||
+        null;
+      const name = payload.name || payload.panName || fallback.panName || null;
+      const fatherName =
+        payload.father_name || fallback.panFatherName || null;
+      const dob = payload.dob || fallback.panDob || null;
+      const status = panSource?.status || payload.status || fallback.status || null;
+      const message =
+        panSource?.message || payload.message || fallback.message || null;
+      const txid = payload.txid || panSource?.txid || fallback.txid || null;
+
+      const result = {
+        reference_id: referenceId,
+        verification_id: verificationId,
+        pan_number: panNumber,
+        name,
+        father_name: fatherName,
+        dob,
+        status,
+        message,
+        txid,
+        provider: 'DIGILOCKER',
+        raw_response: payload
+      };
+
+      if (
+        result.reference_id ||
+        result.verification_id ||
+        result.pan_number ||
+        result.name ||
+        result.father_name ||
+        result.dob
+      ) {
+        return result;
+      }
+      return null;
+    };
     
     // If document already has full data (name for Aadhaar or panNumber for PAN), it's already processed
     if ((docType === 'AADHAAR' && existingDigilockerDocument.name) || (docType === 'PAN' && existingDigilockerDocument.panNumber)) {
@@ -904,10 +961,17 @@ const getDigilockerDocuments = async (req, res) => {
             userUpdateData.dob = updateData.dob;
           }
           await dbService.update(model.user, { id: user.id }, userUpdateData);
-        } else if (docType === 'PAN') {
-          // PAN verification does not update user DOB - only updates panVerify status
-          await dbService.update(model.user, { id: user.id }, { panVerify: true });
         }
+      }
+    }
+
+    if (docType === 'PAN' && response) {
+      const panDetailsPayload = buildPanDetailsPayload(response, existingDigilockerDocument);
+      if (panDetailsPayload) {
+        await dbService.update(model.user, { id: user.id }, {
+          panVerify: true,
+          panDetails: panDetailsPayload
+        });
       }
     }
 
@@ -1736,16 +1800,28 @@ const uploadAadharDocuments = async (req, res) => {
         validationResults.photoMatch;
     }
 
-    const aadharLast4 = extractedData.aadhaar_number?.toString().slice(-4) || '';
-    const matchStatus = extractedData.aadhaar_numbers_match ? '1' : '0';
-    const validationPassed = existingAadharDetails && validationResults.allValidationsPassed ? '1' : '0';
-    const aadharDetailsString = `${aadharLast4},${matchStatus},${validationPassed}`;
+    const sanitizedAadhaarNumber = extractedData.aadhaar_number
+      ? extractedData.aadhaar_number.toString().replace(/\D/g, '')
+      : '';
+    const aadharLast4 = sanitizedAadhaarNumber ? sanitizedAadhaarNumber.slice(-4) : '';
+    const canPersistFullAadhaarNumber =
+      !!sanitizedAadhaarNumber &&
+      (!existingAadharDetails || validationResults.allValidationsPassed);
+    const aadharDetailsPayload = sanitizedAadhaarNumber
+      ? {
+          aadhaarLast4: aadharLast4 || null,
+          aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
+        }
+      : null;
 
     const updateData = {
       aadharFrontImage: frontImageS3Key, 
-      aadharBackImage: backImageS3Key,
-      aadharDetails: aadharDetailsString
+      aadharBackImage: backImageS3Key
     };
+    
+    if (aadharDetailsPayload) {
+      updateData.aadharDetails = aadharDetailsPayload;
+    }
     
     if (extractedData.aadhaar_number && extractedData.aadhaar_numbers_match) {
       if (existingAadharDetails) {
@@ -1763,11 +1839,19 @@ const uploadAadharDocuments = async (req, res) => {
       const errorMessage = dbError.message || dbError.parent?.message || '';
       if (dbError.name === 'SequelizeDatabaseError' && 
           (errorMessage.includes('too long') || errorMessage.includes('value too long'))) {
-        const minimalDetails = extractedData.aadhaar_numbers_match ? '1' : '0';
-        try {
-          updateData.aadharDetails = minimalDetails;
-          await dbService.update(model.user, { id: user.id }, updateData);
-        } catch (secondError) {
+        if (aadharDetailsPayload) {
+          const minimalDetails = {
+            aadhaarLast4: aadharDetailsPayload.aadhaarLast4 || null,
+            aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
+          };
+          try {
+            updateData.aadharDetails = minimalDetails;
+            await dbService.update(model.user, { id: user.id }, updateData);
+          } catch (secondError) {
+            const { aadharDetails, ...updateDataWithoutDetails } = updateData;
+            await dbService.update(model.user, { id: user.id }, updateDataWithoutDetails);
+          }
+        } else {
           const { aadharDetails, ...updateDataWithoutDetails } = updateData;
           await dbService.update(model.user, { id: user.id }, updateDataWithoutDetails);
         }
