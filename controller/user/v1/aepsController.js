@@ -76,25 +76,33 @@ const aepsOnboarding = async (req, res) => {
         };
 
 
-        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
-
-        const existingCompany = await dbService.findOne(model.company, { id: existingUser.companyId });
-        if (!existingCompany) {
-            return res.failure({ message: 'Company not found' });
-        }
-
-        const [outletDetails, customerBankDetails, existingAepsOnboarding] = await Promise.all([
-            dbService.findOne(model.outlet, { refId: existingUser.id }),
-            dbService.findOne(model.customerBank, { refId: existingUser.id }),
+        const dataFetchStartedAt = Date.now();
+        const [
+            existingUser,
+            existingCompany,
+            outletDetails,
+            customerBankDetails,
+            existingAepsOnboarding
+        ] = await Promise.all([
+            dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId }),
+            dbService.findOne(model.company, { id: req.user.companyId }),
+            dbService.findOne(model.outlet, { refId: req.user.id }),
+            dbService.findOne(model.customerBank, { refId: req.user.id }),
             dbService.findOne(model.aepsOnboarding, {
                 userId: req.user.id,
                 companyId: req.user.companyId,
                 merchantStatus: true
             })
         ]);
+        console.log(`[AEPS Onboarding] Fetched prerequisite data in ${Date.now() - dataFetchStartedAt}ms`);
+
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found' });
+        }
 
         if (!outletDetails) {
             return res.failure({ message: 'Outlet not found' });
@@ -106,6 +114,7 @@ const aepsOnboarding = async (req, res) => {
             return res.success({ message: 'AEPS onboarding already completed', data: existingAepsOnboarding });
         }
 
+        const payloadBuildStartedAt = Date.now();
         const retailerLatitude = pickValue(existingUser.latitude, outletDetails.latitude);
         const retailerLongitude = pickValue(existingUser.longitude, outletDetails.longitude);
         const retailerCountry = pickValue(existingUser.country, outletDetails.shopCountry, 'India');
@@ -152,6 +161,7 @@ const aepsOnboarding = async (req, res) => {
             retailerPanBackImage: buildImageUrl(existingUser.panBackImage || existingUser.panCardBackImage),
             retailerShopImage: buildImageUrl(outletDetails.shopImage || existingUser.profileImage)
         };
+        console.log(`[AEPS Onboarding] Payload constructed in ${Date.now() - payloadBuildStartedAt}ms`);
 
 
         const validationError = validatePayload(payload);
@@ -159,7 +169,9 @@ const aepsOnboarding = async (req, res) => {
             return res.failure({ message: validationError });
         }
 
+        const aslRequestStartedAt = Date.now();
         const aepsOnboardingDetails = await asl.aslAepsOnboarding(payload);
+        console.log(`[AEPS Onboarding] ASL API responded in ${Date.now() - aslRequestStartedAt}ms`);
 
         const normalizedStatus = aepsOnboardingDetails?.status ? String(aepsOnboardingDetails.status).toLowerCase() : null;
         const nestedStatus = aepsOnboardingDetails?.data?.status ? String(aepsOnboardingDetails.data.status).toLowerCase() : null;
