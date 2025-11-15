@@ -130,7 +130,7 @@ const aepsOnboarding = async (req, res) => {
             retailerShopName: outletDetails.shopName || existingUser.outletName,
             companyOrShopPan: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
             shopAddress: outletDetails.shopAddress,
-            gstinNumber: outletDetails.gstNo || '',
+            gstinNumber: outletDetails.gstNo ,
             shopCity: outletDetails.shopCity || existingUser.city,
             shopDistrict: outletDetails.shopDistrict,
             shopState: outletDetails.shopState || existingUser.state,
