@@ -1950,7 +1950,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       } else {
         return {
           flag: true,
-          msg: 'Invalid Token pls check 2FA code'
+          msg: '2FA verification failed. Please try again.'
         };
       }
     } else {
@@ -2069,7 +2069,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       } else {
         return {
           flag: true,
-          msg: 'Invalid Token pls check 2FA code'
+          msg: '2FA setup failed. Please try again.'
         };
       }
     }

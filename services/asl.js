@@ -79,7 +79,6 @@ const  aslAepsOnboarding = async (data) => {
 
     const formData = new FormData();
     for (const [key, value] of Object.entries(payload)) {
-      // eslint-disable-next-line no-await-in-loop
       await appendFormField(formData, key, value);
     }
 
@@ -88,13 +87,8 @@ const  aslAepsOnboarding = async (data) => {
       {
         headers: {
           ...formData.getHeaders()
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        timeout: 60000
+        }
       });
-    console.log("response",response);
-    console.log("response.data",response.data);
     return response.data;
   } catch (error) {
     console.log("error",error?.response?.data || error.message);

@@ -86,9 +86,14 @@ const aepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Company not found' });
         }
 
-        const [outletDetails, customerBankDetails] = await Promise.all([
+        const [outletDetails, customerBankDetails, existingAepsOnboarding] = await Promise.all([
             dbService.findOne(model.outlet, { refId: existingUser.id }),
-            dbService.findOne(model.customerBank, { refId: existingUser.id })
+            dbService.findOne(model.customerBank, { refId: existingUser.id }),
+            dbService.findOne(model.aepsOnboarding, {
+                userId: req.user.id,
+                companyId: req.user.companyId,
+                merchantStatus: true
+            })
         ]);
 
         if (!outletDetails) {
@@ -96,6 +101,9 @@ const aepsOnboarding = async (req, res) => {
         }
         if (!customerBankDetails) {
             return res.failure({ message: 'Customer bank not found' });
+        }
+        if (existingAepsOnboarding) {
+            return res.success({ message: 'AEPS onboarding already completed', data: existingAepsOnboarding });
         }
 
         const retailerLatitude = pickValue(existingUser.latitude, outletDetails.latitude);
@@ -130,7 +138,7 @@ const aepsOnboarding = async (req, res) => {
             retailerShopName: outletDetails.shopName || existingUser.outletName,
             companyOrShopPan: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
             shopAddress: outletDetails.shopAddress,
-            gstinNumber: outletDetails.gstNo ,
+            gstinNumber: outletDetails.gstNo || '',
             shopCity: outletDetails.shopCity || existingUser.city,
             shopDistrict: outletDetails.shopDistrict,
             shopState: outletDetails.shopState || existingUser.state,
@@ -154,22 +162,28 @@ const aepsOnboarding = async (req, res) => {
         const aepsOnboardingDetails = await asl.aslAepsOnboarding(payload);
 
         const normalizedStatus = aepsOnboardingDetails?.status ? String(aepsOnboardingDetails.status).toLowerCase() : null;
-        const isSuccess = normalizedStatus === 'success';
+        const nestedStatus = aepsOnboardingDetails?.data?.status ? String(aepsOnboardingDetails.data.status).toLowerCase() : null;
+        const merchantStatus = Boolean(aepsOnboardingDetails?.data?.data?.merchantStatus ?? aepsOnboardingDetails?.data?.merchantStatus);
+        const isSuccess =
+            normalizedStatus === 'success' ||
+            nestedStatus === 'success' ||
+            nestedStatus === 'transaction successful' ||
+            merchantStatus;
 
         if (isSuccess) {
             await dbService.createOne(model.aepsOnboarding, {
                 userId: req.user.id,
                 companyId: req.user.companyId,
-                status: aepsOnboardingDetails.status,
-                uniqueID: aepsOnboardingDetails.uniqueID,
-                otpReferenceId: aepsOnboardingDetails.otpReferneceId,
-                hash: aepsOnboardingDetails.hash,
-                message: aepsOnboardingDetails.message,
-                merchantStatus: aepsOnboardingDetails.data?.merchantStatus,
-                remarks: aepsOnboardingDetails.data?.remarks,
-                superMerchantId: aepsOnboardingDetails.data?.superMerchantId,
-                merchantLoginId: aepsOnboardingDetails.data?.merchantLoginId,
-                errorCodes: aepsOnboardingDetails.data?.errorCodes
+                status: aepsOnboardingDetails.status || aepsOnboardingDetails.data?.status,
+                uniqueID: aepsOnboardingDetails.uniqueID || aepsOnboardingDetails.data?.uniqueID,
+                otpReferenceId: aepsOnboardingDetails.otpReferneceId || aepsOnboardingDetails.data?.otpReferneceId,
+                hash: aepsOnboardingDetails.hash || aepsOnboardingDetails.data?.hash,
+                message: aepsOnboardingDetails.message || aepsOnboardingDetails.data?.message,
+                merchantStatus: merchantStatus,
+                remarks: aepsOnboardingDetails.data?.data?.remarks || aepsOnboardingDetails.data?.remarks,
+                superMerchantId: aepsOnboardingDetails.data?.data?.superMerchantId || aepsOnboardingDetails.data?.superMerchantId,
+                merchantLoginId: aepsOnboardingDetails.data?.data?.merchantLoginId || aepsOnboardingDetails.data?.merchantLoginId,
+                errorCodes: aepsOnboardingDetails.data?.data?.errorCodes || aepsOnboardingDetails.data?.errorCodes
             });
 
             return res.success({ message: 'AEPS onboarding successful', data: aepsOnboardingDetails });
