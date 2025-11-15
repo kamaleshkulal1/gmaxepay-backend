@@ -122,14 +122,13 @@ const aslAepsValidateAgentOtp = async (data) => {
         {
             associateId: aslAssociateId,
             apiToken: aslApiToken,
-            ServiceType: 'AEPS',
+            Service: 'AEPS',
             ...data
         }, {
             headers: {
                 'Content-Type': 'application/json'
             }
         });
-    console.log("response",response);
     console.log("response.data",response.data);
     return response.data;
   } catch (error) {

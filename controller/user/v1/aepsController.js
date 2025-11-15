@@ -208,4 +208,40 @@ const aepsOnboarding = async (req, res) => {
     }
 };
 
-module.exports = { aepsOnboarding };
+const validateAgentOtp = async (req, res) => {
+   try{
+    const { otp } = req.body;
+    const  existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+    if(!existingUser) {
+        return res.failure({ message: 'User not found' });
+    }
+    const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+        userId: req.user.id,
+        companyId: req.user.companyId,
+        merchantStatus: true
+    });
+    if(!existingAepsOnboarding) {
+        return res.failure({ message: 'AEPS onboarding not found' });
+    }
+    const payload = {
+        uniqueID: existingAepsOnboarding.uniqueID,
+        aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
+        otpReferenceID: existingAepsOnboarding.otpReferenceId,
+        otp,
+        hash: existingAepsOnboarding.hash,
+        merchantLoginID: existingAepsOnboarding.merchantLoginId,
+    }
+    console.log('payload', payload);
+    const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
+    console.log('aepsResponse', aepsResponse);
+    if(aepsResponse.status === 'success' || aepsResponse.data.status === 'success') {
+        return res.success({ message: 'AEPS OTP validation successful', data: aepsResponse });
+    }
+    return res.failure({ message: aepsResponse?.message || 'AEPS OTP validation failed', data: aepsResponse });
+   } catch (error) {
+    console.error('AEPS OTP validation error', error);
+    return res.failure({ message: error.message || 'Unable to process AEPS OTP validation' });
+   }
+};
+
+module.exports = { aepsOnboarding, validateAgentOtp };
