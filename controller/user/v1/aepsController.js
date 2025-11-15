@@ -229,7 +229,7 @@ const validateAgentOtp = async (req, res) => {
     const payload = {
         uniqueID: existingAepsOnboarding.uniqueID,
         aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
-        otpReferenceId: existingAepsOnboarding.otpReferenceId,
+        otpReferenceID: existingAepsOnboarding.otpReferenceId,
         otp,
         hash: existingAepsOnboarding.hash,
         merchantLoginId: existingAepsOnboarding.superMerchantId,
