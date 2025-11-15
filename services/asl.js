@@ -91,14 +91,12 @@ const  aslAepsOnboarding = async (data) => {
       Service: 'AEPS',
       ...data
     };
-    console.log("payload",payload);
 
     const formData = new FormData();
     const formBuildStart = Date.now();
     await Promise.all(
       Object.entries(payload).map(([key, value]) => appendFormField(formData, key, value))
     );
-    console.log(`[ASL AEPS] Form data prepared in ${Date.now() - formBuildStart}ms`);
 
     const response = await axios.post(`${aslUrl}/aeps/v1/onboarding`,
       formData,
@@ -106,7 +104,6 @@ const  aslAepsOnboarding = async (data) => {
         headers: {
           ...formData.getHeaders()
         },
-        timeout: 60000
       });
     return response.data;
   } catch (error) {
@@ -115,7 +112,7 @@ const  aslAepsOnboarding = async (data) => {
   }
 }
 
-// ASL AEPS Validate Agent OTP
+
 const aslAepsValidateAgentOtp = async (data) => {
   try{
     const payload = {
@@ -166,12 +163,11 @@ const aslAepsValidateAgentBiometric = async (data) => {
 // ASL AEPS 2FA
 const aslAeps2FA = async (data) => {
   try{
-    const response = await axios.post(`${aslUrl}/aeps/v1/two-factor-
-authenticate`,
+    const response = await axios.post(`${aslUrl}/aeps/v1/two-factor-authenticate`,
         {
             associateId: aslAssociateId,
             apiToken: aslApiToken,
-            ServiceType: 'AEPS',
+            Service: 'AEPS',
             ...data
         }, {
             headers: {
