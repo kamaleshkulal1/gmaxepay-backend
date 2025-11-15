@@ -234,7 +234,7 @@ const validateAgentOtp = async (req, res) => {
     console.log('payload', payload);
     const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
     console.log('aepsResponse', aepsResponse);
-    if(aepsResponse.status === 'success' || aepsResponse.data.status === 'success') {
+    if(aepsResponse.status.toUpperCase() === 'SUCCESS' || aepsResponse.data.status.toUpperCase() === 'SUCCESS') {
         return res.success({ message: 'AEPS OTP validation successful', data: aepsResponse });
     }
     return res.failure({ message: aepsResponse?.message || 'AEPS OTP validation failed', data: aepsResponse });
