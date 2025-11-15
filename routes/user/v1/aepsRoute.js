@@ -5,5 +5,5 @@ const authentication = require('../../../middleware/authentication');
 
 router.post('/onboarding', authentication, aepsController.aepsOnboarding);
 router.post('/validate-otp', authentication, aepsController.validateAgentOtp);
-
+router.post('/reset-otp', authentication, aepsController.resendAgentOtp);
 module.exports = router;

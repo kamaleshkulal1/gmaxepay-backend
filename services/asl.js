@@ -232,7 +232,6 @@ const aslAepsReceiveOtp = async (data) => {
   }
 }
 
-// ASL AEPS Resend OTP
 const aslAepsResendOtp = async (data) => {
   try{
     const response = await axios.post(`${aslUrl}/aeps/v1/resendOTP`,
@@ -245,7 +244,6 @@ const aslAepsResendOtp = async (data) => {
                 'Content-Type': 'application/json'
             }
         });
-    console.log("response",response);
     console.log("response.data",response.data);
     return response.data;
   } catch (error) {
@@ -257,22 +255,23 @@ const aslAepsResendOtp = async (data) => {
 // ASL AEPS Pay Out
 const aslAepsPayOut = async (data) => {
   try{
-    const response = await axios.post(`${aslUrl}/payout/v1/payout`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
+    const payload = {
+      associateId: aslAssociateId,
+      apiToken: aslApiToken,
+      ...data
+    }
+    const response = await axios.post(`${aslUrl}/payout/v1/payout`, {
+      ...payload
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
     console.log("response.data",response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
-    return error.response.data;
+    console.log("error",error?.response?.data || error.message);
+    return error.response?.data || { status: 'error', message: 'Unable to reach ASL Payout API' };
   }
 }
 
