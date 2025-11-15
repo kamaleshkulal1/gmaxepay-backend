@@ -232,7 +232,7 @@ const validateAgentOtp = async (req, res) => {
         otpReferenceID: existingAepsOnboarding.otpReferenceId,
         otp,
         hash: existingAepsOnboarding.hash,
-        merchantLoginId: existingAepsOnboarding.superMerchantId,
+        merchantLoginId: existingAepsOnboarding.merchantLoginId,
     }
     const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
     console.log('aepsResponse', aepsResponse);
