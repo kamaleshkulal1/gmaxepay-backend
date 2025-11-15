@@ -226,10 +226,10 @@ const validateAgentOtp = async (req, res) => {
     const payload = {
         uniqueID: existingAepsOnboarding.uniqueID,
         aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
-        otpReferenceID: existingAepsOnboarding.otpReferenceId,
+        otpReferenceId: existingAepsOnboarding.otpReferenceId,
         otp,
         hash: existingAepsOnboarding.hash,
-        merchantLoginID: existingAepsOnboarding.merchantLoginId,
+        merchantLoginId: existingAepsOnboarding.merchantLoginId,
     }
     const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
     console.log('aepsResponse', aepsResponse);
@@ -260,9 +260,10 @@ const resendAgentOtp = async (req, res) => {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
         const payload = {
-            otpReferenceID: existingAepsOnboarding.otpReferenceId,
+            uniqueID: existingAepsOnboarding.uniqueID,
+            otpReferenceId: existingAepsOnboarding.otpReferenceId,
             hash: existingAepsOnboarding.hash,
-            merchantLoginID: existingAepsOnboarding.merchantLoginId,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId
         }
         const aepsResponse = await asl.aslAepsResendOtp(payload);
         console.log('aepsResponse', aepsResponse);
