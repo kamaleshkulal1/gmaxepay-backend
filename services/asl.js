@@ -4,6 +4,15 @@ const aslUrl = process.env.ASL_URL;
 const aslApiToken = process.env.ASL_API_TOKEN;
 const aslAssociateId = process.env.ASL_ASSOCIATE_ID;
 const aslApiUserId = process.env.ASL_USER_ID;
+const FILE_DOWNLOAD_TIMEOUT_MS = Number(process.env.ASL_FILE_DOWNLOAD_TIMEOUT_MS || 15000);
+const FILE_DOWNLOAD_MAX_BYTES = Number(process.env.ASL_FILE_DOWNLOAD_MAX_BYTES || 5 * 1024 * 1024);
+
+const fileDownloadClient = axios.create({
+  timeout: FILE_DOWNLOAD_TIMEOUT_MS,
+  responseType: 'arraybuffer',
+  maxContentLength: FILE_DOWNLOAD_MAX_BYTES,
+  validateStatus: (status) => status >= 200 && status < 300
+});
 
 const AEPS_FILE_FIELDS = new Set([
   'retailerAadhaarFrontImage',
@@ -47,12 +56,19 @@ const appendFormField = async (formData, key, value) => {
     }
 
     if (isHttpUrl(value)) {
-      const fileResponse = await axios.get(value, { responseType: 'arraybuffer' });
-      const filename = getFileNameFromUrl(value, `${key}.jpg`);
-      formData.append(key, fileResponse.data, {
-        filename,
-        contentType: fileResponse.headers['content-type'] || 'application/octet-stream'
-      });
+      const downloadStartedAt = Date.now();
+      try {
+        const fileResponse = await fileDownloadClient.get(value);
+        const filename = getFileNameFromUrl(value, `${key}.jpg`);
+        formData.append(key, fileResponse.data, {
+          filename,
+          contentType: fileResponse.headers['content-type'] || 'application/octet-stream'
+        });
+        console.log(`[ASL AEPS] Downloaded ${key} (${filename}) in ${Date.now() - downloadStartedAt}ms`);
+      } catch (error) {
+        console.error(`[ASL AEPS] Failed to download ${key} from ${value}`, error.message);
+        throw new Error(`Unable to download ${key} asset: ${error.message}`);
+      }
       return;
     }
   }
@@ -78,16 +94,19 @@ const  aslAepsOnboarding = async (data) => {
     console.log("payload",payload);
 
     const formData = new FormData();
-    for (const [key, value] of Object.entries(payload)) {
-      await appendFormField(formData, key, value);
-    }
+    const formBuildStart = Date.now();
+    await Promise.all(
+      Object.entries(payload).map(([key, value]) => appendFormField(formData, key, value))
+    );
+    console.log(`[ASL AEPS] Form data prepared in ${Date.now() - formBuildStart}ms`);
 
     const response = await axios.post(`${aslUrl}/aeps/v1/onboarding`,
       formData,
       {
         headers: {
           ...formData.getHeaders()
-        }
+        },
+        timeout: 60000
       });
     return response.data;
   } catch (error) {
