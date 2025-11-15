@@ -2,9 +2,6 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
-const User = require('./user');
-const Customer = require('./customer');
-const Company = require('./company');
 
 let CustomerBank = sequelize.define('customerBank', {
   id: {
@@ -80,14 +77,6 @@ let CustomerBank = sequelize.define('customerBank', {
     type: DataTypes.BOOLEAN
   }
 });
-CustomerBank.belongsTo(User, { foreignKey: 'refId', as: 'user' });
-User.hasMany(CustomerBank, { foreignKey: 'refId', as: 'customerBanks' });
-
-CustomerBank.belongsTo(Company, { foreignKey: 'companyId', as: 'company' });
-Company.hasMany(CustomerBank, { foreignKey: 'companyId', as: 'customerBanks' });
-
-CustomerBank.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
-Customer.hasMany(CustomerBank, { foreignKey: 'customerId', as: 'customerBanks' });
 
 sequelizeTransforms(CustomerBank);
 sequelizePaginate.paginate(CustomerBank);

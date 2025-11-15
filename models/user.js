@@ -16,6 +16,102 @@ const bcrypt = require('bcrypt');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Package = require('./packages');
 
+const toEncryptableString = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+};
+
+const encryptJsonFieldValue = (value) => {
+  const serialized = toEncryptableString(value);
+  if (serialized === null) {
+    return null;
+  }
+  return encrypt(serialized);
+};
+
+const decryptJsonFieldValue = (value) => {
+  if (!value) {
+    return value;
+  }
+  try {
+    const decrypted = decrypt(value);
+    try {
+      return JSON.parse(decrypted);
+    } catch {
+      return decrypted;
+    }
+  } catch (error) {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+};
+
+const normalizeAadhaarDetails = (details) => {
+  if (!details) {
+    return details;
+  }
+
+  if (typeof details === 'object' && !Array.isArray(details)) {
+    return {
+      aadhaarLast4: details.aadhaarLast4 || details.aadhaarLst || details.last4 || null,
+      aadhaarNumber: details.aadhaarNumber || details.aadhaarNo || null
+    };
+  }
+
+  if (typeof details === 'string') {
+    const trimmed = details.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^\d{12}$/.test(trimmed)) {
+      return {
+        aadhaarLast4: trimmed.slice(-4),
+        aadhaarNumber: trimmed
+      };
+    }
+
+    const [maybeLast4] = trimmed.split(',');
+    const last4Candidate = maybeLast4?.trim();
+    if (last4Candidate && /^\d{4}$/.test(last4Candidate)) {
+      return {
+        aadhaarLast4: last4Candidate,
+        aadhaarNumber: null
+      };
+    }
+  }
+
+  return details;
+};
+
+const applyDocumentDecryption = (record) => {
+  if (!record) {
+    return;
+  }
+  if (record.aadharDetails) {
+    const decryptedAadhaar = decryptJsonFieldValue(record.aadharDetails);
+    record.aadharDetails = normalizeAadhaarDetails(decryptedAadhaar);
+  }
+  if (record.panDetails) {
+    record.panDetails = decryptJsonFieldValue(record.panDetails);
+  }
+};
+
 // Helper function to encrypt image field (handles JSON and STRING)
 // For JSON fields: stores as {key: "encrypted_string"}
 // For STRING fields: stores as "encrypted_string"
@@ -191,6 +287,14 @@ const User = sequelize.define(
       allowNull: false,
       values: convertObjectToEnum(authConstantEnum.PLATFORM)
     },
+    latitude: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    longitude: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     kycStatus: {
       type: DataTypes.STRING,
       attribute: ['NO_KYC', 'HALF_KYC', 'FULL_KYC', 'REJECTED'],
@@ -261,7 +365,7 @@ const User = sequelize.define(
       defaultValue: false
     },
     aadharDetails: {
-      type: DataTypes.STRING,
+      type: DataTypes.JSON,
       allowNull: true
     },
     nameSimilarity: {
@@ -269,7 +373,7 @@ const User = sequelize.define(
       allowNull: true
     },
     panDetails: {
-      type: DataTypes.STRING,
+      type: DataTypes.JSON,
       allowNull: true
     },
     aadharFrontImage: {
@@ -419,10 +523,10 @@ const User = sequelize.define(
           user.isDeleted = false;
 
           if (user.aadharDetails) {
-            user.aadharDetails = encrypt(user.aadharDetails);
+            user.aadharDetails = encryptJsonFieldValue(user.aadharDetails);
           }
           if (user.panDetails) {
-            user.panDetails = encrypt(user.panDetails);
+            user.panDetails = encryptJsonFieldValue(user.panDetails);
           }
 
           // Encrypt image fields (JSON or STRING)
@@ -495,10 +599,10 @@ const User = sequelize.define(
               element.isActive = true;
               element.isDeleted = false;
               if (element.aadharDetails) {
-                element.aadharDetails = encrypt(element.aadharDetails);
+                element.aadharDetails = encryptJsonFieldValue(element.aadharDetails);
               }
               if (element.panDetails) {
-                element.panDetails = encrypt(element.panDetails);
+                element.panDetails = encryptJsonFieldValue(element.panDetails);
               }
               // Encrypt image fields
               if (element.profileImage) {
@@ -523,10 +627,10 @@ const User = sequelize.define(
       beforeUpdate: [
         async function (user) {
           if (user.aadharDetails) {
-            user.aadharDetails = encrypt(user.aadharDetails);
+            user.aadharDetails = encryptJsonFieldValue(user.aadharDetails);
           }
           if (user.panDetails) {
-            user.panDetails = encrypt(user.panDetails);
+            user.panDetails = encryptJsonFieldValue(user.panDetails);
           }
           // Encrypt image fields if they are being updated
           // Only encrypt if the value is a plain S3 key (starts with 'images/')
@@ -555,12 +659,7 @@ const User = sequelize.define(
         async function (user) {
           if (Array.isArray(user)) {
             user.forEach((u) => {
-              if (u.aadharDetails) {
-                u.aadharDetails = decrypt(u.aadharDetails);
-              }
-              if (u.panDetails) {
-                u.panDetails = decrypt(u.panDetails);
-              }
+              applyDocumentDecryption(u);
               // Decrypt image fields
               if (u.profileImage) {
                 try {
@@ -583,12 +682,7 @@ const User = sequelize.define(
               }
             });
           } else {
-            if (user?.aadharDetails) {
-              user.aadharDetails = decrypt(user.aadharDetails);
-            }
-            if (user?.panDetails) {
-              user.panDetails = decrypt(user.panDetails);
-            }
+            applyDocumentDecryption(user);
             // Decrypt image fields
             if (user?.profileImage) {
               try {

@@ -357,6 +357,19 @@ const loginUser = async (
       };
     }
     
+    // Update user's last known coordinates
+    try {
+      await dbService.update(
+        model.user,
+        { id: user.id },
+        { latitude, longitude }
+      );
+      user.latitude = latitude;
+      user.longitude = longitude;
+    } catch (coordError) {
+      console.log('Failed to update latitude/longitude for user', user.id, coordError);
+    }
+
     // Check if account is locked due to failed password attempts
     if (user.isAccountLocked()) {
       return {
@@ -1937,7 +1950,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       } else {
         return {
           flag: true,
-          msg: '2FA verification failed. Please try again.'
+          msg: 'Invalid Token pls check 2FA code'
         };
       }
     } else {
@@ -2056,7 +2069,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       } else {
         return {
           flag: true,
-          msg: '2FA setup failed. Please try again.'
+          msg: 'Invalid Token pls check 2FA code'
         };
       }
     }

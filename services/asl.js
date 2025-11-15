@@ -1,30 +1,104 @@
 const axios = require('axios');
+const FormData = require('form-data');
 const aslUrl = process.env.ASL_URL;
 const aslApiToken = process.env.ASL_API_TOKEN;
 const aslAssociateId = process.env.ASL_ASSOCIATE_ID;
 const aslApiUserId = process.env.ASL_USER_ID;
 
+const AEPS_FILE_FIELDS = new Set([
+  'retailerAadhaarFrontImage',
+  'retailerAadhaarBackImage',
+  'retailerPanFrontImage',
+  'retailerPanBackImage',
+  'retailerShopImage'
+]);
+
+const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value);
+
+const getFileNameFromUrl = (url, fallback) => {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments.length) {
+      return segments.pop();
+    }
+  } catch (error) {
+    // ignore and fallback
+  }
+  return fallback;
+};
+
+const appendFormField = async (formData, key, value) => {
+  if (value === undefined || value === null || value === '') {
+    return;
+  }
+
+  if (AEPS_FILE_FIELDS.has(key)) {
+    if (Buffer.isBuffer(value)) {
+      formData.append(key, value, { filename: `${key}.jpg` });
+      return;
+    }
+
+    if (typeof value === 'string' && value.startsWith('data:')) {
+      const [, base64Part] = value.split(',');
+      const buffer = Buffer.from(base64Part, 'base64');
+      formData.append(key, buffer, { filename: `${key}.jpg` });
+      return;
+    }
+
+    if (isHttpUrl(value)) {
+      const fileResponse = await axios.get(value, { responseType: 'arraybuffer' });
+      const filename = getFileNameFromUrl(value, `${key}.jpg`);
+      formData.append(key, fileResponse.data, {
+        filename,
+        contentType: fileResponse.headers['content-type'] || 'application/octet-stream'
+      });
+      return;
+    }
+  }
+
+  const normalizedValue =
+    typeof value === 'number'
+      ? value.toString()
+      : typeof value === 'boolean'
+      ? value ? 'true' : 'false'
+      : value;
+  formData.append(key, normalizedValue);
+};
 
 // ASL AEPS Onboarding
 const  aslAepsOnboarding = async (data) => {
   try{
+    const payload = {
+      associateId: aslAssociateId,
+      apiToken : aslApiToken,
+      Service: 'AEPS',
+      ...data
+    };
+    console.log("payload",payload);
+
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(payload)) {
+      // eslint-disable-next-line no-await-in-loop
+      await appendFormField(formData, key, value);
+    }
+
     const response = await axios.post(`${aslUrl}/aeps/v1/onboarding`,
-        {
-            associateId: aslAssociateId,
-            apiToken : aslApiToken,
-            ServiceType: 'AEPS',
-            ...data
-        }, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders()
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        timeout: 60000
+      });
     console.log("response",response);
     console.log("response.data",response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
-    return error.response.data;
+    console.log("error",error?.response?.data || error.message);
+    return error.response?.data || { status: 'error', message: 'Unable to reach ASL onboarding API' };
   }
 }
 
