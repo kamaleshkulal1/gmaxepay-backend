@@ -251,6 +251,14 @@ const resendAgentOtp = async (req, res) => {
         if(!existingUser) {
             return res.failure({ message: 'User not found' });
         }
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+        if(!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
         const payload = {
             otpReferenceID: existingAepsOnboarding.otpReferenceId,
             hash: existingAepsOnboarding.hash,
