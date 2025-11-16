@@ -54,7 +54,7 @@ const loadUserPermissions = async (userRole) => {
 };
 
 // Helper function to validate and decrypt dataToken with expiration check
-const validateAndDecryptDataToken = (dataToken) => {
+const validateAndDecryptDataToken = async (dataToken) => {
   try {
     if (!dataToken) {
       return {
@@ -99,6 +99,22 @@ const validateAndDecryptDataToken = (dataToken) => {
       return {
         isValid: false,
         error: 'Data token has expired! Please request a new one.'
+      };
+    }
+
+    // Fetch existing user to enforce status/KYC checks when needed
+    const existingUser = await dbService.findOne(model.user, { id: userId, isDeleted: false });
+    if (existingUser && existingUser.isActive === false) {
+      // If user is inactive and KYC shows FULL_KYC but steps are not 7, block with specific message
+      if (existingUser.kycStatus === 'FULL_KYC' && existingUser.kycSteps !== 7) {
+        return {
+          isValid: false,
+          error: 'KYC status is Incomplete. Please complete your KYC to login.'
+        };
+      }
+      return {
+        isValid: false,
+        error: 'User is inactive. Please contact support.'
       };
     }
 
@@ -543,7 +559,7 @@ const loginUser = async (
     }
 
     // Validate and decrypt dataToken with expiration check
-    const tokenValidation = validateAndDecryptDataToken(token);
+    const tokenValidation = await validateAndDecryptDataToken(token);
     if (!tokenValidation.isValid) {
       return {
         flag: true,
@@ -1091,7 +1107,7 @@ const resendMobileOTP = async (token, companyId) => {
     }
 
     // Validate and decrypt dataToken with expiration check
-    const tokenValidation = validateAndDecryptDataToken(token);
+    const tokenValidation = await validateAndDecryptDataToken(token);
     if (!tokenValidation.isValid) {
       return {
         flag: true,
@@ -1355,7 +1371,7 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
     }
 
     // Validate and decrypt dataToken with expiration check
-    const tokenValidation = validateAndDecryptDataToken(token);
+    const tokenValidation = await validateAndDecryptDataToken(token);
     if (!tokenValidation.isValid) {
       return {
         flag: true,
@@ -1454,7 +1470,7 @@ const verify2FA = async (dataToken, otp, companyId) => {
     }
 
     // Validate and decrypt dataToken with expiration check
-    const tokenValidation = validateAndDecryptDataToken(dataToken);
+    const tokenValidation = await validateAndDecryptDataToken(dataToken);
     if (!tokenValidation.isValid) {
       return {
         flag: true,
@@ -1600,7 +1616,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
     }
 
     // Validate and decrypt dataToken with expiration check
-    const tokenValidation = validateAndDecryptDataToken(dataToken);
+    const tokenValidation = await validateAndDecryptDataToken(dataToken);
     if (!tokenValidation.isValid) {
       return {
         flag: true,
@@ -1756,7 +1772,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
     }
 
     // Validate and decrypt dataToken with expiration check
-    const tokenValidation = validateAndDecryptDataToken(dataToken);
+    const tokenValidation = await validateAndDecryptDataToken(dataToken);
     if (!tokenValidation.isValid) {
       return {
         flag: true,
