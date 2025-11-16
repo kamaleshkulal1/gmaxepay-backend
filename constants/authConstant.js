@@ -17,13 +17,14 @@ const JWT = {
     return process.env.JWT_REFRESH_SECRET;
   },
   EXPIRES_IN: 30,
-  OTP_EXPIRES_IN: 120, // 2 minutes in seconds
-  JWT_REFRESH_EXPIRY: '7d',
+  OTP_EXPIRES_IN: 180,
+  JWT_REFRESH_EXPIRY: '28m',
+  TOTAL_SESSION_MINUTES: 30,
   ALGORITHM: process.env.JWT_ALGORITHM || 'HS256',
   ISSUER: process.env.JWT_ISSUER || 'gmaxepay',
   AUDIENCE: process.env.JWT_AUDIENCE || 'gmaxepay_users',
-  TOKEN_ENCRYPT_EXPIRY: 300, // 5 minutes in seconds for token encryption expiry
-  SIGNATURE_TOKEN_EXPIRY: process.env.SIGNATURE_TOKEN_EXPIRY || '10m' // 10 minutes for signature token expiry
+  TOKEN_ENCRYPT_EXPIRY: 300,
+  SIGNATURE_TOKEN_EXPIRY: process.env.SIGNATURE_TOKEN_EXPIRY || '10m' 
 };
 
 const USER_TYPES = {

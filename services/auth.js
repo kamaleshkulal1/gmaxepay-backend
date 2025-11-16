@@ -211,6 +211,49 @@ const generateToken = (user, secret) => {
   };
 };
 
+// Generate tokens ensuring the refresh token expires so that total time since login
+// (dataToken timestamp) does not exceed JWT.TOTAL_SESSION_MINUTES
+const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
+  const totalMs = (JWT.TOTAL_SESSION_MINUTES || 30) * 60 * 1000;
+  const now = Date.now();
+  const loginTs = typeof loginTimestamp === 'number' ? loginTimestamp : now;
+  const elapsedMs = Math.max(0, now - loginTs);
+  const remainingMs = Math.max(60 * 1000, totalMs - elapsedMs);
+
+  const accessToken = jwt.sign(
+    {
+      id: user.id,
+      userRole: user.userRole,
+      userType: user.userType,
+      companyId: user.companyId,
+      tokenVersion: user.tokenVersion
+    },
+    secret,
+    {
+      expiresIn: JWT.EXPIRES_IN * 60,
+      algorithm: JWT.ALGORITHM,
+      issuer: JWT.ISSUER,
+      audience: JWT.AUDIENCE
+    }
+  );
+
+  const refreshToken = jwt.sign(
+    {
+      userId: user.id,
+      tokenVersion: user.tokenVersion
+    },
+    JWT.JWT_REFRESH_SECRET,
+    {
+      expiresIn: Math.floor(remainingMs / 1000),
+      algorithm: JWT.ALGORITHM,
+      issuer: JWT.ISSUER,
+      audience: JWT.AUDIENCE
+    }
+  );
+
+  return { accessToken, refreshToken };
+};
+
 const generateTempToken = (
   user,
   secret,
@@ -1479,6 +1522,7 @@ const verify2FA = async (dataToken, otp, companyId) => {
     }
 
     const { userId } = tokenValidation;
+    const loginTimestamp = tokenValidation.userDetail?.timestamp;
 
     const where = {
       id: userId,
@@ -1518,7 +1562,7 @@ const verify2FA = async (dataToken, otp, companyId) => {
         user.tokenVersion = getTokenVersion;
         
         // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
         // Create userLogin record for successful 2FA verification
         const userLoginRecord = await dbService.createOne(model.userLogin, {
@@ -1565,7 +1609,7 @@ const verify2FA = async (dataToken, otp, companyId) => {
       user.tokenVersion = getTokenVersion;
       
       // Generate final tokens after 2FA verification
-      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+      const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
       // Create userLogin record for successful 2FA verification
       const userLoginRecord = await dbService.createOne(model.userLogin, {
@@ -1625,6 +1669,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
     }
 
     const { userId } = tokenValidation;
+    const loginTimestamp = tokenValidation.userDetail?.timestamp;
 
     const where = {
       id: userId,
@@ -1660,7 +1705,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
       );
 
       // Generate final tokens after 2FA setup
-      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+      const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
       
       // Update user login status
       const getTokenVersion = getRandomNumber();
@@ -1711,7 +1756,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
       );
 
       // Generate final tokens after 2FA setup
-      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+      const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
       
       // Update user login status
       const getTokenVersion = getRandomNumber();
@@ -1781,6 +1826,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
     }
 
     const { userId } = tokenValidation;
+    const loginTimestamp = tokenValidation.userDetail?.timestamp;
 
     const where = {
       id: userId,
@@ -1795,7 +1841,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
     if (!user) {
       return {
         flag: true,
-        msg: 'User does not exist!'
+        msg: 'Invalid credentials!'
       };
     }
 
@@ -1819,16 +1865,16 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
         user.tokenVersion = getTokenVersion;
         
         // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
         // Create userLogin record for successful 2FA verification
         const userLoginRecord = await dbService.createOne(model.userLogin, {
           user_id: user.id,
           user_type: user.userRole,
           isLoggedIn: true,
-          latitude: latitude|| null, // Will be updated if available
-          longitude: longitude|| null, // Will be updated if available
-          ipAddress: ipAddress|| null, // Will be updated if available
+          latitude: latitude,
+          longitude: longitude, 
+          ipAddress: ipAddress, 
           companyId: user.companyId
         });
 
@@ -1866,7 +1912,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
         user.tokenVersion = getTokenVersion;
         
         // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
         // Create userLogin record for successful 2FA verification
         const userLoginRecord = await dbService.createOne(model.userLogin, {
@@ -1926,7 +1972,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
         );
 
         // Generate final tokens after 2FA setup
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
         
         // Update user login status
         const getTokenVersion = getRandomNumber();
@@ -1977,7 +2023,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
         );
 
         // Generate final tokens after 2FA setup
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
         
         // Update user login status
         const getTokenVersion = getRandomNumber();
