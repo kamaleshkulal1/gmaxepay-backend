@@ -36,7 +36,7 @@ const login = async (req, res) => {
         if(!existingUser.isActive){
             return res.failure({ message: 'User is not active! please contact support.' });
         }
-        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps !== 7) {
+        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps !== '7') {
             return res.failure({ message: 'KYC is not completed! Please complete your KYC to login.' });
         }
 
