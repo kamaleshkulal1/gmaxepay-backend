@@ -16,9 +16,9 @@ const JWT = {
   get JWT_REFRESH_SECRET() {
     return process.env.JWT_REFRESH_SECRET;
   },
-  EXPIRES_IN: 2, // 2 minutes for access token
+  EXPIRES_IN: 5, // 2 minutes for access token
   OTP_EXPIRES_IN: 180,
-  JWT_REFRESH_EXPIRY: '28m',
+  JWT_REFRESH_EXPIRY: '25m',
   TOTAL_SESSION_MINUTES: 30,
   ALGORITHM: process.env.JWT_ALGORITHM || 'HS256',
   ISSUER: process.env.JWT_ISSUER || 'gmaxepay',
