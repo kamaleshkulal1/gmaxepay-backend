@@ -31,7 +31,7 @@ const login = async (req, res) => {
         }
         const existingUser = await dbService.findOne(model.user, { mobileNo ,companyId});
         if (!existingUser) {
-            return res.failure({ message: 'User not found!' });
+            return res.failure({ message: 'Invalid credentials!' });
         }
         if(!existingUser.isActive){
             return res.failure({ message: 'User is not active! please contact support.' });
