@@ -1,7 +1,3 @@
-/**
- * aepsOnboarding.js
- * @description :: sequelize model of database table aepsOnboarding
- */
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
@@ -10,14 +6,12 @@ const { reusableModelAttribute } = require('../utils/common');
 const { encrypt, decrypt } = require('../utils/encryption');
 
 const SENSITIVE_FIELDS = {
-  uniqueID: 'number',
-  otpReferenceId: 'number',
-  hash: 'string',
-  message: 'string',
-  remarks: 'string',
-  superMerchantId: 'number',
-  merchantLoginId: 'string',
-  errorCodes: 'string'
+  requestPayload: 'json',
+  responsePayload: 'json',
+  aadhaarNumber: 'string',
+  authCode: 'string',
+  transactionId: 'string',
+  rrn: 'string'
 };
 
 const serializeValue = (value, type) => {
@@ -97,7 +91,6 @@ const decryptFields = (record, fieldMap) => {
       const decrypted = decrypt(encryptedValue);
       setRecordValue(record, field, deserializeValue(decrypted, type));
     } catch (error) {
-      // keep original value for backward compatibility
       setRecordValue(record, field, deserializeValue(encryptedValue, type));
     }
   });
@@ -116,72 +109,67 @@ const applyHookOnRecords = (records, handler) => {
   handler(records);
 };
 
-const AepsOnboarding = sequelize.define(
-  'aepsOnboarding',
+/**
+ * bioMetric.js
+ * @description :: sequelize model to store biometric verification attempts.
+ */
+const BioMetric = sequelize.define(
+  'bioMetric',
   {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true
     },
-    userId: {
+    refId: {
       type: DataTypes.INTEGER,
+      allowNull: false,
       references: {
         model: 'user',
         key: 'id'
-      },
-      allowNull: false
+      }
     },
     companyId: {
       type: DataTypes.INTEGER,
+      allowNull: false,
       references: {
         model: 'company',
         key: 'id'
-      },
+      }
+    },
+    captureType: {
+      type: DataTypes.STRING,
       allowNull: false
+    },
+    requestPayload: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    responsePayload: {
+      type: DataTypes.JSON,
+      allowNull: true
     },
     status: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    uniqueID: {
+    responseMessage: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    otpReferenceId: {
+    transactionId: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    hash: {
+    rrn: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    message: {
+    aadhaarNumber: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    merchantStatus: {
-      type: DataTypes.BOOLEAN,
-      allowNull: true
-    },
-    remarks: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    superMerchantId: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    merchantLoginId: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    isOtpValidated: {
-      type: DataTypes.BOOLEAN,
-      allowNull: true,
-      defaultValue: false
-    },
-    errorCodes: {
+    authCode: {
       type: DataTypes.STRING,
       allowNull: true
     },
@@ -198,7 +186,7 @@ const AepsOnboarding = sequelize.define(
   }
 );
 
-sequelizeTransforms(AepsOnboarding);
-sequelizePaginate.paginate(AepsOnboarding);
-module.exports = AepsOnboarding;
+sequelizeTransforms(BioMetric);
+sequelizePaginate.paginate(BioMetric);
 
+module.exports = BioMetric;

@@ -23,6 +23,7 @@ db.userVerification = require('./userVerification');
 db.userPackage = require('./userPackage');
 db.onboardingToken = require('./onboardingToken');
 db.aepsOnboarding = require('./aepsOnboarding');
+db.bioMetric = require('./bioMetric');
 
 // Role & Permission Models
 db.permission = require('./permissions');
@@ -269,6 +270,29 @@ db.aepsOnboarding.belongsTo(db.company, {
 db.company.hasMany(db.aepsOnboarding, {
   foreignKey: 'companyId',
   as: 'aepsOnboardings',
+  sourceKey: 'id'
+});
+
+// Bio Metric Relationships
+db.bioMetric.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.bioMetric, {
+  foreignKey: 'refId',
+  as: 'bioMetrics',
+  sourceKey: 'id'
+});
+
+db.bioMetric.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.bioMetric, {
+  foreignKey: 'companyId',
+  as: 'bioMetrics',
   sourceKey: 'id'
 });
 
