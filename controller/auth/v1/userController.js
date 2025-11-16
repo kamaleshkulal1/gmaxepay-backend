@@ -15,6 +15,11 @@ const login = async (req, res) => {
         if (!existingCompany) {
             return res.failure({ message: 'Company not found!' });
         }
+        
+        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps!== 7) {
+            return res.failure({ message: 'KYC is not completed!' });
+        }
+
         if (!mobileNo) {
             return res.failure({ message: 'Mobile number is required!' });
         }
@@ -79,7 +84,17 @@ const verifyOTP = async (req, res) => {
         if (!companyId) {
             return res.failure({ message: 'Company ID is required!' });
         }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found!' });
+        }
+
+        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps !== 7) {
+            return res.failure({ message: 'KYC is not completed!' });
+        }
+
         const existingCompany = await dbService.findOne(model.company, { id: companyId });
+
         if (!existingCompany) {
             return res.failure({ message: 'Company not found!' });
         }
@@ -126,6 +141,14 @@ const resetPassword = async (req, res) => {
         if (!existingCompany) {
             return res.failure({ message: 'Company not found!' });
         }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found!' });
+        }
+
+        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps !== 7) {
+            return res.failure({ message: 'KYC is not completed!' });
+        }
 
         if (!newPassword || !confirmPassword) {
             return res.failure({ message: 'New password and confirm password are required!!' });
@@ -168,6 +191,13 @@ const handle2FA = async (req, res) => {
 
         if (!companyId) {
             return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found!' });
+        }
+        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps !== 7) {
+            return res.failure({ message: 'KYC is not completed!' });
         }
         const existingCompany = await dbService.findOne(model.company, { id: companyId });
         if (!existingCompany) {
@@ -217,6 +247,14 @@ const resendOTP = async(req,res)=>{
         if (!existingCompany) {
             return res.failure({ message: 'Company not found!' });
         }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found!' });
+        }
+        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps !== 7) {
+            return res.failure({ message: 'KYC is not completed!' });
+        }
+        
         if (!token) {
             return res.failure({ message: 'Data token is required!' });
         }
