@@ -1,7 +1,7 @@
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const authService = require('../../../services/auth');
-const {  TYPES } = require('../../../constants/authConstant');
+const { TYPES } = require('../../../constants/authConstant');
 
 const login = async (req, res) => {
     try {
