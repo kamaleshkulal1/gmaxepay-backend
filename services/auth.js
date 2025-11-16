@@ -213,6 +213,7 @@ const generateToken = (user, secret) => {
 
 // Generate tokens with access token expiring in 2 minutes and refresh token expiring
 // exactly 28 minutes from the original login timestamp
+// The refresh token includes the original login timestamp to preserve the 30-minute session limit
 const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
   const now = Date.now();
   const loginTs = typeof loginTimestamp === 'number' ? loginTimestamp : now;
@@ -242,10 +243,12 @@ const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
     }
   );
 
+  // Store original login timestamp in refresh token payload to preserve 30-minute session limit
   const refreshToken = jwt.sign(
     {
       userId: user.id,
-      tokenVersion: user.tokenVersion
+      tokenVersion: user.tokenVersion,
+      loginTimestamp: loginTs // Store original login timestamp
     },
     JWT.JWT_REFRESH_SECRET,
     {
@@ -370,7 +373,14 @@ const refreshAccessToken = async (token) => {
       };
     }
 
-    const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
+    // Get original login timestamp from refresh token payload
+    // If not present (old tokens), use current time as fallback
+    const loginTimestamp = payload.loginTimestamp || Date.now();
+    
+    // Generate new access token (2 minutes) and refresh token with same expiry
+    // based on original login timestamp to preserve 30-minute session limit
+    const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+    
     return {
       flag: false,
       msg: 'Token refreshed successfully',
