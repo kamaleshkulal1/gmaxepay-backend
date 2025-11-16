@@ -59,7 +59,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
     if (!dataToken) {
       return {
         isValid: false,
-        error: 'Data token is required!'
+        error: 'token is required!'
       };
     }
 
@@ -70,7 +70,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
     if (!decryptedData) {
       return {
         isValid: false,
-        error: 'Invalid data token!'
+        error: 'Invalid token!'
       };
     }
 
@@ -98,7 +98,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
     if (tokenAge > expiryInMs) {
       return {
         isValid: false,
-        error: 'Data token has expired! Please request a new one.'
+        error: 'token has expired! Please request a new one.'
       };
     }
 
@@ -106,7 +106,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
     const existingUser = await dbService.findOne(model.user, { id: userId, isDeleted: false });
     if (existingUser && existingUser.isActive === false) {
       // If user is inactive and KYC shows FULL_KYC but steps are not 7, block with specific message
-      if (existingUser.kycStatus === 'FULL_KYC' && existingUser.kycSteps !== 7) {
+      if (existingUser.kycStatus === 'FULL_KYC' ||  existingUser.kycSteps !== 7) {
         return {
           isValid: false,
           error: 'KYC status is Incomplete. Please complete your KYC to login.'
@@ -126,7 +126,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
   } catch (error) {
     return {
       isValid: false,
-      error: 'Invalid data token format!'
+      error: 'Invalid token format!'
     };
   }
 };
@@ -554,7 +554,7 @@ const loginUser = async (
     if (!token || !mobileOtp) {
       return {
         flag: true,
-        msg: 'Data token and OTP are required!'
+        msg: 'token and OTP are required!'
       };
     }
 
@@ -1102,7 +1102,7 @@ const resendMobileOTP = async (token, companyId) => {
     if (!token) {
       return {
         flag: true,
-        msg: 'Data token is required!'
+        msg: 'token is required!'
       };
     }
 
@@ -1359,7 +1359,7 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
     if (!token || !newPassword || !confirmPassword) {
       return {
         flag: true,
-        msg: 'Data token, new password and confirm password are required!'
+        msg: 'token, new password and confirm password are required!'
       };
     }
 
@@ -1465,7 +1465,7 @@ const verify2FA = async (dataToken, otp, companyId) => {
     if (!dataToken || !otp) {
       return {
         flag: true,
-        msg: 'Data token and 2FA code are required!'
+        msg: 'token and 2FA code are required!'
       };
     }
 
@@ -1611,7 +1611,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
     if (!dataToken || !otp) {
       return {
         flag: true,
-        msg: 'Data token and 2FA code are required!'
+        msg: 'token and 2FA code are required!'
       };
     }
 
@@ -1767,7 +1767,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
     if (!dataToken || !otp) {
       return {
         flag: true,
-        msg: 'Data token and 2FA code are required!'
+        msg: 'token and 2FA code are required!'
       };
     }
 

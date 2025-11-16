@@ -29,14 +29,14 @@ const login = async (req, res) => {
         if (!latitude || !longitude) {
             return res.failure({ message: 'Location coordinates are required!' });
         }
-        const existingUser = await dbService.findOne(model.user, { mobileNo });
+        const existingUser = await dbService.findOne(model.user, { mobileNo ,companyId});
         if (!existingUser) {
             return res.failure({ message: 'User not found!' });
         }
         if(!existingUser.isActive){
             return res.failure({ message: 'User is not active! please contact support.' });
         }
-        if(existingUser.kycStatus !== 'FULL_KYC' && existingUser.kycSteps !== '7') {
+        if(existingUser.kycStatus !== 'FULL_KYC' || existingUser.kycSteps !== 7) {
             return res.failure({ message: 'KYC is not completed! Please complete your KYC to login.' });
         }
 
@@ -95,7 +95,7 @@ const verifyOTP = async (req, res) => {
         }
 
         if (!token) {
-            return res.failure({ message: 'Data token is required!' });
+            return res.failure({ message: 'Token is required!' });
         }
         
         const result = await authService.verifyMobileOTP(
@@ -142,7 +142,7 @@ const resetPassword = async (req, res) => {
         }
 
         if (!token) {
-            return res.failure({ message: 'Data token is required!' });
+            return res.failure({ message: 'Token is required!' });
         }
         const result = await authService.resetPassword(
             token,
@@ -185,7 +185,7 @@ const handle2FA = async (req, res) => {
         }
 
         if (!dataToken) {
-            return res.badRequest({ message: 'Data token is required!' });
+            return res.badRequest({ message: 'Token is required!' });
         }
         
         const result = await authService.handle2FA(
@@ -224,7 +224,7 @@ const resendOTP = async(req,res)=>{
             return res.failure({ message: 'Company not found!' });
         }
         if (!token) {
-            return res.failure({ message: 'Data token is required!' });
+            return res.failure({ message: 'Token is required!' });
         }
         
         const result = await authService.resendMobileOTP(
