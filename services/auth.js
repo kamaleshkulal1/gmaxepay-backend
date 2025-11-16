@@ -439,7 +439,7 @@ const loginUser = async (
       key: encryptionKey.toString('hex')
     };
 
-    // In development environment, skip OTP verification and proceed directly to login
+    // In development environment, skip mobile OTP but ENFORCE 2FA
     if (process.env.NODE_ENV === 'development') {
       // Check if password reset is required
       if (user.isResetPassword || !user.password) {
@@ -456,81 +456,48 @@ const loginUser = async (
       // Reset all lock attempts in development environment for easier testing
       await user.resetAllLockAttempts();
 
-      // Check if 2FA is active for this user
-      if (user.is2faEnabledActive) {
-        // If 2FA is already enabled, just verify
-        if (user.is2FAenabled) {
-          return {
-            flag: false,
-            msg: 'Please enter your 2FA code',
-            data: {
-              requires2FA: true,
-              token:Buffer.from(JSON.stringify(dataToken)).toString('base64')
-            }
-          };
-        }
-        
-        // If 2FA is active but not set up yet, require setup
-        if (!user.key2Fa) {
-          const qrCodeData = await generateQRCodeURL(user);
-          return {
-            flag: false,
-            msg: 'Please set up 2FA to secure your account.',
-            data: {
-              requiresSetup2FA: true,
-              qrCode: qrCodeData,
-              token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
-            }
-          };
-        }
-
-        // If secret exists but 2FA not enabled, show QR again
-        if (!user.is2FAenabled && user.key2Fa) {
-          const qrCodeData = await generateQRCodeURL(user);
-          return {
-            flag: false,
-            msg: 'Please set up 2FA to secure your account.',
-            data: {
-              requires2FA: true,
-              qrCode: qrCodeData,
-              token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
-            }
-          };
-        }
+      // 2FA is mandatory in development:
+      // If 2FA already enabled, require verification
+      if (user.is2FAenabled) {
+        return {
+          flag: false,
+          msg: 'Please enter your 2FA code',
+          data: {
+            requires2FA: true,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+      
+      // If 2FA not set up, require setup (generate QR)
+      if (!user.key2Fa) {
+        const qrCodeData = await generateQRCodeURL(user);
+        return {
+          flag: false,
+          msg: 'Please set up 2FA to secure your account.',
+          data: {
+            requiresSetup2FA: true,
+            qrCode: qrCodeData,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
       }
 
-      // If 2FA is not active, proceed with direct login
-      // Update user login status FIRST
-      const getTokenVersion = getRandomNumber();
-      await dbService.update(
-        model.user,
-        { id: user.id },
-        { tokenVersion: getTokenVersion, loggedIn: true }
-      );
-      
-      // Update user object with new tokenVersion
-      user.tokenVersion = getTokenVersion;
-      
-      // Generate tokens with correct tokenVersion
-      const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-
-      return {
-        flag: false,
-        msg: 'Login successful!',
-        data: {
-          accessToken,
-          refreshToken,
-          user: {
-            id: user.id,
-            name: user.name,
-            mobileNo: user.mobileNo,
-            userRole: user.userRole,
-            outletName: user.outletName,
-            companyId: user.companyId
+      // If secret exists but 2FA not enabled, ask to complete setup
+      if (!user.is2FAenabled && user.key2Fa) {
+        const qrCodeData = await generateQRCodeURL(user);
+        return {
+          flag: false,
+          msg: 'Please set up 2FA to secure your account.',
+          data: {
+            requires2FA: true,
+            qrCode: qrCodeData,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
-        }
-      };
+        };
+      }
     }
+    
 
     // Production environment - Generate OTP for mobile verification
     // Reset login attempts when generating new OTP
@@ -566,7 +533,7 @@ const loginUser = async (
   }
 };
 
-const verifyMobileOTP = async (token, mobileOtp, companyId) => {
+    const verifyMobileOTP = async (token, mobileOtp, companyId) => {
   try {
     if (!token || !mobileOtp) {
       return {
@@ -690,80 +657,46 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
       };
     }
 
-        // Check if 2FA is active for this user
-        if (user.is2faEnabledActive) {
-          // If 2FA is already enabled, just verify
-          if (user.is2FAenabled) {
-            return {
-              flag: false,
-              msg: 'Please enter your 2FA code',
-              data: {
-                requires2FA: true,
-                token: token
-              }
-            };
-          }
-          
-          // If 2FA is active but not set up yet, require setup
-          if (!user.key2Fa) {
-            const qrCodeData = await generateQRCodeURL(user);
-            return {
-              flag: false,
-              msg: 'Please set up 2FA to secure your account.',
-              data: {
-                requiresSetup2FA: true,
-                qrCode: qrCodeData,
-                token: token
-              }
-            };
-          }
-
-          // If secret exists but 2FA not enabled, show QR again
-          if (!user.is2FAenabled && user.key2Fa) {
-            const qrCodeData = await generateQRCodeURL(user);
-            return {
-              flag: false,
-              msg: 'Please set up 2FA to secure your account.',
-              data: {
-                requiresSetup2FA: true,
-                qrCode: qrCodeData,
-                token: token
-              }
-            };
-          }
+        // Enforce 2FA after OTP in production
+        // If 2FA already enabled, require verification
+        if (user.is2FAenabled) {
+          return {
+            flag: false,
+            msg: 'Please enter your 2FA code',
+            data: {
+              requires2FA: true,
+              token: token
+            }
+          };
+        }
+        
+        // If 2FA not set up, require setup (generate QR)
+        if (!user.key2Fa) {
+          const qrCodeData = await generateQRCodeURL(user);
+          return {
+            flag: false,
+            msg: 'Please set up 2FA to secure your account.',
+            data: {
+              requiresSetup2FA: true,
+              qrCode: qrCodeData,
+              token: token
+            }
+          };
         }
 
-        // If 2FA is not active, proceed with direct login
-        // Update user login status FIRST
-        const getTokenVersion = getRandomNumber();
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { tokenVersion: getTokenVersion, loggedIn: true }
-        );
-        
-        // Update user object with new tokenVersion
-        user.tokenVersion = getTokenVersion;
-        
-        // Generate tokens with correct tokenVersion
-        const { accessToken, refreshToken } = generateToken(user, JWT.SECRET);
-
-        return {
-          flag: false,
-          msg: 'Login successful!',
-          data: {
-            accessToken,
-            refreshToken,
-            user: {
-              id: user.id,
-              name: user.name,
-              mobileNo: user.mobileNo,
-              userRole: user.userRole,
-              outletName: user.outletName,
-              companyId: user.companyId
+        // If secret exists but 2FA not enabled, ask to complete setup
+        if (!user.is2FAenabled && user.key2Fa) {
+          const qrCodeData = await generateQRCodeURL(user);
+          return {
+            flag: false,
+            msg: 'Please set up 2FA to secure your account.',
+            data: {
+              requiresSetup2FA: true,
+              qrCode: qrCodeData,
+              token: token
             }
-          }
-        };
+          };
+        }
       } else {
         // Increment OTP attempts and potentially lock OTP verification
         await user.incrementOtpAttempts();
