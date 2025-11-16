@@ -16,7 +16,7 @@ const JWT = {
   get JWT_REFRESH_SECRET() {
     return process.env.JWT_REFRESH_SECRET;
   },
-  EXPIRES_IN: 30,
+  EXPIRES_IN: 2, // 2 minutes for access token
   OTP_EXPIRES_IN: 180,
   JWT_REFRESH_EXPIRY: '28m',
   TOTAL_SESSION_MINUTES: 30,

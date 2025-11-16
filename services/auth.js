@@ -211,14 +211,19 @@ const generateToken = (user, secret) => {
   };
 };
 
-// Generate tokens ensuring the refresh token expires so that total time since login
-// (dataToken timestamp) does not exceed JWT.TOTAL_SESSION_MINUTES
+// Generate tokens with access token expiring in 2 minutes and refresh token expiring
+// exactly 28 minutes from the original login timestamp
 const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
-  const totalMs = (JWT.TOTAL_SESSION_MINUTES || 30) * 60 * 1000;
   const now = Date.now();
   const loginTs = typeof loginTimestamp === 'number' ? loginTimestamp : now;
-  const elapsedMs = Math.max(0, now - loginTs);
-  const remainingMs = Math.max(60 * 1000, totalMs - elapsedMs);
+  
+  // Access token expires in 2 minutes from now
+  const accessTokenExpiry = JWT.EXPIRES_IN * 60; // 2 minutes in seconds
+  
+  // Refresh token expires exactly 28 minutes from login timestamp
+  const refreshTokenExpiryMs = 28 * 60 * 1000; // 28 minutes in milliseconds
+  const refreshTokenExpiryTime = loginTs + refreshTokenExpiryMs;
+  const refreshTokenExpirySeconds = Math.max(60, Math.floor((refreshTokenExpiryTime - now) / 1000)); // Minimum 1 minute
 
   const accessToken = jwt.sign(
     {
@@ -230,7 +235,7 @@ const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
     },
     secret,
     {
-      expiresIn: JWT.EXPIRES_IN * 60,
+      expiresIn: accessTokenExpiry,
       algorithm: JWT.ALGORITHM,
       issuer: JWT.ISSUER,
       audience: JWT.AUDIENCE
@@ -244,7 +249,7 @@ const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
     },
     JWT.JWT_REFRESH_SECRET,
     {
-      expiresIn: Math.floor(remainingMs / 1000),
+      expiresIn: refreshTokenExpirySeconds,
       algorithm: JWT.ALGORITHM,
       issuer: JWT.ISSUER,
       audience: JWT.AUDIENCE
@@ -1502,9 +1507,8 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
   }
 };
 
-const verify2FA = async (dataToken, otp, companyId) => {
+const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
   try {
-    const {latitude, longitude, ipAddress} = req.body;
     if (!dataToken || !otp) {
       return {
         flag: true,
@@ -1616,9 +1620,9 @@ const verify2FA = async (dataToken, otp, companyId) => {
         user_id: user.id,
         user_type: user.userRole,
         isLoggedIn: true,
-        latitude: longitude|| null,
-        longitude: longitude|| null,
-        ipAddress: ipAddress|| null,
+        latitude: latitude,
+        longitude: longitude,
+        ipAddress: ipAddress,
         companyId: user.companyId
       });
 
