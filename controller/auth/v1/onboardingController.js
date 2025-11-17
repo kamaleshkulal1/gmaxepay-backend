@@ -1966,12 +1966,15 @@ const uploadAadharDocuments = async (req, res) => {
     const backImageS3Key = backUploadResult.key;
     
     if (!llmResponse || !llmResponse.success) {
-      await dbService.update(model.user, { id: ctx.user.id }, {
-        aadharFrontImage: frontImageS3Key,
-        aadharBackImage: backImageS3Key
-      }).catch(err => console.error('Error updating user images:', err));
-      
-      await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+      // Delete newly uploaded images from S3 since LLM failed and we won't save them
+      await Promise.all([
+        imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+          console.error('Error deleting front image from S3:', err)
+        ),
+        imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+          console.error('Error deleting back image from S3:', err)
+        )
+      ]);
       
       const errorMessage = llmResponse?.message || llmResponse?.error || 'Failed to extract Aadhar data';
       return res.failure({ message: errorMessage });
@@ -1999,12 +2002,15 @@ const uploadAadharDocuments = async (req, res) => {
         
         if (existingLast4 && extractedLast4) {
           if (existingLast4 !== extractedLast4) {
-            await dbService.update(model.user, { id: ctx.user.id }, {
-              aadharFrontImage: frontImageS3Key,
-              aadharBackImage: backImageS3Key
-            }).catch(err => console.error('Error updating user images:', err));
-            
-            await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+            // Delete newly uploaded images from S3 since validation failed and we won't save them
+            await Promise.all([
+              imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+                console.error('Error deleting front image from S3:', err)
+              ),
+              imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+                console.error('Error deleting back image from S3:', err)
+              )
+            ]);
             
             return res.failure({ message: 'pls check your uploaded image' });
           }
@@ -2056,6 +2062,16 @@ const uploadAadharDocuments = async (req, res) => {
           
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
           if(!validationResults.photoMatch){
+            // Delete newly uploaded images from S3 since photo validation failed and we won't save them
+            await Promise.all([
+              imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+                console.error('Error deleting front image from S3:', err)
+              ),
+              imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+                console.error('Error deleting back image from S3:', err)
+              )
+            ]);
+            
             return res.failure({ message: 'pls check your uploaded image' });
           }
           if (!faceComparison.success) {
