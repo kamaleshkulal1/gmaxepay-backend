@@ -506,6 +506,11 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    referCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true
+    },
     ...reusableModelAttribute
   },
   {
@@ -544,6 +549,11 @@ const User = sequelize.define(
           }
           if (user.panCardBackImage) {
             user.panCardBackImage = encryptImageField(user.panCardBackImage);
+          }
+
+          // Encrypt referCode if provided
+          if (user.referCode) {
+            user.referCode = encrypt(user.referCode);
           }
         },
 
@@ -620,6 +630,10 @@ const User = sequelize.define(
               if (element.panCardBackImage) {
                 element.panCardBackImage = encryptImageField(element.panCardBackImage);
               }
+              // Encrypt referCode if provided
+              if (element.referCode) {
+                element.referCode = encrypt(element.referCode);
+              }
             }
           }
         }
@@ -652,6 +666,13 @@ const User = sequelize.define(
           if (user.changed('panCardBackImage') && user.panCardBackImage) {
             user.panCardBackImage = encryptImageField(user.panCardBackImage);
           }
+          // Encrypt referCode if it's being updated
+          if (user.changed('referCode') && user.referCode) {
+            // Only encrypt if it's not already encrypted (doesn't look like encrypted hex)
+            if (typeof user.referCode === 'string' && !/^[0-9a-f]{32,}$/i.test(user.referCode)) {
+              user.referCode = encrypt(user.referCode);
+            }
+          }
           user.updatedAt = new Date();
         }
       ],
@@ -680,6 +701,14 @@ const User = sequelize.define(
               if (u.panCardBackImage) {
                 u.panCardBackImage = decryptImageField(u.panCardBackImage);
               }
+              // Decrypt referCode
+              if (u.referCode) {
+                try {
+                  u.referCode = decrypt(u.referCode);
+                } catch (e) {
+                  // If decryption fails, it might be already decrypted or invalid
+                }
+              }
             });
           } else {
             applyDocumentDecryption(user);
@@ -702,6 +731,14 @@ const User = sequelize.define(
             }
             if (user?.panCardBackImage) {
               user.panCardBackImage = decryptImageField(user.panCardBackImage);
+            }
+            // Decrypt referCode
+            if (user?.referCode) {
+              try {
+                user.referCode = decrypt(user.referCode);
+              } catch (e) {
+                // If decryption fails, it might be already decrypted or invalid
+              }
             }
           }
         }

@@ -7,11 +7,11 @@ const { uploadImageToS3, deleteImageFromS3, getImageUrl } = imageService;
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 const { decrypt, doubleEncrypt } = require('../../../utils/doubleCheckUp');
 const { generateOnboardingToken } = require('../../../utils/onboardingToken');
+const { generateUniqueReferCode } = require('../../../utils/generateUniqueReferCode');
 const { sendWelcomeEmail } = require('../../../services/emailService');
 const googleMap = require('../../../services/googleMap');
 const postalPincode = require('../../../services/postalPincode');
 const mapplesMap = require('../../../services/mapplesMap');
-
 
 // Helper function to check IP address
 const checkDomainIP = async (domain) => {
@@ -412,6 +412,9 @@ const createCompany = async (req, res) => {
     // Create company first
     const company = await dbService.createOne(model.company, companyData);
 
+    // Generate unique refer code for the company admin user
+    const referCode = await generateUniqueReferCode(data.companyName);
+
     const userData = {
       mobileNo: data.MobileNo,
       email: data.email,
@@ -424,7 +427,8 @@ const createCompany = async (req, res) => {
       city: data.city,
       state: data.state,
       zipcode: data.postalCode,
-      userId: data.userId, 
+      userId: data.userId,
+      referCode: referCode,
       isActive: true,
     };
 
@@ -531,6 +535,7 @@ const createCompany = async (req, res) => {
           userId: user.userId,
           mobileNo: user.mobileNo,
           email: user.email,
+          referCode: user.referCode, // Refer code (already decrypted by model hooks)
           profileImageUrl: user.profileImage ? (() => {
             // For profile images, use simple CDN URL (no secure proxy)
             const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';

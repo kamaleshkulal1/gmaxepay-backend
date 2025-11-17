@@ -584,4 +584,76 @@ const aeps2FaAuthentication = async (req, res) => {
     }
 }
 
-module.exports = { getOnboardingStatus, aepsOnboarding, validateAgentOtp, resendAgentOtp, bioMetricVerification, aeps2FaAuthentication };
+const aepsTransaction = async (req, res) => {
+    try{
+        const { amount, txnType, captureType, biometricData } = req.body;
+        if(!biometricData) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+        if(!captureType || !['FACE', 'FINGER'].includes(captureType)) {
+            return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
+        }
+        if(!txnType || !['DEPOSIT', 'WITHDRAWAL'].includes(txnType)) {
+            return res.failure({ message: 'Invalid transaction type. Allowed values are DEPOSIT or WITHDRAWAL' });
+        }
+        if(!amount) {
+            return res.failure({ message: 'Amount is required' });
+        }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if(!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+
+        const existingBioMetric = await dbService.findOne(model.bioMetric, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            captureType: captureType
+        });
+        if(!existingBioMetric) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+        const payload = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            type: captureType,
+            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
+            txnType: txnType,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+            bankiin,
+            mobileNo:existingUser.mobileNo,
+            amount: amount, 
+            latitude: existingUser.latitude,
+            longitude: existingUser.longitude,
+            transactionId: existingBioMetric.transactionId,
+            captureType: captureType,
+            biometricData: biometricData
+        }
+        const aepsResponse = await asl.aslAepsTransaction(payload);
+        console.log('aepsResponse', aepsResponse);
+        const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
+        const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
+        const responseCode = aepsResponse?.data?.responseCode;
+        const responseMessage = aepsResponse?.data?.responseMessage;
+        if(status === 'SUCCESS' || nestedStatus === 'SUCCESS' || responseCode === '00' || (responseMessage && responseMessage.toLowerCase().includes('completed'))) {
+            return res.success({ message: 'AEPS transaction successful', data: aepsResponse });
+        }
+        return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'AEPS transaction failed', data: aepsResponse });
+    }
+    catch (error) {
+        console.error('AEPS transaction error', error);
+        return res.failure({ message: error.message || 'Unable to process AEPS transaction' });
+    }
+}
+
+module.exports = { 
+    getOnboardingStatus, 
+    aepsOnboarding, 
+    validateAgentOtp, 
+    resendAgentOtp, 
+    bioMetricVerification, 
+    aeps2FaAuthentication 
+};
