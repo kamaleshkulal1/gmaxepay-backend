@@ -246,6 +246,7 @@ const resendOTP = async(req,res)=>{
         return res.internalServerError({ message: error.message });
     }
 }
+
 const refreshAccessToken = async (req, res) => {
     try {
         const { refreshToken } = req.body;
@@ -280,7 +281,7 @@ const refreshAccessToken = async (req, res) => {
 
 const logout = async (req, res) => {
     try {
-        const userId = req.user?.id; // User is attached to req by authentication middleware
+        const userId = req.user?.id; 
         const companyId = req.headers['x-company-id'];
         if (!companyId) {
             return res.failure({ message: 'Company ID is required!' });

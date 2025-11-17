@@ -181,6 +181,17 @@ const AepsOnboarding = sequelize.define(
       allowNull: true,
       defaultValue: false
     },
+    isBioMetricValidated: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false
+    },
+    onboardingStatus: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      attributes: ['PENDING', 'COMPLETED', 'FAILED'],
+      defaultValue: 'PENDING'
+    },
     errorCodes: {
       type: DataTypes.STRING,
       allowNull: true

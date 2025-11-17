@@ -16,7 +16,41 @@ const getOnboardingStatus = async (req, res) => {
         if(!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
-        return res.success({ message: 'AEPS onboarding status', data: existingAepsOnboarding });
+        
+        const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
+        const isOtpValidated = Boolean(existingAepsOnboarding.isOtpValidated);
+        const isBioMetricValidated = Boolean(existingAepsOnboarding.isBioMetricValidated);
+        
+        const isAllCompleted = isAepsOnboardingComplete && isOtpValidated && isBioMetricValidated;
+        const overallStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
+        
+        // Update onboardingStatus in database if it needs to be updated
+        if (existingAepsOnboarding.onboardingStatus !== overallStatus) {
+            await dbService.update(
+                model.aepsOnboarding,
+                { id: existingAepsOnboarding.id },
+                { onboardingStatus: overallStatus }
+            );
+        }
+        
+        const statusData = {
+            ...existingAepsOnboarding.toJSON ? existingAepsOnboarding.toJSON() : existingAepsOnboarding,
+            onboardingStatus: overallStatus,
+            aepsOnboarding: {
+                status: isAepsOnboardingComplete ? 'completed' : 'pending',
+                isCompleted: isAepsOnboardingComplete
+            },
+            validateAgentOtp: {
+                status: isOtpValidated ? 'completed' : 'pending',
+                isCompleted: isOtpValidated
+            },
+            bioMetricVerification: {
+                status: isBioMetricValidated ? 'completed' : 'pending',
+                isCompleted: isBioMetricValidated
+            }
+        };
+        
+        return res.success({ message: 'AEPS onboarding status', data: statusData });
     }
     catch (error) {
         console.error('AEPS onboarding status error', error);
@@ -98,9 +132,6 @@ const aepsOnboarding = async (req, res) => {
             }
             return null;
         };
-
-
-        const dataFetchStartedAt = Date.now();
         const [
             existingUser,
             existingCompany,
@@ -118,7 +149,6 @@ const aepsOnboarding = async (req, res) => {
                 merchantStatus: true
             })
         ]);
-        console.log(`[AEPS Onboarding] Fetched prerequisite data in ${Date.now() - dataFetchStartedAt}ms`);
 
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -134,11 +164,10 @@ const aepsOnboarding = async (req, res) => {
         if (!customerBankDetails) {
             return res.failure({ message: 'Customer bank not found' });
         }
-        if (existingAepsOnboarding) {
-            return res.success({ message: 'AEPS onboarding already completed', data: existingAepsOnboarding });
+        if(existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
+            return res.failure({ message: 'AEPS onboarding already completed' });
         }
 
-        const payloadBuildStartedAt = Date.now();
         const retailerLatitude = pickValue(existingUser.latitude, outletDetails.latitude);
         const retailerLongitude = pickValue(existingUser.longitude, outletDetails.longitude);
         const retailerCountry = pickValue(existingUser.country, outletDetails.shopCountry, 'India');
@@ -185,17 +214,13 @@ const aepsOnboarding = async (req, res) => {
             retailerPanBackImage: buildImageUrl(existingUser.panBackImage || existingUser.panCardBackImage),
             retailerShopImage: buildImageUrl(outletDetails.shopImage || existingUser.profileImage)
         };
-        console.log(`[AEPS Onboarding] Payload constructed in ${Date.now() - payloadBuildStartedAt}ms`);
-
 
         const validationError = validatePayload(payload);
         if (validationError) {
             return res.failure({ message: validationError });
         }
 
-        const aslRequestStartedAt = Date.now();
         const aepsOnboardingDetails = await asl.aslAepsOnboarding(payload);
-        console.log(`[AEPS Onboarding] ASL API responded in ${Date.now() - aslRequestStartedAt}ms`);
 
         const normalizedStatus = aepsOnboardingDetails?.status ? String(aepsOnboardingDetails.status).toLowerCase() : null;
         const nestedStatus = aepsOnboardingDetails?.data?.status ? String(aepsOnboardingDetails.data.status).toLowerCase() : null;
@@ -219,7 +244,8 @@ const aepsOnboarding = async (req, res) => {
                 remarks: aepsOnboardingDetails.data?.data?.remarks || aepsOnboardingDetails.data?.remarks,
                 superMerchantId: aepsOnboardingDetails.data?.data?.superMerchantId || aepsOnboardingDetails.data?.superMerchantId,
                 merchantLoginId: aepsOnboardingDetails.data?.data?.merchantLoginId || aepsOnboardingDetails.data?.merchantLoginId,
-                errorCodes: aepsOnboardingDetails.data?.data?.errorCodes || aepsOnboardingDetails.data?.errorCodes
+                errorCodes: aepsOnboardingDetails.data?.data?.errorCodes || aepsOnboardingDetails.data?.errorCodes,
+                onboardingStatus: 'PENDING'
             });
 
             return res.success({ message: 'AEPS onboarding successful', data: aepsOnboardingDetails });
@@ -261,11 +287,20 @@ const validateAgentOtp = async (req, res) => {
         merchantLoginId: existingAepsOnboarding.merchantLoginId,
     }
     const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
-    console.log('aepsResponse', aepsResponse);
+
     const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
     const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
     if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
-        await dbService.update(model.aepsOnboarding, { id: existingAepsOnboarding.id }, { isOtpValidated: true });
+        const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
+        const isBioMetricValidated = Boolean(existingAepsOnboarding.isBioMetricValidated);
+        const isAllCompleted = isAepsOnboardingComplete && isBioMetricValidated;
+        const onboardingStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
+        
+        await dbService.update(
+            model.aepsOnboarding,
+            { id: existingAepsOnboarding.id },
+            { isOtpValidated: true, onboardingStatus }
+        );
         return res.success({ message: 'AEPS OTP validation successful', data: aepsResponse });
     }
     return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'AEPS OTP validation failed', data: aepsResponse });
@@ -324,6 +359,13 @@ const bioMetricVerification = async (req, res) => {
         if(!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
+        if(existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
+            return res.failure({ message: 'AEPS onboarding already completed' });
+        }
+        if(existingAepsOnboarding.isBioMetricValidated) {
+            return res.failure({ message: 'Bio metric verification already validated' });
+        }
+        
         const captureType = req.body.captureType ? String(req.body.captureType).trim().toUpperCase() : null;
         if(!captureType || !['FACE', 'FINGURE'].includes(captureType)) {
             return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGURE' });
@@ -398,6 +440,16 @@ const bioMetricVerification = async (req, res) => {
         });
 
         if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+            const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
+            const isOtpValidated = Boolean(existingAepsOnboarding.isOtpValidated);
+            const isAllCompleted = isAepsOnboardingComplete && isOtpValidated;
+            const onboardingStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
+            
+            await dbService.update(
+                model.aepsOnboarding,
+                { id: existingAepsOnboarding.id },
+                { isBioMetricValidated: true, onboardingStatus }
+            );
             return res.success({ message: 'Bio metric verification successful', data: aepsResponse });
         }
         return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'Bio metric verification failed', data: aepsResponse });
