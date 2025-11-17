@@ -493,7 +493,10 @@ const aeps2FaAuthentication = async (req, res) => {
         });
 
         if (existingDailyLogin) {
-            return res.success({ message: 'Already logged in today. You can login again after midnight (IST).'  });
+            const data = {
+                status: 'used',
+            }
+            return res.success({ message: 'Already logged in today. You can login again after midnight (IST).',  data });
         }
 
         const payload = {
