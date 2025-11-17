@@ -42,10 +42,11 @@ const generateUniqueReferCode = async (companyName, maxRetries = 10) => {
 
   // Check if refer code already exists (need to check encrypted values)
   // Since referCode is encrypted in DB, we need to check all users and decrypt
-  const allUsers = await dbService.findAll(model.user, {
-    isDeleted: false,
-    attributes: ['id', 'referCode']
-  });
+  const allUsers = await dbService.findAll(
+    model.user,
+    { isDeleted: false },
+    { attributes: ['id', 'referCode'] }
+  );
 
   // Check if any user has this refer code (after decryption)
   for (const user of allUsers) {

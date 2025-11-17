@@ -274,10 +274,11 @@ const createCompany = async (req, res) => {
     // Also check if PAN is stored encrypted by fetching all companies and decrypting
     // This handles the case where PAN might be encrypted in the database
     try {
-      const allCompanies = await dbService.findAll(model.company, {
-        isDeleted: false,
-        attributes: ['id', 'companyPan']
-      });
+      const allCompanies = await dbService.findAll(
+        model.company,
+        { isDeleted: false },
+        { attributes: ['id', 'companyPan'] }
+      );
       
       for (const company of allCompanies) {
         let decryptedPan = null;
