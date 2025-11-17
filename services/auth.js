@@ -607,7 +607,8 @@ const loginUser = async (
   }
 };
 
-    const verifyMobileOTP = async (token, mobileOtp, companyId) => {
+
+const verifyMobileOTP = async (token, mobileOtp, companyId) => {
   try {
     if (!token || !mobileOtp) {
       return {

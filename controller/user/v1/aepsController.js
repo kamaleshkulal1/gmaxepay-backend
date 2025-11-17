@@ -58,7 +58,6 @@ const getOnboardingStatus = async (req, res) => {
     }
 }
 
-
 // Onboarding Agent
 const aepsOnboarding = async (req, res) => {
     try {
@@ -344,9 +343,20 @@ const resendAgentOtp = async (req, res) => {
     }
 }
 
-
 const bioMetricVerification = async (req, res) => {
     try{
+        const { biometricData } = req.body;
+        let { captureType } = req.body;
+        
+        if(!biometricData) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+
+        captureType = captureType ? String(captureType).trim().toUpperCase() : null;
+        if(!captureType || !['FACE', 'FINGER'].includes(captureType)) {
+            return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
+        }
+
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if(!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -366,51 +376,25 @@ const bioMetricVerification = async (req, res) => {
             return res.failure({ message: 'Bio metric verification already validated' });
         }
         
-        const captureType = req.body.captureType ? String(req.body.captureType).trim().toUpperCase() : null;
-        if(!captureType || !['FACE', 'FINGURE'].includes(captureType)) {
-            return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGURE' });
+        // Validate that biometricData is a string (PID XML)
+        if (typeof biometricData !== 'string' || biometricData.trim() === '') {
+            return res.failure({ message: 'Biometric data must be a valid PID XML string' });
         }
+
+        // Ensure biometricData is properly formatted (trim whitespace)
+        const formattedBiometricData = biometricData.trim();
+
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
             aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
             otpReferenceID: existingAepsOnboarding.otpReferenceId,
             hash: existingAepsOnboarding.hash,
-            biometricData: req.body.biometricData,
+            biometricData: formattedBiometricData,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
             captureType
         }
-        const aepsResponse = {
-            "status": "SUCCESS",
-            "data": {
-            "aslTransactionId": "EKYKF7316551120825120254768I",
-            "aadharNumber": "xxxxxxxx4260",
-            "reqId": "20250812180737564383",
-            "rrn": "522418089794",
-            "responseMessage": "Success",
-            "kycResponseCode": "0",
-            "name": "Amit Kundu",
-            "dob": "28-08-1989",
-            "co": null,
-            "street": null,
-            "houseNo": null,
-            "locality": null,
-            "village": "Dharampota",
-            "district": "Hooghly",
-            "state": "West Bengal",
-            "pincode": "712413",
-            "photo": "1007_202508120607380916.png",
-            "ekycTime": "12/08/2025 18:07:38",
-            "photoBase64": "",
-            "bankARK": "jhNEzzbyD0gj",
-            "authCode":
-            "010003893FiLMpfMEO+iehdlRzsAloibGDLIlnXMO7EohOT+gV/rcRnYeLio0/ELYxTxoHkU"
-            },
-            "message": "Transaction Successful"
-            }
 
-
-        // const aepsResponse = await asl.aslAepsBioMetricVerification(payload);
-        // console.log('aepsResponse', aepsResponse);
+        const aepsResponse = await asl.aslAepsValidateAgentBiometric(payload);
 
         const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
         const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
@@ -459,5 +443,6 @@ const bioMetricVerification = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process Bio metric verification' });
     }
 }
+
 
 module.exports = { getOnboardingStatus, aepsOnboarding, validateAgentOtp, resendAgentOtp, bioMetricVerification };
