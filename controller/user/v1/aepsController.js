@@ -1,6 +1,7 @@
 const asl = require('../../../services/asl');
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
+const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
 
 
 const getOnboardingStatus = async (req, res) => {
@@ -445,4 +446,139 @@ const bioMetricVerification = async (req, res) => {
 }
 
 
-module.exports = { getOnboardingStatus, aepsOnboarding, validateAgentOtp, resendAgentOtp, bioMetricVerification };
+const aeps2FaAuthentication = async (req, res) => {
+    try{
+        const { biometricData } = req.body;
+        const { captureType } = req.body;
+        if(!biometricData) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+        if(!captureType || !['FACE', 'FINGER'].includes(captureType)) {
+            return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
+        }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if(!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+
+        if (!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
+
+        const existingBioMetric = await dbService.findOne(model.bioMetric, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            captureType: captureType
+        });
+
+        if(!existingBioMetric){
+            return res.failure({ message: 'Biometric data is required' });
+        }
+
+        // Daily login tracking - logout previous day sessions
+        await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
+
+        // Check if user already logged in today (IST date) - DB read in controller
+        const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
+        const existingDailyLogin = await dbService.findOne(model.aepsDailyLogin, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            loginDate: todayDateStr,
+            isLoggedIn: true
+        });
+
+        if (existingDailyLogin) {
+            return res.success({ message: 'Already logged in today. You can login again after midnight (IST).'  });
+        }
+
+        const payload = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            type: captureType,
+            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
+            serviceType: "CashDeposit",
+            latitude: existingUser.latitude,
+            longitude: existingUser.longitude,
+            transactionId: existingBioMetric.transactionId,
+            captureType: captureType,
+            biometricData: biometricData,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId
+        }
+        const aepsResponse = await asl.aslAeps2FA(payload);
+        console.log('aepsResponse', aepsResponse);
+        
+        // Parse response if it's a string (handles trailing commas and newlines)
+        let parsedResponse = aepsResponse;
+        if (typeof aepsResponse === 'string') {
+            try {
+                let cleanedResponse = aepsResponse.trim()
+                    .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+                    .replace(/\\r\\n/g, '')
+                    .replace(/\\n/g, '')
+                    .replace(/\s+/g, ' ');
+                parsedResponse = JSON.parse(cleanedResponse);
+            } catch (e) {
+                // Fallback: extract JSON from string
+                const jsonMatch = aepsResponse.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    try {
+                        let jsonStr = jsonMatch[0]
+                            .replace(/,(\s*[}\]])/g, '$1')
+                            .replace(/\\r\\n/g, '')
+                            .replace(/\\n/g, '')
+                            .replace(/\s+/g, ' ');
+                        parsedResponse = JSON.parse(jsonStr);
+                    } catch (parseError) {
+                        console.error('Failed to parse aepsResponse:', parseError.message);
+                    }
+                }
+            }
+        }
+
+        // Extract success indicators
+        const status = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
+        const nestedStatus = parsedResponse?.data?.status ? String(parsedResponse.data.status).toUpperCase() : null;
+        const responseCode = parsedResponse?.data?.responseCode;
+        const responseMessage = parsedResponse?.data?.responseMessage;
+        
+        // Check for success
+        const isSuccess = status === 'SUCCESS' || 
+                         nestedStatus === 'SUCCESS' || 
+                         responseCode === '00' ||
+                         (responseMessage && responseMessage.toLowerCase().includes('completed'));
+        
+        if(isSuccess) {
+            // Create daily login record in database - done in controller
+            const newLoginTime = new Date();
+            const logoutTime = aepsDailyLoginService.getNextMidnightIST();
+            
+            await dbService.createOne(model.aepsDailyLogin, {
+                refId: req.user.id,
+                companyId: req.user.companyId,
+                loginTime: newLoginTime,
+                logoutTime: logoutTime,
+                loginDate: todayDateStr,
+                isLoggedIn: true,
+                addedBy: req.user.id,
+                updatedBy: req.user.id
+            });
+
+            return res.success({ message: 'AEPS 2FA authentication successful', data: parsedResponse });
+        }
+        
+        return res.failure({ 
+            message: parsedResponse?.message || parsedResponse?.data?.message || 'AEPS 2FA authentication failed', 
+            data: parsedResponse 
+        });
+    }
+    catch (error) {
+        console.error('AEPS 2FA authentication error', error);
+        return res.failure({ message: error.message || 'Unable to process AEPS 2FA authentication' });
+    }
+}
+
+module.exports = { getOnboardingStatus, aepsOnboarding, validateAgentOtp, resendAgentOtp, bioMetricVerification, aeps2FaAuthentication };

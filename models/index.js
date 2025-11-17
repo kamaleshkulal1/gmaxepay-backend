@@ -24,6 +24,7 @@ db.userPackage = require('./userPackage');
 db.onboardingToken = require('./onboardingToken');
 db.aepsOnboarding = require('./aepsOnboarding');
 db.bioMetric = require('./bioMetric');
+db.aepsDailyLogin = require('./aepsDailyLogin');
 
 // Role & Permission Models
 db.permission = require('./permissions');
@@ -293,6 +294,29 @@ db.bioMetric.belongsTo(db.company, {
 db.company.hasMany(db.bioMetric, {
   foreignKey: 'companyId',
   as: 'bioMetrics',
+  sourceKey: 'id'
+});
+
+// AEPS Daily Login Relationships
+db.aepsDailyLogin.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.aepsDailyLogin, {
+  foreignKey: 'refId',
+  as: 'aepsDailyLogins',
+  sourceKey: 'id'
+});
+
+db.aepsDailyLogin.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.aepsDailyLogin, {
+  foreignKey: 'companyId',
+  as: 'aepsDailyLogins',
   sourceKey: 'id'
 });
 

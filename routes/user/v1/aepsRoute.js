@@ -9,4 +9,6 @@ router.post('/validate-otp', authentication, aepsController.validateAgentOtp);
 router.post('/resend-otp', authentication, aepsController.resendAgentOtp);
 router.post('/bio-metric-verification', authentication, aepsController.bioMetricVerification);
 
+router.post('/2fa-authentication', authentication, aepsController.aeps2FaAuthentication);
+
 module.exports = router;

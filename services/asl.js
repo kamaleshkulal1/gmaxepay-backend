@@ -162,24 +162,34 @@ const aslAepsValidateAgentBiometric = async (data) => {
 
 // ASL AEPS 2FA
 const aslAeps2FA = async (data) => {
-  try{
+  try {
     const response = await axios.post(`${aslUrl}/aeps/v1/two-factor-authenticate`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            Service: 'AEPS',
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
+      {
+        associateId: aslAssociateId,
+        apiToken: aslApiToken,
+        Service: 'AEPS',
+        ...data
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
     return response.data;
   } catch (error) {
-    console.log("error",error);
-    return error.response.data;
+    console.error('ASL AEPS 2FA error:', error.message);
+    if (error.response && error.response.data) {
+      if (typeof error.response.data === 'string') {
+        try {
+          return JSON.parse(error.response.data);
+        } catch (e) {
+          return error.response.data;
+        }
+      }
+      return error.response.data;
+    }
+    return { status: 'ERROR', message: error.message || 'Unknown error' };
   }
 }
 
