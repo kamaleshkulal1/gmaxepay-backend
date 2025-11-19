@@ -85,6 +85,20 @@ const uploadImage = async (req, res) => {
 
     const savedImage = await dbService.createOne(model.companyImage, imageData);
 
+    // Update company table if logo or favicon is uploaded
+    if (type === 'signature' && (subtype === 'logo' || subtype === 'favicon')) {
+      try {
+        await dbService.update(
+          model.company,
+          { id: companyId },
+          { [subtype]: uploadResult.key }
+        );
+      } catch (error) {
+        console.error(`Error updating company ${subtype}:`, error);
+        // Don't fail the request if company update fails
+      }
+    }
+
     return res.success({
       message: 'Image uploaded successfully',
       data: {

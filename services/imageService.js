@@ -73,9 +73,9 @@ const extractS3Key = (imageData) => {
 };
 
 /**
- * Get image URL - simple CDN URL for profile images, secure proxy for others
+ * Get image URL - simple CDN URL for profile images and company images, secure proxy for others
  * @param {String|Object} encryptedKey - Encrypted S3 key from database (or plain key for backward compatibility)
- * @param {Boolean} useSecureProxy - Whether to use secure proxy endpoint (default: true, false for profile images)
+ * @param {Boolean} useSecureProxy - Whether to use secure proxy endpoint (default: true, false for profile images and company images)
  * @returns {String} - CDN URL or secure proxy URL for the image
  */
 const getImageUrl = (encryptedKey, useSecureProxy = true) => {
@@ -91,10 +91,12 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
     
     // For profile images, always use simple CDN URL (no secure proxy)
     const isProfileImage = s3Key.includes('/profile/');
+    // For company images (signature/logo, signature/favicon, loginSlider), use CDN URL
+    const isCompanyImage = s3Key.includes('/signature/') || s3Key.includes('/loginSlider/');
     
-    if (isProfileImage || !useSecureProxy) {
-      // Use simple CDN URL for profile images
-      const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+    if (isProfileImage || isCompanyImage || !useSecureProxy) {
+      // Use simple CDN URL for profile images and company images
+      const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
       return `${cdnUrl}/${s3Key}`;
     } else {
       // Use secure proxy for other images
@@ -111,7 +113,7 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
     try {
       const s3Key = extractS3Key(encryptedKey);
       if (s3Key && s3Key.startsWith('images/')) {
-        const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+        const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
         return `${cdnUrl}/${s3Key}`;
       }
     } catch (e) {

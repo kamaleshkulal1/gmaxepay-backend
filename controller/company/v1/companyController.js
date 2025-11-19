@@ -39,12 +39,16 @@ const getCompanyDettails = async (req, res) => {
             type: 'signature',
             subtype: 'logo',
             isActive: true
+        }, {
+            order: [['createdAt', 'DESC']]
         });
         const faviconImage = await dbService.findOne(model.companyImage, {
             companyId: company.id,
             type: 'signature',
             subtype: 'favicon',
             isActive: true
+        }, {
+            order: [['createdAt', 'DESC']]
         });
         
         // Format slider images with backend API URL (proxy endpoint with CORS)
@@ -60,8 +64,8 @@ const getCompanyDettails = async (req, res) => {
             companyId: company.id,
             companyDomain: company.customDomain,
             companyName: company.companyName,
-            logo: logoImage ? getImageUrl(logoImage.s3Key) : null,
-            favicon: faviconImage ? getImageUrl(faviconImage.s3Key) : null,
+            logo: logoImage ? getImageUrl(logoImage.image) : null,
+            favicon: faviconImage ? getImageUrl(faviconImage.image) : null,
             primaryColor: company.primaryColor,
             secondaryColor: company.secondaryColor,
             singupPageDesign: company.singupPageDesign,
@@ -150,6 +154,13 @@ const updateCompany = async (req, res) => {
           };
 
           await dbService.createOne(model.companyImage, logoData);
+          
+          // Update company table with logo S3 key
+          await dbService.update(
+            model.company,
+            { id: companyId },
+            { logo: uploadResult.key }
+          );
         } catch (error) {
           console.error('Error uploading logo:', error);
           return res.failure({ message: `Error uploading logo: ${error.message}` });
@@ -206,6 +217,13 @@ const updateCompany = async (req, res) => {
           };
 
           await dbService.createOne(model.companyImage, faviconData);
+          
+          // Update company table with favicon S3 key
+          await dbService.update(
+            model.company,
+            { id: companyId },
+            { favicon: uploadResult.key }
+          );
         } catch (error) {
           console.error('Error uploading favicon:', error);
           return res.failure({ message: `Error uploading favicon: ${error.message}` });

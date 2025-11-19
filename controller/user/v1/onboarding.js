@@ -9,12 +9,16 @@ const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
 const ekycHub = require('../../../services/eKycHub');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const { encrypt } = require('../../../utils/encryption');
 const googleMap = require('../../../services/googleMap');
 const llmService = require('../../../services/llmService');
 const rekognitionService = require('../../../services/rekognitionService');
 const razorpayApi = require('../../../services/razorpayApi');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
+const { generateUniqueReferCode } = require('../../../utils/generateUniqueReferCode');
 
 // Get company ID and domain from headers
 const getCompanyFromHeaders = async (req) => {
@@ -33,19 +37,19 @@ const getCompanyFromHeaders = async (req) => {
   if (!company) {
     return { error: 'Company not found' };
   }
+  if(company.customDomain != '' && company.customDomain != domain) {
+    return { error: 'Invalid domain' };
+  }
 
   // Validate domain if provided
   if (domain) {
     const companyDomain = (company.customDomain || '').toString().trim().toLowerCase();
     const requestedDomain = domain.toString().trim().toLowerCase();
-    
-    // Allow localhost and app.gmaxepay.in
-    const allowedDomains = ['localhost', 'app.gmaxepay.in'];
-    if (!allowedDomains.includes(requestedDomain) && companyDomain !== requestedDomain) {
+
+    if (companyDomain && companyDomain !== requestedDomain) {
       return { error: 'Invalid domain' };
     }
   }
-
   return { company, companyId };
 };
 
@@ -243,6 +247,12 @@ const getPendingSteps = (ctx) => {
   // Check shop details verification using shopDetailsVerify field from user
   const shopDetailsDone = !!(user.shopDetailsVerify || userDetails?.shopDetailsVerify);
   
+  // Check bank verification using bankDetailsVerify field from user AND customerBankDetails
+  const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) || 
+                          !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
+  
+  const profileVerified = !!(user.profileImageWithShopVerify || userDetails?.profileImageWithShopVerify);
+  
   const steps = [
     { key: 'mobileVerification', label: 'Mobile verification', done: !!userDetails?.mobileVerify },
     { key: 'emailVerification', label: 'Email verification', done: !!userDetails?.emailVerify },
@@ -259,14 +269,259 @@ const getPendingSteps = (ctx) => {
       subSteps: panSubSteps
     },
     { key: 'shopDetails', label: 'Shop/outlet details', done: shopDetailsDone },
-    { key: 'bankVerification', label: 'Bank verification', done: !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc) },
-    { key: 'profile', label: 'Profile setup', done: !!userDetails?.profileImage }
+    { key: 'bankVerification', label: 'Bank verification', done: bankDetailsDone },
+    { key: 'profile', label: 'Profile setup', done: profileVerified }
   ];
   const pending = steps.filter(s => !s.done).map(s => s.key);
   return { steps, pending, allCompleted: pending.length === 0 };
 };
 
-// Step 1: Mobile verification - Send OTP
+// Calculate KYC status and steps based on completed steps
+const calculateKycStatus = (ctx) => {
+  const pendingInfo = getPendingSteps(ctx);
+  const completedSteps = pendingInfo.steps.filter(s => s.done).length;
+  const totalSteps = 7;
+  
+  let kycStatus = 'NO_KYC';
+  let kycSteps = completedSteps;
+  
+  if (completedSteps >= 4 && completedSteps < totalSteps) {
+    kycStatus = 'HALF_KYC';
+  } else if (completedSteps === totalSteps) {
+    kycStatus = 'FULL_KYC';
+  }
+  
+  return { kycStatus, kycSteps, completedSteps, totalSteps };
+};
+
+// Generate temporary password (8-digit numeric)
+const generateTempPassword = () => {
+  const numbers = '0123456789';
+  let password = '';
+  
+  // Generate 8 random digits
+  for (let i = 0; i < 8; i++) {
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+  }
+  
+  return password;
+};
+
+// Helper function to update KYC status after step completion
+const updateKycStatus = async (userId, companyId, ctx) => {
+  try {
+    // Reload user and context to get latest data
+    const user = await dbService.findOne(model.user, { id: userId, companyId: companyId, isDeleted: false });
+    if (!user) return;
+    
+    // Get latest context data
+    const outlet = await dbService.findOne(model.outlet, { refId: userId, companyId: companyId });
+    const customer = await dbService.findOne(model.customer, { mobile: user.mobileNo });
+    let customerBank = null;
+    if (customer) {
+      customerBank = await dbService.findOne(model.customerBank, { refId: customer.id, companyId: companyId });
+    }
+    if (!customerBank) {
+      customerBank = await dbService.findOne(model.customerBank, { refId: userId, companyId: companyId });
+    }
+    const [aadhaarDoc, panDoc] = await Promise.all([
+      dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      }),
+      dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'PAN',
+        isDeleted: false
+      })
+    ]);
+    
+    // Calculate KYC status
+    const kycInfo = calculateKycStatus({
+      user: user,
+      outlet: outlet,
+      customerBank: customerBank,
+      aadhaarDoc: aadhaarDoc || ctx?.aadhaarDoc,
+      panDoc: panDoc || ctx?.panDoc
+    });
+    
+    // Update KYC status and steps
+    await dbService.update(model.user, { id: userId }, {
+      kycStatus: kycInfo.kycStatus,
+      kycSteps: kycInfo.kycSteps
+    });
+    
+    return kycInfo;
+  } catch (error) {
+    console.error('Error updating KYC status:', error);
+    return null;
+  }
+};
+
+// Initial Step ReferCode
+const postReferCode = async (req, res) => {
+  try {
+    const companyCtx = await getCompanyFromHeaders(req);
+    if (companyCtx.error) {
+      return res.failure({ message: companyCtx.error });
+    }
+    const { referCode } = req.body || {};
+    if (!referCode) {
+      return res.failure({ message: 'Refer Code is required' });
+    }
+    const { companyId } = companyCtx;
+    
+    // Encrypt referCode before querying (since it's stored encrypted in database)
+    let encryptedReferCode;
+    try {
+      encryptedReferCode = encrypt(referCode);
+    } catch (error) {
+      console.error('Error encrypting referCode for search:', error);
+      return res.failure({ message: 'Invalid Refer Code format' });
+    }
+    
+    const referCodeData = await dbService.findOne(model.user, { 
+      referCode: encryptedReferCode, 
+      companyId: companyId 
+    });
+    
+    if (!referCodeData) {
+      return res.failure({ message: 'Invalid Refer Code' });
+    }
+    
+    // referCode is automatically decrypted by the model's afterFind hook
+    return res.success({ message: 'Refer Code is valid', data: referCodeData.referCode });
+  }
+  catch (error) {
+    console.error('Error in postReferCode:', error);
+    return res.failure({ message: 'Failed to post Refer Code', error: error.message });
+  }
+};
+
+const validateReferralCodeAndDetermineRole = async (referCode, companyId, company) => {
+  // If no referral code provided, default to Retailer (userRole = 5)
+  if (!referCode || referCode.trim() === '') {
+    return {
+      userRole: 5, // Retailer
+      parentId: null,
+      error: null
+    };
+  }
+
+  const trimmedReferCode = referCode.trim();
+
+  // First, check if it's a company admin referral code
+  // Find company admin user (userRole = 2) for this company
+  const companyAdmin = await dbService.findOne(model.user, {
+    companyId: companyId,
+    userRole: 2, 
+    isDeleted: false
+  });
+
+  if (companyAdmin && companyAdmin.referCode) {
+    // Try to get decrypted referCode (model hook should decrypt it, but handle both cases)
+    let companyReferCode = companyAdmin.referCode;
+    try {
+      // If it's encrypted (doesn't match plain text pattern), try to decrypt
+      // Plain referral codes are alphanumeric, encrypted ones are longer hex strings
+      if (companyReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(companyReferCode)) {
+        companyReferCode = decrypt(companyReferCode);
+      }
+    } catch (e) {
+      // If decryption fails, assume it's already decrypted
+    }
+    
+    if (companyReferCode === trimmedReferCode) {
+      // Company referral code matched
+      // Note: reportingTo field references user.id, not company.id
+      // For company referral, we'll set reportingTo to companyAdmin.id (the company admin user)
+      // This maintains the referral relationship while using the existing field structure
+      return {
+        userRole: 3, // Master Distributor
+        parentId: companyAdmin.id, // Use company admin's user ID as parentId
+        isCompanyReferral: true, // Flag to indicate this is a company referral
+        error: null
+      };
+    }
+  }
+
+  // Check all users for matching referral code
+  const allUsers = await dbService.findAll(
+    model.user,
+    { isDeleted: false },
+    { attributes: ['id', 'referCode', 'userRole', 'companyId'] }
+  );
+
+  let refOwner = null;
+  for (const user of allUsers) {
+    if (user.referCode) {
+      // Try to get decrypted referCode (model hook should decrypt it, but handle both cases)
+      let userReferCode = user.referCode;
+      try {
+        // If it's encrypted (doesn't match plain text pattern), try to decrypt
+        // Plain referral codes are alphanumeric, encrypted ones are longer hex strings
+        if (userReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(userReferCode)) {
+          userReferCode = decrypt(userReferCode);
+        }
+      } catch (e) {
+        // If decryption fails, assume it's already decrypted
+      }
+      
+      if (userReferCode === trimmedReferCode) {
+        // Check if referral code belongs to the same company
+        if (user.companyId !== companyId) {
+          return {
+            userRole: null,
+            parentId: null,
+            error: 'Invalid referral code'
+          };
+        }
+        refOwner = user;
+        break;
+      }
+    }
+  }
+
+  if (!refOwner) {
+    return {
+      userRole: null,
+      parentId: null,
+      error: 'Invalid referral code'
+    };
+  }
+
+  // Determine role based on refOwner's userRole
+  // User roles: 1=Super Admin, 2=Company Admin, 3=Master Distributor, 4=Distributor, 5=Retailer
+  let newUserRole;
+  if (refOwner.userRole === 2) {
+    // Company Admin (userRole = 2) → newUser becomes Master Distributor (3)
+    newUserRole = 3;
+  } else if (refOwner.userRole === 3) {
+    // Master Distributor (userRole = 3) → newUser becomes Retailer (5)
+    newUserRole = 5;
+  } else if (refOwner.userRole === 4) {
+    // Distributor (userRole = 4) → newUser becomes Retailer (5)
+    newUserRole = 5;
+  } else {
+    // Invalid referrer role (only Company Admin, Master Distributor, or Distributor can have referral codes)
+    return {
+      userRole: null,
+      parentId: null,
+      error: 'Invalid referral code'
+    };
+  }
+
+  return {
+    userRole: newUserRole,
+    parentId: refOwner.id, 
+    error: null
+  };
+};
+
+// Step 1: Mobile verification - Send OTP (for new retailer onboarding)
 const sendSmsMobile = async (req, res) => {
   try {
     const companyCtx = await getCompanyFromHeaders(req);
@@ -275,52 +530,146 @@ const sendSmsMobile = async (req, res) => {
     }
 
     const { companyId, company } = companyCtx;
-    const userCtx = await loadUserContext(req, companyId);
-    if (userCtx.error) {
-      return res.failure({ message: userCtx.error });
+    const { mobileNo, referCode } = req.body || {};
+
+    // Validate mobile number
+    if (!mobileNo || typeof mobileNo !== 'string' || mobileNo.trim() === '') {
+      return res.failure({ message: 'Mobile number is required' });
     }
 
-    const { user, userDetails } = userCtx;
-    const { mobileNo } = req.body || {};
-
-    if (mobileNo != user.mobileNo) {
-      return res.failure({ message: 'Invalid Mobile Number' });
+    // Basic mobile number validation (10 digits)
+    const cleanMobileNo = mobileNo.trim().replace(/[^0-9]/g, '');
+    if (cleanMobileNo.length !== 10) {
+      return res.failure({ message: 'Invalid mobile number format' });
     }
 
-    // Check lock status
-    if (user.isAccountLocked && user.isAccountLocked()) {
-      return res.failure({ message: 'Account is temporarily locked due to multiple invalid attempts. Try again later.' });
+    // Check if user already exists with this mobile number
+    const existingUser = await dbService.findOne(model.user, {
+      mobileNo: cleanMobileNo,
+      companyId: companyId,
+      isDeleted: false
+    });
+
+    // If user exists and mobile is already verified, return error
+    if (existingUser && existingUser.mobileVerify === true) {
+      return res.failure({ message: 'Mobile number already registered and verified' });
     }
 
-    // Reset attempts when generating a new OTP
-    await user.resetLoginAttempts();
-
-    // Generate OTP and store with expiry
+    // Generate OTP
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(JWT.OTP_EXPIRES_IN || 180, 'seconds').toISOString();
 
-    await dbService.update(
-      model.user,
-      { id: user.id },
-      { otpMobile: `${hashedCode}~${expireOTP}` }
-    );
-
-    // Send SMS
+    // Send SMS first
     const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;
-    await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
+    let smsResult;
+    try {
+      smsResult = await amezesmsApi.sendSmsLogin(cleanMobileNo, msg);
+      console.log('smsResult', smsResult);
+      // Check if SMS was sent successfully
+      // SMS API might return different response formats, so we check for common error indicators
+      if (smsResult && typeof smsResult === 'object') {
+        // Check for error status or error message
+        if (smsResult.error || (smsResult.status && smsResult.status.toLowerCase() === 'error')) {
+          return res.failure({ message: 'Failed to send SMS. Please try again.' });
+        }
+      }
+    } catch (smsError) {
+      console.error('SMS sending error:', smsError);
+      return res.failure({ message: 'Failed to send SMS. Please try again.' });
+    }
 
-    const pendingInfo = getPendingSteps({ 
-      userDetails, 
-      outletDetails: userCtx.outletDetails, 
-      customerBankDetails: userCtx.customerBankDetails,
-      aadhaarDoc: userCtx.aadhaarDoc,
-      panDoc: userCtx.panDoc
+    // If user exists but mobileVerify is false, update OTP only (don't create new user)
+    if (existingUser && existingUser.mobileVerify === false) {
+      // Update existing user's OTP
+      await dbService.update(
+        model.user,
+        { id: existingUser.id },
+        { otpMobile: `${hashedCode}~${expireOTP}` }
+      );
+
+      return res.success({ 
+        message: 'OTP sent to mobile number successfully', 
+        data: { 
+          userId: existingUser.id,
+          mobileNo: cleanMobileNo,
+          userRole: existingUser.userRole
+        } 
+      });
+    }
+
+    // If user doesn't exist, create new user
+    // Validate referral code and determine role/parentId
+    const referralValidation = await validateReferralCodeAndDetermineRole(referCode, companyId, company);
+    if (referralValidation.error) {
+      return res.failure({ message: referralValidation.error });
+    }
+
+    const { userRole, parentId } = referralValidation;
+    
+    // Note: parentId will be:
+    // - null if no referral code (Retailer with no parent)
+    // - companyAdmin.id if company referral code used
+    // - refOwner.id if user referral code used
+
+    // Generate unique referral code for the new user
+    const newUserReferCode = await generateUniqueReferCode(company.companyName);
+
+    // Create user record only after SMS is sent successfully
+    const userData = {
+      mobileNo: cleanMobileNo,
+      companyId: companyId,
+      userRole: userRole,
+      reportingTo: parentId, // Using reportingTo as parentId
+      referCode: newUserReferCode,
+      otpMobile: `${hashedCode}~${expireOTP}`,
+      isActive: true,
+      isDeleted: false,
+      kycStatus: 'NO_KYC',
+      kycSteps: 0,
+      signupStep: 1,
+      mobileVerify: false,
+      emailVerify: false,
+      aadharVerify: false,
+      panVerify: false,
+      isLoginOtp: true,
+      tokenVersion: 0,
+      loggedIn: false
+    };
+
+    const newUser = await dbService.createOne(model.user, userData);
+
+    if (!newUser) {
+      return res.failure({ message: 'Failed to create user account' });
+    }
+
+    // Create wallet for the new user (only if wallet doesn't exist)
+    const existingWallet = await dbService.findOne(model.wallet, {
+      refId: newUser.id,
+      companyId: companyId
     });
 
+    if (!existingWallet) {
+      const walletData = {
+        refId: newUser.id,
+        companyId: companyId,
+        roleType: userRole,
+        mainWallet: 0,
+        apesWallet: 0,
+        isActive: true,
+        isDelete: false
+      };
+
+      await dbService.createOne(model.wallet, walletData);
+    }
+
     return res.success({ 
-      message: 'OTP sent to registered mobile number', 
-      data: { steps: pendingInfo.steps, pending: pendingInfo.pending } 
+      message: 'OTP sent to mobile number successfully', 
+      data: { 
+        userId: newUser.id,
+        mobileNo: cleanMobileNo,
+        userRole: userRole
+      } 
     });
   } catch (error) {
     console.error('Error in mobile verification:', error);
@@ -379,6 +728,9 @@ const verifySmsOtp = async (req, res) => {
       otpMobile: null 
     });
     await user.resetOtpAttempts();
+
+    // Update KYC status
+    await updateKycStatus(user.id, companyId, userCtx);
 
     const pendingInfo = getPendingSteps({ 
       userDetails: { ...userDetails, mobileVerify: true }, 
@@ -559,6 +911,9 @@ const verifyEmailOtp = async (req, res) => {
       otpEmail: null 
     });
     await user.resetOtpAttempts();
+
+    // Update KYC status
+    await updateKycStatus(user.id, companyId, userCtx);
 
     const pendingInfo = getPendingSteps({ 
       userDetails: { ...userDetails, emailVerify: true }, 
@@ -974,6 +1329,9 @@ const getDigilockerDocuments = async (req, res) => {
         });
       }
     }
+    
+    // Update KYC status after document download
+    await updateKycStatus(user.id, companyId, { aadhaarDoc: docType === 'AADHAAR' ? existingDigilockerDocument : userCtx.aadhaarDoc, panDoc: docType === 'PAN' ? existingDigilockerDocument : userCtx.panDoc });
 
     const message = docType === 'AADHAAR' 
       ? 'Aadhaar Verification Downloaded' 
@@ -1093,6 +1451,9 @@ const postShopDetails = async (req, res) => {
     // Set shopDetailsVerify to true in user table (prevents multiple shops)
     await dbService.update(model.user, { id: user.id }, { shopDetailsVerify: true });
 
+    // Update KYC status
+    await updateKycStatus(user.id, company.id, { outlet: updatedOutlet, customerBank: customerBank, aadhaarDoc: userCtx.aadhaarDoc, panDoc: userCtx.panDoc });
+
     // Reload user to get updated shopDetailsVerify
     const updatedUser = await dbService.findOne(model.user, { id: user.id });
     const pendingInfo = getPendingSteps({ 
@@ -1114,6 +1475,56 @@ const postShopDetails = async (req, res) => {
 };
 
 // Step 6: Bank details (CustomerBank)
+const calculateStringSimilarity = (str1, str2) => {
+  if (!str1 || !str2) return 0;
+  
+  // Normalize strings: trim, lowercase, remove extra spaces
+  const normalize = (str) => {
+    return (str || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+  };
+  
+  const s1 = normalize(str1);
+  const s2 = normalize(str2);
+  
+  // If both strings are empty after normalization
+  if (!s1 && !s2) return 100;
+  if (!s1 || !s2) return 0;
+  
+  // If strings are exactly equal
+  if (s1 === s2) return 100;
+  
+  // Calculate Levenshtein distance
+  const len1 = s1.length;
+  const len2 = s2.length;
+  
+  // Create a matrix for dynamic programming
+  const matrix = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  
+  // Initialize first row and column
+  for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+  
+  // Fill the matrix
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // deletion
+        matrix[i][j - 1] + 1,      // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  
+  const distance = matrix[len1][len2];
+  const maxLen = Math.max(len1, len2);
+  
+  // Calculate similarity percentage
+  const similarity = maxLen === 0 ? 100 : ((maxLen - distance) / maxLen) * 100;
+  
+  return Math.round(similarity * 100) / 100; // Round to 2 decimal places
+};
+
 const postBankDetails = async (req, res) => {
   try {
     const companyCtx = await getCompanyFromHeaders(req);
@@ -1206,8 +1617,12 @@ const postBankDetails = async (req, res) => {
     const bankName = (razorpayBankData && razorpayBankData.BANK) 
       ? razorpayBankData.BANK 
       : (bankVerification.bank_name || bankVerification.bankName || null);
-    const beneficiaryName = bankVerification.beneficiary_name || bankVerification.beneficiaryName || user.name;
-    const accountNumber = bankVerification.account_number || account_number;
+    const beneficiaryName = bankVerification.nameAtBank
+      || bankVerification.beneficiary_name
+      || bankVerification.beneficiaryName
+      || bankVerification['nameAtBank']
+      || null;
+    const accountNumber = bankVerification.account_number || bankVerification['Account Number'] || account_number;
     // Use Razorpay city/branch if available, otherwise use eKYC response
     const city = (razorpayBankData && razorpayBankData.CITY) 
       ? razorpayBankData.CITY 
@@ -1215,6 +1630,50 @@ const postBankDetails = async (req, res) => {
     const branch = (razorpayBankData && razorpayBankData.BRANCH) 
       ? razorpayBankData.BRANCH 
       : (bankVerification.branch || null);
+
+    const aadhaarName = (userCtx.aadhaarDoc && userCtx.aadhaarDoc.name) ? userCtx.aadhaarDoc.name : '';
+    const bankBeneficiaryName = beneficiaryName || '';
+
+    const nameSimilarityPercentage = calculateStringSimilarity(aadhaarName, bankBeneficiaryName);
+
+    if (!bankBeneficiaryName) {
+      console.error('Bank beneficiary name is missing');
+      return res.failure({
+        message: 'Bank account holder name not found in verification response',
+        data: {
+          aadhaarName: aadhaarName || null,
+          bankHolderName: null,
+          similarityPercentage: 0
+        }
+      });
+    }
+
+    if (nameSimilarityPercentage <= 60) {
+      console.error('Name similarity is below threshold (60%)');
+      return res.failure({
+        message: 'Your name does not match with the bank account holder name. Please verify your bank account details.',
+        data: {
+          aadhaarName: aadhaarName || null,
+          bankHolderName: bankBeneficiaryName,
+          similarityPercentage: nameSimilarityPercentage
+        }
+      });
+    }
+
+    await dbService.update(model.user, {
+      id: user.id,
+      companyId: company.id,
+      isDeleted: false
+    }, {
+      bankDetailsVerify: true,
+      nameSimilarity: nameSimilarityPercentage.toString()
+    });
+
+    const updatedUser = await dbService.findOne(model.user, {
+      id: user.id,
+      companyId: company.id,
+      isDeleted: false
+    });
 
     // Find or create customer record (customerBank.refId references customer table, not user)
     let customer = userCtx.customer || await dbService.findOne(model.customer, {
@@ -1258,8 +1717,10 @@ const postBankDetails = async (req, res) => {
       updatedCustomerBank = await dbService.createOne(model.customerBank, payload);
     }
 
+    await updateKycStatus(user.id, company.id, { outlet: outlet, customerBank: updatedCustomerBank, aadhaarDoc: userCtx.aadhaarDoc, panDoc: userCtx.panDoc });
+
     const pendingInfo = getPendingSteps({ 
-      user, 
+      user: updatedUser, 
       outlet, 
       customerBank: updatedCustomerBank,
       aadhaarDoc: userCtx.aadhaarDoc,
@@ -1267,8 +1728,16 @@ const postBankDetails = async (req, res) => {
     });
 
     return res.success({ 
-      message: 'Bank details saved', 
-      data: { steps: pendingInfo.steps, pending: pendingInfo.pending } 
+      message: 'Bank details Verified',
+      data: {
+        steps: pendingInfo.steps,
+        pending: pendingInfo.pending,
+        nameMatching: {
+          aadhaarName: aadhaarName || null,
+          bankHolderName: bankBeneficiaryName,
+          similarityPercentage: nameSimilarityPercentage
+        }
+      }
     });
   } catch (error) {
     console.error('Error in bank details:', error);
@@ -1393,10 +1862,11 @@ const postProfile = async (req, res) => {
       
       updates.profileImage = uploadResult.key;
       updates.imageVerify = true;
+      updates.profileImageWithShopVerify = true;
     } catch (imageError) {
       console.error('Error processing profile image:', imageError);
       // Return user-friendly error message
-      if (imageError.message.includes('not recognized')) {
+      if (imageError.message.includes('not recognized') || imageError.message.includes('do not match')) {
         return res.failure({ message: imageError.message });
       }
       return res.failure({ message: 'Failed to process profile image', error: imageError.message });
@@ -1405,19 +1875,80 @@ const postProfile = async (req, res) => {
     // Update user in database
     await dbService.update(model.user, { id: user.id }, updates);
     
-    // Prepare response
-    const updatedUser = { ...user, ...updates };
-    const pendingInfo = getPendingSteps({ 
-      user: updatedUser, 
-      outlet: outlet, 
-      customerBank: customerBank,
-      aadhaarDoc: userCtx.aadhaarDoc,
-      panDoc: userCtx.panDoc
+    if (updates.profileImage && outlet?.id) {
+      await dbService.update(
+        model.outlet,
+        { id: outlet.id },
+        { shopImage: updates.profileImage, shopImageVerify: true }
+      );
+    }
+    
+    // Reload user context to get updated data
+    const updatedUser = await dbService.findOne(model.user, { id: user.id });
+    const updatedUserCtx = await loadUserContext(req, companyId);
+    const latestUser = updatedUserCtx.user || updatedUser;
+    const latestOutlet = updatedUserCtx.outlet || outlet;
+    const latestCustomerBank = updatedUserCtx.customerBank || customerBank;
+    const latestAadhaarDoc = updatedUserCtx.aadhaarDoc || userCtx.aadhaarDoc;
+    const latestPanDoc = updatedUserCtx.panDoc || userCtx.panDoc;
+    
+    const pendingInfo = getPendingSteps({
+      user: latestUser,
+      outlet: latestOutlet,
+      customerBank: latestCustomerBank,
+      aadhaarDoc: latestAadhaarDoc,
+      panDoc: latestPanDoc
     });
+    
+    const kycInfo = calculateKycStatus({
+      user: latestUser,
+      outlet: latestOutlet,
+      customerBank: latestCustomerBank,
+      aadhaarDoc: latestAadhaarDoc,
+      panDoc: latestPanDoc
+    });
+    
+    await dbService.update(model.user, { id: user.id }, {
+      kycStatus: kycInfo.kycStatus,
+      kycSteps: kycInfo.kycSteps
+    });
+    
+    const userForCheck = await dbService.findOne(model.user, { id: user.id });
+    let tempPassword = null;
+    if (pendingInfo.allCompleted && userForCheck && userForCheck.firstTimeOnboarding) {
+      tempPassword = generateTempPassword();
+      const hashedTempPassword = await bcrypt.hash(tempPassword, 8);
+      
+      await dbService.update(model.user, { id: user.id }, {
+        password: hashedTempPassword,
+        firstTimeOnboarding: false,
+        firstTimeOnboardingComplete: true,
+        isResetPassword: true
+      });
+      
+      try {
+        const backendUrl = process.env.BASE_URL;
+        const logoUrl = (company && company.logo) ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
+        const illustrationUrl = `${backendUrl}/tempPassword.png`;
+        
+        await emailService.sendTempPasswordEmail({
+          to: userForCheck.email,
+          userName: userForCheck.name || 'User',
+          tempPassword: tempPassword,
+          logoUrl: logoUrl,
+          illustrationUrl: illustrationUrl
+        });
+      } catch (emailError) {
+        console.error('Error sending temporary password email:', emailError);
+      }
+    }
     
     const responseData = {
       steps: pendingInfo.steps,
-      pending: pendingInfo.pending
+      pending: pendingInfo.pending,
+      kycStatus: kycInfo.kycStatus,
+      kycSteps: kycInfo.kycSteps,
+      allCompleted: pendingInfo.allCompleted
     };
     
     return res.success({ message: 'Your Profile is updated and matched with Aadhaar card', data: responseData });
@@ -1862,6 +2393,9 @@ const uploadAadharDocuments = async (req, res) => {
     
     await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
     
+    // Update KYC status after Aadhaar upload
+    await updateKycStatus(user.id, company.id, userCtx);
+    
     let responseMessage = 'Aadhar documents processed and uploaded successfully';
     if (existingAadharDetails) {
       if (validationResults.allValidationsPassed) {
@@ -1911,57 +2445,207 @@ const uploadPanDocuments = async (req, res) => {
 
     const { user } = userCtx;
     const front_photo = req.files?.front_photo?.[0];
-    const back_photo = req.files?.back_photo?.[0];
     
-    if (!front_photo || !back_photo) {
+    if (!front_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
       return res.failure({ 
-        message: !front_photo ? 'Front photo is required' : 'Back photo is required',
+        message: 'Front photo is required',
         receivedFields: receivedFields || 'none',
-        expectedFields: ['front_photo', 'back_photo']
+        expectedFields: ['front_photo']
       });
     }
     
-    const existingUser = await dbService.findOne(model.user, { id: user.id });
-    const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
-    const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
+    // Call LLM service for PAN verification first
+    const llmResult = await llmService.llmPanVerification(front_photo);
     
-    const [frontUploadResult, backUploadResult] = await Promise.all([
-      imageService.uploadImageToS3(
-        front_photo.buffer,
-        front_photo.originalname || 'front_photo.jpg',
-        'pan',
-        company.id,
-        'front',
-        user.id
-      ),
-      imageService.uploadImageToS3(
-        back_photo.buffer,
-        back_photo.originalname || 'back_photo.jpg',
-        'pan',
-        company.id,
-        'back',
-        user.id
-      )
-    ]);
+    // Initialize response variables
+    let frontImageS3Key = null;
+    let backImageS3Key = null;
+    let faceComparisonResult = null;
+    let panExistsInDigilocker = false;
+    let uploaded = false;
+    let verificationMessage = llmResult?.message || 'PAN card processed successfully';
     
-    const frontImageS3Key = frontUploadResult.key;
-    const backImageS3Key = backUploadResult.key;
+    // Only proceed if LLM verification succeeds
+    if (llmResult?.success && llmResult?.data?.pan_number) {
+      const extractedPanNumber = llmResult.data.pan_number;
+      
+      // Read static back image file
+      const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
+      const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
+      
+      // Parallelize: Get existing user data, check digilocker PAN, and fetch Aadhaar doc
+      const [existingUser, digilockerPanDoc, aadhaarDocResult] = await Promise.all([
+        dbService.findOne(model.user, { id: user.id }),
+        dbService.findOne(model.digilockerDocument, {
+          refId: user.id,
+          companyId: company.id,
+          documentType: 'PAN',
+          panNumber: extractedPanNumber,
+          isDeleted: false
+        }),
+        // Fetch Aadhaar doc only if not in context (parallel fetch)
+        userCtx.aadhaarDoc ? Promise.resolve(null) : dbService.findOne(model.digilockerDocument, {
+          refId: user.id,
+          companyId: company.id,
+          documentType: 'AADHAAR',
+          isDeleted: false
+        })
+      ]);
+      
+      // Use Aadhaar doc from context if available, otherwise use fetched result
+      const aadhaarDoc = userCtx.aadhaarDoc || aadhaarDocResult;
+      
+      const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
+      const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
+      
+      // Check if PAN exists in digilocker
+      if (digilockerPanDoc) {
+        panExistsInDigilocker = true;
+      }
+      
+      // Perform face comparison first (before uploading to S3)
+      // Use front_photo.buffer directly instead of base64 from LLM result
+      if (aadhaarDoc?.photoLink && front_photo.buffer) {
+        try {
+          // Extract base64 from Aadhaar photo
+          const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
+          
+          // Use front_photo.buffer directly for PAN photo (convert to base64)
+          const panPhotoBase64 = front_photo.buffer.toString('base64');
+          
+          if (aadhaarPhotoBase64 && panPhotoBase64) {
+            const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
+            const panBuffer = validateAndConvertBase64(panPhotoBase64);
+            
+            if (aadhaarBuffer && panBuffer) {
+              faceComparisonResult = await rekognitionService.compareFaces(
+                aadhaarBuffer.toString('base64'),
+                panBuffer.toString('base64')
+              );
+              
+              // Only proceed with S3 upload if face matches
+              if (faceComparisonResult?.success && faceComparisonResult?.matched) {
+                uploaded = true;
+                verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';
+                
+                // Upload images to S3 only if face comparison matches
+                const [frontUploadResult, backUploadResult] = await Promise.all([
+                  imageService.uploadImageToS3(
+                    front_photo.buffer,
+                    front_photo.originalname || 'front_photo.jpg',
+                    'pan',
+                    company.id,
+                    'front',
+                    user.id
+                  ),
+                  imageService.uploadImageToS3(
+                    staticBackImageBuffer,
+                    'panbackside.jpeg',
+                    'pan',
+                    company.id,
+                    'back',
+                    user.id
+                  )
+                ]);
+                
+                frontImageS3Key = frontUploadResult.key;
+                backImageS3Key = backUploadResult.key;
+                
+                // Update user records with uploaded image keys
+                const updateData = {
+                  panCardFrontImage: frontImageS3Key,
+                  panCardBackImage: backImageS3Key,
+                  panVerify: true
+                };
+                
+                await dbService.update(model.user, { id: user.id }, updateData);
+                await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+                
+                // Update KYC status after PAN upload
+                await updateKycStatus(user.id, company.id, { aadhaarDoc: aadhaarDoc });
+              } else {
+                // If face doesn't match, set verification failed message (no S3 upload)
+                verificationMessage = 'PAN verification failed';
+              }
+            }
+          }
+        } catch (comparisonError) {
+          console.error('Error comparing faces:', comparisonError);
+          verificationMessage = 'PAN verification failed';
+        }
+      } else {
+        // If Aadhaar photo is not available, set appropriate message
+        verificationMessage = 'Aadhaar photo not available for verification';
+      }
+    }
     
-    const updateData = {
-      panCardFrontImage: frontImageS3Key,
-      panCardBackImage: backImageS3Key
+    // Handle failure cases - return failure response
+    // Case 1: LLM verification failed
+    if (!llmResult?.success) {
+      return res.failure({
+        message: llmResult?.message || 'PAN verification failed',
+        data: {
+          llmVerification: {
+            success: false,
+            session_id: llmResult?.session_id || null,
+            message: llmResult?.message || 'PAN verification failed',
+            faceComparison: null
+          }
+        }
+      });
+    }
+    
+    // Case 2: Face comparison failed (matched: false)
+    if (faceComparisonResult && !faceComparisonResult.matched) {
+      return res.failure({
+        message: verificationMessage || 'PAN verification failed',
+        data: {
+          llmVerification: {
+            success: llmResult?.success || false,
+            session_id: llmResult?.session_id || null,
+            message: verificationMessage || 'PAN verification failed',
+            faceComparison: {
+              matched: faceComparisonResult.matched,
+              similarity: faceComparisonResult.similarity
+            }
+          }
+        }
+      });
+    }
+    
+    // Case 3: Aadhaar photo not available (face comparison couldn't be performed)
+    if (!faceComparisonResult && llmResult?.success) {
+      return res.failure({
+        message: verificationMessage || 'Aadhaar photo not available for verification',
+        data: {
+          llmVerification: {
+            success: llmResult?.success || false,
+            session_id: llmResult?.session_id || null,
+            message: verificationMessage || 'Aadhaar photo not available for verification',
+            faceComparison: null
+          }
+        }
+      });
+    }
+    
+    // Success case: Face comparison matched - prepare simplified response
+    const llmVerificationResponse = {
+      success: llmResult?.success || false,
+      session_id: llmResult?.session_id || null,
+      message: verificationMessage,
+      faceComparison: faceComparisonResult ? {
+        matched: faceComparisonResult.matched,
+        similarity: faceComparisonResult.similarity
+      } : null
     };
-    
-    await dbService.update(model.user, { id: user.id }, updateData);
-    
-    await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
     
     return res.success({ 
       message: 'PAN documents uploaded successfully',
       data: {
         panCardFrontImage: frontImageS3Key,
-        panCardBackImage: backImageS3Key
+        panCardBackImage: backImageS3Key,
+        llmVerification: llmVerificationResponse
       }
     });
   } catch (error) {
@@ -1971,6 +2655,7 @@ const uploadPanDocuments = async (req, res) => {
 };
 
 module.exports = {
+  postReferCode,
   sendSmsMobile,
   verifySmsOtp,
   resetSmsOtp,
