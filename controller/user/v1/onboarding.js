@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 const { generateUniqueReferCode } = require('../../../utils/generateUniqueReferCode');
+const { generateUserToken, decryptUserToken } = require('../../../utils/userToken');
 
 // Get company ID and domain from headers
 const getCompanyFromHeaders = async (req) => {
@@ -55,11 +56,20 @@ const getCompanyFromHeaders = async (req) => {
 
 // Load user context
 const loadUserContext = async (req, companyId) => {
-  const { userId } = req.body || {};
+  // Get userId from token header instead of request body
+  const userToken = req.get('token');
   
-  if (!userId) {
-    return { error: 'userId is required in request body' };
+  if (!userToken) {
+    return { error: 'token header is required' };
   }
+
+  // Decrypt user token to get userId
+  const tokenData = decryptUserToken(userToken);
+  if (!tokenData || !tokenData.userId) {
+    return { error: 'Invalid or expired user token' };
+  }
+
+  const userId = tokenData.userId;
 
   const user = await dbService.findOne(model.user, { 
     id: userId, 
@@ -550,9 +560,21 @@ const sendSmsMobile = async (req, res) => {
       isDeleted: false
     });
 
-    // If user exists and mobile is already verified, return error
+    // If user exists and mobile is already verified, return success with token
     if (existingUser && existingUser.mobileVerify === true) {
-      return res.failure({ message: 'Mobile number already registered and verified' });
+      // Generate userToken for existing verified user
+      const userToken = generateUserToken(existingUser.id);
+      
+      return res.success({ 
+        message: 'Mobile number already exists', 
+        data: { 
+          userToken: userToken,
+          mobileNo: cleanMobileNo,
+          userRole: existingUser.userRole,
+          mobileVerify: true,
+          status: 'verified'
+        } 
+      });
     }
 
     // Generate OTP
@@ -588,10 +610,13 @@ const sendSmsMobile = async (req, res) => {
         { otpMobile: `${hashedCode}~${expireOTP}` }
       );
 
+      // Generate userToken for existing user
+      const userToken = generateUserToken(existingUser.id);
+
       return res.success({ 
         message: 'OTP sent to mobile number successfully', 
         data: { 
-          userId: existingUser.id,
+          userToken: userToken,
           mobileNo: cleanMobileNo,
           userRole: existingUser.userRole
         } 
@@ -663,10 +688,13 @@ const sendSmsMobile = async (req, res) => {
       await dbService.createOne(model.wallet, walletData);
     }
 
+    // Generate userToken for new user
+    const userToken = generateUserToken(newUser.id);
+
     return res.success({ 
       message: 'OTP sent to mobile number successfully', 
       data: { 
-        userId: newUser.id,
+        userToken: userToken,
         mobileNo: cleanMobileNo,
         userRole: userRole
       } 
@@ -732,6 +760,9 @@ const verifySmsOtp = async (req, res) => {
     // Update KYC status
     await updateKycStatus(user.id, companyId, userCtx);
 
+    // Generate userToken after successful verification
+    const userToken = generateUserToken(user.id);
+
     const pendingInfo = getPendingSteps({ 
       userDetails: { ...userDetails, mobileVerify: true }, 
       outletDetails, 
@@ -742,7 +773,11 @@ const verifySmsOtp = async (req, res) => {
 
     return res.success({ 
       message: 'Mobile verified successfully', 
-      data: { steps: pendingInfo.steps, pending: pendingInfo.pending } 
+      data: { 
+        userToken: userToken,
+        steps: pendingInfo.steps, 
+        pending: pendingInfo.pending 
+      } 
     });
   } catch (error) {
     console.error('Error verifying mobile OTP:', error);
@@ -811,12 +846,31 @@ const sendEmailOtp = async (req, res) => {
     const { user, userDetails, outletDetails, customerBankDetails } = userCtx;
     const { email } = req.body || {};
 
-    if (email != user.email) {
-      return res.failure({ message: 'Invalid Email Address' });
+    // Check if email is already verified
+    if (user.emailVerify) {
+      return res.failure({ message: 'Email is already verified' });
     }
 
+    // If email is provided in request, create or update it in the database
+    if (email) {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.failure({ message: 'Invalid email format' });
+      }
+
+      // Update user email in database
+      await dbService.update(model.user, { id: user.id }, { email: email });
+      // Reload user to get updated email
+      const updatedUser = await dbService.findOne(model.user, { id: user.id });
+      if (updatedUser) {
+        user.email = updatedUser.email;
+      }
+    }
+
+    // Check if user has email after update
     if (!user.email) {
-      return res.failure({ message: 'Email not set for user' });
+      return res.failure({ message: 'Email is required. Please provide an email address.' });
     }
 
     await user.resetLoginAttempts();
@@ -940,31 +994,24 @@ const resetEmailOtp = async (req, res) => {
     if (companyCtx.error) {
       return res.failure({ message: companyCtx.error });
     }
-
-    const { companyId, company } = companyCtx;
-    const userCtx = await loadUserContext(req, companyId);
-    if (userCtx.error) {
-      return res.failure({ message: userCtx.error });
-    }
-
-    const { user } = userCtx;
     const { email } = req.body || {};
-
-    if (email != user.email) {
+ 
+    const { companyId, company } = companyCtx;
+    const existingUser = await dbService.findOne(model.user, { email: email, companyId: companyId });
+    if (email != existingUser.email) {
       return res.failure({ message: 'Invalid Email Address' });
     }
-
-    if (!user.email) {
+    if (!existingUser.email) {
       return res.failure({ message: 'Email not set for user' });
     }
-
-    await user.resetOtpAttempts();
+   
+    await existingUser.resetOtpAttempts();
 
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(3, 'minutes').toISOString();
 
-    await dbService.update(model.user, { id: user.id }, { 
+    await dbService.update(model.user, { id: existingUser.id }, { 
       otpEmail: `${hashedCode}~${expireOTP}` 
     });
 
@@ -973,8 +1020,8 @@ const resetEmailOtp = async (req, res) => {
     const illustrationUrl = `${backendUrl}/otp.png`;
 
     await emailService.sendOtpEmail({ 
-      to: user.email, 
-      userName: user.name || 'User', 
+      to: existingUser.email, 
+      userName: existingUser.name || 'User', 
       otp: String(code), 
       expiryMinutes: 3, 
       logoUrl, 
@@ -1003,11 +1050,11 @@ const connectAadhaarVerification = async (req, res) => {
     }
 
     const { user } = userCtx;
-    const { redirect_url } = req.body || {};
-    if (!redirect_url) {
-      return res.failure({ message: 'Redirect URL is required' });
+    const companyDomain = company.customDomain;
+    if(!company.customDomain || !companyDomain) {
+      return res.failure({ message: 'Aadhaar verification is not allowed for this company' });
     }
-
+    const redirect_url = `${companyDomain || company?.customDomain}/setup`;
     // Check if document already exists (already processed)
     const existingDoc = await dbService.findOne(model.digilockerDocument, {
       refId: user.id,
@@ -1060,14 +1107,19 @@ const connectPanVerification = async (req, res) => {
       return res.failure({ message: companyCtx.error });
     }
 
-    const { companyId } = companyCtx;
+    const { companyId ,company} = companyCtx;
     const userCtx = await loadUserContext(req, companyId);
     if (userCtx.error) {
       return res.failure({ message: userCtx.error });
     }
 
     const { user } = userCtx;
-    const { redirect_url } = req.body || {};
+    const companyDomain = company.customDomain;
+    if(!company.customDomain || !companyDomain) {
+      return res.failure({ message: 'Pan verification is not allowed for this company' });
+    }
+    const redirect_url = `${companyDomain || company?.customDomain}/setup`;
+
     if (!redirect_url) {
       return res.failure({ message: 'Redirect URL is required' });
     }
@@ -2653,6 +2705,8 @@ const uploadPanDocuments = async (req, res) => {
     return res.failure({ message: 'Failed to upload PAN documents', error: error.message });
   }
 };
+
+
 
 module.exports = {
   postReferCode,
