@@ -1118,7 +1118,7 @@ const connectPanVerification = async (req, res) => {
     if(!company.customDomain || !companyDomain) {
       return res.failure({ message: 'Pan verification is not allowed for this company' });
     }
-    const redirect_url = `${companyDomain || company?.customDomain}/setup`;
+    const redirect_url = `https://${companyDomain || company?.customDomain}/setup`;
 
     if (!redirect_url) {
       return res.failure({ message: 'Redirect URL is required' });
