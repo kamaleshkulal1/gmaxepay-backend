@@ -1054,8 +1054,6 @@ const connectAadhaarVerification = async (req, res) => {
     if(!company.customDomain || !companyDomain) {
       return res.failure({ message: 'Aadhaar verification is not allowed for this company' });
     }
-    console.log(company);
-    console.log(companyDomain);
     const redirect_url = `https://${companyDomain || company?.customDomain}/setup`;
     // Check if document already exists (already processed)
     const existingDoc = await dbService.findOne(model.digilockerDocument, {
