@@ -40,7 +40,12 @@ router.post('/postShopDetails', upload.single('shopImage'), multer, onboardingCo
 router.post('/postBankDetails', onboardingController.postBankDetails);
 
 // Step 7: Profile
-router.post('/postProfile', onboardingController.postProfile);
+
+router.post('/postProfile',
+    uploadSingle('photo'),
+    multer, 
+ onboardingController.postProfile
+);
 
 // Utility: Get pending steps
 router.post('/getPending', onboardingController.getPending);
