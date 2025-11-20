@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const onboardingController = require('../../../controller/user/v1/onboarding');
-const { upload, uploadFields, multer } = require('../../../middleware/multerConfig');
+const { upload, uploadSingle, uploadFields, multer } = require('../../../middleware/multerConfig');
 
 // Initial Step ReferCode
 router.post('/postReferCode', onboardingController.postReferCode);
@@ -22,7 +22,7 @@ router.post('/connectAadhaarVerification', onboardingController.connectAadhaarVe
 router.post('/uploadAadhaarDocuments', uploadFields([
   { name: 'front_photo', maxCount: 1 },
   { name: 'back_photo', maxCount: 1 }
-]), multer, onboardingController.uploadPanDocuments);
+]), multer, onboardingController.uploadAadharDocuments);
 // Step 4: PAN verification
 router.post('/connectPanVerification', onboardingController.connectPanVerification);
 
