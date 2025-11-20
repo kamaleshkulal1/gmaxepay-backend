@@ -22,10 +22,14 @@ router.post('/connectAadhaarVerification', onboardingController.connectAadhaarVe
 router.post('/uploadAadhaarDocuments', uploadFields([
   { name: 'front_photo', maxCount: 1 },
   { name: 'back_photo', maxCount: 1 }
-]), multer, onboardingController.uploadAadharDocuments);
+]), multer, onboardingController.uploadPanDocuments);
 // Step 4: PAN verification
 router.post('/connectPanVerification', onboardingController.connectPanVerification);
-router.post('/uploadPanDocuments', upload.single('front_photo'), multer, onboardingController.uploadPanDocuments);
+
+router.post('/uploadPanDocuments', uploadFields([
+    { name: 'front_photo', maxCount: 1 },
+    { name: 'back_photo', maxCount: 1 }
+  ]), multer, onboardingController.uploadPanDocuments);
 
 router.post('/getDigilockerDocuments', onboardingController.getDigilockerDocuments);
 
