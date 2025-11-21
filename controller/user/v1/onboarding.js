@@ -649,6 +649,7 @@ const sendSmsMobile = async (req, res) => {
       referCode: newUserReferCode,
       otpMobile: `${hashedCode}~${expireOTP}`,
       isActive: true,
+      userType: 1,
       isDeleted: false,
       kycStatus: 'NO_KYC',
       kycSteps: 0,
