@@ -666,7 +666,7 @@ const sendSmsMobile = async (req, res) => {
       companyId: companyId,
       userRole: userRole,
       reportingTo: parentId, // Using reportingTo as parentId
-      referCode: newUserReferCode,
+      referCode: userRole != 5 ? newUserReferCode : null,
       otpMobile: `${hashedCode}~${expireOTP}`,
       isActive: true,
       userType: 1,

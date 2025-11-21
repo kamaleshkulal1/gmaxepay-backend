@@ -9,7 +9,7 @@ router.post('/postReferCode', onboardingController.postReferCode);
 // Step 1: Mobile verification
 router.post('/sendSmsOtp', onboardingController.sendSmsMobile);
 router.post('/verifySmsOtp', onboardingController.verifySmsOtp);
-router.post('/onboarding/resetSmsOtp', onboardingController.resetSmsOtp);
+router.post('/resetSmsOtp', onboardingController.resetSmsOtp);
 
 // Step 2: Email verification
 router.post('/sendEmailOtp', onboardingController.sendEmailOtp);
