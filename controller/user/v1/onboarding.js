@@ -8,8 +8,8 @@ const { JWT } = require('../../../constants/authConstant');
 const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
 const ekycHub = require('../../../services/eKycHub');
-const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
-const { encrypt } = require('../../../utils/encryption');
+const { doubleEncrypt, decrypt: doubleDecrypt } = require('../../../utils/doubleCheckUp');
+const { encrypt, decrypt } = require('../../../utils/encryption');
 const googleMap = require('../../../services/googleMap');
 const llmService = require('../../../services/llmService');
 const rekognitionService = require('../../../services/rekognitionService');
@@ -17,6 +17,7 @@ const razorpayApi = require('../../../services/razorpayApi');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { Op } = require('sequelize');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 const { generateUniqueReferCode } = require('../../../utils/generateUniqueReferCode');
 const { generateUserToken, decryptUserToken } = require('../../../utils/userToken');
@@ -411,7 +412,7 @@ const postReferCode = async (req, res) => {
   }
 };
 
-const validateReferralCodeAndDetermineRole = async (referCode, companyId, company) => {
+const  validateReferralCodeAndDetermineRole = async (referCode, companyId, company) => {
   // If no referral code provided, default to Retailer (userRole = 5)
   if (!referCode || referCode.trim() === '') {
     return {
@@ -423,27 +424,42 @@ const validateReferralCodeAndDetermineRole = async (referCode, companyId, compan
 
   const trimmedReferCode = referCode.trim();
 
+  // Encrypt the input referCode to search in database (referCode is stored encrypted)
+  let encryptedReferCode;
+  try {
+    encryptedReferCode = encrypt(trimmedReferCode);
+  } catch (error) {
+    console.error('Error encrypting referCode for search:', error);
+    return {
+      userRole: null,
+      parentId: null,
+      error: 'Invalid referral code format'
+    };
+  }
+
   // First, check if it's a company admin referral code
-  // Find company admin user (userRole = 2) for this company
+  // Find company admin user (userRole = 2) for this company with matching referCode
   const companyAdmin = await dbService.findOne(model.user, {
     companyId: companyId,
     userRole: 2, 
-    isDeleted: false
+    isDeleted: false,
+    referCode: encryptedReferCode
   });
 
-  if (companyAdmin && companyAdmin.referCode) {
-    // Try to get decrypted referCode (model hook should decrypt it, but handle both cases)
+  if (companyAdmin) {
+    // Verify the decrypted referCode matches (model hook should have decrypted it)
     let companyReferCode = companyAdmin.referCode;
+    // If model hook didn't decrypt it (shouldn't happen, but handle edge case)
     try {
-      // If it's encrypted (doesn't match plain text pattern), try to decrypt
-      // Plain referral codes are alphanumeric, encrypted ones are longer hex strings
-      if (companyReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(companyReferCode)) {
+      if (companyReferCode && (companyReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(companyReferCode))) {
         companyReferCode = decrypt(companyReferCode);
       }
     } catch (e) {
       // If decryption fails, assume it's already decrypted
+      console.error('Error decrypting company admin referCode:', e);
     }
     
+    // Double-check the decrypted code matches
     if (companyReferCode === trimmedReferCode) {
       // Company referral code matched
       // Note: reportingTo field references user.id, not company.id
@@ -458,41 +474,45 @@ const validateReferralCodeAndDetermineRole = async (referCode, companyId, compan
     }
   }
 
-  // Check all users for matching referral code
-  const allUsers = await dbService.findAll(
+  // Search for user with matching encrypted referral code within the same company
+  // The model hook will automatically decrypt referCode when we fetch the user
+  const refOwner = await dbService.findOne(
     model.user,
-    { isDeleted: false },
+    { 
+      companyId: companyId,
+      isDeleted: false,
+      referCode: encryptedReferCode
+    },
     { attributes: ['id', 'referCode', 'userRole', 'companyId'] }
   );
 
-  let refOwner = null;
-  for (const user of allUsers) {
-    if (user.referCode) {
-      // Try to get decrypted referCode (model hook should decrypt it, but handle both cases)
-      let userReferCode = user.referCode;
-      try {
-        // If it's encrypted (doesn't match plain text pattern), try to decrypt
-        // Plain referral codes are alphanumeric, encrypted ones are longer hex strings
-        if (userReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(userReferCode)) {
-          userReferCode = decrypt(userReferCode);
-        }
-      } catch (e) {
-        // If decryption fails, assume it's already decrypted
+  // Verify the decrypted referCode matches (model hook should have decrypted it)
+  if (refOwner && refOwner.referCode) {
+    let decryptedReferCode = refOwner.referCode;
+    // If model hook didn't decrypt it (shouldn't happen, but handle edge case)
+    try {
+      if (decryptedReferCode && (decryptedReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(decryptedReferCode))) {
+        decryptedReferCode = decrypt(decryptedReferCode);
       }
-      
-      if (userReferCode === trimmedReferCode) {
-        // Check if referral code belongs to the same company
-        if (user.companyId !== companyId) {
-          return {
-            userRole: null,
-            parentId: null,
-            error: 'Invalid referral code'
-          };
-        }
-        refOwner = user;
-        break;
-      }
+    } catch (e) {
+      // If decryption fails, assume it's already decrypted
+      console.error('Error decrypting user referCode:', e);
     }
+    
+    // Double-check the decrypted code matches
+    if (decryptedReferCode !== trimmedReferCode) {
+      return {
+        userRole: null,
+        parentId: null,
+        error: 'Invalid referral code'
+      };
+    }
+  } else {
+    return {
+      userRole: null,
+      parentId: null,
+      error: 'Invalid referral code'
+    };
   }
 
   if (!refOwner) {
