@@ -18,7 +18,7 @@ let Subscription = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
-    userId: {
+    refId: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
@@ -43,7 +43,7 @@ let Subscription = sequelize.define(
       allowNull: false
     },
     subscriptionType: {
-      type: DataTypes.ENUM('one_time', 'monthly', 'yearly'),
+      type: DataTypes.ENUM('one_time'),
       defaultValue: 'one_time',
       allowNull: false
     },
