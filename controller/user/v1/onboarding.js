@@ -573,6 +573,15 @@ const sendSmsMobile = async (req, res) => {
       return res.failure({ message: 'Invalid mobile number format' });
     }
 
+    // Validate referral code early (before checking user existence)
+    // This ensures invalid referral codes are rejected immediately
+    if (referCode && referCode.trim() !== '') {
+      const referralValidation = await validateReferralCodeAndDetermineRole(referCode, companyId, company);
+      if (referralValidation.error) {
+        return res.failure({ message: referralValidation.error });
+      }
+    }
+
     // Check if user already exists with this mobile number
     const existingUser = await dbService.findOne(model.user, {
       mobileNo: cleanMobileNo,
