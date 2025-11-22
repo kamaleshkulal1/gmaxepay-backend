@@ -101,6 +101,24 @@ let Operator = sequelize.define(
     tollFree: {
       type: DataTypes.STRING
     },
+    comm: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0
+    },
+    commType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isIn: [['com', 'sur']]
+      }
+    },
+    amtType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isIn: [['fix', 'per']]
+      }
+    },
     billerId: {
       type: DataTypes.STRING
     },
