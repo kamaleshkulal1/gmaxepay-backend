@@ -92,16 +92,16 @@ app.use(require('./utils/response/responseHandler'));
 // SECURITY: Validate Content-Type (now safe to use res.failure)
 app.use(validateContentType);
 const httpServer = require('http').createServer(app);
-// SECURITY: Limit URL-encoded payload size
-app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+// SECURITY: Limit URL-encoded payload size (increased for file uploads)
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // Use custom logging middleware instead of default morgan
 app.use(morganMiddleware);
-// SECURITY: Limit request body size to prevent DoS attacks
-app.use(express.json({ limit: '5mb' })); // Reduced from 10mb for security
+// SECURITY: Limit request body size (increased for file uploads, multer handles individual file limits)
+app.use(express.json({ limit: '10mb' }));
 
 // SECURITY: Input sanitization and NoSQL injection prevention
 app.use(sanitizeInput);
