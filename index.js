@@ -163,7 +163,6 @@ function detectIPType(ip) {
   return 'unknown';
 }
 
-// SECURITY: Test endpoint removed - exposes sensitive information
 // If needed for debugging, add authentication and only enable in development
 if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
   // Add authentication middleware here if you need this endpoint
