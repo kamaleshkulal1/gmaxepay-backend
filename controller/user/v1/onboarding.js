@@ -1224,8 +1224,6 @@ const getDigilockerDocuments = async (req, res) => {
     }
 
     const userId = user.id;
-    
-    console.log(`[getDigilockerDocuments] Request - User ID: ${userId}, Company ID: ${companyId}, Document Type: ${docType}`);
 
     const existingUser = await dbService.findOne(model.user, { 
       id: userId, 
@@ -1262,12 +1260,10 @@ const getDigilockerDocuments = async (req, res) => {
     }
 
     if (!existingDigilockerDocument.verificationId) {
-      console.error(`[getDigilockerDocuments] Missing verificationId for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: 'Verification ID is required. Please connect verification first' });
     }
 
     if (!existingDigilockerDocument.referenceId) {
-      console.error(`[getDigilockerDocuments] Missing referenceId for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: 'Reference ID is required. Please connect verification first' });
     }
 
@@ -1286,7 +1282,6 @@ const getDigilockerDocuments = async (req, res) => {
     console.log(`[getDigilockerDocuments] Document has full data: ${hasFullData}`);
     
     if (isUserVerified && hasFullData) {
-      console.log(`[getDigilockerDocuments] Returning existing data for User ID: ${userId}, Document Type: ${docType}`);
       response = {
         status: 'SUCCESS',
         message: `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} Verification Already Processed`,
@@ -1319,9 +1314,7 @@ const getDigilockerDocuments = async (req, res) => {
     }
     
     if (shouldFetchFromApi) {
-      console.log(`[getDigilockerDocuments] Fetching latest data from API for User ID: ${userId}, Document Type: ${docType}`);
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
-      console.log(`[getDigilockerDocuments] API Response status: ${response?.status}`);
       
       // Handle both 'Success' and 'SUCCESS' status, and check if data is nested
       const responseStatus = (response?.status || '').toString().toUpperCase();
@@ -1404,7 +1397,6 @@ const getDigilockerDocuments = async (req, res) => {
         // Update KYC status after document download
         await updateKycStatus(userId, companyId, { aadhaarDoc: docType === 'AADHAAR' ? existingDigilockerDocument : userCtx?.aadhaarDoc, panDoc: docType === 'PAN' ? existingDigilockerDocument : userCtx?.panDoc });
       } else {
-        console.error(`[getDigilockerDocuments] API fetch failed for User ID: ${userId}, Document Type: ${docType}`, response);
         return res.failure({ 
           message: `Failed to fetch ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} document from digilocker`, 
           data: response 
@@ -1447,7 +1439,6 @@ const getDigilockerDocuments = async (req, res) => {
       }
     }
     
-    console.log(`[getDigilockerDocuments] Successfully completed for User ID: ${userId}, Document Type: ${docType}`);
     return res.success({ message, data: response.data || response });
   } catch (error) {
     console.error('[getDigilockerDocuments] Error:', error);
