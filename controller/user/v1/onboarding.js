@@ -597,7 +597,7 @@ const sendSmsMobile = async (req, res) => {
     });
 
     // If user exists and mobile is already verified, return success with token
-    if (existingUser && existingUser.mobileVerify === true) {
+    if (existingUser && existingUser.mobileVerify === true || existingUser.mobileVerify === 'true') {
       // Generate userToken for existing verified user
       const userToken = generateUserToken(existingUser.id);
       
