@@ -1060,7 +1060,7 @@ const sendEmailOtp = async (req, res) => {
       });
     }
 
-    // If email is provided in request, validate and check if it belongs to another user
+    // If email is provided in request, validate and check ownership
     if (email) {
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1068,23 +1068,33 @@ const sendEmailOtp = async (req, res) => {
         return res.failure({ message: 'Invalid email format' });
       }
 
-      // Check if this email is associated with another user (different id)
+      // Check if this email is associated with any user
       const existingEmailUser = await dbService.findOne(model.user, { 
         email: email, 
         isActive: true,
         companyId: companyId
       });
 
-      if (existingEmailUser && existingEmailUser.id !== user.id) {
-        return res.failure({ message: 'This email is already associated with another user' });
-      }
-
-      // Update user email in database (allow updating until verified)
-      await dbService.update(model.user, { id: user.id }, { email: email });
-      // Reload user to get updated email
-      const updatedUser = await dbService.findOne(model.user, { id: user.id });
-      if (updatedUser) {
-        user.email = updatedUser.email;
+      // If email belongs to current user, proceed with update
+      if (existingEmailUser && existingEmailUser.id === user.id) {
+        // Email belongs to current user - update and proceed
+        await dbService.update(model.user, { id: user.id }, { email: email });
+        // Reload user to get updated email
+        const updatedUser = await dbService.findOne(model.user, { id: user.id });
+        if (updatedUser) {
+          user.email = updatedUser.email;
+        }
+      } else if (existingEmailUser && existingEmailUser.id !== user.id) {
+        // Email belongs to another user
+        return res.failure({ message: 'Already associated to other user' });
+      } else {
+        // Email doesn't exist in database - update it
+        await dbService.update(model.user, { id: user.id }, { email: email });
+        // Reload user to get updated email
+        const updatedUser = await dbService.findOne(model.user, { id: user.id });
+        if (updatedUser) {
+          user.email = updatedUser.email;
+        }
       }
     }
     
