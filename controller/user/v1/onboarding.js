@@ -1384,23 +1384,18 @@ const connectPanVerification = async (req, res) => {
       return res.failure({ message: companyCtx.error });
     }
 
-    const { companyId ,company} = companyCtx;
+    const { companyId, company } = companyCtx;
     const userCtx = await loadUserContext(req, companyId);
     if (userCtx.error) {
       return res.failure({ message: userCtx.error });
     }
+    const { redirect_url } = req.body || {};
 
     const { user } = userCtx;
     const companyDomain = company.customDomain;
     if(!company.customDomain || !companyDomain) {
       return res.failure({ message: 'Pan verification is not allowed for this company' });
     }
-    const redirect_url = `https://${companyDomain || company?.customDomain}/setup`;
-
-    if (!redirect_url) {
-      return res.failure({ message: 'Redirect URL is required' });
-    }
-
     // Check if document already exists (already processed)
     const existingDoc = await dbService.findOne(model.digilockerDocument, {
       refId: user.id,
@@ -1408,13 +1403,15 @@ const connectPanVerification = async (req, res) => {
       documentType: 'PAN',
       isDeleted: false
     });
-    
-    if (existingDoc) {
-      return res.failure({ message: 'PAN verification already processed. Please download from digilocker' });
+
+    const data = {
+      isDownload: true
+    }
+    if(existingDoc){
+      return res.success({ message: 'PAN verification already processed. Please download from digilocker', data });
     }
     
     const response = await ekycHub.createPanVerificationUrl(redirect_url);
-    console.log("response",response);
 
     // Only store verification_id and reference_id if response is successful
     if (response && response.status === 'Success') {
