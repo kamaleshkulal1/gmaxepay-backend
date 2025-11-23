@@ -599,7 +599,6 @@ const sendSmsMobile = async (req, res) => {
         data: { 
           userToken: userToken,
           mobileNo: cleanMobileNo,
-          userRole: existingUser.userRole,
           mobileVerify: true,
           status: 'verified'
         } 
