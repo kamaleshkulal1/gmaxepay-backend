@@ -1323,14 +1323,13 @@ const connectAadhaarVerification = async (req, res) => {
     if (userCtx.error) {
       return res.failure({ message: userCtx.error });
     }
+   const {redirect_url}= req.body || {};
 
     const { user } = userCtx;
     const companyDomain = company.customDomain;
     if(!company.customDomain || !companyDomain) {
       return res.failure({ message: 'Aadhaar verification is not allowed for this company' });
-    }
-    const redirect_url = `https://${companyDomain || company?.customDomain}/setup`;
-    // Check if document already exists (already processed)
+    }    // Check if document already exists (already processed)
     const existingDoc = await dbService.findOne(model.digilockerDocument, {
       refId: user.id,
       companyId: companyId,
