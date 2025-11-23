@@ -70,14 +70,18 @@ const loadUserContext = async (req, companyId) => {
     return { error: 'Invalid or expired user token' };
   }
 
-  const userId = tokenData.userId;
+  const userId = parseInt(tokenData.userId, 10);
+  
+  if (isNaN(userId)) {
+    return { error: 'Invalid user ID in token' };
+  }
 
   const existingUser = await dbService.findOne(model.user, { 
     id: userId, 
     companyId: companyId,
     isDeleted: false 
   });
-  
+
   if (!existingUser) {
     return { error: 'User not found' };
   }
@@ -924,11 +928,22 @@ const verifySmsOtp = async (req, res) => {
       return res.failure({ message: 'OTP is required' });
     }
 
-    if (user.isAccountLocked && user.isAccountLocked()) {
+    // Get Sequelize instance to call methods
+    const existingUser = await dbService.findOne(model.user, { 
+      id: user.id, 
+      companyId: companyId,
+      isActive: true 
+    });
+    
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    if (existingUser.isAccountLocked && existingUser.isAccountLocked()) {
       return res.failure({ message: 'Account is temporarily locked due to multiple invalid attempts. Try again later.' });
     }
 
-    const otpField = user.otpMobile || '';
+    const otpField = existingUser.otpMobile || '';
     const [storedHash, expiresAt] = otpField.split('~');
     
     if (!storedHash || !expiresAt) {
@@ -941,8 +956,10 @@ const verifySmsOtp = async (req, res) => {
 
     const isMatch = await bcrypt.compare(otp.toString(), storedHash);
     if (!isMatch) {
-      await user.incrementOtpAttempts();
-      if (user.isAccountLocked && user.isAccountLocked()) {
+      await existingUser.incrementOtpAttempts();
+      // Reload user to check lock status after increment
+      const updatedUser = await dbService.findOne(model.user, { id: user.id });
+      if (updatedUser && updatedUser.isAccountLocked && updatedUser.isAccountLocked()) {
         return res.failure({ message: 'Account locked due to multiple invalid attempts.' });
       }
       return res.failure({ message: 'Invalid OTP' });
@@ -953,7 +970,7 @@ const verifySmsOtp = async (req, res) => {
       mobileVerify: true, 
       otpMobile: null 
     });
-    await user.resetOtpAttempts();
+    await existingUser.resetOtpAttempts();
 
     // Update KYC status
     await updateKycStatus(user.id, companyId, userCtx);
@@ -1004,7 +1021,18 @@ const resetSmsOtp = async (req, res) => {
       return res.failure({ message: 'Invalid Mobile Number' });
     }
 
-    await user.resetOtpAttempts();
+    // Get Sequelize instance to call resetOtpAttempts method
+    const existingUser = await dbService.findOne(model.user, { 
+      id: user.id, 
+      companyId: companyId,
+      isActive: true 
+    });
+    
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    await existingUser.resetOtpAttempts();
 
     // Generate and send new OTP
     const code = random.randomNumber(6);
@@ -1169,16 +1197,23 @@ const verifyEmailOtp = async (req, res) => {
     if (!otp) {
       return res.failure({ message: 'OTP is required' });
     }
-   
-    const existingUser = await dbService.findOne(model.user, { id: user.id, isActive: true });
+
+    // Get Sequelize instance to call methods
+    const existingUser = await dbService.findOne(model.user, { 
+      id: user.id, 
+      companyId: companyId,
+      isActive: true 
+    });
+    
     if (!existingUser) {
       return res.failure({ message: 'User not found' });
     }
+
     if (existingUser.isAccountLocked && existingUser.isAccountLocked()) {
       return res.failure({ message: 'Account is temporarily locked due to multiple invalid attempts. Try again later.' });
     }
 
-    const otpField = user.otpEmail || '';
+    const otpField = existingUser.otpEmail || '';
     const [storedHash, expiresAt] = otpField.split('~');
     
     if (!storedHash || !expiresAt) {
@@ -1191,8 +1226,10 @@ const verifyEmailOtp = async (req, res) => {
 
     const isMatch = await bcrypt.compare(otp.toString(), storedHash);
     if (!isMatch) {
-      await user.incrementOtpAttempts();
-      if (user.isAccountLocked && user.isAccountLocked()) {
+      await existingUser.incrementOtpAttempts();
+      // Reload user to check lock status after increment
+      const updatedUser = await dbService.findOne(model.user, { id: user.id });
+      if (updatedUser && updatedUser.isAccountLocked && updatedUser.isAccountLocked()) {
         return res.failure({ message: 'Account locked due to multiple invalid attempts.' });
       }
       return res.failure({ message: 'Invalid OTP' });
@@ -1202,7 +1239,7 @@ const verifyEmailOtp = async (req, res) => {
       emailVerify: true, 
       otpEmail: null 
     });
-    await user.resetOtpAttempts();
+    await existingUser.resetOtpAttempts();
 
     // Update KYC status
     await updateKycStatus(user.id, companyId, userCtx);
