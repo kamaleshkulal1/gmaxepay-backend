@@ -72,15 +72,37 @@ const loadUserContext = async (req, companyId) => {
 
   const userId = tokenData.userId;
 
-  const user = await dbService.findOne(model.user, { 
+  const existingUser = await dbService.findOne(model.user, { 
     id: userId, 
     companyId: companyId,
     isDeleted: false 
   });
-
-  if (!user) {
+  
+  if (!existingUser) {
     return { error: 'User not found' };
   }
+
+  const user = {
+    id: existingUser.id,
+    userRole: existingUser.userRole,
+    mobileVerify: existingUser.mobileVerify,
+    aadharVerify: existingUser.aadharVerify,
+    shopDetailsVerify: existingUser.shopDetailsVerify,
+    panVerify: existingUser.panVerify,
+    imageVerify: existingUser.imageVerify,
+    emailVerify: existingUser.emailVerify,
+    profileImageWithShopVerify: existingUser.profileImageWithShopVerify,
+    bankDetailsVerify: existingUser.bankDetailsVerify,
+    aadharDetails: existingUser.aadharDetails,
+    mobileNo: existingUser.mobileNo,
+    email: existingUser.email,
+    name: existingUser.name,
+    profileImage: existingUser.profileImage,
+    aadharFrontImage: existingUser.aadharFrontImage,
+    aadharBackImage: existingUser.aadharBackImage,
+    panCardFrontImage: existingUser.panCardFrontImage,
+    panCardBackImage: existingUser.panCardBackImage
+  };
 
   const outlet = await dbService.findOne(model.outlet, { 
     refId: user.id, 
@@ -1018,15 +1040,15 @@ const sendEmailOtp = async (req, res) => {
     if (userCtx.error) {
       return res.failure({ message: userCtx.error });
     }
-
+    
     const { user, userDetails, outletDetails, customerBankDetails } = userCtx;
+    
     const { email } = req.body || {};
-
+  
     // Check if email is already verified
     if (user.emailVerify) {
       return res.failure({ message: 'Email is already verified' });
     }
-
     // If email is provided in request, create or update it in the database
     if (email) {
       // Validate email format
@@ -1043,13 +1065,18 @@ const sendEmailOtp = async (req, res) => {
         user.email = updatedUser.email;
       }
     }
-
+    
     // Check if user has email after update
     if (!user.email) {
       return res.failure({ message: 'Email is required. Please provide an email address.' });
     }
 
-    await user.resetLoginAttempts();
+    // Get Sequelize instance to call resetLoginAttempts method
+    const existingUser = await dbService.findOne(model.user, { id: user.id, isActive: true });
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+    await existingUser.resetLoginAttempts();
 
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
