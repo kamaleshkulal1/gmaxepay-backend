@@ -1045,11 +1045,22 @@ const sendEmailOtp = async (req, res) => {
     
     const { email } = req.body || {};
   
-    // Check if email is already verified
+    // Check if email is already verified - if yes, return pending steps
     if (user.emailVerify) {
-      return res.failure({ message: 'Email is already verified' });
+      const pendingInfo = getPendingSteps({ 
+        userDetails, 
+        outletDetails, 
+        customerBankDetails,
+        aadhaarDoc: userCtx.aadhaarDoc,
+        panDoc: userCtx.panDoc
+      });
+      return res.success({ 
+        message: 'Email is already verified', 
+        data: { steps: pendingInfo.steps, pending: pendingInfo.pending } 
+      });
     }
-    // If email is provided in request, create or update it in the database
+
+    // If email is provided in request, validate and check if it belongs to another user
     if (email) {
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1057,7 +1068,18 @@ const sendEmailOtp = async (req, res) => {
         return res.failure({ message: 'Invalid email format' });
       }
 
-      // Update user email in database
+      // Check if this email is associated with another user (different id)
+      const existingEmailUser = await dbService.findOne(model.user, { 
+        email: email, 
+        isActive: true,
+        companyId: companyId
+      });
+
+      if (existingEmailUser && existingEmailUser.id !== user.id) {
+        return res.failure({ message: 'This email is already associated with another user' });
+      }
+
+      // Update user email in database (allow updating until verified)
       await dbService.update(model.user, { id: user.id }, { email: email });
       // Reload user to get updated email
       const updatedUser = await dbService.findOne(model.user, { id: user.id });
@@ -1070,12 +1092,6 @@ const sendEmailOtp = async (req, res) => {
     if (!user.email) {
       return res.failure({ message: 'Email is required. Please provide an email address.' });
     }
-
-    const existingEmailUser = await dbService.findOne(model.user, { email: user.email, isActive: true });
-
-    if (existingEmailUser && existingEmailUser.email === email) {
-      return res.failure({ message: 'Already associated with this email' });
-    }
     // Get Sequelize instance to call resetLoginAttempts method
     const existingUser = await dbService.findOne(model.user, { id: user.id, isActive: true });
     if (!existingUser) {
@@ -1083,7 +1099,7 @@ const sendEmailOtp = async (req, res) => {
     }
     await existingUser.resetLoginAttempts();
 
-    const code = random.randomNumber(6);
+    const code = random.randomNumber(6); 
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(3, 'minutes').toISOString();
 
