@@ -592,107 +592,146 @@ const sendSmsMobile = async (req, res) => {
     // Check if user already exists with this mobile number
     const existingUser = await dbService.findOne(model.user, {
       mobileNo: cleanMobileNo,
-      companyId: companyId,
       isDeleted: false
     });
+    if(!existingUser.companyId!==companyId) {
+      return res.failure({ message: 'Invalid company' });
+    }
 
-    // If user exists and mobile is already verified, return success with token
-    if (existingUser && existingUser.mobileVerify === true || existingUser.mobileVerify === 'true') {
-      // Generate userToken for existing verified user
-      const userToken = generateUserToken(existingUser.id);
-      
-      // Fetch related data for pending steps
-      const outlet = await dbService.findOne(model.outlet, { 
-        refId: existingUser.id, 
-        companyId: companyId 
-      });
-
-      // Find customer record to lookup customerBank
-      const customer = await dbService.findOne(model.customer, {
-        mobile: existingUser.mobileNo
-      });
-      
-      // Find customerBank using customer.id if customer exists, otherwise try user.id for backward compatibility
-      let customerBank = null;
-      if (customer) {
-        customerBank = await dbService.findOne(model.customerBank, { refId: customer.id, companyId: companyId });
-      }
-      if (!customerBank) {
-        customerBank = await dbService.findOne(model.customerBank, { refId: existingUser.id, companyId: companyId });
+    // If user exists, check userRole - only roles 3, 4, 5 can access
+    if (existingUser) {
+      // Check if userRole is 1 or 2 - deny access
+      if (existingUser.userRole === 1 || existingUser.userRole === 2) {
+        return res.failure({ 
+          message: 'Access denied. This mobile number is registered with an admin account.' 
+        });
       }
 
-      // Fetch digilocker documents for Aadhaar and PAN
-      const [aadhaarDoc, panDoc] = await Promise.all([
-        dbService.findOne(model.digilockerDocument, {
-          refId: existingUser.id,
-          companyId: companyId,
-          documentType: 'AADHAAR',
-          isDeleted: false
-        }),
-        dbService.findOne(model.digilockerDocument, {
-          refId: existingUser.id,
-          companyId: companyId,
-          documentType: 'PAN',
-          isDeleted: false
-        })
-      ]);
-
-      // Create userDetails object for getPendingSteps
-      const userDetails = {
-        userId: existingUser.id,
-        mobileVerify: existingUser.mobileVerify,
-        emailVerify: existingUser.emailVerify,
-        aadharVerify: existingUser.aadharVerify,
-        panVerify: existingUser.panVerify,
-        mobileNo: existingUser.mobileNo,
-        email: existingUser.email,
-        aadharFrontImage: existingUser.aadharFrontImage,
-        aadharBackImage: existingUser.aadharBackImage,
-        panCardFrontImage: existingUser.panCardFrontImage,
-        panCardBackImage: existingUser.panCardBackImage,
-        shopDetailsVerify: existingUser.shopDetailsVerify,
-        bankDetailsVerify: existingUser.bankDetailsVerify,
-        profileImageWithShopVerify: existingUser.profileImageWithShopVerify
-      };
-
-      const outletDetails = outlet ? {
-        outletId: outlet.id || null,
-        shopName: outlet.shopName,
-        shopAddress: outlet.shopAddress,
-        gstNo: outlet.gstNo,
-        mobileNo: outlet.mobileNo,
-        zipCode: outlet.zipCode,
-        shopImage: outlet.shopImage
-      } : null;
-
-      const customerBankDetails = customerBank ? {
-        customerBankId: customerBank.id,
-        accountNumber: customerBank.accountNumber,
-        ifsc: customerBank.ifsc,
-      } : null;
-
-      // Get pending steps
-      const pendingInfo = getPendingSteps({ 
-        user: existingUser, 
-        userDetails: userDetails, 
-        outletDetails: outletDetails, 
-        customerBankDetails: customerBankDetails, 
-        aadhaarDoc: aadhaarDoc, 
-        panDoc: panDoc 
-      });
+      // Check if any verification is already completed
+      // Prevent duplicate user creation - if user exists with any verification, return pending steps
+      const isMobileVerified = existingUser.mobileVerify === true || existingUser.mobileVerify === 'true';
+      const isEmailVerified = existingUser.emailVerify === true || existingUser.emailVerify === 'true';
+      const isAadharVerified = existingUser.aadharVerify === true || existingUser.aadharVerify === 'true';
+      const isPanVerified = existingUser.panVerify === true || existingUser.panVerify === 'true';
+      const isBankVerified = existingUser.bankDetailsVerify === true || existingUser.bankDetailsVerify === 'true';
       
-      return res.success({ 
-        message: 'Mobile number is already verified', 
-        data: { 
-          userToken: userToken,
-          mobileNo: cleanMobileNo,
-          mobileVerify: true,
-          status: 'verified',
-          steps: pendingInfo.steps,
-          pending: pendingInfo.pending,
-          allCompleted: pendingInfo.allCompleted
-        } 
-      });
+      // If any verification is completed, return with pending steps (no duplicate user creation, no OTP)
+      if (isMobileVerified || isEmailVerified || isAadharVerified || isPanVerified || isBankVerified) {
+        // Generate userToken for existing verified user
+        const userToken = generateUserToken(existingUser.id);
+        
+        // Fetch related data for pending steps
+        const outlet = await dbService.findOne(model.outlet, { 
+          refId: existingUser.id, 
+          companyId: companyId 
+        });
+
+        // Find customer record to lookup customerBank
+        const customer = await dbService.findOne(model.customer, {
+          mobile: existingUser.mobileNo
+        });
+        
+        // Find customerBank using customer.id if customer exists, otherwise try user.id for backward compatibility
+        let customerBank = null;
+        if (customer) {
+          customerBank = await dbService.findOne(model.customerBank, { refId: customer.id, companyId: companyId });
+        }
+        if (!customerBank) {
+          customerBank = await dbService.findOne(model.customerBank, { refId: existingUser.id, companyId: companyId });
+        }
+
+        // Fetch digilocker documents for Aadhaar and PAN
+        const [aadhaarDoc, panDoc] = await Promise.all([
+          dbService.findOne(model.digilockerDocument, {
+            refId: existingUser.id,
+            companyId: companyId,
+            documentType: 'AADHAAR',
+            isDeleted: false
+          }),
+          dbService.findOne(model.digilockerDocument, {
+            refId: existingUser.id,
+            companyId: companyId,
+            documentType: 'PAN',
+            isDeleted: false
+          })
+        ]);
+
+        // Create userDetails object for getPendingSteps
+        const userDetails = {
+          userId: existingUser.id,
+          mobileVerify: existingUser.mobileVerify,
+          emailVerify: existingUser.emailVerify,
+          aadharVerify: existingUser.aadharVerify,
+          panVerify: existingUser.panVerify,
+          mobileNo: existingUser.mobileNo,
+          email: existingUser.email,
+          aadharFrontImage: existingUser.aadharFrontImage,
+          aadharBackImage: existingUser.aadharBackImage,
+          panCardFrontImage: existingUser.panCardFrontImage,
+          panCardBackImage: existingUser.panCardBackImage,
+          shopDetailsVerify: existingUser.shopDetailsVerify,
+          bankDetailsVerify: existingUser.bankDetailsVerify,
+          profileImageWithShopVerify: existingUser.profileImageWithShopVerify
+        };
+
+        const outletDetails = outlet ? {
+          outletId: outlet.id || null,
+          shopName: outlet.shopName,
+          shopAddress: outlet.shopAddress,
+          gstNo: outlet.gstNo,
+          mobileNo: outlet.mobileNo,
+          zipCode: outlet.zipCode,
+          shopImage: outlet.shopImage
+        } : null;
+
+        const customerBankDetails = customerBank ? {
+          customerBankId: customerBank.id,
+          accountNumber: customerBank.accountNumber,
+          ifsc: customerBank.ifsc,
+        } : null;
+
+        // Get pending steps
+        const pendingInfo = getPendingSteps({ 
+          user: existingUser, 
+          userDetails: userDetails, 
+          outletDetails: outletDetails, 
+          customerBankDetails: customerBankDetails, 
+          aadhaarDoc: aadhaarDoc, 
+          panDoc: panDoc 
+        });
+        
+        // Determine appropriate message based on what's verified
+        let message = 'User already exists';
+        if (isMobileVerified) {
+          message = 'Mobile already verified';
+        } else if (isEmailVerified) {
+          message = 'Email is already verified';
+        } else if (isAadharVerified) {
+          message = 'Aadhaar is already verified';
+        } else if (isPanVerified) {
+          message = 'PAN is already verified';
+        } else if (isBankVerified) {
+          message = 'Bank details are already verified';
+        }
+        
+        return res.success({ 
+          message: message, 
+          data: { 
+            userToken: userToken,
+            mobileNo: cleanMobileNo,
+            mobileVerify: isMobileVerified,
+            emailVerify: isEmailVerified,
+            aadharVerify: isAadharVerified,
+            panVerify: isPanVerified,
+            bankVerify: isBankVerified,
+            status: 'verified',
+            userRole: existingUser.userRole,
+            steps: pendingInfo.steps,
+            pending: pendingInfo.pending,
+            allCompleted: pendingInfo.allCompleted
+          } 
+        });
+      }
     }
 
     // Generate OTP
@@ -721,6 +760,13 @@ const sendSmsMobile = async (req, res) => {
 
     // If user exists but mobileVerify is false, update OTP only (don't create new user)
     if (existingUser && existingUser.mobileVerify === false) {
+      // Check if userRole is 1 or 2 - deny access
+      if (existingUser.userRole === 1 || existingUser.userRole === 2) {
+        return res.failure({ 
+          message: 'Access denied. This mobile number is registered with an admin account.' 
+        });
+      }
+
       // Update existing user's OTP
       await dbService.update(
         model.user,
@@ -749,6 +795,13 @@ const sendSmsMobile = async (req, res) => {
     }
 
     const { userRole, parentId } = referralValidation;
+    
+    // Ensure userRole is only 3, 4, or 5 (not 1 or 2)
+    if (userRole === 1 || userRole === 2) {
+      return res.failure({ 
+        message: 'Invalid user role. Only Master Distributor, Distributor, and Retailer can register.' 
+      });
+    }
     
     // Note: parentId will be:
     // - null if no referral code (Retailer with no parent)
