@@ -1336,9 +1336,12 @@ const connectAadhaarVerification = async (req, res) => {
       documentType: 'AADHAAR',
       isDeleted: false
     });
-    
-    if (existingDoc) {
-      return res.failure({ message: 'Aadhaar verification already processed. Please download from digilocker' });
+
+    const data = {
+      download_url: true
+    }
+    if(existingDoc){
+      return res.success({ message: 'Aadhaar verification already processed. Please download from digilocker' , data});
     }
     
     const response = await ekycHub.createAadharVerificationUrl(redirect_url);
