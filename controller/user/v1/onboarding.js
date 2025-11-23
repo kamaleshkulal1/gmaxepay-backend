@@ -594,12 +594,16 @@ const sendSmsMobile = async (req, res) => {
       mobileNo: cleanMobileNo,
       isDeleted: false
     });
-    if(!existingUser.companyId!==companyId) {
-      return res.failure({ message: 'Invalid company' });
-    }
 
     // If user exists, check userRole - only roles 3, 4, 5 can access
     if (existingUser) {
+      // Check if user belongs to the same company (convert both to numbers for comparison)
+      const existingUserCompanyId = Number(existingUser.companyId);
+      const requestCompanyId = Number(companyId);
+      
+      if (existingUserCompanyId !== requestCompanyId) {
+        return res.failure({ message: 'Invalid company' });
+      }
       // Check if userRole is 1 or 2 - deny access
       if (existingUser.userRole === 1 || existingUser.userRole === 2) {
         return res.failure({ 
