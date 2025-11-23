@@ -1071,6 +1071,11 @@ const sendEmailOtp = async (req, res) => {
       return res.failure({ message: 'Email is required. Please provide an email address.' });
     }
 
+    const existingEmailUser = await dbService.findOne(model.user, { email: user.email, isActive: true });
+
+    if (existingEmailUser && existingEmailUser.email === email) {
+      return res.failure({ message: 'Already associated with this email' });
+    }
     // Get Sequelize instance to call resetLoginAttempts method
     const existingUser = await dbService.findOne(model.user, { id: user.id, isActive: true });
     if (!existingUser) {
