@@ -594,13 +594,96 @@ const sendSmsMobile = async (req, res) => {
       // Generate userToken for existing verified user
       const userToken = generateUserToken(existingUser.id);
       
+      // Fetch related data for pending steps
+      const outlet = await dbService.findOne(model.outlet, { 
+        refId: existingUser.id, 
+        companyId: companyId 
+      });
+
+      // Find customer record to lookup customerBank
+      const customer = await dbService.findOne(model.customer, {
+        mobile: existingUser.mobileNo
+      });
+      
+      // Find customerBank using customer.id if customer exists, otherwise try user.id for backward compatibility
+      let customerBank = null;
+      if (customer) {
+        customerBank = await dbService.findOne(model.customerBank, { refId: customer.id, companyId: companyId });
+      }
+      if (!customerBank) {
+        customerBank = await dbService.findOne(model.customerBank, { refId: existingUser.id, companyId: companyId });
+      }
+
+      // Fetch digilocker documents for Aadhaar and PAN
+      const [aadhaarDoc, panDoc] = await Promise.all([
+        dbService.findOne(model.digilockerDocument, {
+          refId: existingUser.id,
+          companyId: companyId,
+          documentType: 'AADHAAR',
+          isDeleted: false
+        }),
+        dbService.findOne(model.digilockerDocument, {
+          refId: existingUser.id,
+          companyId: companyId,
+          documentType: 'PAN',
+          isDeleted: false
+        })
+      ]);
+
+      // Create userDetails object for getPendingSteps
+      const userDetails = {
+        userId: existingUser.id,
+        mobileVerify: existingUser.mobileVerify,
+        emailVerify: existingUser.emailVerify,
+        aadharVerify: existingUser.aadharVerify,
+        panVerify: existingUser.panVerify,
+        mobileNo: existingUser.mobileNo,
+        email: existingUser.email,
+        aadharFrontImage: existingUser.aadharFrontImage,
+        aadharBackImage: existingUser.aadharBackImage,
+        panCardFrontImage: existingUser.panCardFrontImage,
+        panCardBackImage: existingUser.panCardBackImage,
+        shopDetailsVerify: existingUser.shopDetailsVerify,
+        bankDetailsVerify: existingUser.bankDetailsVerify,
+        profileImageWithShopVerify: existingUser.profileImageWithShopVerify
+      };
+
+      const outletDetails = outlet ? {
+        outletId: outlet.id || null,
+        shopName: outlet.shopName,
+        shopAddress: outlet.shopAddress,
+        gstNo: outlet.gstNo,
+        mobileNo: outlet.mobileNo,
+        zipCode: outlet.zipCode,
+        shopImage: outlet.shopImage
+      } : null;
+
+      const customerBankDetails = customerBank ? {
+        customerBankId: customerBank.id,
+        accountNumber: customerBank.accountNumber,
+        ifsc: customerBank.ifsc,
+      } : null;
+
+      // Get pending steps
+      const pendingInfo = getPendingSteps({ 
+        user: existingUser, 
+        userDetails: userDetails, 
+        outletDetails: outletDetails, 
+        customerBankDetails: customerBankDetails, 
+        aadhaarDoc: aadhaarDoc, 
+        panDoc: panDoc 
+      });
+      
       return res.success({ 
         message: 'Mobile number is already verified', 
         data: { 
           userToken: userToken,
           mobileNo: cleanMobileNo,
           mobileVerify: true,
-          status: 'verified'
+          status: 'verified',
+          steps: pendingInfo.steps,
+          pending: pendingInfo.pending,
+          allCompleted: pendingInfo.allCompleted
         } 
       });
     }

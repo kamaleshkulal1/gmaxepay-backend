@@ -65,7 +65,7 @@ const ensureAllowedOrigin = (req) => {
 const isAllowedCompanyDomain = (domain) => {
   if (!domain) return false;
   const normalizedDomain = domain.toString().trim().toLowerCase();
-  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in';
+  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in' ;
 };
 
 const getRequestedDomain = (req) => {
