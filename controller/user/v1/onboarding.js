@@ -240,20 +240,27 @@ const getPendingSteps = (ctx) => {
   const panBackImageKey = extractS3Key(panCardBackImage);
   const panUpload = !!(panFrontImageKey && panBackImageKey);
   
+  // Check if verification is done via user flags (for manual verification)
+  const aadharVerifyFlag = !!(user.aadharVerify || userDetails?.aadharVerify);
+  const panVerifyFlag = !!(user.panVerify || userDetails?.panVerify);
+  
+  // If verification flag is set, mark all sub-steps as done
   const aadhaarSubSteps = [
-    { key: 'connect', label: 'Connect Aadhaar', done: aadhaarConnect },
-    { key: 'download', label: 'Download Aadhaar', done: aadhaarDownload },
-    { key: 'upload', label: 'Upload Aadhaar Images', done: aadhaarUpload }
+    { key: 'connect', label: 'Connect Aadhaar', done: aadharVerifyFlag || aadhaarConnect },
+    { key: 'download', label: 'Download Aadhaar', done: aadharVerifyFlag || aadhaarDownload },
+    { key: 'upload', label: 'Upload Aadhaar Images', done: aadharVerifyFlag || aadhaarUpload }
   ];
   
   const panSubSteps = [
-    { key: 'connect', label: 'Connect PAN', done: panConnect },
-    { key: 'download', label: 'Download PAN', done: panDownload },
-    { key: 'upload', label: 'Upload PAN Images', done: panUpload }
+    { key: 'connect', label: 'Connect PAN', done: panVerifyFlag || panConnect },
+    { key: 'download', label: 'Download PAN', done: panVerifyFlag || panDownload },
+    { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag || panUpload }
   ];
   
-  const aadhaarAllDone = aadhaarConnect && aadhaarDownload && aadhaarUpload;
-  const panAllDone = panConnect && panDownload && panUpload;
+  // Aadhaar is done if: verification flag is set OR all Digilocker steps are complete
+  const aadhaarAllDone = aadharVerifyFlag || (aadhaarConnect && aadhaarDownload && aadhaarUpload);
+  // PAN is done if: verification flag is set OR all Digilocker steps are complete
+  const panAllDone = panVerifyFlag || (panConnect && panDownload && panUpload);
   
   // Check shop details verification using shopDetailsVerify field from user
   const shopDetailsDone = !!(user.shopDetailsVerify || userDetails?.shopDetailsVerify);
