@@ -1338,7 +1338,7 @@ const connectAadhaarVerification = async (req, res) => {
     });
 
     const data = {
-      download_url: true
+      isDownload: true
     }
     if(existingDoc){
       return res.success({ message: 'Aadhaar verification already processed. Please download from digilocker' , data});
