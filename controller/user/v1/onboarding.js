@@ -595,7 +595,7 @@ const sendSmsMobile = async (req, res) => {
       const userToken = generateUserToken(existingUser.id);
       
       return res.success({ 
-        message: 'Mobile number already exists', 
+        message: 'Mobile number is already verified', 
         data: { 
           userToken: userToken,
           mobileNo: cleanMobileNo,
