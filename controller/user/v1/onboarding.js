@@ -1167,7 +1167,8 @@ const connectPanVerification = async (req, res) => {
     }
     
     const response = await ekycHub.createPanVerificationUrl(redirect_url);
-    
+    console.log("response",response);
+
     // Only store verification_id and reference_id if response is successful
     if (response && response.status === 'Success') {
       const { verification_id, reference_id } = response;
@@ -1235,7 +1236,7 @@ const getDigilockerDocuments = async (req, res) => {
       return res.failure({ message: 'User not found' });
     }
 
-    const allDigilockerDocuments = await dbService.findAll(model.digilockerDocument, {
+    const existingDigilockerDocument = await dbService.findOne(model.digilockerDocument, {
       refId: userId,
       companyId: companyId,
       documentType: docType,
@@ -1243,20 +1244,9 @@ const getDigilockerDocuments = async (req, res) => {
     }, {
       sort: { id: -1 }
     });
-
-    if (!allDigilockerDocuments || allDigilockerDocuments.length === 0) {
-      console.log(`[getDigilockerDocuments] No document record found for User ID: ${userId}, Document Type: ${docType}`);
+   
+    if (!existingDigilockerDocument) {
       return res.failure({ message: `Please connect your ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} to digilocker first` });
-    }
-
-    const existingDigilockerDocument = allDigilockerDocuments[0];
-    console.log(`[getDigilockerDocuments] Found ${allDigilockerDocuments.length} document(s), using latest - ID: ${existingDigilockerDocument.id}`);
-
-    if (existingDigilockerDocument.refId !== userId || existingDigilockerDocument.companyId !== companyId || existingDigilockerDocument.documentType !== docType) {
-      console.error(`[getDigilockerDocuments] Security check failed - Document ownership mismatch`);
-      console.error(`[getDigilockerDocuments] Expected - User: ${userId}, Company: ${companyId}, Type: ${docType}`);
-      console.error(`[getDigilockerDocuments] Found - User: ${existingDigilockerDocument.refId}, Company: ${existingDigilockerDocument.companyId}, Type: ${existingDigilockerDocument.documentType}`);
-      return res.failure({ message: 'Document access denied. Data mismatch detected.' });
     }
 
     if (!existingDigilockerDocument.verificationId) {
@@ -1270,16 +1260,13 @@ const getDigilockerDocuments = async (req, res) => {
     const verification_id = existingDigilockerDocument.verificationId;
     const reference_id = existingDigilockerDocument.referenceId;
     
-    console.log(`[getDigilockerDocuments] Document found - ID: ${existingDigilockerDocument.id}, Verification ID: ${verification_id}, Reference ID: ${reference_id}`);
     
     let response;
     let shouldFetchFromApi = true;
     
     const isUserVerified = docType === 'AADHAAR' ? existingUser.aadharVerify : existingUser.panVerify;
-    console.log(`[getDigilockerDocuments] User verification status: ${isUserVerified}`);
     
     const hasFullData = (docType === 'AADHAAR' && existingDigilockerDocument.name) || (docType === 'PAN' && existingDigilockerDocument.panNumber);
-    console.log(`[getDigilockerDocuments] Document has full data: ${hasFullData}`);
     
     if (isUserVerified && hasFullData) {
       response = {
@@ -1314,7 +1301,11 @@ const getDigilockerDocuments = async (req, res) => {
     }
     
     if (shouldFetchFromApi) {
+      console.log("verification_id",verification_id);
+      console.log("reference_id",reference_id);
+      console.log("document_type",document_type);
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
+      console.log("response",response);
       
       // Handle both 'Success' and 'SUCCESS' status, and check if data is nested
       const responseStatus = (response?.status || '').toString().toUpperCase();
