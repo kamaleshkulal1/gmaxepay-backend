@@ -1169,8 +1169,12 @@ const verifyEmailOtp = async (req, res) => {
     if (!otp) {
       return res.failure({ message: 'OTP is required' });
     }
-
-    if (user.isAccountLocked && user.isAccountLocked()) {
+   
+    const existingUser = await dbService.findOne(model.user, { id: user.id, isActive: true });
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+    if (existingUser.isAccountLocked && existingUser.isAccountLocked()) {
       return res.failure({ message: 'Account is temporarily locked due to multiple invalid attempts. Try again later.' });
     }
 
