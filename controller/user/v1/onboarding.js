@@ -66,6 +66,7 @@ const loadUserContext = async (req, companyId) => {
 
   // Decrypt user token to get userId
   const tokenData = decryptUserToken(userToken);
+  console.log('tokenData', tokenData);
   if (!tokenData || !tokenData.userId) {
     return { error: 'Invalid or expired user token' };
   }
@@ -175,12 +176,15 @@ const loadUserContext = async (req, companyId) => {
     aadharVerify: user.aadharVerify,
     panVerify: user.panVerify,
     mobileNo: user.mobileNo,
+    bankDetailsVerify: user.bankDetailsVerify,
     email: user.email,
     profileImage: getImageUrl(user.profileImage, true), // true = is profile image, use simple CDN
     aadharFrontImage: getImageUrl(user.aadharFrontImage, false),
     aadharBackImage: getImageUrl(user.aadharBackImage, false),
     panCardFrontImage: getImageUrl(user.panCardFrontImage, false),
     panCardBackImage: getImageUrl(user.panCardBackImage, false),
+    shopDetailsVerify: user.shopDetailsVerify,
+    profileImageWithShopVerify: user.profileImageWithShopVerify
   };
 
   // Get secure shop image URL
@@ -222,6 +226,22 @@ const loadUserContext = async (req, companyId) => {
   return { user, outlet, customerBank, userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc, customer };
 };
 
+// Helper function to extract S3 key from JSON field
+const extractS3Key = (imageData) => {
+  if (!imageData) return null;
+  if (typeof imageData === 'string') {
+    try {
+      const parsed = JSON.parse(imageData);
+      return parsed.key || parsed;
+    } catch {
+      return imageData;
+    }
+  } else if (typeof imageData === 'object') {
+    return imageData.key || imageData;
+  }
+  return null;
+};
+
 const getPendingSteps = (ctx) => {
   const userDetails = ctx.userDetails || ctx.user || {};
   const user = ctx.user || {};
@@ -229,22 +249,6 @@ const getPendingSteps = (ctx) => {
   const customerBankDetails = ctx.customerBankDetails || ctx.customerBank || null;
   const aadhaarDoc = ctx.aadhaarDoc || null;
   const panDoc = ctx.panDoc || null;
-  
-  // Helper to extract S3 key from JSON field
-  const extractS3Key = (imageData) => {
-    if (!imageData) return null;
-    if (typeof imageData === 'string') {
-      try {
-        const parsed = JSON.parse(imageData);
-        return parsed.key || parsed;
-      } catch {
-        return imageData;
-      }
-    } else if (typeof imageData === 'object') {
-      return imageData.key || imageData;
-    }
-    return null;
-  };
   
   // Get image fields from userDetails or user
   const aadharFrontImage = userDetails?.aadharFrontImage || ctx.user?.aadharFrontImage;
@@ -2383,21 +2387,6 @@ const getPending = async (req, res) => {
 };
 
 // Helper functions
-const extractS3Key = (imageData) => {
-  if (!imageData) return null;
-  if (typeof imageData === 'string') {
-    try {
-      const parsed = JSON.parse(imageData);
-      return parsed.key || parsed;
-    } catch {
-      return imageData;
-    }
-  } else if (typeof imageData === 'object') {
-    return imageData.key || imageData;
-  }
-  return null;
-};
-
 const getLast4Digits = (aadhaarNumber) => {
   if (!aadhaarNumber) return null;
   const digits = aadhaarNumber.toString().replace(/\D/g, '');
