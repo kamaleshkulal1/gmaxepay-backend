@@ -2360,11 +2360,14 @@ const getPending = async (req, res) => {
       return res.failure({ message: userCtx.error });
     }
 
-    const { user, outlet, customerBank, aadhaarDoc, panDoc } = userCtx;
+    const { user, userDetails, outlet, outletDetails, customerBank, customerBankDetails, aadhaarDoc, panDoc } = userCtx;
     const pendingInfo = getPendingSteps({ 
-      user, 
-      outlet, 
+      user,
+      userDetails,
+      outlet,
+      outletDetails,
       customerBank,
+      customerBankDetails,
       aadhaarDoc,
       panDoc
     });
