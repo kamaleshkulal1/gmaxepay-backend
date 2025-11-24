@@ -1914,17 +1914,23 @@ const postBankDetails = async (req, res) => {
       // Decrypt the cached response
       try {
         const encryptedData = JSON.parse(existingBank.response);
+        
         if (encryptedData && encryptedData.encrypted) {
-          const decryptedResponse = decrypt(encryptedData, Buffer.from(key, 'hex'));
+          // Use doubleDecrypt (from doubleCheckUp.js) which expects object with encrypted, iv, authTag
+          const decryptedResponse = doubleDecrypt(encryptedData, Buffer.from(key, 'hex'));
+          
           if (decryptedResponse) {
             bankVerification = JSON.parse(decryptedResponse);
           } else {
+            // If decryption failed, encryptedData might already be the response
             bankVerification = encryptedData;
           }
         } else {
+          // Response might not be double-encrypted, try parsing directly
           bankVerification = JSON.parse(existingBank.response);
         }
       } catch (e) {
+        console.error('Error decrypting/parsing existing bank response:', e.message);
         bankVerification = existingBank.response;
       }
     } else {
@@ -1947,8 +1953,42 @@ const postBankDetails = async (req, res) => {
       }
     }
 
+    if (!bankVerification) {
+      return res.failure({ 
+        message: 'Bank verification failed', 
+        data: { error: 'No response from verification service' } 
+      });
+    }
+
+    if (typeof bankVerification === 'string') {
+      try {
+        bankVerification = JSON.parse(bankVerification);
+      } catch (e) {
+        console.error('Failed to parse bankVerification string:', e.message);
+        return res.failure({ 
+          message: 'Bank verification failed', 
+          data: { error: 'Invalid response format from verification service', response: bankVerification } 
+        });
+      }
+    }
+
+    if (!bankVerification.status) {
+      console.error('Bank verification status is missing:', JSON.stringify(bankVerification, null, 2));
+      return res.failure({ 
+        message: 'Bank verification failed', 
+        data: { error: 'Status missing in verification response', response: bankVerification } 
+      });
+    }
+
     if (bankVerification.status !== 'Success') {
-      return res.failure({ message: 'Bank verification failed' });
+      return res.failure({ 
+        message: 'Bank verification failed', 
+        data: { 
+          error: bankVerification.message || bankVerification.error || 'Verification unsuccessful',
+          status: bankVerification.status,
+          response: bankVerification
+        } 
+      });
     }
     
     // Fetch bank details from Razorpay API using IFSC
