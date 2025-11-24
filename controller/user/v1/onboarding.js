@@ -1698,9 +1698,20 @@ const postShopDetails = async (req, res) => {
     const { user, outlet, customerBank } = userCtx;
     const { shopName, ipAddress, latitude, longitude } = req.body || {};
 
-    if (!shopName || !ipAddress || !latitude || !longitude) {
+
+    if (!shopName ) {
       return res.failure({ 
-        message: 'shopName, ipAddress, latitude and longitude are required' 
+        message: 'shopName is required' 
+      });
+    }
+    if(!ipAddress){
+      return res.failure({ 
+        message: 'ipAddress is required' 
+      });
+    }
+    if(!latitude || !longitude){
+      return res.failure({ 
+        message: 'pls allow location access to get complete address' 
       });
     }
 
