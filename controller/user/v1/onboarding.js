@@ -2067,30 +2067,10 @@ const postBankDetails = async (req, res) => {
       isDeleted: false
     });
 
-    // Find or create customer record (customerBank.refId references customer table, not user)
-    let customer = userCtx.customer || await dbService.findOne(model.customer, {
-      mobile: user.mobileNo
-    });
-
-    if (!customer) {
-      // Create customer record from user data
-      const customerName = user.name || '';
-      const nameParts = customerName.split(' ');
-      const firstName = nameParts[0] || customerName;
-      const lastName = nameParts.slice(1).join(' ') || null;
-
-      customer = await dbService.createOne(model.customer, {
-        firstName,
-        lastName,
-        email: user.email || null,
-        mobile: user.mobileNo,
-        isActive: true
-      });
-    }
-
+    // Use user.id directly as refId for customerBank (no customer table needed)
     let updatedCustomerBank = customerBank;
     const payload = {
-      refId: customer.id, 
+      refId: user.id, 
       companyId: company.id,
       bankName,
       beneficiaryName: beneficiaryName || user.name,
