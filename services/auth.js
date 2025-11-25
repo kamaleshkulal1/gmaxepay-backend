@@ -35,16 +35,18 @@ const loadUserPermissions = async (userRole) => {
       }
     );
     
-    const permissions = rolePermissions.map(rp => ({
-      permissionId: rp.permissionId,
-      read: rp.read,
-      write: rp.write,
-      dataValues: {
+    const permissions = rolePermissions
+      .map(rp => ({
         permissionId: rp.permissionId,
         read: rp.read,
-        write: rp.write
-      }
-    }));
+        write: rp.write,
+        dataValues: {
+          permissionId: rp.permissionId,
+          read: rp.read,
+          write: rp.write
+        }
+      }))
+      .filter(permission => permission.read === true || permission.write === true);
     
     return permissions;
   } catch (error) {
