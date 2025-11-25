@@ -196,6 +196,7 @@ if (process.env.NODE_ENV !== 'test') {
     .finally(() => {
       app.use(routes);
       // seeder();
+      
       name();
       aepsLogout();
     });
