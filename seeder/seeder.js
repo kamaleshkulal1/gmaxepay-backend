@@ -343,13 +343,6 @@ async function insertPermissions() {
           isDeleted: false
         },
         {
-          moduleName: 'FUND_MANAGEMENT',
-          isParent: null,
-          parentId: 4,
-          isActive: true,
-          isDeleted: false
-        },
-        {
           moduleName: 'BUSSINESS_REPORT',
           isParent: null,
           parentId: 5,
