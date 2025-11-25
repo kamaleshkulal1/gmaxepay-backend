@@ -428,7 +428,6 @@ const createCompany = async (req, res) => {
       city: data.city,
       state: data.state,
       zipcode: data.postalCode,
-      userId: data.userId,
       referCode: referCode,
       isActive: true,
     };

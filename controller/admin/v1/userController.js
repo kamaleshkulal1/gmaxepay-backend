@@ -1,6 +1,6 @@
-const { user, role, userPackage } = require('../../../models/index');
+const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
-const { Op } = require('sequelize');
+const { Op, Sequelize } = require('sequelize');
 
 /**
  * @description : create record of User in SQL table.
@@ -32,7 +32,7 @@ const createUser = async (req, res) => {
       companyId
     };
 
-    let createdUser = await dbService.createOne(user, dataToCreate);
+    let createdUser = await dbService.createOne(model.user, dataToCreate);
     if (!createdUser) {
       return res.failure({ message: 'Failed to create User' });
     }
@@ -67,25 +67,187 @@ const findAllUsers = async (req, res) => {
       return res.failure({ message: "User doesn't have Permission!" });
     }
 
+    let dataToFind = req.body || {};
+    let options = {};
     let query = {};
+
+    // Build query from request body
+    if (dataToFind.query) {
+      query = { ...dataToFind.query };
+    }
+
+    // Filter by userRole (2=white label, 3=master distributor, 4=distributor, 5=retailer)
+    // Only filter if userRole is explicitly provided in query
+    if (query.userRole) {
+      // userRole is already in query from dataToFind.query
+    } else {
+      // If no userRole specified, filter by allowed roles
+      query.userRole = { [Op.in]: [2, 3, 4, 5] };
+    }
+
+    // Apply company filter
     const userRole = req.user.userRole;
     const userCompanyId = req.user.companyId;
     if (userRole === 1 && userCompanyId === 1) {
       // Don't filter by companyId - show all users
-      query = {};
     } else {
       // Filter by companyId for userRole = 2 or other cases
       const companyId = req.companyId || userCompanyId;
       query.companyId = companyId;
     }
 
-    let foundUsers = await dbService.findAll(user, query);
-    if (!foundUsers) {
-      return res.failure({ message: 'No Users found' });
+    // Handle options
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
     }
+
+    // Handle customSearch
+    if (dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        query = {
+          ...query,
+          [Op.or]: orConditions
+        };
+      }
+    }
+
+    // Include company and wallet information
+    options.include = [
+      {
+        model: model.company,
+        as: 'company',
+        attributes: ['id', 'companyName'],
+        required: false
+      },
+      {
+        model: model.wallet,
+        as: 'wallet',
+        attributes: ['id', 'mainWallet', 'apesWallet'],
+        required: false
+      }
+    ];
+
+    // Use pagination
+    let foundUsers = await dbService.paginate(model.user, query, options);
+
+    if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
+      return res.success({
+        message: 'Users Retrieved Successfully',
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
+      });
+    }
+
+    // Map userRole to readable names
+    const roleMap = {
+      2: 'WL',
+      3: 'MD',
+      4: 'DI',
+      5: 'RE'
+    };
+
+    // Map userRole to userAgentCode prefix
+    const rolePrefixMap = {
+      2: 'WL',
+      3: 'MD',
+      4: 'DI',
+      5: 'RE'
+    };
+
+    // Helper function to format userAgentCode with correct prefix
+    const formatUserAgentCode = (userId, userRole) => {
+      if (!userId) return null;
+      
+      // Extract the number part from userId (e.g., "RE08" -> "08", "WU04" -> "04")
+      const numberMatch = userId.match(/\d+$/);
+      if (numberMatch) {
+        const numberPart = numberMatch[0];
+        const prefix = rolePrefixMap[userRole] || 'UN';
+        return `${prefix}${numberPart.padStart(2, '0')}`;
+      }
+      
+      // If no number found, return as is
+      return userId;
+    };
+
+    // Transform the response
+    const transformedData = foundUsers.data.map((user, index) => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      const companyData = userData.company || {};
+      const walletData = userData.wallet || {};
+
+      // Determine KYC Status
+      const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
+
+      // Get KYC Details
+      const kycDetails = {
+        kycStatus: userData.kycStatus || 'NO_KYC',
+        kycSteps: userData.kycSteps || 0,
+        mobileVerify: userData.mobileVerify || false,
+        emailVerify: userData.emailVerify || false,
+        aadharVerify: userData.aadharVerify || false,
+        panVerify: userData.panVerify || false,
+        shopDetailsVerify: userData.shopDetailsVerify || false,
+        imageVerify: userData.imageVerify || false,
+        profileImageWithShopVerify: userData.profileImageWithShopVerify || false,
+        bankDetailsVerify: userData.bankDetailsVerify || false
+      };
+
+      // Format userAgentCode with correct prefix based on role
+      const userAgentCode = formatUserAgentCode(userData.userId, userData.userRole);
+
+      return {
+        srNo: (options.page ? (options.page - 1) * (options.paginate || 25) : 0) + index + 1,
+        date: userData.createdAt || null,
+        userAgentCode: userAgentCode,
+        userName: userData.name || null,
+        userRole: roleMap[userData.userRole] || `Role ${userData.userRole}`,
+        mobileNumber: userData.mobileNo || null,
+        emailId: userData.email || null,
+        parentName: companyData.companyName || null,
+        parentRole: 'Enterprise',
+        companyName: companyData.companyName || null,
+        kycStatus: kycStatus,
+        kycSteps: userData.kycSteps || 0,
+        status: userData.isActive ? 'Active' : 'Inactive',
+        kycDetails: kycDetails,
+        wallet: {
+          mainWallet: walletData.mainWallet || 0,
+          apesWallet: walletData.apesWallet || 0
+        }
+      };
+    });
+
     return res.success({
       message: 'Users Retrieved Successfully',
-      data: foundUsers
+      data: transformedData,
+      total: foundUsers.total,
+      paginator: foundUsers.paginator
     });
   } catch (error) {
     console.log(error);
@@ -109,7 +271,7 @@ const getUser = async (req, res) => {
     const { id } = req.params;
     const companyId = req.companyId;
 
-    let foundUser = await dbService.findOne(user, {
+    let foundUser = await dbService.findOne(model.user, {
       id,
       companyId
     });
@@ -149,7 +311,7 @@ const updateUser = async (req, res) => {
     };
 
     let updatedUser = await dbService.update(
-      user,
+      model.user,
       { id, companyId },
       dataToUpdate
     );
@@ -187,7 +349,7 @@ const deleteUser = async (req, res) => {
     const { id } = req.params;
     const companyId = req.companyId;
 
-    let deletedUser = await dbService.deleteOne(user, { id, companyId });
+    let deletedUser = await dbService.destroy(model.user, { id, companyId });
     if (!deletedUser) {
       return res.failure({ message: 'Delete User failed' });
     }

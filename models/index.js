@@ -354,6 +354,25 @@ db.customer.hasMany(db.customerBank, {
   sourceKey: 'id'
 });
 
+// User Company Relationships
+db.user.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.user, {
+  foreignKey: 'companyId',
+  as: 'users',
+  sourceKey: 'id'
+});
+
+// User Wallet Relationships
+db.user.hasOne(db.wallet, {
+  foreignKey: 'refId',
+  as: 'wallet',
+  sourceKey: 'id'
+});
+
 // BBPS Operator Relationships (commented out as models don't exist yet)
 // db.bbpsOperator.belongsTo(db.bbpsOperatorCategory, {
 //   foreignKey: 'categoryId',

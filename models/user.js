@@ -15,6 +15,7 @@ const authConstantEnum = require('../constants/authConstant');
 const bcrypt = require('bcrypt');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Package = require('./packages');
+const Company = require('./company');
 
 const toEncryptableString = (value) => {
   if (value === null || value === undefined) {
@@ -580,10 +581,47 @@ const User = sequelize.define(
               break;
           }
 
+          // Get company name prefix (2-5 characters)
+          let companyPrefix = '';
+          if (user.companyId) {
+            try {
+              const company = await Company.findOne({
+                where: { id: user.companyId },
+                attributes: ['companyName']
+              });
+              
+              if (company && company.companyName) {
+                // Clean company name: remove spaces and special characters, keep only alphanumeric
+                let cleanedName = company.companyName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+                const nameLength = cleanedName.length;
+                
+                if (nameLength >= 5) {
+                  // Use first 5 characters
+                  companyPrefix = cleanedName.substring(0, 5);
+                } else if (nameLength >= 2) {
+                  // Use all available characters (2-4 chars)
+                  companyPrefix = cleanedName.substring(0, nameLength);
+                } else if (nameLength === 1) {
+                  // If only 1 character after cleaning, use it (fallback)
+                  companyPrefix = cleanedName;
+                }
+                // If cleaned name is empty, companyPrefix remains empty
+              }
+            } catch (companyError) {
+              console.error('Error fetching company for userId generation:', companyError);
+              // Continue without company prefix if error occurs
+            }
+          }
+
+          // Build search pattern: {COMPANY_PREFIX}{ROLE_PREFIX}%
+          const searchPattern = companyPrefix 
+            ? `${companyPrefix}${rolePrefix}%` 
+            : `${rolePrefix}%`;
+
           const lastUser = await User.findOne({
             where: {
               userId: {
-                [Op.like]: `${rolePrefix}%`
+                [Op.like]: searchPattern
               }
             },
             order: [['createdAt', 'DESC']]
@@ -592,13 +630,21 @@ const User = sequelize.define(
           let newIdNumber = 1;
           if (lastUser) {
             const lastId = lastUser.userId;
-            const lastIdNumber = parseInt(lastId.slice(rolePrefix.length), 10);
-            newIdNumber = lastIdNumber + 1;
+            // Extract number from end (after company prefix and role prefix)
+            const prefixLength = companyPrefix ? companyPrefix.length + rolePrefix.length : rolePrefix.length;
+            const numberPart = lastId.slice(prefixLength);
+            const lastIdNumber = parseInt(numberPart, 10);
+            if (!isNaN(lastIdNumber)) {
+              newIdNumber = lastIdNumber + 1;
+            }
           }
 
           const formattedNumber = newIdNumber.toString().padStart(2, '0');
 
-          user.userId = `${rolePrefix}${formattedNumber}`;
+          // Generate userId: {COMPANY_PREFIX}{ROLE_PREFIX}{NUMBER}
+          user.userId = companyPrefix 
+            ? `${companyPrefix}${rolePrefix}${formattedNumber}` 
+            : `${rolePrefix}${formattedNumber}`;
         }
       ],
       beforeBulkCreate: [

@@ -13,6 +13,7 @@ const getProfile = async (req, res) => {
         mobileNo: user.mobileNo,
         name: user.name,
         profileImage: user.profileImage ? `${process.env.AWS_CDN_URL}/${user.profileImage}` : null,
+        referrerCode: user.referrerCode
     }
     return res.success({ message: 'User profile retrieved successfully', data: userDetails });
   } catch (error) {
