@@ -266,6 +266,13 @@ async function permissions() {
         },
         // Shopping
         {
+          moduleName: 'REPORTS',
+          isParent: true,
+          parentId: null,
+          isActive: true,
+          isDeleted: false
+        },
+        {
         moduleName: 'TXN_HISTORY',
           isParent: true,
           parentId: null,
@@ -300,109 +307,66 @@ async function insertPermissions() {
           isActive: true,
           isDeleted: false
         },
-
         {
-          moduleName: 'OPERATOR_MASTER',
+          moduleName: 'ROLE_MANAGEMENT',
+          isParent: null,
+          parentId: 1,
+          isActive: true,
+          isDeleted: false
+        },
+        {
+          moduleName: 'OPERATOR_LIST',
           isParent: null,
           parentId: 2,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'SERVICE_MASTER',
+          moduleName: 'API_SETTINGS',
           isParent: true,
           parentId: 2,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'API_OPERATOR_CODE',
-          isParent: null,
-          parentId: 2,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'API_CIRCLE_CODE',
-          isParent: null,
-          parentId: 2,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'NEWS_SETTING',
-          isParent: null,
-          parentId: 2,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'SLAB_MASTER',
+          moduleName: 'SCHEME_MANAGER',
           isParent: null,
           parentId: 3,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'PACKAGE_MASTER',
+          moduleName: 'ROLE_UPGRADE_REQUEST',
           isParent: null,
           parentId: 3,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'VAS_PACKAGE_MASTER',
-          isParent: null,
-          parentId: 3,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'CHANNEL_SLAB_SETTING',
-          isParent: null,
-          parentId: 3,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'SETTLEMENT_BANK_REQUEST',
+          moduleName: 'FUND_MANAGEMENT',
           isParent: null,
           parentId: 4,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'DENOMINATION_RANGE_MASTER',
+          moduleName: 'BUSSINESS_REPORT',
           isParent: null,
-          parentId: 4,
+          parentId: 5,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'GST_VERIFICATION',
+          moduleName: 'EARNINGS_REPORT',
           isParent: null,
-          parentId: 4,
+          parentId: 5,
           isActive: true,
           isDeleted: false
         },
         {
-          moduleName: 'WALLET_LOCK_REQUEST',
+          moduleName: 'N/W_OVERVIEW_REPORT',
           isParent: null,
-          parentId: 4,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'CHARGE_BACK_AND_RECOVERY',
-          isParent: null,
-          parentId: 4,
-          isActive: true,
-          isDeleted: false
-        },
-        {
-          moduleName: 'FUND_REQUEST',
-          isParent: null,
-          parentId: 4,
+          parentId: 5,
           isActive: true,
           isDeleted: false
         }
@@ -13784,29 +13748,29 @@ async function serviceCharges() {
 
 async function seedData() {
   
-   await roles();
+  //  await roles();
    await permissions();
    await insertPermissions();
    await rolePermission();
-   await KycDocumentSettings();
-   await createBasicPackage();
-  //  await servicePush();
-   await OperatorType();
-   await state();
-   await gstState();
-   await bank();
+  //  await KycDocumentSettings();
+  //  await createBasicPackage();
+  // //  await servicePush();
+  //  await OperatorType();
+  //  await state();
+  //  await gstState();
+  //  await bank();
     // await services();
    
-   await cardType();
-   await paymentInsturment();
-   await seedPgCommercials();
-   await seedRangeComm();
-   await seedRangeCharges();
+  //  await cardType();
+  //  await paymentInsturment();
+  //  await seedPgCommercials();
+  //  await seedRangeComm();
+  //  await seedRangeCharges();
    
-   // Create company first, then user and wallet
-   const company = await seedCompany();
-   if (company && company.id) {
-     await seedUsers(company.id);
-   }
+  //  // Create company first, then user and wallet
+  //  const company = await seedCompany();
+  //  if (company && company.id) {
+  //    await seedUsers(company.id);
+  //  }
 }
 module.exports = seedData;
