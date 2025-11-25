@@ -197,15 +197,6 @@ const findAllUsers = async (req, res) => {
       5: 'RE'
     };
 
-    // Map userRole to userAgentCode prefix
-    const rolePrefixMap = {
-      2: 'WL',
-      3: 'MD',
-      4: 'DI',
-      5: 'RE'
-    };
-
-
     // Transform the response
     const transformedData = foundUsers.data.map((user, index) => {
       const userData = user.toJSON ? user.toJSON() : user;
@@ -231,16 +222,16 @@ const findAllUsers = async (req, res) => {
 
       // Format userAgentCode with correct prefix based on role
       return {
-        srNo: (options.page ? (options.page - 1) * (options.paginate || 25) : 0) + index + 1,
+        id: userData.id,
         date: userData.createdAt || null,
-        userAgentCode: userData.userId || null,
-        userName: userData.name || null,
+        userId: userData.userId || null,
+        name: userData.name || null,
         userRole: roleMap[userData.userRole] || `Role ${userData.userRole}`,
-        mobileNumber: userData.mobileNo || null,
-        emailId: userData.email || null,
+        mobileNo: userData.mobileNo || null,
+        email: userData.email || null,
         parentName: companyData.companyName || null,
         parentRole: 'Enterprise',
-        companyName: companyData.companyName || null,
+        company: companyData.companyName || null,
         kycStatus: kycStatus,
         kycSteps: userData.kycSteps || 0,
         status: userData.isActive ? 'Active' : 'Inactive',
