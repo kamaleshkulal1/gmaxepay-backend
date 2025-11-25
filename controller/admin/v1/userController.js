@@ -179,21 +179,6 @@ const findAllUsers = async (req, res) => {
       5: 'RE'
     };
 
-    // Helper function to format userAgentCode with correct prefix
-    const formatUserAgentCode = (userId, userRole) => {
-      if (!userId) return null;
-      
-      // Extract the number part from userId (e.g., "RE08" -> "08", "WU04" -> "04")
-      const numberMatch = userId.match(/\d+$/);
-      if (numberMatch) {
-        const numberPart = numberMatch[0];
-        const prefix = rolePrefixMap[userRole] || 'UN';
-        return `${prefix}${numberPart.padStart(2, '0')}`;
-      }
-      
-      // If no number found, return as is
-      return userId;
-    };
 
     // Transform the response
     const transformedData = foundUsers.data.map((user, index) => {
@@ -219,12 +204,10 @@ const findAllUsers = async (req, res) => {
       };
 
       // Format userAgentCode with correct prefix based on role
-      const userAgentCode = formatUserAgentCode(userData.userId, userData.userRole);
-
       return {
         srNo: (options.page ? (options.page - 1) * (options.paginate || 25) : 0) + index + 1,
         date: userData.createdAt || null,
-        userAgentCode: userAgentCode,
+        userAgentCode: userData.userId || null,
         userName: userData.name || null,
         userRole: roleMap[userData.userRole] || `Role ${userData.userRole}`,
         mobileNumber: userData.mobileNo || null,

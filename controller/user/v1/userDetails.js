@@ -9,11 +9,12 @@ const getProfile = async (req, res) => {
     }
     const outlet = await dbService.findOne(model.outlet, { refId: user.id });
     const userDetails = {
-        userId: user.id,
-        mobileNo: user.mobileNo,
-        name: user.name,
-        profileImage: user.profileImage ? `${process.env.AWS_CDN_URL}/${user.profileImage}` : null,
-        referrerCode: user.referrerCode
+      userId: user.id,
+      mobileNo: user.mobileNo,
+      name: user.name,
+      profileImage: user.profileImage ? `${process.env.AWS_CDN_URL}/${user.profileImage}` : null,
+      referrerCode: user.referCode,
+      outlet: outlet ? outlet.shopName : null
     }
     return res.success({ message: 'User profile retrieved successfully', data: userDetails });
   } catch (error) {
