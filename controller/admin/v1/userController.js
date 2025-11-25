@@ -96,6 +96,32 @@ const findAllUsers = async (req, res) => {
       query.companyId = companyId;
     }
 
+    // Handle kycStatus filter - map "pending" and "completed" to actual status values
+    if (query.kycStatus) {
+      const kycStatusValue = query.kycStatus;
+      
+      // Map "pending" to HALF_KYC and NO_KYC
+      if (kycStatusValue === 'pending') {
+        query.kycStatus = { [Op.in]: ['HALF_KYC', 'NO_KYC'] };
+      }
+      // Map "completed" to FULL_KYC
+      else if (kycStatusValue === 'completed') {
+        query.kycStatus = 'FULL_KYC';
+      }
+      // Handle string with || separator (e.g., "HALF_KYC || NO_KYC")
+      else if (typeof kycStatusValue === 'string' && kycStatusValue.includes('||')) {
+        const statuses = kycStatusValue.split('||').map(s => s.trim()).filter(s => s);
+        if (statuses.length > 0) {
+          query.kycStatus = { [Op.in]: statuses };
+        }
+      }
+      // If it's already an array, use it directly
+      else if (Array.isArray(kycStatusValue)) {
+        query.kycStatus = { [Op.in]: kycStatusValue };
+      }
+      // Otherwise, use the value as is (e.g., "FULL_KYC", "HALF_KYC", "NO_KYC", "REJECTED")
+    }
+
     // Handle options
     if (dataToFind.options !== undefined) {
       options = { ...dataToFind.options };
