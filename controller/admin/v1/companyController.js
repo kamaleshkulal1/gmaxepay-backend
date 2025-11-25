@@ -430,6 +430,7 @@ const createCompany = async (req, res) => {
       zipcode: data.postalCode,
       referCode: referCode,
       isActive: true,
+      companyName: data.companyName, // Pass company name for userId generation (temporary field, not saved to DB)
     };
 
     let user = await dbService.createOne(model.user, userData);

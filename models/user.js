@@ -583,7 +583,17 @@ const User = sequelize.define(
 
           // Get company name prefix (2-5 characters)
           let companyPrefix = '';
-          if (user.companyId) {
+          let companyName = null;
+          
+          // First, try to get company name from temporary field (passed from controller)
+          if (user.companyName) {
+            companyName = user.companyName;
+            // Remove the temporary field so it doesn't get saved (not a User model field)
+            delete user.companyName;
+          }
+          
+          // If not available, try to fetch from database
+          if (!companyName && user.companyId) {
             try {
               const company = await Company.findOne({
                 where: { id: user.companyId },
@@ -591,26 +601,35 @@ const User = sequelize.define(
               });
               
               if (company && company.companyName) {
-                // Clean company name: remove spaces and special characters, keep only alphanumeric
-                let cleanedName = company.companyName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-                const nameLength = cleanedName.length;
-                
-                if (nameLength >= 5) {
-                  // Use first 5 characters
-                  companyPrefix = cleanedName.substring(0, 5);
-                } else if (nameLength >= 2) {
-                  // Use all available characters (2-4 chars)
-                  companyPrefix = cleanedName.substring(0, nameLength);
-                } else if (nameLength === 1) {
-                  // If only 1 character after cleaning, use it (fallback)
-                  companyPrefix = cleanedName;
-                }
-                // If cleaned name is empty, companyPrefix remains empty
+                companyName = company.companyName;
               }
             } catch (companyError) {
               console.error('Error fetching company for userId generation:', companyError);
               // Continue without company prefix if error occurs
             }
+          }
+          
+          // Process company name to extract prefix
+          if (companyName) {
+            // Clean company name: remove spaces and special characters, keep only alphanumeric
+            let cleanedName = companyName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const nameLength = cleanedName.length;
+            
+            if (nameLength >= 5) {
+              // Use first 5 characters
+              companyPrefix = cleanedName.substring(0, 5);
+            } else if (nameLength >= 2) {
+              // Use all available characters (2-4 chars)
+              companyPrefix = cleanedName.substring(0, nameLength);
+            } else if (nameLength === 1) {
+              // If only 1 character after cleaning, use it (fallback)
+              companyPrefix = cleanedName;
+            }
+            // If cleaned name is empty, companyPrefix remains empty
+            
+            console.log(`[userId generation] Company: "${companyName}" -> Cleaned: "${cleanedName}" -> Prefix: "${companyPrefix}"`);
+          } else {
+            console.log(`[userId generation] No company name available for companyId: ${user.companyId}`);
           }
 
           // Build search pattern: {COMPANY_PREFIX}{ROLE_PREFIX}%

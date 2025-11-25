@@ -865,7 +865,8 @@ const sendSmsMobile = async (req, res) => {
       panVerify: false,
       isLoginOtp: true,
       tokenVersion: 0,
-      loggedIn: false
+      loggedIn: false,
+      companyName: company.companyName, // Pass company name for userId generation (temporary field, not saved to DB)
     };
 
     const newUser = await dbService.createOne(model.user, userData);
