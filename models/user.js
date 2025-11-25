@@ -604,7 +604,6 @@ const User = sequelize.define(
                 companyName = company.companyName;
               }
             } catch (companyError) {
-              console.error('Error fetching company for userId generation:', companyError);
               // Continue without company prefix if error occurs
             }
           }
@@ -626,10 +625,6 @@ const User = sequelize.define(
               companyPrefix = cleanedName;
             }
             // If cleaned name is empty, companyPrefix remains empty
-            
-            console.log(`[userId generation] Company: "${companyName}" -> Cleaned: "${cleanedName}" -> Prefix: "${companyPrefix}"`);
-          } else {
-            console.log(`[userId generation] No company name available for companyId: ${user.companyId}`);
           }
 
           // Build search pattern: {COMPANY_PREFIX}{ROLE_PREFIX}%

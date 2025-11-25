@@ -347,14 +347,11 @@ const createCompany = async (req, res) => {
         // If not encrypted or not JSON, return as is
         panVerificationResult = existingPan.response;
       }
-      console.log('panVerificationResult', panVerificationResult);
-
       // Check if PAN name matches
       if (panVerificationResult && panVerificationResult.status === 'Success') {
         panNameFromAPI = panVerificationResult.registered_name || panVerificationResult.data?.name || panVerificationResult.name;
         if (panNameFromAPI && panNameFromAPI.toLowerCase().trim() === data.PanName.toLowerCase().trim()) {
           // PAN name matches, continue with company creation
-          console.log('PAN verification successful - name matches');
         } else {
           // PAN name doesn't match
           return res.failure({
