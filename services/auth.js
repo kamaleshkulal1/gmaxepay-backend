@@ -1590,6 +1590,9 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
           companyId: user.companyId
         });
 
+        // Load user permissions
+        const permissions = await loadUserPermissions(user.userRole);
+
         return {
           flag: false,
           msg: '2FA verification successful!',
@@ -1604,7 +1607,8 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
               outletName: user.outletName,
               companyId: user.companyId
             },
-            userLogin: userLoginRecord
+            userLogin: userLoginRecord,
+            permissions
           }
         };
       }
@@ -1637,6 +1641,9 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
         companyId: user.companyId
       });
 
+      // Load user permissions
+      const permissions = await loadUserPermissions(user.userRole);
+
       return {
         flag: false,
         msg: '2FA verification successful!',
@@ -1650,7 +1657,9 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
             userRole: user.userRole,
             outletName: user.outletName,
             companyId: user.companyId
-          }
+          },
+          userLogin: userLoginRecord,
+          permissions
         }
       };
     } else {
@@ -1741,6 +1750,9 @@ const setup2FA = async (dataToken, otp, companyId) => {
         companyId: user.companyId
       });
 
+      // Load user permissions
+      const permissions = await loadUserPermissions(user.userRole);
+
       return {
         flag: false,
         msg: '2FA setup successful!',
@@ -1755,7 +1767,8 @@ const setup2FA = async (dataToken, otp, companyId) => {
             outletName: user.outletName,
             companyId: user.companyId
           },
-          userLogin: userLoginRecord
+          userLogin: userLoginRecord,
+          permissions
         }
       };
     }
@@ -1792,6 +1805,9 @@ const setup2FA = async (dataToken, otp, companyId) => {
         companyId: user.companyId
       });
 
+      // Load user permissions
+      const permissions = await loadUserPermissions(user.userRole);
+
       return {
         flag: false,
         msg: '2FA setup successful!',
@@ -1806,7 +1822,8 @@ const setup2FA = async (dataToken, otp, companyId) => {
             outletName: user.outletName,
             companyId: user.companyId
           },
-          userLogin: userLoginRecord
+          userLogin: userLoginRecord,
+          permissions
         }
       };
     } else {
@@ -1893,6 +1910,9 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
           companyId: user.companyId
         });
 
+        // Load user permissions
+        const permissions = await loadUserPermissions(user.userRole);
+
         return {
           flag: false,
           msg: '2FA verification successful!',
@@ -1907,7 +1927,8 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
               outletName: user.outletName,
               companyId: user.companyId
             },
-            userLogin: userLoginRecord
+            userLogin: userLoginRecord,
+            permissions
           }
         };
       }
@@ -1940,6 +1961,9 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
           companyId: user.companyId
         });
 
+        // Load user permissions
+        const permissions = await loadUserPermissions(user.userRole);
+
         return {
           flag: false,
           msg: '2FA verification successful!',
@@ -1954,7 +1978,8 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
               outletName: user.outletName,
               companyId: user.companyId
             },
-            userLogin: userLoginRecord
+            userLogin: userLoginRecord,
+            permissions
           }
         };
       } else {
@@ -2008,6 +2033,9 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
           companyId: user.companyId
         });
 
+        // Load user permissions
+        const permissions = await loadUserPermissions(user.userRole);
+
         return {
           flag: false,
           msg: '2FA setup successful!',
@@ -2022,7 +2050,8 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
               outletName: user.outletName,
               companyId: user.companyId
             },
-            userLogin: userLoginRecord
+            userLogin: userLoginRecord,
+            permissions
           }
         };
       }
@@ -2059,6 +2088,9 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
           companyId: user.companyId
         });
 
+        // Load user permissions
+        const permissions = await loadUserPermissions(user.userRole);
+
         return {
           flag: false,
           msg: '2FA setup successful!',
@@ -2073,7 +2105,8 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
               outletName: user.outletName,
               companyId: user.companyId
             },
-            userLogin: userLoginRecord
+            userLogin: userLoginRecord,
+            permissions
           }
         };
       } else {
