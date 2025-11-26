@@ -31,11 +31,13 @@ const loadUserPermissions = async (userRole) => {
             model: model.permission,
             attributes: ['id', 'moduleName', 'isParent', 'parentId']
           }
-        ]
+        ],
+        order: [['permissionId', 'ASC']]
       }
     );
     
-    const permissions = rolePermissions
+    // First, map all permissions with their data
+    const allPermissions = rolePermissions
       .map((rp) => {
         const permissionMeta = rp.permission
           ? {
@@ -52,20 +54,58 @@ const loadUserPermissions = async (userRole) => {
           write: rp.write,
           parentId: permissionMeta?.parentId ?? null,
           moduleName: permissionMeta?.moduleName ?? null,
-          isParent: permissionMeta?.isParent ?? null,
-          dataValues: {
-            permissionId: rp.permissionId,
-            read: rp.read,
-            write: rp.write,
-            parentId: permissionMeta?.parentId ?? null,
-            moduleName: permissionMeta?.moduleName ?? null,
-            isParent: permissionMeta?.isParent ?? null
-          }
+          isParent: permissionMeta?.isParent ?? null
         };
       })
       .filter((permission) => permission.read === true || permission.write === true);
     
-    return permissions;
+    // Separate parents and children
+    const parents = allPermissions.filter(p => p.parentId === null);
+    const children = allPermissions.filter(p => p.parentId !== null);
+    
+    // Build hierarchical structure
+    const hierarchicalPermissions = parents.map(parent => {
+      // Find all children for this parent
+      const parentChildren = children
+        .filter(child => child.parentId === parent.permissionId)
+        .sort((a, b) => a.permissionId - b.permissionId)
+        .map(child => ({
+          permissionId: child.permissionId,
+          read: child.read,
+          write: child.write,
+          parentId: child.parentId,
+          moduleName: child.moduleName,
+          isParent: child.isParent,
+          dataValues: {
+            permissionId: child.permissionId,
+            read: child.read,
+            write: child.write,
+            parentId: child.parentId,
+            moduleName: child.moduleName,
+            isParent: child.isParent
+          }
+        }));
+      
+      // Return parent with children nested, dataValues is null for parent
+      const parentObj = {
+        permissionId: parent.permissionId,
+        read: parent.read,
+        write: parent.write,
+        parentId: parent.parentId,
+        moduleName: parent.moduleName,
+        isParent: parent.isParent,
+        dataValues: null
+      };
+      
+      // Only add children array if there are children
+      if (parentChildren.length > 0) {
+        parentObj.children = parentChildren;
+      }
+      
+      return parentObj;
+    }).sort((a, b) => a.permissionId - b.permissionId);
+    
+    return hierarchicalPermissions;
   } catch (error) {
     console.error('Error loading user permissions:', error);
     return [];
