@@ -78,15 +78,14 @@ const loadUserPermissions = async (userRole) => {
           isParent: child.isParent
         }));
       
-      // Return parent with children nested, dataValues is null for parent
+      // Return parent with children nested, no dataValues for parent
       const parentObj = {
         permissionId: parent.permissionId,
         read: parent.read,
         write: parent.write,
         parentId: parent.parentId,
         moduleName: parent.moduleName,
-        isParent: parent.isParent,
-        dataValues: null
+        isParent: parent.isParent
       };
       
       // Only add children array if there are children
