@@ -36,17 +36,34 @@ const loadUserPermissions = async (userRole) => {
     );
     
     const permissions = rolePermissions
-      .map(rp => ({
-        permissionId: rp.permissionId,
-        read: rp.read,
-        write: rp.write,
-        dataValues: {
+      .map((rp) => {
+        const permissionMeta = rp.permission
+          ? {
+              id: rp.permission.id,
+              moduleName: rp.permission.moduleName,
+              isParent: rp.permission.isParent,
+              parentId: rp.permission.parentId
+            }
+          : null;
+
+        return {
           permissionId: rp.permissionId,
           read: rp.read,
-          write: rp.write
-        }
-      }))
-      .filter(permission => permission.read === true || permission.write === true);
+          write: rp.write,
+          parentId: permissionMeta?.parentId ?? null,
+          moduleName: permissionMeta?.moduleName ?? null,
+          isParent: permissionMeta?.isParent ?? null,
+          dataValues: {
+            permissionId: rp.permissionId,
+            read: rp.read,
+            write: rp.write,
+            parentId: permissionMeta?.parentId ?? null,
+            moduleName: permissionMeta?.moduleName ?? null,
+            isParent: permissionMeta?.isParent ?? null
+          }
+        };
+      })
+      .filter((permission) => permission.read === true || permission.write === true);
     
     return permissions;
   } catch (error) {
