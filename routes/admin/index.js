@@ -22,7 +22,7 @@ const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 
 // User management routes
 router.post('/users', userController.createUser);
-router.get('/users',authentication, userController.findAllUsers);
+router.post('/users-list',authentication, userController.findAllUsers);
 router.get('/users/:id', userController.getUser);
 router.put('/users/:id', userController.updateUser);
 router.delete('/users/:id', userController.deleteUser);

@@ -502,48 +502,48 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 1,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 1,
-          permissionId: 22,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
+        // {
+        //   roleId: 1,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 1,
+        //   permissionId: 22,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
         // {
         //   roleId: 1,
         //   permissionId: 23,
@@ -995,41 +995,41 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 2,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 2,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
+        // {
+        //   roleId: 2,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 2,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
         // {
         //   roleId: 2,
         //   permissionId: 22,
@@ -1488,41 +1488,41 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 3,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 3,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
+        // {
+        //   roleId: 3,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 3,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
         // {
         //   roleId: 3,
         //   permissionId: 22,
@@ -1981,41 +1981,41 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 4,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 4,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
+        // {
+        //   roleId: 4,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 4,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
         // {
         //   roleId: 4,
         //   permissionId: 22,
@@ -2473,41 +2473,41 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 5,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 5,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
+        // {
+        //   roleId: 5,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 5,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
         // {
         //   roleId: 5,
         //   permissionId: 22,
@@ -2965,41 +2965,41 @@ async function rolePermission() {
           write: false,
           isDeleted: false
         },
-        {
-          roleId: 6,
-          permissionId: 17,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 18,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 19,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 20,
-          read: false,
-          write: false,
-          isDeleted: false
-        },
-        {
-          roleId: 6,
-          permissionId: 21,
-          read: false,
-          write: false,
-          isDeleted: false
-        }
+        // {
+        //   roleId: 6,
+        //   permissionId: 17,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 18,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 19,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 20,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // },
+        // {
+        //   roleId: 6,
+        //   permissionId: 21,
+        //   read: false,
+        //   write: false,
+        //   isDeleted: false
+        // }
         // {
         //   roleId: 6,
         //   permissionId: 22,
