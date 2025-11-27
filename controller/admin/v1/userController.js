@@ -324,9 +324,14 @@ const updateUser = async (req, res) => {
     if (!updatedUser) {
       return res.failure({ message: 'Update User failed' });
     }
+
+    const finalData = {
+      ...updatedUser
+    };
+
     return res.success({
       message: 'User Updated Successfully',
-      data: updatedUser
+      data: finalData
     });
   } catch (error) {
     console.log(error);
