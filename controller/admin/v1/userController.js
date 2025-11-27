@@ -1082,13 +1082,6 @@ const revertKycData = async (req, res) => {
       revertMessages.push('Bank verification has been reverted');
     }
 
-    // Check if any revert operation was requested
-    if (!isTrue(pan) && !isTrue(aadhar) && !isTrue(shopImage) && !isTrue(bankVerification)) {
-      return res.failure({ 
-        message: 'No KYC data specified to revert. Please provide at least one of: pan, aadhar, shopImage, bankVerification' 
-      });
-    }
-
     // Wait for all image deletions to complete
     await Promise.all(revertOperations);
 
@@ -1202,6 +1195,34 @@ const revertKycData = async (req, res) => {
               message: 'Please connect your Aadhaar to digilocker, upload and download your Aadhaar document to complete the verification process.',
               logoUrl: logoUrl,
               illustrationUrl: resetAadhaarIllustrationUrl
+            });
+          }
+
+          // Send email for shop image revert
+          if (isTrue(shopImage)) {
+            const resetShopImageIllustrationUrl = `${backendUrl}/resetShopImage.png`;
+            await emailService.sendNotificationEmail({
+              to: userForEmail.email,
+              userName: userForEmail.name || 'User',
+              subject: 'Shop Image Reverted - Gmaxepay',
+              successMessage: 'Your shop image has been reverted',
+              message: 'Please upload your shop image again to complete the shop details verification process.',
+              logoUrl: logoUrl,
+              illustrationUrl: resetShopImageIllustrationUrl
+            });
+          }
+
+          // Send email for bank verification revert
+          if (isTrue(bankVerification)) {
+            const resetBankIllustrationUrl = `${backendUrl}/resetBank.png`;
+            await emailService.sendNotificationEmail({
+              to: userForEmail.email,
+              userName: userForEmail.name || 'User',
+              subject: 'Bank Verification Reverted - Gmaxepay',
+              successMessage: 'Your bank verification has been reverted',
+              message: 'Please provide your bank account details again to complete the bank verification process.',
+              logoUrl: logoUrl,
+              illustrationUrl: resetBankIllustrationUrl
             });
           }
         } catch (emailError) {
