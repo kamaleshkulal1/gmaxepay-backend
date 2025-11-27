@@ -507,15 +507,17 @@ const unlockAccount = async (req, res) => {
     // Send unlock email if user has email
     if (updatedUser.email) {
       try {
-        const backendUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+        const backendUrl = process.env.BASE_URL|| 'https://api-dev.gmaxepay.in';
         const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
         const unlockIllustrationUrl = `${backendUrl}/unlockuser.png`;
 
-        // Send email using tempPasswordEmail template (which supports illustration)
-        await emailService.sendTempPasswordEmail({
+        // Send notification email for account unlock
+        await emailService.sendNotificationEmail({
           to: updatedUser.email,
           userName: updatedUser.name || 'User',
-          tempPassword: '', // Not needed for unlock email, template will handle it
+          subject: 'Your Account Has Been Unlocked - Gmaxepay',
+          successMessage: 'Your account has been unlocked successfully',
+          message: 'You can now login to your account. If you did not request this action, please contact our support team immediately.',
           logoUrl: logoUrl,
           illustrationUrl: unlockIllustrationUrl
         });
@@ -1118,10 +1120,12 @@ const revertKycData = async (req, res) => {
           // Send email for PAN revert
           if (pan === true || pan === 'true') {
             const resetPanIllustrationUrl = `${backendUrl}/resetPan.png`;
-            await emailService.sendTempPasswordEmail({
+            await emailService.sendNotificationEmail({
               to: userForEmail.email,
               userName: userForEmail.name || 'User',
-              tempPassword: '', // Not needed for revert notification
+              subject: 'PAN Verification Reverted - Gmaxepay',
+              successMessage: 'Your PAN verification has been reverted',
+              message: 'Please connect your PAN to digilocker, upload and download your PAN document to complete the verification process.',
               logoUrl: logoUrl,
               illustrationUrl: resetPanIllustrationUrl
             });
@@ -1130,10 +1134,12 @@ const revertKycData = async (req, res) => {
           // Send email for Aadhaar revert
           if (aadhar === true || aadhar === 'true') {
             const resetAadhaarIllustrationUrl = `${backendUrl}/resetAadhaar.png`;
-            await emailService.sendTempPasswordEmail({
+            await emailService.sendNotificationEmail({
               to: userForEmail.email,
               userName: userForEmail.name || 'User',
-              tempPassword: '', // Not needed for revert notification
+              subject: 'Aadhaar Verification Reverted - Gmaxepay',
+              successMessage: 'Your Aadhaar verification has been reverted',
+              message: 'Please connect your Aadhaar to digilocker, upload and download your Aadhaar document to complete the verification process.',
               logoUrl: logoUrl,
               illustrationUrl: resetAadhaarIllustrationUrl
             });

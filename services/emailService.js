@@ -76,6 +76,53 @@ module.exports = {
 };
 
 /**
+ * Send notification email (for account unlock, KYC revert, etc.)
+ * @param {Object} options
+ * @param {string} options.to
+ * @param {string} options.userName
+ * @param {string} options.subject
+ * @param {string} options.successMessage - Main success message (e.g., "Your account has been unlocked successfully")
+ * @param {string} options.message - Additional message text
+ * @param {string} options.logoUrl
+ * @param {string} options.illustrationUrl
+ */
+module.exports.sendNotificationEmail = async ({ 
+  to, 
+  userName, 
+  subject, 
+  successMessage, 
+  message, 
+  logoUrl, 
+  illustrationUrl 
+}) => {
+  try {
+    const templatePath = path.join(__dirname, '../mailTemplate/notificationEmail.html');
+    let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
+
+    htmlTemplate = htmlTemplate.replace(/{{USER_NAME}}/g, userName || 'User');
+    htmlTemplate = htmlTemplate.replace(/{{SUCCESS_MESSAGE}}/g, successMessage || '');
+    htmlTemplate = htmlTemplate.replace(/{{MESSAGE}}/g, message || '');
+    htmlTemplate = htmlTemplate.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
+    htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
+    htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, illustrationUrl || '');
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
+      to,
+      subject: subject || 'Notification from Gmaxepay',
+      html: htmlTemplate,
+      text: `Dear ${userName},\n\n${successMessage || ''}\n\n${message || ''}\n\nBest regards,\nGMAXEPAY Team`
+    };
+
+    const info = await transport.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId, response: info.response };
+  } catch (error) {
+    console.error('Error sending notification email:', error);
+    throw new Error(`Failed to send notification email: ${error.message}`);
+  }
+};
+
+/**
  * Send OTP email for verification
  * @param {Object} options
  * @param {string} options.to
