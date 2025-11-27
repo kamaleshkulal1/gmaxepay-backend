@@ -443,7 +443,24 @@ const unlockAccount = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId;
+    // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
+    let companyId = req.companyId || req.user?.companyId;
+
+    // If companyId is still not available, get it from the user record
+    if (!companyId) {
+      const tempUser = await dbService.findOne(model.user, {
+        id,
+        isDeleted: false
+      }, {
+        attributes: ['companyId']
+      });
+      
+      if (tempUser) {
+        companyId = tempUser.companyId;
+      } else {
+        return res.failure({ message: 'User not found' });
+      }
+    }
 
     // Find user
     let foundUser = await dbService.findOne(model.user, {
@@ -544,7 +561,24 @@ const getKycVerificationStatus = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId;
+    // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
+    let companyId = req.companyId || req.user?.companyId;
+
+    // If companyId is still not available, get it from the user record
+    if (!companyId) {
+      const tempUser = await dbService.findOne(model.user, {
+        id,
+        isDeleted: false
+      }, {
+        attributes: ['companyId']
+      });
+      
+      if (tempUser) {
+        companyId = tempUser.companyId;
+      } else {
+        return res.failure({ message: 'User not found' });
+      }
+    }
 
     // Find user
     let foundUser = await dbService.findOne(model.user, {
@@ -627,7 +661,24 @@ const getCompleteKycData = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId;
+    // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
+    let companyId = req.companyId || req.user?.companyId;
+
+    // If companyId is still not available, get it from the user record
+    if (!companyId) {
+      const tempUser = await dbService.findOne(model.user, {
+        id,
+        isDeleted: false
+      }, {
+        attributes: ['companyId']
+      });
+      
+      if (tempUser) {
+        companyId = tempUser.companyId;
+      } else {
+        return res.failure({ message: 'User not found' });
+      }
+    }
 
     // Find user
     let foundUser = await dbService.findOne(model.user, {
@@ -791,8 +842,25 @@ const revertKycData = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId;
+    // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
+    let companyId = req.companyId || req.user?.companyId;
     const { pan, aadhar, shopImage, bankVerification } = req.body || {};
+
+    // If companyId is still not available, get it from the user record
+    if (!companyId) {
+      const tempUser = await dbService.findOne(model.user, {
+        id,
+        isDeleted: false
+      }, {
+        attributes: ['companyId']
+      });
+      
+      if (tempUser) {
+        companyId = tempUser.companyId;
+      } else {
+        return res.failure({ message: 'User not found' });
+      }
+    }
 
     // Find user
     let foundUser = await dbService.findOne(model.user, {
@@ -1043,7 +1111,7 @@ const revertKycData = async (req, res) => {
 
       // Send email notifications if user has email
       if (userForEmail && userForEmail.email) {
-        const backendUrl = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
+        const backendUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
         const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
         
         try {
