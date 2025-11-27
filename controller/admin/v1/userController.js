@@ -582,6 +582,7 @@ const getKycVerificationStatus = async (req, res) => {
       }
     }
 
+
     // Find user
     let foundUser = await dbService.findOne(model.user, {
       id,
@@ -593,12 +594,29 @@ const getKycVerificationStatus = async (req, res) => {
       return res.failure({ message: 'User not found' });
     }
 
-    // Get image URLs helper
-    const getImageUrl = (imageData, isProfileImage = false) => {
+    // Get outlet for shop image
+    const outlet = await dbService.findOne(model.outlet, {
+      refId: id,
+      companyId: companyId
+    });
+
+    // Get image URLs helper - use CDN URLs for all images (not secure proxy)
+    // Pass useSecureProxy = false to get CDN URLs like: https://assets.gmaxepay.in/images/...
+    const getImageUrl = (imageData) => {
       if (!imageData) return null;
       const plainKey = extractS3Key(imageData);
       if (!plainKey) return null;
-      return imageService.getImageUrl(plainKey, !isProfileImage);
+      // Use useSecureProxy = false to get CDN URLs instead of secure proxy URLs
+      return imageService.getImageUrl(plainKey, false);
+    };
+
+    // Get shop image URL helper
+    const getShopImageUrl = (shopImage) => {
+      if (!shopImage) return null;
+      const plainKey = extractS3Key(shopImage);
+      if (!plainKey) return null;
+      // Use CDN URL for shop images
+      return imageService.getImageUrl(plainKey, false);
     };
 
     // Get Aadhaar and PAN documents
@@ -626,11 +644,12 @@ const getKycVerificationStatus = async (req, res) => {
       bankDetailsVerify: !!foundUser.bankDetailsVerify,
       imageVerify: !!foundUser.imageVerify,
       profileImageWithShopVerify: !!foundUser.profileImageWithShopVerify,
-      aadharFrontImage: getImageUrl(foundUser.aadharFrontImage, false),
-      aadharBackImage: getImageUrl(foundUser.aadharBackImage, false),
-      panCardFrontImage: getImageUrl(foundUser.panCardFrontImage, false),
-      panCardBackImage: getImageUrl(foundUser.panCardBackImage, false),
-      profileImage: getImageUrl(foundUser.profileImage, true)
+      aadharFrontImage: getImageUrl(foundUser.aadharFrontImage),
+      aadharBackImage: getImageUrl(foundUser.aadharBackImage),
+      panCardFrontImage: getImageUrl(foundUser.panCardFrontImage),
+      panCardBackImage: getImageUrl(foundUser.panCardBackImage),
+      profileImage: getImageUrl(foundUser.profileImage),
+      shopImage: outlet ? getShopImageUrl(outlet.shopImage) : null
     };
 
     return res.success({
@@ -693,12 +712,14 @@ const getCompleteKycData = async (req, res) => {
       return res.failure({ message: 'User not found' });
     }
 
-    // Get image URLs helper
-    const getImageUrl = (imageData, isProfileImage = false) => {
+    // Get image URLs helper - use CDN URLs for all images (not secure proxy)
+    // Pass useSecureProxy = false to get CDN URLs like: https://assets.gmaxepay.in/images/...
+    const getImageUrl = (imageData) => {
       if (!imageData) return null;
       const plainKey = extractS3Key(imageData);
       if (!plainKey) return null;
-      return imageService.getImageUrl(plainKey, !isProfileImage);
+      // Use useSecureProxy = false to get CDN URLs instead of secure proxy URLs
+      return imageService.getImageUrl(plainKey, false);
     };
 
     // Get outlet
@@ -745,12 +766,13 @@ const getCompleteKycData = async (req, res) => {
     // Calculate KYC status
     const kycInfo = calculateKycStatus(foundUser, outlet, customerBank, aadhaarDoc, panDoc);
 
-    // Get shop image URL
+    // Get shop image URL - use CDN URL
     const getShopImageUrl = (shopImage) => {
       if (!shopImage) return null;
       const plainKey = extractS3Key(shopImage);
       if (!plainKey) return null;
-      return imageService.getImageUrl(plainKey, true);
+      // Use CDN URL for shop images
+      return imageService.getImageUrl(plainKey, false);
     };
 
     const kycData = {
@@ -768,11 +790,11 @@ const getCompleteKycData = async (req, res) => {
         bankDetailsVerify: !!foundUser.bankDetailsVerify,
         imageVerify: !!foundUser.imageVerify,
         profileImageWithShopVerify: !!foundUser.profileImageWithShopVerify,
-        profileImage: getImageUrl(foundUser.profileImage, true),
-        aadharFrontImage: getImageUrl(foundUser.aadharFrontImage, false),
-        aadharBackImage: getImageUrl(foundUser.aadharBackImage, false),
-        panCardFrontImage: getImageUrl(foundUser.panCardFrontImage, false),
-        panCardBackImage: getImageUrl(foundUser.panCardBackImage, false)
+        profileImage: getImageUrl(foundUser.profileImage),
+        aadharFrontImage: getImageUrl(foundUser.aadharFrontImage),
+        aadharBackImage: getImageUrl(foundUser.aadharBackImage),
+        panCardFrontImage: getImageUrl(foundUser.panCardFrontImage),
+        panCardBackImage: getImageUrl(foundUser.panCardBackImage)
       },
       outletDetails: outlet ? {
         outletId: outlet.id,
