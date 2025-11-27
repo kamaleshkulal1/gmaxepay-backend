@@ -899,9 +899,29 @@ const revertKycData = async (req, res) => {
 
     const revertOperations = [];
     const updateData = {};
+    const revertMessages = [];
+    const revertedItems = {
+      pan: false,
+      aadhar: false,
+      shopImage: false,
+      bankVerification: false
+    };
+
+    // Helper to check if value is true (handles boolean true or string 'true')
+    const isTrue = (value) => {
+      return value === true || value === 'true';
+    };
+
+    // Check if any revert operation was requested
+    if (!isTrue(pan) && !isTrue(aadhar) && !isTrue(shopImage) && !isTrue(bankVerification)) {
+      return res.failure({ 
+        message: 'No KYC data specified to revert. Please provide at least one of: pan, aadhar, shopImage, bankVerification with value true or "true"' 
+      });
+    }
 
     // Revert PAN verification
-    if (pan === true || pan === 'true') {
+    if (isTrue(pan)) {
+      revertedItems.pan = true;
       // Delete PAN images from S3
       const panFrontKey = extractS3Key(foundUser.panCardFrontImage);
       const panBackKey = extractS3Key(foundUser.panCardBackImage);
@@ -941,10 +961,13 @@ const revertKycData = async (req, res) => {
           companyId: companyId
         });
       }
+      
+      revertMessages.push('PAN verification has been reverted');
     }
 
     // Revert Aadhaar verification
-    if (aadhar === true || aadhar === 'true') {
+    if (isTrue(aadhar)) {
+      revertedItems.aadhar = true;
       // Delete Aadhaar images from S3
       const aadharFrontKey = extractS3Key(foundUser.aadharFrontImage);
       const aadharBackKey = extractS3Key(foundUser.aadharBackImage);
@@ -984,10 +1007,13 @@ const revertKycData = async (req, res) => {
           companyId: companyId
         });
       }
+      
+      revertMessages.push('Aadhaar verification has been reverted');
     }
 
     // Revert shop image
-    if (shopImage === true || shopImage === 'true') {
+    if (isTrue(shopImage)) {
+      revertedItems.shopImage = true;
       // Get outlet
       const outlet = await dbService.findOne(model.outlet, {
         refId: id,
@@ -1015,10 +1041,13 @@ const revertKycData = async (req, res) => {
 
       // Update user fields
       updateData.shopDetailsVerify = false;
+      
+      revertMessages.push('Shop image has been reverted');
     }
 
     // Revert bank verification
-    if (bankVerification === true || bankVerification === 'true') {
+    if (isTrue(bankVerification)) {
+      revertedItems.bankVerification = true;
       // Get customer and customerBank
       const customer = await dbService.findOne(model.customer, {
         mobile: foundUser.mobileNo
@@ -1049,6 +1078,15 @@ const revertKycData = async (req, res) => {
       // Update user fields
       updateData.bankDetailsVerify = false;
       updateData.nameSimilarity = null;
+      
+      revertMessages.push('Bank verification has been reverted');
+    }
+
+    // Check if any revert operation was requested
+    if (!isTrue(pan) && !isTrue(aadhar) && !isTrue(shopImage) && !isTrue(bankVerification)) {
+      return res.failure({ 
+        message: 'No KYC data specified to revert. Please provide at least one of: pan, aadhar, shopImage, bankVerification' 
+      });
     }
 
     // Wait for all image deletions to complete
@@ -1140,7 +1178,7 @@ const revertKycData = async (req, res) => {
         
         try {
           // Send email for PAN revert
-          if (pan === true || pan === 'true') {
+          if (isTrue(pan)) {
             const resetPanIllustrationUrl = `${backendUrl}/resetPan.png`;
             await emailService.sendNotificationEmail({
               to: userForEmail.email,
@@ -1154,7 +1192,7 @@ const revertKycData = async (req, res) => {
           }
 
           // Send email for Aadhaar revert
-          if (aadhar === true || aadhar === 'true') {
+          if (isTrue(aadhar)) {
             const resetAadhaarIllustrationUrl = `${backendUrl}/resetAadhaar.png`;
             await emailService.sendNotificationEmail({
               to: userForEmail.email,
@@ -1173,16 +1211,15 @@ const revertKycData = async (req, res) => {
       }
     }
 
+    // Build success message
+    let successMessage = 'KYC data reverted successfully';
+    if (revertMessages.length > 0) {
+      successMessage = revertMessages.join('. ');
+    }
+
     return res.success({
-      message: 'KYC data reverted successfully',
-      data: {
-        reverted: {
-          pan: pan === true || pan === 'true',
-          aadhar: aadhar === true || aadhar === 'true',
-          shopImage: shopImage === true || shopImage === 'true',
-          bankVerification: bankVerification === true || bankVerification === 'true'
-        }
-      }
+      message: successMessage,
+      data: null
     });
   } catch (error) {
     console.error('Error reverting KYC data:', error);
