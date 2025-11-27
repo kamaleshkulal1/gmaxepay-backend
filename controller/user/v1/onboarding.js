@@ -409,6 +409,66 @@ const updateKycStatus = async (userId, companyId, ctx) => {
   }
 };
 
+// Helper function to revert KYC verification on failure
+const revertKycVerification = async (userId, companyId, kycType) => {
+  try {
+    const user = await dbService.findOne(model.user, { id: userId, companyId: companyId, isDeleted: false });
+    if (!user) return;
+
+    const updateData = {};
+    
+    if (kycType === 'pan') {
+      // Revert PAN verification
+      updateData.panVerify = false;
+      
+      // Delete PAN digilocker document
+      const panDoc = await dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'PAN',
+        isDeleted: false
+      });
+
+      if (panDoc) {
+        await dbService.update(
+          model.digilockerDocument,
+          { id: panDoc.id },
+          { isDeleted: true }
+        );
+      }
+    } else if (kycType === 'aadhar' || kycType === 'aadhaar') {
+      // Revert Aadhaar verification
+      updateData.aadharVerify = false;
+      
+      // Delete Aadhaar digilocker document
+      const aadhaarDoc = await dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      });
+
+      if (aadhaarDoc) {
+        await dbService.update(
+          model.digilockerDocument,
+          { id: aadhaarDoc.id },
+          { isDeleted: true }
+        );
+      }
+    }
+
+    // Update user if any fields need to be reverted
+    if (Object.keys(updateData).length > 0) {
+      await dbService.update(model.user, { id: userId, companyId: companyId }, updateData);
+      
+      // Recalculate and update KYC status
+      await updateKycStatus(userId, companyId, {});
+    }
+  } catch (error) {
+    console.error(`Error reverting ${kycType} KYC verification:`, error);
+  }
+};
+
 // Initial Step ReferCode
 const postReferCode = async (req, res) => {
   try {
@@ -2588,6 +2648,9 @@ const uploadAadharDocuments = async (req, res) => {
       
       await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
       
+      // Revert Aadhaar KYC verification on failure
+      await revertKycVerification(user.id, company.id, 'aadhaar');
+      
       const errorMessage = llmResponse?.message || llmResponse?.error || 'Failed to extract Aadhar data';
       return res.failure({ message: errorMessage });
     }
@@ -2621,6 +2684,9 @@ const uploadAadharDocuments = async (req, res) => {
             
             await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
             
+            // Revert Aadhaar KYC verification on validation failure
+            await revertKycVerification(user.id, company.id, 'aadhaar');
+            
             return res.failure({ message: 'pls check your uploaded image' });
           }
           validationResults.aadhaarLast4Match = true;
@@ -2647,6 +2713,8 @@ const uploadAadharDocuments = async (req, res) => {
 
           if (!photoLinkBase64 || !extractedPhotoBase64) {
             console.error('Failed to extract base64 from photos');
+            // Revert Aadhaar KYC verification on failure
+            await revertKycVerification(user.id, company.id, 'aadhaar');
             return res.failure({ message: 'Invalid photo data. Please try again.' });
           }
 
@@ -2656,6 +2724,8 @@ const uploadAadharDocuments = async (req, res) => {
 
           if (!photoLinkBuffer || !extractedPhotoBuffer) {
             console.error('Failed to convert photo base64 to buffer');
+            // Revert Aadhaar KYC verification on failure
+            await revertKycVerification(user.id, company.id, 'aadhaar');
             return res.failure({ message: 'Invalid photo format. Please try again.' });
           }
 
@@ -2671,6 +2741,8 @@ const uploadAadharDocuments = async (req, res) => {
           
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
           if(!validationResults.photoMatch){
+            // Revert Aadhaar KYC verification on face match failure
+            await revertKycVerification(user.id, company.id, 'aadhaar');
             return res.failure({ message: 'pls check your uploaded image' });
           }
           if (!faceComparison.success) {
@@ -2926,24 +2998,29 @@ const uploadPanDocuments = async (req, res) => {
                 // Update KYC status after PAN upload
                 await updateKycStatus(user.id, company.id, { aadhaarDoc: aadhaarDoc });
               } else {
-                // If face doesn't match, set verification failed message (no S3 upload)
+                // If face doesn't match, revert PAN KYC verification
                 verificationMessage = 'PAN verification failed';
+                await revertKycVerification(user.id, company.id, 'pan');
               }
             }
           }
         } catch (comparisonError) {
           console.error('Error comparing faces:', comparisonError);
           verificationMessage = 'PAN verification failed';
+          await revertKycVerification(user.id, company.id, 'pan');
         }
       } else {
         // If Aadhaar photo is not available, set appropriate message
         verificationMessage = 'Aadhaar photo not available for verification';
+        await revertKycVerification(user.id, company.id, 'pan');
       }
     }
     
     // Handle failure cases - return failure response
     // Case 1: LLM verification failed
     if (!llmResult?.success) {
+      // Revert PAN KYC verification
+      await revertKycVerification(user.id, company.id, 'pan');
       return res.failure({
         message: llmResult?.message || 'PAN verification failed',
         data: {
@@ -2959,6 +3036,8 @@ const uploadPanDocuments = async (req, res) => {
     
     // Case 2: Face comparison failed (matched: false)
     if (faceComparisonResult && !faceComparisonResult.matched) {
+      // Revert PAN KYC verification
+      await revertKycVerification(user.id, company.id, 'pan');
       return res.failure({
         message: verificationMessage || 'PAN verification failed',
         data: {
@@ -2977,6 +3056,8 @@ const uploadPanDocuments = async (req, res) => {
     
     // Case 3: Aadhaar photo not available (face comparison couldn't be performed)
     if (!faceComparisonResult && llmResult?.success) {
+      // Revert PAN KYC verification
+      await revertKycVerification(user.id, company.id, 'pan');
       return res.failure({
         message: verificationMessage || 'Aadhaar photo not available for verification',
         data: {

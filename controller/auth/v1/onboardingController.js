@@ -439,6 +439,66 @@ const updateKycStatus = async (userId, companyId, ctx) => {
   }
 };
 
+// Helper function to revert KYC verification on failure
+const revertKycVerification = async (userId, companyId, kycType) => {
+  try {
+    const user = await dbService.findOne(model.user, { id: userId, companyId: companyId, isDeleted: false });
+    if (!user) return;
+
+    const updateData = {};
+    
+    if (kycType === 'pan') {
+      // Revert PAN verification
+      updateData.panVerify = false;
+      
+      // Delete PAN digilocker document
+      const panDoc = await dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'PAN',
+        isDeleted: false
+      });
+
+      if (panDoc) {
+        await dbService.update(
+          model.digilockerDocument,
+          { id: panDoc.id },
+          { isDeleted: true }
+        );
+      }
+    } else if (kycType === 'aadhar' || kycType === 'aadhaar') {
+      // Revert Aadhaar verification
+      updateData.aadharVerify = false;
+      
+      // Delete Aadhaar digilocker document
+      const aadhaarDoc = await dbService.findOne(model.digilockerDocument, {
+        refId: userId,
+        companyId: companyId,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      });
+
+      if (aadhaarDoc) {
+        await dbService.update(
+          model.digilockerDocument,
+          { id: aadhaarDoc.id },
+          { isDeleted: true }
+        );
+      }
+    }
+
+    // Update user if any fields need to be reverted
+    if (Object.keys(updateData).length > 0) {
+      await dbService.update(model.user, { id: userId, companyId: companyId }, updateData);
+      
+      // Recalculate and update KYC status
+      await updateKycStatus(userId, companyId, {});
+    }
+  } catch (error) {
+    console.error(`Error reverting ${kycType} KYC verification:`, error);
+  }
+};
+
 /**
  * Verify onboarding token and return user details
  * @route GET /company/onboarding/:token

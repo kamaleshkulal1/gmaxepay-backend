@@ -19,13 +19,8 @@ const subscriptionController = require('../../controller/admin/v1/subscriptionCo
 const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 
 
-
 // User management routes
-router.post('/users', userController.createUser);
-router.post('/users-list',authentication, userController.findAllUsers);
-router.get('/users/:id', userController.getUser);
-router.put('/users/:id', userController.updateUser);
-router.delete('/users/:id', userController.deleteUser);
+router.use('/users', require('./v1/userRoute'));
 
 // Role and permission routes
 router.put('/roles/permissions', rolePermissionController.updatePermission);
