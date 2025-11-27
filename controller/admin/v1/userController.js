@@ -304,7 +304,11 @@ const updateUser = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId;
+    const companyId = req.companyId || req.user?.companyId;
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) {
+      return res.failure({ message: 'Company not found' });
+    }
     let dataToUpdate = { ...(req.body || {}) };
     dataToUpdate = {
       ...dataToUpdate,
