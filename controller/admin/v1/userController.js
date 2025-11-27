@@ -324,9 +324,8 @@ const updateUser = async (req, res) => {
     if (!updatedUser) {
       return res.failure({ message: 'Update User failed' });
     }
-
     const finalData = {
-      ...updatedUser
+      ...dataToUpdate,
     };
 
     return res.success({
