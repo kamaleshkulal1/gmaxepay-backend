@@ -1173,7 +1173,7 @@ const revertKycData = async (req, res) => {
 
       // Send email notifications if user has email
       if (userForEmail && userForEmail.email) {
-        const backendUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+        const backendUrl = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
         const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
         
         try {
