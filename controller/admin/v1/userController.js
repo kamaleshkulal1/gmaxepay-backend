@@ -89,7 +89,10 @@ const findAllUsers = async (req, res) => {
     } else {
       // Filter by companyId for userRole = 2 or other cases
       const companyId = req.companyId || userCompanyId;
-      query.companyId = companyId;
+      // Only add companyId to query if it's defined
+      if (companyId !== undefined && companyId !== null) {
+        query.companyId = companyId;
+      }
     }
 
     // Handle kycStatus filter - map "pending" and "completed" to actual status values
@@ -256,12 +259,33 @@ const getUser = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId;
+    // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
+    let companyId = req.companyId || req.user?.companyId;
 
-    let foundUser = await dbService.findOne(model.user, {
-      id,
-      companyId
-    });
+    // If companyId is still not available, get it from the user record
+    if (!companyId) {
+      const tempUser = await dbService.findOne(model.user, {
+        id,
+        isDeleted: false
+      }, {
+        attributes: ['companyId']
+      });
+      
+      if (tempUser) {
+        companyId = tempUser.companyId;
+      } else {
+        return res.failure({ message: 'User not found' });
+      }
+    }
+
+    // Build query - only include companyId if user is not super admin
+    const userRole = req.user.userRole;
+    const query = { id };
+    if (!(userRole === 1 && companyId === 1)) {
+      query.companyId = companyId;
+    }
+
+    let foundUser = await dbService.findOne(model.user, query);
     if (!foundUser) {
       return res.failure({ message: 'User not found' });
     }
@@ -289,7 +313,24 @@ const updateUser = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId || req.user?.companyId;
+    let companyId = req.companyId || req.user?.companyId;
+
+    // If companyId is still not available, get it from the user record
+    if (!companyId) {
+      const tempUser = await dbService.findOne(model.user, {
+        id,
+        isDeleted: false
+      }, {
+        attributes: ['companyId']
+      });
+      
+      if (tempUser) {
+        companyId = tempUser.companyId;
+      } else {
+        return res.failure({ message: 'User not found' });
+      }
+    }
+
     const company = await dbService.findOne(model.company, { id: companyId });
     if (!company) {
       return res.failure({ message: 'Company not found' });
@@ -301,9 +342,16 @@ const updateUser = async (req, res) => {
       type: req.user.userType
     };
 
+    // Build query - only include companyId if user is not super admin
+    const userRole = req.user.userRole;
+    const query = { id };
+    if (!(userRole === 1 && companyId === 1)) {
+      query.companyId = companyId;
+    }
+
     let updatedUser = await dbService.update(
       model.user,
-      { id, companyId },
+      query,
       dataToUpdate
     );
     if (!updatedUser) {
@@ -342,9 +390,33 @@ const deleteUser = async (req, res) => {
     }
 
     const { id } = req.params;
-    const companyId = req.companyId;
+    // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
+    let companyId = req.companyId || req.user?.companyId;
 
-    let deletedUser = await dbService.destroy(model.user, { id, companyId });
+    // If companyId is still not available, get it from the user record
+    if (!companyId) {
+      const tempUser = await dbService.findOne(model.user, {
+        id,
+        isDeleted: false
+      }, {
+        attributes: ['companyId']
+      });
+      
+      if (tempUser) {
+        companyId = tempUser.companyId;
+      } else {
+        return res.failure({ message: 'User not found' });
+      }
+    }
+
+    // Build query - only include companyId if user is not super admin
+    const userRole = req.user.userRole;
+    const query = { id };
+    if (!(userRole === 1 && companyId === 1)) {
+      query.companyId = companyId;
+    }
+
+    let deletedUser = await dbService.destroy(model.user, query);
     if (!deletedUser) {
       return res.failure({ message: 'Delete User failed' });
     }
