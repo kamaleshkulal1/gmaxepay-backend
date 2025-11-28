@@ -7,7 +7,7 @@ const model = require('../models/index');
 const moment = require('moment');
 const bcrypt = require('bcrypt');
 const dbService = require('../utils/dbService');
-const { JWT } = require('../constants/authConstant');
+const { JWT, MAX_LOGIN_RETRY_LIMIT } = require('../constants/authConstant');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
@@ -516,19 +516,34 @@ const loginUser = async (
         // Increment login attempts and potentially lock account
         await user.incrementLoginAttempts();
         
-        // Check if account is now locked after this attempt
+        // Reload user to get updated loginAttempts and lock status
         const updatedUser = await dbService.findOne(model.user, { id: user.id });
-        if (updatedUser.isAccountLocked()) {
+        
+        // Check if account is now locked after this attempt
+        if (updatedUser.isAccountLocked() || updatedUser.loginAttempts >= MAX_LOGIN_RETRY_LIMIT) {
           return {
             flag: true,
             msg: 'Account locked due to multiple failed login attempts. Please contact admin for assistance.'
           };
         }
         
-        const remainingAttempts = 3 - updatedUser.loginAttempts;
+        // Calculate remaining attempts (MAX_LOGIN_RETRY_LIMIT = 3)
+        // After 1st wrong: loginAttempts = 1, remaining = 2
+        // After 2nd wrong: loginAttempts = 2, remaining = 1
+        // After 3rd wrong: account is locked (handled above)
+        const remainingAttempts = MAX_LOGIN_RETRY_LIMIT - updatedUser.loginAttempts;
+        
+        // Ensure remaining attempts is never negative
+        if (remainingAttempts <= 0) {
+          return {
+            flag: true,
+            msg: 'Account locked due to multiple failed login attempts. Please contact admin for assistance.'
+          };
+        }
+        
         return {
           flag: true,
-          msg: `Incorrect Password. ${remainingAttempts} attempts remaining before account lock.`
+          msg: `Incorrect Password. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before account lock.`
         };
       }
       

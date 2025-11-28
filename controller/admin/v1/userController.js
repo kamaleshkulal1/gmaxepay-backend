@@ -4,12 +4,6 @@ const { Op, Sequelize } = require('sequelize');
 const imageService = require('../../../services/imageService');
 const emailService = require('../../../services/emailService');
 
-/**
- * @description : create record of User in SQL table.
- * @param {Object} req : request including body for creating record.
- * @param {Object} res : response of created record.
- * @return {Object} : created User. {status, message, data}
- */
 
 const createUser = async (req, res) => {
   try {
@@ -208,19 +202,10 @@ const findAllUsers = async (req, res) => {
       // Determine KYC Status
       const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
 
-      // Get KYC Details
-      const kycDetails = {
-        kycStatus: userData.kycStatus || 'NO_KYC',
-        kycSteps: userData.kycSteps || 0,
-        mobileVerify: userData.mobileVerify || false,
-        emailVerify: userData.emailVerify || false,
-        aadharVerify: userData.aadharVerify || false,
-        panVerify: userData.panVerify || false,
-        shopDetailsVerify: userData.shopDetailsVerify || false,
-        imageVerify: userData.imageVerify || false,
-        profileImageWithShopVerify: userData.profileImageWithShopVerify || false,
-        bankDetailsVerify: userData.bankDetailsVerify || false
-      };
+      // Determine if account is locked
+      const isLockedByStatus = !!(userData.isLocked && userData.lockUntil && new Date(userData.lockUntil) > new Date());
+      const isLockedByAttempts = (userData.loginAttempts || 0) >= 3;
+      const isLocked = isLockedByStatus || isLockedByAttempts;
 
       // Format userAgentCode with correct prefix based on role
       return {
@@ -237,7 +222,7 @@ const findAllUsers = async (req, res) => {
         kycStatus: kycStatus,
         kycSteps: userData.kycSteps || 0,
         status: userData.isActive ? 'Active' : 'Inactive',
-        kycDetails: kycDetails,
+        lock: isLocked,
         wallet: {
           mainWallet: walletData.mainWallet || 0,
           apesWallet: walletData.apesWallet || 0
@@ -431,12 +416,6 @@ const calculateKycStatus = (user, outlet, customerBank, aadhaarDoc, panDoc) => {
   return { kycStatus, kycSteps, completedSteps, totalSteps };
 };
 
-/**
- * @description : Unlock user account if it's locked
- * @param {Object} req : request including user id
- * @param {Object} res : response
- * @return {Object} : {status, message, data}
- */
 const unlockAccount = async (req, res) => {
   try {
     let permissions = req.permission;
@@ -551,12 +530,6 @@ const unlockAccount = async (req, res) => {
   }
 };
 
-/**
- * @description : Get KYC verification status for a specific user
- * @param {Object} req : request including user id
- * @param {Object} res : response
- * @return {Object} : {status, message, data}
- */
 const getKycVerificationStatus = async (req, res) => {
   try {
     let permissions = req.permission;
@@ -670,12 +643,6 @@ const getKycVerificationStatus = async (req, res) => {
   }
 };
 
-/**
- * @description : Get complete KYC data for a user
- * @param {Object} req : request including user id
- * @param {Object} res : response
- * @return {Object} : {status, message, data}
- */
 const getCompleteKycData = async (req, res) => {
   try {
     let permissions = req.permission;
@@ -854,12 +821,7 @@ const getCompleteKycData = async (req, res) => {
   }
 };
 
-/**
- * @description : Revert/Delete KYC data for a user
- * @param {Object} req : request including user id and KYC types to revert
- * @param {Object} res : response
- * @return {Object} : {status, message, data}
- */
+
 const revertKycData = async (req, res) => {
   try {
     let permissions = req.permission;

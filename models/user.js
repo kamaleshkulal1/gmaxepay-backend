@@ -817,7 +817,13 @@ User.prototype.isPinMatch = async function (pin) {
 };
 
 User.prototype.isAccountLocked = function () {
-  return !!(this.isLocked && this.lockUntil && this.lockUntil > Date.now());
+  // Check if account is locked based on lock status and expiry time
+  const isLockedByStatus = !!(this.isLocked && this.lockUntil && this.lockUntil > Date.now());
+  
+  // Also check if login attempts have exceeded the limit (additional safeguard)
+  const isLockedByAttempts = (this.loginAttempts || 0) >= authConstantEnum.MAX_LOGIN_RETRY_LIMIT;
+  
+  return isLockedByStatus || isLockedByAttempts;
 };
 
 
@@ -831,10 +837,11 @@ User.prototype.incrementLoginAttempts = async function () {
     });
   }
   
-  const updates = { loginAttempts: this.loginAttempts + 1 };
+  // Calculate new attempt count
+  const newAttemptCount = (this.loginAttempts || 0) + 1;
+  const updates = { loginAttempts: newAttemptCount };
   
-  // Lock account after 3 failed attempts (password or OTP) for 20 minutes
-  if (this.loginAttempts + 1 >= authConstantEnum.MAX_LOGIN_RETRY_LIMIT && !this.isLocked) {
+  if (newAttemptCount >= authConstantEnum.MAX_LOGIN_RETRY_LIMIT) {
     updates.lockUntil = Date.now() + authConstantEnum.LOGIN_LOCK_TIME * 60 * 1000; // 20 minutes
     updates.isLocked = true;
   }
