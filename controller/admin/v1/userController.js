@@ -155,7 +155,7 @@ const findAllUsers = async (req, res) => {
       }
     }
 
-    // Include company and wallet information
+    // Include company, wallet, and onboardingToken information
     options.include = [
       {
         model: model.company,
@@ -168,6 +168,19 @@ const findAllUsers = async (req, res) => {
         as: 'wallet',
         attributes: ['id', 'mainWallet', 'apesWallet'],
         required: false
+      },
+      {
+        model: model.onboardingToken,
+        as: 'onboardingTokens',
+        attributes: ['id', 'expiresAt', 'isUsed', 'isDeactivated', 'createdAt'],
+        required: false,
+        where: {
+          isDeactivated: false,
+          isUsed: false
+        },
+        separate: true,
+        order: [['createdAt', 'DESC']],
+        limit: 1
       }
     ];
 
@@ -201,6 +214,7 @@ const findAllUsers = async (req, res) => {
       const userData = user.toJSON ? user.toJSON() : user;
       const companyData = userData.company || {};
       const walletData = userData.wallet || {};
+      const onboardingTokens = userData.onboardingTokens || [];
 
       // Determine KYC Status
       const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
@@ -209,6 +223,13 @@ const findAllUsers = async (req, res) => {
       const isLockedByStatus = !!(userData.isLocked && userData.lockUntil && new Date(userData.lockUntil) > new Date());
       const isLockedByAttempts = (userData.loginAttempts || 0) >= 3;
       const isLocked = isLockedByStatus || isLockedByAttempts;
+
+      // Get the latest active onboarding token's expiresAt
+      // onboardingTokens is already filtered and limited to 1, so get the first one
+      const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0 
+        ? onboardingTokens[0] 
+        : null;
+      const onboardingTokenExpiresAt = latestOnboardingToken?.expiresAt || null;
 
       // Format userAgentCode with correct prefix based on role
       return {
@@ -226,6 +247,7 @@ const findAllUsers = async (req, res) => {
         kycSteps: userData.kycSteps || 0,
         status: userData.isActive ? 'Active' : 'Inactive',
         lock: isLocked,
+        onboardingTokenExpiresAt: onboardingTokenExpiresAt,
         wallet: {
           mainWallet: walletData.mainWallet || 0,
           apesWallet: walletData.apesWallet || 0
