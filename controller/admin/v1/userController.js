@@ -753,22 +753,20 @@ const getCompleteKycData = async (req, res) => {
     const { id } = req.params;
     // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
     let companyId = req.companyId || req.user?.companyId;
-
+    if(req.user.userRole !== 1){
+      return res.failure({message:"don't have permission to get complete KYC data"})
+    }
     // If companyId is still not available, get it from the user record
-    if (!companyId) {
-      const tempUser = await dbService.findOne(model.user, {
+    const tempUser = await dbService.findOne(model.user, {
         id,
         isDeleted: false
-      }, {
-        attributes: ['companyId']
-      });
-      
+    });
+   
       if (tempUser) {
         companyId = tempUser.companyId;
       } else {
         return res.failure({ message: 'User not found' });
       }
-    }
     // Find user
     let foundUser = await dbService.findOne(model.user, {
       id,
