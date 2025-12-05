@@ -15,9 +15,18 @@ const createServiceCharge = async (req, res) => {
       return res.failure({ message: "User doesn't have Permission!" });
     }
 
-    // Only SUPER_ADMIN and ADMIN can create service charges
-    if (![USER_TYPES.SUPER_ADMIN, USER_TYPES.ADMIN].includes(req.user?.userType)) {
-      return res.failure({ message: "Only SUPER_ADMIN and ADMIN can create service charges" });
+    // Allow hierarchy to configure charges for their own downlines
+    // SUPER_ADMIN, WHITELABEL_ADMIN (company), MASTER_DISTRIBUTOR and DISTRIBUTOR
+    const allowedCreators = [
+      USER_TYPES.SUPER_ADMIN,
+      USER_TYPES.WHITELABEL_ADMIN,
+      USER_TYPES.MASTER_DISTRIBUTOR,
+      USER_TYPES.DISTRIBUTOR
+    ];
+    if (!allowedCreators.includes(req.user?.userType)) {
+      return res.failure({
+        message: 'Only SUPER_ADMIN, WHITELABEL_ADMIN, MASTER_DISTRIBUTOR and DISTRIBUTOR can create service charges'
+      });
     }
 
     const { serviceId, roleType, chargeAmount, userId } = req.body;
@@ -31,6 +40,22 @@ const createServiceCharge = async (req, res) => {
     const service = await dbService.findOne(model.services, { id: serviceId });
     if (!service) {
       return res.badRequest({ message: 'Service not found' });
+    }
+
+    // AEPS services are free for all companies and users - no subscription required
+    const serviceName = (service.serviceName || '').toUpperCase();
+    const isAepsService =
+      serviceName.includes('AEPS');
+
+    if (isAepsService) {
+      return res.success({
+        message: 'AEPS service is free and enabled for all users. No subscription is required.',
+        data: {
+          serviceId: service.id,
+          serviceName: service.serviceName,
+          isSubscriptionCreated: false
+        }
+      });
     }
 
     // Check if charge already exists for this service and role

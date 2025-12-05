@@ -512,6 +512,11 @@ const User = sequelize.define(
       allowNull: true,
       unique: true
     },
+    schemaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Reference to schema assigned to this user'
+    },
     ...reusableModelAttribute
   },
   {

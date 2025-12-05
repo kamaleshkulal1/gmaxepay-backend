@@ -62,6 +62,14 @@ db.range = require('./range');
 db.rangeCharges = require('./rangeCharges');
 db.rangeCommission = require('./rangeCommission');
 
+// Schema & Commission Models
+db.schema = require('./schema');
+db.adminCommission = require('./adminCommission');
+db.companyCommission = require('./companyCommission');
+db.masterDistributorCommission = require('./masterDistributorCommission');
+db.distributorCommission = require('./distributorCommission');
+db.retailerCommission = require('./retailerCommission');
+
 // Bank & Payment Models
 db.bank = require('./bank');
 db.customerBank = require('./customerBank');
@@ -365,6 +373,84 @@ db.company.hasMany(db.user, {
   as: 'users',
   sourceKey: 'id'
 });
+
+// User Schema Relationships
+db.user.belongsTo(db.schema, {
+  foreignKey: 'schemaId',
+  as: 'schema',
+  targetKey: 'id'
+});
+db.schema.hasMany(db.user, {
+  foreignKey: 'schemaId',
+  as: 'users',
+  sourceKey: 'id'
+});
+
+// Schema Relationships
+db.schema.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.schema, {
+  foreignKey: 'companyId',
+  as: 'schemas',
+  sourceKey: 'id'
+});
+
+db.schema.belongsTo(db.user, {
+  foreignKey: 'createdBy',
+  as: 'creator',
+  targetKey: 'id'
+});
+db.user.hasMany(db.schema, {
+  foreignKey: 'createdBy',
+  as: 'createdSchemas',
+  sourceKey: 'id'
+});
+
+db.schema.belongsTo(db.user, {
+  foreignKey: 'assignedTo',
+  as: 'assignedUser',
+  targetKey: 'id'
+});
+db.user.hasMany(db.schema, {
+  foreignKey: 'assignedTo',
+  as: 'assignedSchemas',
+  sourceKey: 'id'
+});
+
+// Commission Model Relationships
+db.adminCommission.belongsTo(db.operator, { foreignKey: 'operatorId', as: 'operator' });
+db.adminCommission.belongsTo(db.slab, { foreignKey: 'slabId', as: 'slab' });
+db.adminCommission.belongsTo(db.company, { foreignKey: 'companyId', as: 'company' });
+db.operator.hasMany(db.adminCommission, { foreignKey: 'operatorId', as: 'adminCommissions' });
+
+db.companyCommission.belongsTo(db.operator, { foreignKey: 'operatorId', as: 'operator' });
+db.companyCommission.belongsTo(db.schema, { foreignKey: 'schemaId', as: 'schema' });
+db.companyCommission.belongsTo(db.company, { foreignKey: 'companyId', as: 'company' });
+db.companyCommission.belongsTo(db.user, { foreignKey: 'assignedToUserId', as: 'assignedUser' });
+db.operator.hasMany(db.companyCommission, { foreignKey: 'operatorId', as: 'companyCommissions' });
+
+db.masterDistributorCommission.belongsTo(db.operator, { foreignKey: 'operatorId', as: 'operator' });
+db.masterDistributorCommission.belongsTo(db.schema, { foreignKey: 'schemaId', as: 'schema' });
+db.masterDistributorCommission.belongsTo(db.company, { foreignKey: 'companyId', as: 'company' });
+db.masterDistributorCommission.belongsTo(db.user, { foreignKey: 'masterDistributorId', as: 'masterDistributor' });
+db.masterDistributorCommission.belongsTo(db.user, { foreignKey: 'assignedToUserId', as: 'assignedUser' });
+db.operator.hasMany(db.masterDistributorCommission, { foreignKey: 'operatorId', as: 'masterDistributorCommissions' });
+
+db.distributorCommission.belongsTo(db.operator, { foreignKey: 'operatorId', as: 'operator' });
+db.distributorCommission.belongsTo(db.schema, { foreignKey: 'schemaId', as: 'schema' });
+db.distributorCommission.belongsTo(db.company, { foreignKey: 'companyId', as: 'company' });
+db.distributorCommission.belongsTo(db.user, { foreignKey: 'distributorId', as: 'distributor' });
+db.distributorCommission.belongsTo(db.user, { foreignKey: 'assignedToUserId', as: 'assignedUser' });
+db.operator.hasMany(db.distributorCommission, { foreignKey: 'operatorId', as: 'distributorCommissions' });
+
+db.retailerCommission.belongsTo(db.operator, { foreignKey: 'operatorId', as: 'operator' });
+db.retailerCommission.belongsTo(db.schema, { foreignKey: 'schemaId', as: 'schema' });
+db.retailerCommission.belongsTo(db.company, { foreignKey: 'companyId', as: 'company' });
+db.retailerCommission.belongsTo(db.user, { foreignKey: 'retailerId', as: 'retailer' });
+db.operator.hasMany(db.retailerCommission, { foreignKey: 'operatorId', as: 'retailerCommissions' });
 
 // User Wallet Relationships
 db.user.hasOne(db.wallet, {

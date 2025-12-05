@@ -22,7 +22,8 @@ let Slab = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: false
+      allowNull: true,
+      comment: 'Null for global slabs, set for company-specific slabs'
     },
     slabName: {
       type: DataTypes.STRING,

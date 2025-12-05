@@ -72,7 +72,7 @@ async function createBasicPackage() {
         isDefault: true,
         isSelfAssigned: false,
         slabAssigned: null,
-        companyId: null,
+        companyId:  1,
         addedBy: 1,
         isActive: true
       });
@@ -13745,25 +13745,25 @@ async function seedData() {
    await permissions();
    await insertPermissions();
    await rolePermission();
-  //  await KycDocumentSettings();
-  //  await createBasicPackage();
-  // //  await servicePush();
-  //  await OperatorType();
-  //  await state();
-  //  await gstState();
-  //  await bank();
-    // await services();
+   await KycDocumentSettings();
+   await servicePush();
+   await OperatorType();
+   await state();
+   await gstState();
+   await bank();
+    await services();
    
-  //  await cardType();
-  //  await paymentInsturment();
-  //  await seedPgCommercials();
-  //  await seedRangeComm();
-  //  await seedRangeCharges();
+   await cardType();
+   await paymentInsturment();
+   await seedPgCommercials();
+   await seedRangeComm();
+   await seedRangeCharges();
    
-  //  // Create company first, then user and wallet
-  //  const company = await seedCompany();
-  //  if (company && company.id) {
-  //    await seedUsers(company.id);
-  //  }
+   // Create company first, then user and wallet
+   const company = await seedCompany();
+   if (company && company.id) {
+     await seedUsers(company.id);
+   }
+   await createBasicPackage();
 }
 module.exports = seedData;
