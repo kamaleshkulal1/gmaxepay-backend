@@ -769,11 +769,9 @@ const getCompleteKycData = async (req, res) => {
         return res.failure({ message: 'User not found' });
       }
     }
-
     // Find user
     let foundUser = await dbService.findOne(model.user, {
       id,
-      companyId,
       isDeleted: false
     });
 
