@@ -876,7 +876,8 @@ const getCompleteKycData = async (req, res) => {
         accountNumber: customerBank.accountNumber,
         ifsc: customerBank.ifsc,
         bankName: customerBank.bankName,
-        beneficiaryName: customerBank.beneficiaryName
+        beneficiaryName: customerBank.beneficiaryName,
+        branch: customerBank.branch || null
       } : null,
       aadhaarDoc: aadhaarDoc ? {
         id: aadhaarDoc.id,
