@@ -22,10 +22,7 @@ const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 router.use('/users', require('./v1/userRoute'));
 
 // Role and permission routes
-router.put('/roles/permissions', rolePermissionController.updatePermission);
-router.get('/roles/:roleId/permissions', rolePermissionController.getPermissionByRoleId);
-router.post('/roles/permissions', rolePermissionController.createPermission);
-router.post('/roles/permission', rolePermissionController.createRolePermission);
+router.use('/rolesAndPermissions', require('./v1/rolesAndPermission'));
 
 // Services routes
 router.post('/services', authentication, servicesController.registerService);
