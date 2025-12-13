@@ -2,13 +2,6 @@ const dbService = require('../../../utils/dbService');
 const { permission, rolePermission, role } = require('../../../models/index');
 const { Op } = require('sequelize');
 
-/**
- * @description : create record of User in SQL table.
- * @param {Object} req : request including body for creating record.
- * @param {Object} res : response of created record.
- * @return {Object} : created User. {status, message, data}
- */
-
 const updatePermission = async (req, res) => {
   try {
     let permissions = req.permission;
