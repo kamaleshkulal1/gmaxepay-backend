@@ -29,6 +29,9 @@ router.post('/recharge', slabController.createRecharge);
 router.get('/users', slabController.getSlabUser);
 router.put('/users/:id', slabController.updateSlabUser);
 
+// Package upgrade (for company admins)
+router.post('/upgrade-package', authentication, slabController.upgradePackage);
+
 // Sub-Slab routes (Company, MD, Distributor create their commercials)
 router.post('/sub-slabs', authentication, subSlabController.createSubSlab);
 router.get('/sub-slabs', authentication, subSlabController.getAllSubSlabs);

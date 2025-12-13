@@ -49,6 +49,12 @@ let Slab = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true
     },
+    amount: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Slab upgrade amount/cost for downline users to upgrade package'
+    },
     users: {
       type: DataTypes.ARRAY(DataTypes.INTEGER),
       allowNull: true,

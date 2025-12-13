@@ -136,6 +136,8 @@ const panVerification = async (pan) => {
 
 const bankVerification = async (account_number, ifsc) => {
   const orderid = generateSystemReference();
+    // Set timeout to 30 seconds for bank verification (penny drop can take longer)
+    const timeout = Number(process.env.EKYCHUB_BANK_VERIFICATION_TIMEOUT_MS || 30000);
     let config = {
       method: 'get',
       url: `${ekychubUrl}/verification/penny_less?`,
@@ -148,15 +150,39 @@ const bankVerification = async (account_number, ifsc) => {
         account_number,
         ifsc,
         orderid
-      }
+      },
+      timeout: timeout
     }
     return axios
       .request(config)
       .then((response) => {
         return response.data;
       })
-      .catch((error) => { 
-        return error.response.data;
+      .catch((error) => {
+        // Handle timeout and network errors
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          return {
+            status: 'Failure',
+            message: `Bank verification request timed out after ${timeout}ms. Please try again.`,
+            'Account Number': account_number,
+            'Ifsc Code': ifsc,
+            nameAtBank: null,
+            error: 'TIMEOUT'
+          };
+        }
+        // Handle cases where error.response might not exist
+        if (error.response && error.response.data) {
+          return error.response.data;
+        }
+        // Return a structured error response for other cases
+        return {
+          status: 'Failure',
+          message: error.message || 'Bank verification service error',
+          'Account Number': account_number,
+          'Ifsc Code': ifsc,
+          nameAtBank: null,
+          error: 'SERVICE_ERROR'
+        };
       });
 }
 

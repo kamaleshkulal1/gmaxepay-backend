@@ -1485,7 +1485,23 @@ const postBankDetails = async (req, res) => {
     if (!bankVerification || bankVerification.status !== 'Success') {
       console.error('Bank verification failed - Status:', bankVerification?.status);
       console.error('Bank verification failed - Full Response:', JSON.stringify(bankVerification, null, 2));
-      return res.failure({ message: 'Bank verification failed' });
+      
+      // Provide more specific error messages based on error type
+      let errorMessage = 'Bank verification failed';
+      if (bankVerification?.error === 'TIMEOUT') {
+        errorMessage = 'Bank verification request timed out. The verification service is taking longer than expected. Please try again in a few moments.';
+      } else if (bankVerification?.message) {
+        errorMessage = bankVerification.message;
+      }
+      
+      return res.failure({ 
+        message: errorMessage,
+        data: {
+          status: bankVerification?.status,
+          error: bankVerification?.error,
+          retryable: bankVerification?.error === 'TIMEOUT'
+        }
+      });
     }
 
     let razorpayBankData = null;

@@ -1550,6 +1550,179 @@ const updateSlabUser = async (req, res) => {
   }
 };
 
+// Upgrade package by assigning slab (for company admins)
+const upgradePackage = async (req, res) => {
+  try {
+    let permissions = req.permission || [];
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 13 &&
+        permission.dataValues.write === true
+    );
+
+    // Only company admin (userRole 2) can upgrade packages
+    if (req.user?.userRole !== 2) {
+      return res.failure({ message: 'Only Company Admin can upgrade packages' });
+    }
+
+    const { slabId } = req.body;
+    const companyId = req.companyId ?? req.user?.companyId;
+    const userId = req.user.id;
+
+    if (!slabId) {
+      return res.badRequest({ message: 'slabId is required' });
+    }
+
+    // Find the slab
+    const selectedSlab = await dbService.findOne(model.slab, {
+      id: slabId,
+      [Op.or]: [
+        { companyId: companyId },
+        { slabScope: 'global' }
+      ],
+      isActive: true,
+      isDelete: false
+    });
+
+    if (!selectedSlab) {
+      return res.failure({ message: 'Slab not found or not accessible' });
+    }
+
+    // Check if slab has an amount
+    const slabAmount = selectedSlab.amount || 0;
+
+    if (slabAmount > 0) {
+      // Get user wallet
+      const userWallet = await dbService.findOne(model.wallet, {
+        refId: userId
+      });
+
+      if (!userWallet) {
+        return res.failure({ message: 'User wallet not found' });
+      }
+
+      // Check if user has sufficient balance (using mainWallet)
+      const currentBalance = userWallet.mainWallet || 0;
+      if (currentBalance < slabAmount) {
+        return res.failure({ 
+          message: `Insufficient balance. Required: ${slabAmount}, Available: ${currentBalance}` 
+        });
+      }
+
+      // Deduct amount from wallet
+      const newBalance = currentBalance - slabAmount;
+      await dbService.update(
+        model.wallet,
+        { refId: userId },
+        { mainWallet: newBalance }
+      );
+
+      // Create wallet history entry
+      await dbService.createOne(model.walletHistory, {
+        refId: userId,
+        companyId: companyId,
+        amount: slabAmount,
+        debit: slabAmount,
+        credit: 0,
+        openingAmt: currentBalance,
+        closingAmt: newBalance,
+        description: `Package upgrade: ${selectedSlab.slabName}`,
+        remark: `Slab upgrade payment - ${selectedSlab.slabName}`,
+        paymentStatus: 'SUCCESS',
+        addedBy: userId
+      });
+    }
+
+    // Find package associated with this slab
+    const packageWithSlab = await dbService.findOne(model.packages, {
+      slabAssigned: slabId,
+      companyId: companyId
+    });
+
+    if (!packageWithSlab) {
+      return res.failure({ 
+        message: 'No package found for this slab. Please contact admin.' 
+      });
+    }
+
+    // Get package services
+    const packageServices = await dbService.findAll(
+      model.packageService,
+      { packageId: packageWithSlab.id },
+      { select: ['serviceId'] }
+    );
+
+    if (!packageServices || packageServices.length === 0) {
+      return res.failure({ message: 'No services found for this package' });
+    }
+
+    const serviceIds = packageServices.map((ps) => ps.dataValues.serviceId);
+    const services = await dbService.findAll(model.services, {
+      id: serviceIds
+    });
+
+    if (!services || services.length === 0) {
+      return res.failure({ message: 'Services not found' });
+    }
+
+    // Remove existing user package
+    await dbService.destroy(model.userPackage, { userId });
+
+    // Create new user package entries
+    const dataToInsert = services.map((service) => ({
+      userId,
+      packageId: packageWithSlab.id,
+      packageName: packageWithSlab.packageName,
+      cost: packageWithSlab.cost || 0,
+      serviceId: service.id,
+      serviceName: service.serviceName,
+      isActive: true,
+      addedBy: userId
+    }));
+
+    const createdUserPackage = await dbService.createMany(
+      model.userPackage,
+      dataToInsert
+    );
+
+    // Update user's slab assignment
+    const currentUsers = selectedSlab.users || [];
+    if (!currentUsers.includes(userId)) {
+      await dbService.update(
+        model.slab,
+        { id: slabId },
+        { users: [...currentUsers, userId] }
+      );
+    }
+
+    // Update user record
+    await dbService.update(
+      model.user,
+      { id: userId },
+      { slab: selectedSlab.slabName }
+    );
+
+    return res.success({
+      message: 'Package upgraded successfully!',
+      data: {
+        slab: selectedSlab.slabName,
+        package: packageWithSlab.packageName,
+        amountDeducted: slabAmount,
+        services: services.length
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else {
+      return res.internalServerError({ message: error.message });
+    }
+  }
+};
+
 module.exports = {
   registerService,
   updateService,
@@ -1567,5 +1740,6 @@ module.exports = {
   getSlabUser,
   updateSlabUser,
   getAllSlab,
-  creditCardSlabComm
+  creditCardSlabComm,
+  upgradePackage
 };

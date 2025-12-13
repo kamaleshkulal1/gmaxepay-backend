@@ -221,6 +221,7 @@ const loadUserContext = async (req, companyId) => {
     customerBankId: customerBank.id,
     accountNumber: customerBank.accountNumber,
     ifsc: customerBank.ifsc,
+    branch: customerBank.branch || null,
   } : null;
 
   return { user, outlet, customerBank, userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc, customer };
@@ -297,7 +298,7 @@ const getPendingSteps = (ctx) => {
   
   // Check bank verification using bankDetailsVerify field from user AND customerBankDetails
   const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) || 
-                          !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
+                          !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc && customerBankDetails.branch);
   
   const profileVerified = !!(user.profileImageWithShopVerify || userDetails?.profileImageWithShopVerify);
   
@@ -2046,11 +2047,22 @@ const postBankDetails = async (req, res) => {
     }
 
     if (bankVerification.status !== 'Success') {
+      // Provide more specific error messages based on error type
+      let errorMessage = 'Bank verification failed';
+      if (bankVerification.error === 'TIMEOUT') {
+        errorMessage = 'Bank verification request timed out. The verification service is taking longer than expected. Please try again in a few moments.';
+      } else if (bankVerification.message) {
+        errorMessage = bankVerification.message;
+      } else if (bankVerification.error) {
+        errorMessage = `Bank verification failed: ${bankVerification.error}`;
+      }
+      
       return res.failure({ 
-        message: 'Bank verification failed', 
+        message: errorMessage, 
         data: { 
-          error: bankVerification.message || bankVerification.error || 'Verification unsuccessful',
+          error: bankVerification.error || 'Verification unsuccessful',
           status: bankVerification.status,
+          retryable: bankVerification.error === 'TIMEOUT',
           response: bankVerification
         } 
       });

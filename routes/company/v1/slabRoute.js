@@ -18,5 +18,8 @@ router.delete('/sub-slabs/:id', authentication, subSlabController.deleteSubSlab)
 router.post('/sub-slabs/:id/assign-users', authentication, subSlabController.assignUsersToSubSlab);
 router.post('/sub-slabs/:id/remove-users', authentication, subSlabController.removeUsersFromSubSlab);
 
+// Package upgrade (for company admins)
+router.post('/upgrade-package', authentication, slabController.upgradePackage);
+
 module.exports = router;
 
