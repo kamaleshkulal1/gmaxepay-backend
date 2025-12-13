@@ -58,13 +58,14 @@ const authConstant = require('../constants/authConstant');
 
 async function createBasicPackage() {
   try {
-    // Check if basic package already exists
+    // Check if basic package already exists with companyId 1
     let existingPackage = await dbService.findOne(model.packages, {
-      packageName: 'Basic'
+      packageName: 'Basic',
+      companyId: 1
     });
 
     if (!existingPackage) {
-      // Create basic package
+      // Create basic package with default company ID 1
       let basicPackage = await dbService.createOne(model.packages, {
         packageName: 'Basic',
         remark: 'Basic package with all services',
@@ -72,12 +73,12 @@ async function createBasicPackage() {
         isDefault: true,
         isSelfAssigned: false,
         slabAssigned: null,
-        companyId: null,
+        companyId: 1,
         addedBy: 1,
         isActive: true
       });
 
-      console.log('Basic package created successfully');
+      console.log('Basic package created successfully with companyId: 1');
 
       // Get all services
       let allServices = await dbService.findAll(model.services, {});
@@ -95,7 +96,7 @@ async function createBasicPackage() {
         console.log(`Added ${allServices.length} services to Basic package`);
       }
     } else {
-      console.log('Basic package already exists');
+      console.log('Basic package already exists for companyId: 1');
     }
   } catch (error) {
     console.log('Failed to create basic package:', error.message);
@@ -13632,7 +13633,8 @@ async function seedUsers(companyId) {
         mobileNo: '9071138349',
         password: '12345678',
         userRole: 1, // Super Admin
-        kycStatus: 1, // Approved
+        kycStatus: 'FULL_KYC', // Approved
+        kycSteps: 7,
         userType: 1, // Admin type
         companyId: companyId,
         isActive: true,
@@ -13741,29 +13743,29 @@ async function serviceCharges() {
 
 async function seedData() {
   
-  //  await roles();
+   await roles();
    await permissions();
    await insertPermissions();
    await rolePermission();
-  //  await KycDocumentSettings();
-  //  await createBasicPackage();
-  // //  await servicePush();
-  //  await OperatorType();
-  //  await state();
-  //  await gstState();
-  //  await bank();
-    // await services();
+   await KycDocumentSettings();
+   await createBasicPackage();
+  //  await servicePush();
+   await OperatorType();
+   await state();
+   await gstState();
+   await bank();
+    await services();
    
-  //  await cardType();
-  //  await paymentInsturment();
-  //  await seedPgCommercials();
-  //  await seedRangeComm();
-  //  await seedRangeCharges();
+   await cardType();
+   await paymentInsturment();
+   await seedPgCommercials();
+   await seedRangeComm();
+   await seedRangeCharges();
    
-  //  // Create company first, then user and wallet
-  //  const company = await seedCompany();
-  //  if (company && company.id) {
-  //    await seedUsers(company.id);
-  //  }
+   // Create company first, then user and wallet
+   const company = await seedCompany();
+   if (company && company.id) {
+     await seedUsers(company.id);
+   }
 }
 module.exports = seedData;

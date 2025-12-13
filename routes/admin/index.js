@@ -15,7 +15,6 @@ const servicesController = require('../../controller/admin/v1/servicesController
 const slabController = require('../../controller/admin/v1/slabController');
 const packageController = require('../../controller/admin/v1/packageController');
 const operatorController = require('../../controller/admin/v1/operatorController');
-const subscriptionController = require('../../controller/admin/v1/subscriptionController');
 const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 
 
@@ -37,24 +36,8 @@ router.put('/services/:id', servicesController.updateUserPackage);
 router.get('/services/:id/packages', servicesController.listUserPackage);
 router.put('/services/:id/update', servicesController.updateUserService);
 
-// Slab routes
-router.post('/slabs', authentication, slabController.registerService);
-router.put('/slabs/:id', slabController.updateService);
-router.get('/slabs', slabController.findAllService);
-router.get('/slabs/:id', slabController.getService);
-router.patch('/slabs/:id', slabController.partialUpdateService);
-router.delete('/slabs/:id', slabController.deleteService);
-router.post('/slabs/bulk-recharge', slabController.createBulkRecharge);
-router.post('/slabs/dth', slabController.createDth);
-router.post('/slabs/recharge', slabController.createRecharge);
-router.get('/slabs/commission/all', slabController.findAllslabComm);
-router.get('/slabs/commission/bbps', slabController.bbpsSlabComm);
-router.get('/slabs/commission/zaakpay', slabController.zaakpaySlabComm);
-router.get('/slabs/commission/recharge', slabController.findAllRechargeSlabComm);
-router.get('/slabs/users', slabController.getSlabUser);
-router.put('/slabs/users/:id', slabController.updateSlabUser);
-router.get('/slabs/all', slabController.getAllSlab);
-router.get('/slabs/commission/credit-card', slabController.creditCardSlabComm);
+// Slab routes - use separate route file
+router.use('/slabs', require('./v1/slabRoute'));
 
 // Package routes
 router.post('/packages', authentication, packageController.registerPackage);
@@ -63,20 +46,6 @@ router.get('/packages/:id', packageController.getPackage);
 router.patch('/packages/:id', packageController.partialUpdatePackage);
 router.get('/packages/:id/users', packageController.getUserPackage);
 router.delete('/packages/:id', packageController.deletePackage);
-
-// Service Charge routes
-router.post('/service-charges', subscriptionController.createServiceCharge);
-router.get('/service-charges', subscriptionController.getAllServiceCharges);
-router.put('/service-charges/:id', subscriptionController.updateServiceCharge);
-router.delete('/service-charges/:id', subscriptionController.deleteServiceCharge);
-
-// Subscription routes
-router.post('/subscriptions/:userId', subscriptionController.createSubscription);
-router.get('/subscriptions', subscriptionController.getAllSubscriptions);
-router.get('/subscriptions/user/:userId', subscriptionController.getUserSubscriptions);
-router.get('/subscriptions/history/:userId', subscriptionController.getSubscriptionHistory);
-router.put('/subscriptions/:id/cancel', subscriptionController.cancelSubscription);
-router.get('/subscriptions/company/services', subscriptionController.getCompanySubscribedServices);
 
 // Operator routes
 router.post('/operators', authentication, operatorController.registerService);

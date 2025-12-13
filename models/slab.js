@@ -42,21 +42,18 @@ let Slab = sequelize.define(
       defaultValue: 'private',
       validate: {
         isIn: [['global', 'private']]
-      }
+      },
+      comment: 'global: can be used by multiple companies, private: company-specific'
     },
     remark: {
       type: DataTypes.TEXT,
       allowNull: true
     },
-    isSignUpB2B: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false
-    },
     users: {
       type: DataTypes.ARRAY(DataTypes.INTEGER),
       allowNull: true,
-      defaultValue: []
+      defaultValue: [],
+      comment: 'Array of company admin user IDs (userRole 2) assigned to this slab'
     },
 
     ...reusableSMSAttribute

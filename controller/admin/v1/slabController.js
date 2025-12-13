@@ -1,7 +1,8 @@
 const { slab, commSlab, role } = require('../../../models/index');
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
-const { Op } = require('sequelize');
+const { Op, Sequelize } = require('sequelize');
+const sequelize = require('../../../config/dbConnection');
 const bcrypt = require('bcrypt');
 const { USER_TYPES } = require('../../../constants/authConstant');
 
@@ -51,32 +52,21 @@ const registerService = async (req, res) => {
       return res.failure({ message: 'slabScope must be either "global" or "private"' });
     }
 
-    // For global slabs, companyId should be null
-    if (dataToCreate.slabScope === 'global') {
-      dataToCreate.companyId = null;
-    } else {
-      // For private slabs, use the companyId from request
-      dataToCreate.companyId = companyId;
+    // companyId cannot be null - required for all slabs
+    // Global slabs can be used by multiple companies but customization is private
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
     }
+    
+    dataToCreate.companyId = companyId;
 
     dataToCreate = {
       ...dataToCreate,
-      companyId: companyId,
       isActive: true,
       addedBy: req.user.id,
-      type: req.user.userType
+      type: req.user.userType,
+      users: dataToCreate.users || []
     };
-
-    if (dataToCreate.isSignUpB2B) {
-      let findQuery = { isSignUpB2B: true };
-      if (dataToCreate.slabScope === 'private' && dataToCreate.companyId !== null && dataToCreate.companyId !== undefined) {
-        findQuery.companyId = dataToCreate.companyId;
-      }
-      let datas = await dbService.findOne(slab, findQuery);
-      if (datas) {
-        return res.failure({ message: 'Only one isSignUp can be True!' });
-      }
-    }
 
     let createdUser = await dbService.createOne(slab, dataToCreate);
     if (!createdUser) {
@@ -448,34 +438,46 @@ const findAllService = async (req, res) => {
 const getAllSlab = async (req, res) => {
   try {
     const companyId = req.companyId ?? req.user?.companyId ?? null;
+    
+    if (!companyId) {
+      return res.failure({ message: 'companyId is required' });
+    }
+
+    // Get slabs that belong to this company OR global slabs (slabScope = 'global')
     const foundSlab = await dbService.findAll(
       slab,
-      companyId !== null && companyId !== undefined ? {
+      {
         [Op.or]: [
           { companyId: companyId },
-          { companyId: null } // Include global slabs
-        ]
-      } : {},
+          { slabScope: 'global' }
+        ],
+        isDelete: false,
+        isActive: true
+      },
       {
-        select: ['slabName', 'id'],
+        select: ['slabName', 'id', 'slabType', 'slabScope'],
         sort: {
-          id: 1 // {1 - ASC & @- DESC}
+          id: 1 // ASC
         }
       }
     );
+
     if (!foundSlab || foundSlab.length === 0) {
       return res.recordNotFound();
     }
+
     return res.status(200).send({
       status: 'SUCCESS',
       message: 'Your request is successfully executed',
       data: foundSlab
     });
+
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return res.internalServerError({ data: error.message });
   }
 };
+
 
 const processData = (data) => {
   const groupedData = {};
@@ -1000,22 +1002,23 @@ const partialUpdateService = async (req, res) => {
       return res.failure({ message: 'Slab not found!' });
     }
 
-    let updatedSlab;
-    if (dataToUpdate.isSignUpB2B === true) {
-      const existingB2BSlab = await dbService.findOne(model.slab, {
-        isSignUpB2B: true
+    // Validate users array contains only company admin IDs (userRole 2) if provided
+    if (dataToUpdate.users && Array.isArray(dataToUpdate.users)) {
+      const companyId = existingSlab.companyId;
+      const companyAdmins = await dbService.findAll(model.user, {
+        id: { [Op.in]: dataToUpdate.users },
+        userRole: 2,
+        companyId: companyId
       });
 
-      if (existingB2BSlab && existingB2BSlab.id !== existingSlab.id) {
-        await dbService.update(
-          model.slab,
-          { id: existingB2BSlab.id },
-          { isSignUpB2B: false }
-        );
+      if (companyAdmins.length !== dataToUpdate.users.length) {
+        return res.failure({ 
+          message: 'All users must be company admins (userRole 2) from the same company' 
+        });
       }
     }
 
-    updatedSlab = await dbService.update(
+    const updatedSlab = await dbService.update(
       model.slab,
       { id: req.params.id },
       dataToUpdate
@@ -1460,6 +1463,20 @@ const updateSlabUser = async (req, res) => {
     }
 
     const userId = dataToUpdate.userId;
+    
+    // Validate that the user to be assigned is a company admin (userRole 2)
+    const userToAssign = await dbService.findOne(model.user, { 
+      id: userId,
+      userRole: 2, // Only company admin (userRole 2)
+      companyId: existingSlab.companyId // Must be from same company
+    });
+
+    if (!userToAssign) {
+      return res.failure({ 
+        message: 'User must be a company admin (userRole 2) from the same company' 
+      });
+    }
+
     const user = await dbService.findOne(model.user, { id: req.user.id });
     const pin = dataToUpdate.secureKey;
 
@@ -1486,6 +1503,7 @@ const updateSlabUser = async (req, res) => {
       });
     }
 
+    // Remove user from any existing slab
     const currentSlab = await dbService.findOne(model.slab, {
       users: { [Op.contains]: [userId] }
     });
@@ -1499,12 +1517,16 @@ const updateSlabUser = async (req, res) => {
       );
     }
 
-    existingSlab.users.push(userId);
-    await dbService.update(
-      model.slab,
-      { id: existingSlab.id },
-      { users: existingSlab.users }
-    );
+    // Add user to this slab (using array methods to avoid duplicates)
+    const currentUsers = existingSlab.users || [];
+    if (!currentUsers.includes(userId)) {
+      existingSlab.users = [...currentUsers, userId];
+      await dbService.update(
+        model.slab,
+        { id: existingSlab.id },
+        { users: existingSlab.users }
+      );
+    }
 
     const updatedUser = await dbService.update(
       model.user,

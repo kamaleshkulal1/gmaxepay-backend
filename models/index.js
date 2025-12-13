@@ -56,7 +56,10 @@ db.pgCommercials = require('./pgCommercials');
 
 // Commission & Slab Models
 db.slab = require('./slab');
+db.subSlabs = require('./subSlabs');
 db.commSlab = require('./CommSlab');
+db.subSlabComm = require('./subSlabComm');
+db.subSlabPgCommercials = require('./subSlabPgCommercials');
 db.distributorSlabCom = require('./distributorSlabCom');
 db.range = require('./range');
 db.rangeCharges = require('./rangeCharges');
@@ -363,6 +366,107 @@ db.user.belongsTo(db.company, {
 db.company.hasMany(db.user, {
   foreignKey: 'companyId',
   as: 'users',
+  sourceKey: 'id'
+});
+
+// Sub-Slab Relationships
+db.subSlabs.belongsTo(db.slab, {
+  foreignKey: 'parentSlabId',
+  as: 'parentSlab',
+  targetKey: 'id'
+});
+db.slab.hasMany(db.subSlabs, {
+  foreignKey: 'parentSlabId',
+  as: 'subSlabs',
+  sourceKey: 'id'
+});
+
+db.subSlabs.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.subSlabs, {
+  foreignKey: 'companyId',
+  as: 'subSlabs',
+  sourceKey: 'id'
+});
+
+db.subSlabs.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.subSlabs, {
+  foreignKey: 'userId',
+  as: 'subSlabs',
+  sourceKey: 'id'
+});
+
+// Sub-Slab Commercial Relationships
+db.subSlabComm.belongsTo(db.subSlabs, {
+  foreignKey: 'subSlabId',
+  as: 'subSlab',
+  targetKey: 'id'
+});
+db.subSlabs.hasMany(db.subSlabComm, {
+  foreignKey: 'subSlabId',
+  as: 'commercials',
+  sourceKey: 'id'
+});
+
+db.subSlabComm.belongsTo(db.operator, {
+  foreignKey: 'operatorId',
+  as: 'operator',
+  targetKey: 'id'
+});
+db.operator.hasMany(db.subSlabComm, {
+  foreignKey: 'operatorId',
+  as: 'subSlabComm',
+  sourceKey: 'id'
+});
+
+db.subSlabPgCommercials.belongsTo(db.subSlabs, {
+  foreignKey: 'subSlabId',
+  as: 'subSlab',
+  targetKey: 'id'
+});
+db.subSlabs.hasMany(db.subSlabPgCommercials, {
+  foreignKey: 'subSlabId',
+  as: 'pgCommercials',
+  sourceKey: 'id'
+});
+
+db.subSlabPgCommercials.belongsTo(db.operator, {
+  foreignKey: 'operatorId',
+  as: 'operator',
+  targetKey: 'id'
+});
+db.operator.hasMany(db.subSlabPgCommercials, {
+  foreignKey: 'operatorId',
+  as: 'subSlabPgCommercials',
+  sourceKey: 'id'
+});
+
+db.subSlabPgCommercials.belongsTo(db.paymentInstrument, {
+  foreignKey: 'paymentInstrumentId',
+  as: 'paymentInstrument',
+  targetKey: 'id'
+});
+db.paymentInstrument.hasMany(db.subSlabPgCommercials, {
+  foreignKey: 'paymentInstrumentId',
+  as: 'subSlabPgCommercials',
+  sourceKey: 'id'
+});
+
+db.subSlabPgCommercials.belongsTo(db.cardType, {
+  foreignKey: 'cardTypeId',
+  as: 'cardType',
+  targetKey: 'id'
+});
+db.cardType.hasMany(db.subSlabPgCommercials, {
+  foreignKey: 'cardTypeId',
+  as: 'subSlabPgCommercials',
   sourceKey: 'id'
 });
 
