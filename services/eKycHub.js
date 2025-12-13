@@ -136,28 +136,75 @@ const panVerification = async (pan) => {
 
 const bankVerification = async (account_number, ifsc) => {
   const orderid = generateSystemReference();
-    let config = {
-      method: 'get',
-      url: `${ekychubUrl}/verification/penny_less?`,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      params: {
-        username,
-        token,
-        account_number,
-        ifsc,
-        orderid
+  // Set timeout to 60 seconds (60000ms) for bank verification as it can take longer
+  const BANK_VERIFICATION_TIMEOUT = Number(process.env.EKYCHUB_BANK_VERIFICATION_TIMEOUT_MS || 60000);
+  
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/verification/penny_less?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      account_number,
+      ifsc,
+      orderid
+    },
+    timeout: BANK_VERIFICATION_TIMEOUT
+  }
+  return axios
+    .request(config)
+    .then((response) => {
+      return response.data;
+    })
+    .catch((error) => {
+      // Handle timeout errors specifically
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        console.error('Bank verification timeout:', error.message);
+        return {
+          status: 'Failure',
+          'Account Number': account_number,
+          'Ifsc Code': ifsc,
+          nameAtBank: null,
+          utr: null,
+          message: `Error contacting verification server: ${error.message}`,
+          txid: orderid
+        };
       }
-    }
-    return axios
-      .request(config)
-      .then((response) => {
-        return response.data;
-      })
-      .catch((error) => { 
+      
+      // Handle network errors
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+        console.error('Bank verification network error:', error.code, error.message);
+        return {
+          status: 'Failure',
+          'Account Number': account_number,
+          'Ifsc Code': ifsc,
+          nameAtBank: null,
+          utr: null,
+          message: `Error contacting verification server: ${error.message || error.code}`,
+          txid: orderid
+        };
+      }
+      
+      // Handle response errors (API returned error status)
+      if (error.response && error.response.data) {
         return error.response.data;
-      });
+      }
+      
+      // Handle other errors
+      console.error('Bank verification error:', error.message);
+      return {
+        status: 'Failure',
+        'Account Number': account_number,
+        'Ifsc Code': ifsc,
+        nameAtBank: null,
+        utr: null,
+        message: `Error during bank verification: ${error.message}`,
+        txid: orderid
+      };
+    });
 }
 
 module.exports = {

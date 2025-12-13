@@ -221,6 +221,7 @@ const loadUserContext = async (req, companyId) => {
     customerBankId: customerBank.id,
     accountNumber: customerBank.accountNumber,
     ifsc: customerBank.ifsc,
+    branch: customerBank.branch || null,
   } : null;
 
   return { user, outlet, customerBank, userDetails, outletDetails, customerBankDetails, aadhaarDoc, panDoc, customer };
@@ -297,7 +298,7 @@ const getPendingSteps = (ctx) => {
   
   // Check bank verification using bankDetailsVerify field from user AND customerBankDetails
   const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) || 
-                          !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
+                          !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc && customerBankDetails.branch);
   
   const profileVerified = !!(user.profileImageWithShopVerify || userDetails?.profileImageWithShopVerify);
   
