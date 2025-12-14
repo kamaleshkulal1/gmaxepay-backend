@@ -53,12 +53,16 @@ const registerService = async (req, res) => {
     }
 
     // companyId cannot be null - required for all slabs
-    // Global slabs can be used by multiple companies but customization is private
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
     }
     
     dataToCreate.companyId = companyId;
+
+    // Set default amount if not provided
+    if (dataToCreate.amount === undefined || dataToCreate.amount === null) {
+      dataToCreate.amount = 0;
+    }
 
     dataToCreate = {
       ...dataToCreate,
@@ -455,7 +459,7 @@ const getAllSlab = async (req, res) => {
         isActive: true
       },
       {
-        select: ['slabName', 'id', 'slabType', 'slabScope'],
+        select: ['slabName', 'id', 'slabType', 'slabScope', 'amount'],
         sort: {
           id: 1 // ASC
         }
