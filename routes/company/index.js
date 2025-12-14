@@ -11,5 +11,7 @@ router.use('/onboarding', require('./v1/onboardingRoute'));
 
 // Slab routes
 router.use('/slabs', require('./v1/slabRoute'));
+// User management routes (upgrade/degrade)
+router.use('/user', authentication, require('./v1/userRoutes'));
 
 module.exports = router;

@@ -2902,6 +2902,8 @@ const uploadPanDocuments = async (req, res) => {
     
     // Call LLM service for PAN verification first
     const llmResult = await llmService.llmPanVerification(front_photo);
+
+    console.log("llmResult",llmResult);
     
     // Initialize response variables
     let frontImageS3Key = null;
@@ -2941,6 +2943,14 @@ const uploadPanDocuments = async (req, res) => {
       // Use Aadhaar doc from context if available, otherwise use fetched result
       const aadhaarDoc = userCtx.aadhaarDoc || aadhaarDocResult;
       
+      // Debug logging to understand why photoLink might be missing
+      console.log('Aadhaar doc check:', {
+        aadhaarDocExists: !!aadhaarDoc,
+        hasPhotoLink: !!(aadhaarDoc?.photoLink),
+        photoLinkType: aadhaarDoc?.photoLink ? typeof aadhaarDoc.photoLink : 'N/A',
+        hasAadharFrontImage: !!(existingUser?.aadharFrontImage)
+      });
+      
       const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
       const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
       
@@ -2949,12 +2959,42 @@ const uploadPanDocuments = async (req, res) => {
         panExistsInDigilocker = true;
       }
       
+      // Get Aadhaar photo for face comparison
+      // Priority: 1. photoLink from digilocker, 2. uploaded Aadhaar front image from S3
+      let aadhaarPhotoSource = null;
+      let aadhaarPhotoSourceType = null;
+      
+      if (aadhaarDoc?.photoLink) {
+        aadhaarPhotoSource = aadhaarDoc.photoLink;
+        aadhaarPhotoSourceType = 'digilocker_photoLink';
+      } else if (existingUser?.aadharFrontImage) {
+        // Fallback: Use uploaded Aadhaar front image from S3
+        try {
+          const aadhaarFrontImageBuffer = await imageService.getImageFromS3(existingUser.aadharFrontImage);
+          if (aadhaarFrontImageBuffer) {
+            aadhaarPhotoSource = aadhaarFrontImageBuffer.toString('base64');
+            aadhaarPhotoSourceType = 'uploaded_aadhaar_front';
+            console.log('Using uploaded Aadhaar front image as fallback for face comparison');
+          }
+        } catch (s3Error) {
+          console.error('Error fetching Aadhaar front image from S3:', s3Error);
+        }
+      }
+      
       // Perform face comparison first (before uploading to S3)
       // Use front_photo.buffer directly instead of base64 from LLM result
-      if (aadhaarDoc?.photoLink && front_photo.buffer) {
+      if (aadhaarPhotoSource && front_photo.buffer) {
         try {
           // Extract base64 from Aadhaar photo
-          const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
+          let aadhaarPhotoBase64 = null;
+          
+          if (aadhaarPhotoSourceType === 'digilocker_photoLink') {
+            // Extract from photoLink (could be URL or base64)
+            aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarPhotoSource);
+          } else if (aadhaarPhotoSourceType === 'uploaded_aadhaar_front') {
+            // Already base64 from S3 buffer
+            aadhaarPhotoBase64 = aadhaarPhotoSource;
+          }
           
           // Use front_photo.buffer directly for PAN photo (convert to base64)
           const panPhotoBase64 = front_photo.buffer.toString('base64');
@@ -3023,7 +3063,14 @@ const uploadPanDocuments = async (req, res) => {
         }
       } else {
         // If Aadhaar photo is not available, set appropriate message
-        verificationMessage = 'Aadhaar photo not available for verification';
+        const reason = !aadhaarDoc 
+          ? 'Aadhaar document not found. Please upload Aadhaar documents first.'
+          : !aadhaarDoc.photoLink && !existingUser?.aadharFrontImage
+          ? 'Aadhaar photo not available. Please upload Aadhaar documents first.'
+          : 'Aadhaar photo not available for verification';
+        
+        
+        verificationMessage = reason;
         await revertKycVerification(user.id, company.id, 'pan');
       }
     }
