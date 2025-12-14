@@ -5,4 +5,8 @@ const authentication = require('../../../middleware/authentication');
 
 router.post('/getProfile', authentication, userController.getProfile);
 
+// Master Distributor specific endpoints
+router.post('/upgradeUser', authentication, userController.upgradeUserRole);
+router.post('/degradeUser', authentication, userController.degradeUserRole);
+
 module.exports = router;

@@ -118,15 +118,15 @@ const upgradeUserRole = async (req, res) => {
       return res.failure({ message: 'Target role is required' });
     }
     
-    // Only Company Admin (userRole 2) can upgrade users
+    // Only Company Admin (userRole 2) can use this endpoint
     const currentUserRole = currentUser.userRole;
     if (currentUserRole !== 2) {
-      return res.failure({ message: 'Only Company Admin can upgrade users' });
+      return res.failure({ message: 'Not authorized to upgrade users' });
     }
     
-    // Validate targetRole - Company Admin can upgrade to Master Distributor (3) or Distributor (4)
+    // Company Admin can upgrade to Master Distributor (3) or Distributor (4)
     const targetRoleInt = parseInt(targetRole);
-    const validRoles = [3, 4]; // Master Distributor, Distributor
+    const validRoles = [3, 4];
     if (!validRoles.includes(targetRoleInt)) {
       return res.failure({ message: 'Invalid target role' });
     }
@@ -252,14 +252,16 @@ const degradeUserRole = async (req, res) => {
       return res.failure({ message: 'Target role is required' });
     }
     
-    // Only Company Admin (userRole 2) can access this
-    if (currentUser.userRole !== 2) {
-      return res.failure({ message: 'Only Company Admin can degrade users' });
+    // Only Company Admin (userRole 2) can use this endpoint
+    const currentUserRole = currentUser.userRole;
+    if (currentUserRole !== 2) {
+      return res.failure({ message: 'Not authorized to degrade users' });
     }
     
-    // Validate targetRole
-    const validRoles = [4, 5]; // Distributor, Retailer (can degrade to these)
-    if (!validRoles.includes(parseInt(targetRole))) {
+    // Company Admin can degrade to Distributor (4) or Retailer (5)
+    const targetRoleInt = parseInt(targetRole);
+    const validRoles = [4, 5];
+    if (!validRoles.includes(targetRoleInt)) {
       return res.failure({ message: 'Invalid target role' });
     }
     
@@ -274,11 +276,7 @@ const degradeUserRole = async (req, res) => {
       return res.failure({ message: 'User not found' });
     }
     
-    // Company Admin can degrade:
-    // - Master Distributor (3) to Distributor (4) or Retailer (5)
-    // - Distributor (4) to Retailer (5)
     const currentRole = userToDegrade.userRole;
-    const targetRoleInt = parseInt(targetRole);
     
     // Check if it's actually a degradation (target role should be higher number)
     if (targetRoleInt <= currentRole) {
@@ -289,6 +287,20 @@ const degradeUserRole = async (req, res) => {
       }
     }
     
+    // Check if user has children (users with reportingTo = userId) before allowing downgrade
+    const childrenCount = await dbService.count(model.user, {
+      reportingTo: userId,
+      companyId: currentUser.companyId,
+      isDeleted: false
+    });
+    
+    if (childrenCount > 0) {
+      return res.failure({ message: 'You have children so downgrade not possible' });
+    }
+    
+    // Company Admin can degrade:
+    // - Master Distributor (3) to Distributor (4) or Retailer (5)
+    // - Distributor (4) to Retailer (5)
     if (currentRole === 3) {
       // Can degrade Master Distributor to either Distributor or Retailer
       if (targetRoleInt !== 4 && targetRoleInt !== 5) {
