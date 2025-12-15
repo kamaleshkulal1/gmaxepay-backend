@@ -1318,12 +1318,12 @@ const uploadBankDetailsForUser = async (req, res) => {
     // Check if user is super admin
     const userRole = req.user.userRole;
     const userCompanyId = req.user.companyId;
-    
+    const userId = req.user.id;
     if (!(userRole === 1 && userCompanyId === 1)) {
       return res.failure({ message: 'Only super admin can upload bank details for users' });
     }
 
-    const { userId, account_number, ifsc } = req.body || {};
+    const {  account_number, ifsc } = req.body || {};
 
     if (!userId) {
       return res.failure({ message: 'User ID is required' });
