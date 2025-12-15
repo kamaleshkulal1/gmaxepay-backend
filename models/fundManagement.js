@@ -136,4 +136,3 @@ let FundManagement = sequelize.define(
 sequelizeTransforms(FundManagement);
 sequelizePaginate.paginate(FundManagement);
 module.exports = FundManagement;
-
