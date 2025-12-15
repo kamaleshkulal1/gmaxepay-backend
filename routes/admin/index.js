@@ -21,9 +21,10 @@ const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 
 // User management routes
 router.use('/users', require('./v1/userRoute'));
-
 // Role and permission routes
 router.use('/rolesAndPermissions', require('./v1/rolesAndPermission'));
+
+router.use('/foundManagement', require('./v1/foundManagementRoute'));
 
 // Services routes
 router.post('/services', authentication, servicesController.registerService);

@@ -171,6 +171,8 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
       s3Key = `images/${companyId||'default'}/aadhaar/${userId}/${subtype}/${sanitizedFileName}`;
     } else if (type === 'pan' && subtype && userId) {
       s3Key = `images/${companyId||'default'}/pan/${userId}/${subtype}/${sanitizedFileName}`;
+    } else if (type === 'fundManagement' && subtype && userId) {
+      s3Key = `images/${companyId||'default'}/${userId}/fundManagement/${subtype}/${sanitizedFileName}`;
     } else {
       s3Key = `images/${companyId||'default'}/other/${sanitizedFileName}`;
     }

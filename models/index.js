@@ -53,6 +53,8 @@ db.wallet = require('./wallet');
 db.walletHistory = require('./walletHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
+db.fundManagement = require('./fundManagement');
+db.fundManagementHistory = require('./fundmanagementHistory');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -370,6 +372,97 @@ db.company.hasMany(db.user, {
 db.user.hasOne(db.wallet, {
   foreignKey: 'refId',
   as: 'wallet',
+  sourceKey: 'id'
+});
+
+// Fund Management Relationships
+db.fundManagement.belongsTo(db.user, {
+  foreignKey: 'requestUserId',
+  as: 'requestUser',
+  targetKey: 'id'
+});
+db.user.hasMany(db.fundManagement, {
+  foreignKey: 'requestUserId',
+  as: 'fundRequests',
+  sourceKey: 'id'
+});
+
+db.fundManagement.belongsTo(db.user, {
+  foreignKey: 'superiorUserId',
+  as: 'superiorUser',
+  targetKey: 'id'
+});
+db.user.hasMany(db.fundManagement, {
+  foreignKey: 'superiorUserId',
+  as: 'superiorFundRequests',
+  sourceKey: 'id'
+});
+
+db.fundManagement.belongsTo(db.user, {
+  foreignKey: 'approvedBy',
+  as: 'approver',
+  targetKey: 'id'
+});
+db.fundManagement.belongsTo(db.user, {
+  foreignKey: 'rejectedBy',
+  as: 'rejector',
+  targetKey: 'id'
+});
+
+db.fundManagement.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.fundManagement, {
+  foreignKey: 'companyId',
+  as: 'fundRequests',
+  sourceKey: 'id'
+});
+
+db.fundManagement.belongsTo(db.customerBank, {
+  foreignKey: 'bankId',
+  as: 'selectedBank',
+  targetKey: 'id'
+});
+db.customerBank.hasMany(db.fundManagement, {
+  foreignKey: 'bankId',
+  as: 'fundRequests',
+  sourceKey: 'id'
+});
+
+// Fund Management History Relationships
+db.fundManagementHistory.belongsTo(db.user, {
+  foreignKey: 'requestUserId',
+  as: 'requestUser',
+  targetKey: 'id'
+});
+db.user.hasMany(db.fundManagementHistory, {
+  foreignKey: 'requestUserId',
+  as: 'fundRequestHistories',
+  sourceKey: 'id'
+});
+
+db.fundManagementHistory.belongsTo(db.user, {
+  foreignKey: 'superiorUserId',
+  as: 'superiorUser',
+  targetKey: 'id'
+});
+
+db.fundManagementHistory.belongsTo(db.user, {
+  foreignKey: 'performedBy',
+  as: 'performer',
+  targetKey: 'id'
+});
+
+db.fundManagementHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.fundManagementHistory, {
+  foreignKey: 'companyId',
+  as: 'fundRequestHistories',
   sourceKey: 'id'
 });
 
