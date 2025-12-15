@@ -75,6 +75,11 @@ let CustomerBank = sequelize.define('customerBank', {
   },
   isActive: {
     type: DataTypes.BOOLEAN
+  },
+  isPrimary: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false
   }
 });
 

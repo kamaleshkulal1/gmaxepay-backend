@@ -2129,6 +2129,15 @@ const postBankDetails = async (req, res) => {
       isDeleted: false
     });
 
+    // Ensure only one primary account exists - set all others to false
+    await dbService.update(model.customerBank, {
+      refId: user.id,
+      companyId: company.id,
+      isPrimary: true
+    }, {
+      isPrimary: false
+    });
+
     // Use user.id directly as refId for customerBank (no customer table needed)
     let updatedCustomerBank = customerBank;
     const payload = {
@@ -2140,7 +2149,8 @@ const postBankDetails = async (req, res) => {
       ifsc,
       city: city || null,
       branch: branch || null,
-      isActive: true
+      isActive: true,
+      isPrimary: true
     };
 
     if (customerBank) {

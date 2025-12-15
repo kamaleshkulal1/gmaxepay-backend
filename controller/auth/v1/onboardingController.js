@@ -1567,7 +1567,8 @@ const postBankDetails = async (req, res) => {
       ifsc,
       city: city || null,
       branch: branch || null,
-      isActive: true
+      isActive: true,
+      isPrimary: true
     };
     let customerBank = ctx.customerBank;
     if (customerBank) {
