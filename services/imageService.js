@@ -93,8 +93,10 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
     const isProfileImage = s3Key.includes('/profile/');
     // For company images (signature/logo, signature/favicon, loginSlider), use CDN URL
     const isCompanyImage = s3Key.includes('/signature/') || s3Key.includes('/loginSlider/');
+    // For service images, use CDN URL
+    const isServiceImage = s3Key.includes('/service/');
     
-    if (isProfileImage || isCompanyImage || !useSecureProxy) {
+    if (isProfileImage || isCompanyImage || isServiceImage || !useSecureProxy) {
       // Use simple CDN URL for profile images and company images
       const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
       return `${cdnUrl}/${s3Key}`;
@@ -171,6 +173,8 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
       s3Key = `images/${companyId||'default'}/aadhaar/${userId}/${subtype}/${sanitizedFileName}`;
     } else if (type === 'pan' && subtype && userId) {
       s3Key = `images/${companyId||'default'}/pan/${userId}/${subtype}/${sanitizedFileName}`;
+    } else if (type === 'service') {
+      s3Key = `images/${companyId||'default'}/service/${sanitizedFileName}`;
     } else {
       s3Key = `images/${companyId||'default'}/other/${sanitizedFileName}`;
     }

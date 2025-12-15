@@ -340,18 +340,76 @@ const deletePackage = async (req, res) => {
 };
 
 const getUserPackage = async (req, res) => {
-  const userId = req.params.id;
-  const companyId = req.companyId;
-  const foundApi = await dbService.findOne(model.userPackage, {
-    userId,
-    companyId
-  });
+  try {
+    const packageId = req.params.id;
+    
+    // Get companyId from req.companyId or req.user.companyId for filtering
+    const companyId = req.companyId ?? req.user?.companyId;
+    
+    // Verify package exists
+    const packageData = await dbService.findOne(model.packages, {
+      id: packageId,
+      isDelete: false
+    });
+    
+    if (!packageData) {
+      return res.badRequest({ message: 'Package not found!' });
+    }
+    
+    // If companyId is available, verify the package belongs to that company
+    if (companyId && packageData.companyId !== companyId) {
+      return res.badRequest({ message: 'Package does not belong to this company!' });
+    }
+    
+    // Query userPackage by packageId (userPackage model doesn't have companyId field)
+    // If we need to filter by company, we can join with user table or filter results
+    let query = { packageId };
+    
+    // If companyId is provided, we need to filter by users belonging to that company
+    // Since userPackage doesn't have companyId, we'll need to use findAll and filter
+    if (companyId) {
+      // Get all userPackages for this package
+      const allUserPackages = await dbService.findAll(model.userPackage, query);
+      
+      if (!allUserPackages || allUserPackages.length === 0) {
+        return res.badRequest({ message: 'No Data Found!' });
+      }
+      
+      // Get user IDs from userPackages
+      const userIds = [...new Set(allUserPackages.map(up => up.userId))];
+      
+      // Filter users by companyId
+      const users = await dbService.findAll(model.user, {
+        id: userIds,
+        companyId
+      }, {
+        attributes: ['id']
+      });
+      
+      const validUserIds = users.map(u => u.id);
+      
+      // Filter userPackages to only include those with valid user IDs
+      const filteredUserPackages = allUserPackages.filter(up => validUserIds.includes(up.userId));
+      
+      if (filteredUserPackages.length === 0) {
+        return res.badRequest({ message: 'No Data Found!' });
+      }
+      
+      return res.success({ data: filteredUserPackages });
+    }
+    
+    // If no companyId filter, just return all userPackages for this package
+    const foundApi = await dbService.findAll(model.userPackage, query);
 
-  if (!foundApi) {
-    return res.badRequest({ message: 'No Data Found!' });
+    if (!foundApi || foundApi.length === 0) {
+      return res.badRequest({ message: 'No Data Found!' });
+    }
+
+    return res.success({ data: foundApi });
+  } catch (error) {
+    console.log(error);
+    return res.internalServerError({ message: error.message });
   }
-
-  return res.success({ data: foundApi });
 };
 
 module.exports = {

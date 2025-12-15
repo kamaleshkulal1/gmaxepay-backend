@@ -17,7 +17,6 @@ const packageController = require('../../controller/admin/v1/packageController')
 const operatorController = require('../../controller/admin/v1/operatorController');
 const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 
-
 // User management routes
 router.use('/users', require('./v1/userRoute'));
 
@@ -25,25 +24,13 @@ router.use('/users', require('./v1/userRoute'));
 router.use('/rolesAndPermissions', require('./v1/rolesAndPermission'));
 
 // Services routes
-router.post('/services', authentication, servicesController.registerService);
-router.get('/services', servicesController.findAllServices);
-router.post('/services/packages', authentication, servicesController.registerServicePackage);
-router.get('/services/:id', servicesController.getServices);
-router.put('/services/:id', servicesController.updateUserPackage);
-router.get('/services/:id/packages', servicesController.listUserPackage);
-router.put('/services/:id/update', servicesController.updateUserService);
+router.use('/services', require('./v1/serviceRoute'));
 
 // Slab routes - use separate route file
 router.use('/slabs', require('./v1/slabRoute'));
 
 // Package routes
-router.post('/packages', authentication, packageController.registerPackage);
-router.get('/packages', packageController.findAllPackage);
-router.get('/packages/:id', packageController.getPackage);
-router.patch('/packages/:id', packageController.partialUpdatePackage);
-router.get('/packages/:id/users', packageController.getUserPackage);
-router.delete('/packages/:id', packageController.deletePackage);
-
+router.use('/packages', require('./v1/packageRoute'));
 // Operator routes
 router.post('/operators', authentication, operatorController.registerService);
 router.get('/operators', operatorController.findAllService);
