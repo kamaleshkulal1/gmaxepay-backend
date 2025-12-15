@@ -142,11 +142,6 @@ const upgradeUserRole = async (req, res) => {
       return res.failure({ message: 'User not found' });
     }
     
-    // Check if reportingTo is null - only users with null reportingTo can be upgraded
-    if (userToUpgrade.reportingTo !== null) {
-      return res.failure({ message: 'User has reportingTo assigned. Cannot upgrade.' });
-    }
-    
     // Validate upgrade permissions based on current user role
     const currentRole = userToUpgrade.userRole;
     
