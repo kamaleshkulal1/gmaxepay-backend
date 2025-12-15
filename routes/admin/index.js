@@ -24,7 +24,7 @@ router.use('/users', require('./v1/userRoute'));
 // Role and permission routes
 router.use('/rolesAndPermissions', require('./v1/rolesAndPermission'));
 
-router.use('/foundManagement', require('./v1/fundManagementRoute'));
+router.use('/fundManagement', require('./v1/fundManagementRoute'));
 
 // Services routes
 router.post('/services', authentication, servicesController.registerService);
