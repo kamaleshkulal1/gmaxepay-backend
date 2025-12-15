@@ -148,74 +148,94 @@ const getPermissionByRoleId = async (req, res) => {
 
     const { roleId } = req.params;
 
-    let options = {
+    /**
+     * We want the full list of permissions (parents + children),
+     * and for each permission show this role's read/write (true/false).
+     * So we start from `permission` and LEFT JOIN `rolePermission` filtered by roleId.
+     */
+
+    const options = {
       include: [
         {
           model: rolePermission,
           attributes: ['id', 'roleId', 'permissionId', 'read', 'write'],
-          include: [
-            {
-              model: permission,
-              attributes: ['id', 'moduleName', 'isParent', 'parentId']
-            }
-          ]
+          required: false, // left join – return permissions even if rolePermission row doesn't exist
+          query: { roleId: Number(roleId) }
         }
       ]
     };
 
-    let query = {};
-    query = { id: roleId };
-    const foundPermissions = await dbService.findAll(role, query, options);
+    const allPermissions = await dbService.findAll(permission, {}, options);
 
-    if (!foundPermissions) {
+    if (!allPermissions || !allPermissions.length) {
       return res.recordNotFound();
     }
-    foundPermissions.forEach((role) => {
-      role.rolePermissions.sort((a, b) => a.permissionId - b.permissionId);
-    });
 
-    const organizedPermissions = [];
+    // Build a map of parent permissions and attach children under each parent
+    const permissionMap = {};
 
-    foundPermissions.forEach((role) => {
-      const permissionMap = {};
-      role.rolePermissions.forEach((rolePerm) => {
-        const permData = {
-          id: rolePerm.permission.id,
-          moduleName: rolePerm.permission.moduleName,
-          isParent: rolePerm.permission.isParent,
-          parentId: rolePerm.permission.parentId,
-          read: rolePerm.read,
-          write: rolePerm.write,
-          roleId: rolePerm.roleId,
-          permissionId: rolePerm.permissionId
+    allPermissions.forEach((perm) => {
+      const isParent = perm.isParent;
+      const parentId = isParent ? perm.id : perm.parentId;
+
+      if (!parentId) return;
+
+      // Role-specific flags (if any rolePermission rows exist)
+      let read = false;
+      let write = false;
+      let roleIdForPerm = Number(roleId);
+
+      if (Array.isArray(perm.rolePermissions) && perm.rolePermissions.length) {
+        // If multiple rolePermission rows exist for some reason, use the first one
+        const rp = perm.rolePermissions[0];
+        read = Boolean(rp.read);
+        write = Boolean(rp.write);
+        roleIdForPerm = rp.roleId || roleIdForPerm;
+      }
+
+      const permData = {
+        id: perm.id,
+        moduleName: perm.moduleName,
+        isParent: perm.isParent,
+        parentId: perm.parentId,
+        read,
+        write,
+        roleId: roleIdForPerm,
+        permissionId: perm.id
+      };
+
+      // Ensure parent entry exists
+      if (!permissionMap[parentId]) {
+        permissionMap[parentId] = {
+          id: parentId,
+          moduleName: isParent ? perm.moduleName : null,
+          isParent: true,
+          parentId: null,
+          read: false,
+          write: false,
+          roleId: roleIdForPerm,
+          permissionId: parentId,
+          children: []
         };
-        if (rolePerm.permission.isParent) {
-          if (!permissionMap[rolePerm.permission.id]) {
-            permissionMap[rolePerm.permission.id] = {
-              ...permData,
-              children: []
-            };
-            organizedPermissions.push(permissionMap[rolePerm.permission.id]);
-          } else {
-            if (typeof permissionMap[rolePerm.permission.id] === 'object') {
-              permissionMap[rolePerm.permission.id] = {
-                ...permissionMap[rolePerm.permission.id],
-                ...permData
-              };
-            }
-          }
-        } else {
-          if (!permissionMap[rolePerm.permission.parentId]) {
-            permissionMap[rolePerm.permission.parentId] = { children: [] };
-          }
-          if (
-            Array.isArray(permissionMap[rolePerm.permission.parentId].children)
-          ) {
-            permissionMap[rolePerm.permission.parentId].children.push(permData);
-          }
+      }
+
+      if (isParent) {
+        // Update parent details & its own read/write
+        permissionMap[parentId] = {
+          ...permissionMap[parentId],
+          ...permData,
+          children: permissionMap[parentId].children || []
+        };
+      } else {
+        // Child permission – assign moduleName to parent if not set
+        if (!permissionMap[parentId].moduleName) {
+          permissionMap[parentId].moduleName = perm.moduleName;
         }
-      });
+        permissionMap[parentId].children.push(permData);
+      }
     });
+
+    const organizedPermissions = Object.values(permissionMap);
 
     return res.success({
       message: 'Data Found!',
