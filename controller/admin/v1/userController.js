@@ -3,6 +3,10 @@ const dbService = require('../../../utils/dbService');
 const { Op, Sequelize } = require('sequelize');
 const imageService = require('../../../services/imageService');
 const emailService = require('../../../services/emailService');
+const ekycHub = require('../../../services/eKycHub');
+const razorpayApi = require('../../../services/razorpayApi');
+const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const key = Buffer.from(process.env.AES_KEY, 'hex');
 
 
 const createUser = async (req, res) => {
@@ -1309,6 +1313,172 @@ const revertKycData = async (req, res) => {
   }
 };
 
+const uploadBankDetailsForUser = async (req, res) => {
+  try {
+    // Check if user is super admin
+    const userRole = req.user.userRole;
+    const userCompanyId = req.user.companyId;
+    
+    if (!(userRole === 1 && userCompanyId === 1)) {
+      return res.failure({ message: 'Only super admin can upload bank details for users' });
+    }
+
+    const { userId, account_number, ifsc } = req.body || {};
+
+    if (!userId) {
+      return res.failure({ message: 'User ID is required' });
+    }
+    if (!account_number) {
+      return res.failure({ message: 'Account number is required' });
+    }
+    if (!ifsc) {
+      return res.failure({ message: 'IFSC is required' });
+    }
+
+    // Find the target user
+    const targetUser = await dbService.findOne(model.user, {
+      id: userId,
+      isDeleted: false
+    });
+
+    if (!targetUser) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    const companyId = targetUser.companyId;
+
+    // Encrypt the request data
+    const encryptionKey = Buffer.from(key, 'hex');
+    const requestData = { account_number, ifsc };
+    const encryptedRequest = doubleEncrypt(JSON.stringify(requestData), encryptionKey);
+
+    // Check if bank details already exist in our database
+    const existingBank = await dbService.findOne(model.ekycHub, {
+      identityNumber1: account_number,
+      identityNumber2: ifsc,
+      identityType: 'BANK'
+    });
+
+    let bankVerification;
+
+    if (existingBank) {
+      try {
+        const encryptedData = JSON.parse(existingBank.response);
+
+        if (encryptedData && encryptedData.encrypted) {
+          const decryptedResponse = decrypt(encryptedData, Buffer.from(key, 'hex'));
+          bankVerification = decryptedResponse ? JSON.parse(decryptedResponse) : encryptedData;
+        } else {
+          bankVerification = JSON.parse(existingBank.response);
+        }
+      } catch (e) {
+        console.error('Error parsing cached bank verification:', e.message);
+        bankVerification = existingBank.response;
+      }
+    } else {
+      bankVerification = await ekycHub.bankVerification(account_number, ifsc);
+
+      if (bankVerification && bankVerification.status === 'Success') {
+        const encryptedResponse = doubleEncrypt(JSON.stringify(bankVerification), encryptionKey);
+
+        await dbService.createOne(model.ekycHub, {
+          identityNumber1: account_number,
+          identityNumber2: ifsc,
+          request: JSON.stringify(encryptedRequest),
+          response: JSON.stringify(encryptedResponse),
+          identityType: 'BANK',
+          companyId: companyId || null,
+          addedBy: req.user.id
+        });
+      }
+    }
+
+    if (!bankVerification || bankVerification.status !== 'Success') {
+      console.error('Bank verification failed - Status:', bankVerification?.status);
+      return res.failure({ message: 'Bank verification failed' });
+    }
+
+    let razorpayBankData = null;
+    try {
+      razorpayBankData = await razorpayApi.bankDetails(ifsc);
+    } catch (error) {
+      console.error('Error fetching bank details from Razorpay:', error);
+    }
+
+    const bankName = (razorpayBankData && razorpayBankData.BANK)
+      ? razorpayBankData.BANK
+      : (bankVerification.bank_name || bankVerification.bankName || null);
+
+    const beneficiaryName = bankVerification.nameAtBank
+      || bankVerification.beneficiary_name
+      || bankVerification.beneficiaryName
+      || bankVerification['nameAtBank']
+      || null;
+
+    const accountNumber = bankVerification.account_number || bankVerification['Account Number'] || account_number;
+
+    const city = (razorpayBankData && razorpayBankData.CITY)
+      ? razorpayBankData.CITY
+      : (bankVerification.city || null);
+    const branch = (razorpayBankData && razorpayBankData.BRANCH)
+      ? razorpayBankData.BRANCH
+      : (bankVerification.branch || null);
+
+
+    // Check if bank details already exist for this user
+    const existingCustomerBank = await dbService.findOne(model.customerBank, {
+      refId: userId,
+      companyId: companyId
+    });
+
+    const payload = {
+      refId: userId,
+      companyId: companyId,
+      bankName,
+      beneficiaryName: beneficiaryName || targetUser.name,
+      accountNumber,
+      ifsc,
+      city: city || null,
+      branch: branch || null,
+      isActive: true,
+      isPrimary: true
+    };
+
+    let customerBank;
+    if (existingCustomerBank) {
+      customerBank = await dbService.update(model.customerBank, {
+        id: existingCustomerBank.id
+      }, payload);
+    } else {
+      customerBank = await dbService.createOne(model.customerBank, payload);
+    }
+
+    // Update user's bank verification status
+    await dbService.update(model.user, {
+      id: userId,
+      companyId: companyId,
+      isDeleted: false
+    }, {
+      bankDetailsVerify: true
+    });
+
+    return res.success({
+      message: 'Bank details uploaded successfully',
+      data: {
+        customerBank: customerBank,
+        bankVerification: {
+          status: bankVerification.status,
+          bankName: bankName,
+          beneficiaryName: beneficiaryName
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error uploading bank details:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   createUser,
   findAllUsers,
@@ -1318,5 +1488,6 @@ module.exports = {
   unlockAccount,
   getKycVerificationStatus,
   getCompleteKycData,
-  revertKycData
+  revertKycData,
+  uploadBankDetailsForUser
 };
