@@ -335,13 +335,14 @@ const degradeUserRole = async (req, res) => {
   
 const findAllUsers = async (req, res) => {
   try {
-    // Only Master Distributor (userRole 3) can access this endpoint
+    // Master Distributor (userRole 3) and Distributor (userRole 4) can access this endpoint
     const userRole = req.user.userRole;
     const userId = req.user.id;
     const userCompanyId = req.user.companyId;
     
-    if (userRole !== 3) {
-      return res.failure({ message: "Only Master Distributor can access this endpoint!" });
+    // Only Master Distributor (3) and Distributor (4) can access
+    if (userRole !== 3 && userRole !== 4) {
+      return res.failure({ message: "Only Master Distributor and Distributor can access this endpoint!" });
     }
 
     // CompanyId cannot be null
@@ -352,16 +353,27 @@ const findAllUsers = async (req, res) => {
     // Get request body for filtering, pagination, and search
     let dataToFind = req.body || {};
     let options = {};
+    
+    // Determine allowed user roles based on current user's role
+    let allowedRoles = [];
+    if (userRole === 3) {
+      // Master Distributor can see Distributors (4) and Retailers (5) that report to them
+      allowedRoles = [4, 5];
+    } else if (userRole === 4) {
+      // Distributor can only see Retailers (5) that report to them
+      allowedRoles = [5];
+    }
+    
     let query = {
-      reportingTo: userId,
+      reportingTo: userId, // Only users that report to the current user
       companyId: userCompanyId,
-      userRole: { [Op.in]: [4, 5] }, // Only Distributors (4) and Retailers (5)
-        isDeleted: false
+      userRole: { [Op.in]: allowedRoles },
+      isDeleted: false
     };
 
     // Build query from request body
     if (dataToFind.query) {
-      // Apply userRole filter if provided (4=DI, 5=RE)
+      // Apply userRole filter if provided
       if (dataToFind.query.userRole !== undefined) {
         const requestedRole = dataToFind.query.userRole;
         
@@ -370,8 +382,18 @@ const findAllUsers = async (req, res) => {
           return res.failure({ message: "Access denied! You cannot filter by this user role." });
         }
         
-        // Ensure it's one of the allowed roles (4, 5)
-        if ([4, 5].includes(requestedRole)) {
+        // For Distributor (4), they can only filter by Retailer (5)
+        if (userRole === 4 && requestedRole !== 5) {
+          return res.failure({ message: "Access denied! Distributor can only view Retailers." });
+        }
+        
+        // For Master Distributor (3), they can filter by Distributor (4) or Retailer (5)
+        if (userRole === 3 && ![4, 5].includes(requestedRole)) {
+          return res.failure({ message: "Access denied! Master Distributor can only view Distributors and Retailers." });
+        }
+        
+        // Ensure it's one of the allowed roles for the current user
+        if (allowedRoles.includes(requestedRole)) {
           query.userRole = requestedRole;
         }
       }
