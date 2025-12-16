@@ -2,7 +2,7 @@ const dbService = require('../../../utils/dbService');
 const model = require('../../../models/index');
 const { generateUniqueReferCode } = require('../../../utils/generateUniqueReferCode');
 const { decrypt: decryptReferCode } = require('../../../utils/encryption');
-const { Op } = require('sequelize');
+const { Op, Sequelize } = require('sequelize');
 
 const getProfile = async (req, res) => {
   try {
@@ -332,8 +332,236 @@ const degradeUserRole = async (req, res) => {
   }
 };
 
+  
+const findAllUsers = async (req, res) => {
+  try {
+    // Only Master Distributor (userRole 3) can access this endpoint
+    const userRole = req.user.userRole;
+    const userId = req.user.id;
+    const userCompanyId = req.user.companyId;
+    
+    if (userRole !== 3) {
+      return res.failure({ message: "Only Master Distributor can access this endpoint!" });
+    }
+
+    // CompanyId cannot be null
+    if (!userCompanyId || userCompanyId === null || userCompanyId === undefined) {
+      return res.failure({ message: "Company ID is required!" });
+    }
+
+    // Get request body for filtering, pagination, and search
+    let dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      reportingTo: userId,
+      companyId: userCompanyId,
+      userRole: { [Op.in]: [4, 5] }, // Only Distributors (4) and Retailers (5)
+        isDeleted: false
+    };
+
+    // Build query from request body
+    if (dataToFind.query) {
+      // Apply userRole filter if provided (4=DI, 5=RE)
+      if (dataToFind.query.userRole !== undefined) {
+        const requestedRole = dataToFind.query.userRole;
+        
+        // Access denied for userRole 1 (Admin), 2 (Whitelabel), and 3 (Master Distributor)
+        if (requestedRole === 1 || requestedRole === 2 || requestedRole === 3) {
+          return res.failure({ message: "Access denied! You cannot filter by this user role." });
+        }
+        
+        // Ensure it's one of the allowed roles (4, 5)
+        if ([4, 5].includes(requestedRole)) {
+          query.userRole = requestedRole;
+        }
+      }
+
+      // Apply kycStatus filter
+      if (dataToFind.query.kycStatus) {
+        const kycStatusValue = dataToFind.query.kycStatus;
+        
+        // Map "pending" to HALF_KYC and NO_KYC
+        if (kycStatusValue === 'pending') {
+          query.kycStatus = { [Op.in]: ['HALF_KYC', 'NO_KYC'] };
+        }
+        // Map "completed" to FULL_KYC
+        else if (kycStatusValue === 'completed') {
+          query.kycStatus = 'FULL_KYC';
+        }
+        // Handle string with || separator (e.g., "HALF_KYC || NO_KYC")
+        else if (typeof kycStatusValue === 'string' && kycStatusValue.includes('||')) {
+          const statuses = kycStatusValue.split('||').map(s => s.trim()).filter(s => s);
+          if (statuses.length > 0) {
+            query.kycStatus = { [Op.in]: statuses };
+          }
+        }
+        // If it's already an array, use it directly
+        else if (Array.isArray(kycStatusValue)) {
+          query.kycStatus = { [Op.in]: kycStatusValue };
+        }
+        // Otherwise, use the value as is (e.g., "FULL_KYC", "HALF_KYC", "NO_KYC", "REJECTED")
+        else {
+          query.kycStatus = kycStatusValue;
+        }
+      }
+
+      // Apply other query filters
+      Object.keys(dataToFind.query).forEach(key => {
+        if (key !== 'userRole' && key !== 'kycStatus') {
+          query[key] = dataToFind.query[key];
+        }
+      });
+    }
+
+    // Handle options (pagination, sorting)
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+    }
+
+    // Handle customSearch
+    if (dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        query = {
+          ...query,
+          [Op.or]: orConditions
+        };
+      }
+    }
+
+    // Include company, wallet, and onboardingToken information
+    options.include = [
+      {
+        model: model.company,
+        as: 'company',
+        attributes: ['id', 'companyName'],
+        required: false
+      },
+      {
+        model: model.wallet,
+        as: 'wallet',
+        attributes: ['id', 'mainWallet', 'apesWallet'],
+        required: false
+      },
+      {
+        model: model.onboardingToken,
+        as: 'onboardingTokens',
+        attributes: ['id', 'expiresAt', 'isUsed', 'isDeactivated', 'createdAt'],
+        required: false,
+        where: {
+          isDeactivated: false,
+          isUsed: false
+        },
+        separate: true,
+        order: [['createdAt', 'DESC']],
+        limit: 1
+      }
+    ];
+
+    // Use pagination
+    let foundUsers = await dbService.paginate(model.user, query, options);
+
+    if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
+      return res.success({
+        message: 'Users Retrieved Successfully',
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
+      });
+    }
+
+    // Map userRole to readable names
+    const roleMap = {
+      2: 'WL',
+      3: 'MD',
+      4: 'DI',
+      5: 'RE'
+    };
+
+    // Transform users data
+    const transformedUsers = foundUsers.data.map((user) => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      const companyData = userData.company || {};
+      const walletData = userData.wallet || {};
+      const onboardingTokens = userData.onboardingTokens || [];
+
+      // Determine KYC Status
+      const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
+
+      // Determine if account is locked
+      const isLockedByStatus = !!(userData.isLocked && userData.lockUntil && new Date(userData.lockUntil) > new Date());
+      const isLockedByAttempts = (userData.loginAttempts || 0) >= 3;
+      const isLocked = isLockedByStatus || isLockedByAttempts;
+
+      // Get the latest active onboarding token's expiresAt
+      const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0 
+        ? onboardingTokens[0] 
+        : null;
+      const onboardingTokenExpiresAt = latestOnboardingToken?.expiresAt || null;
+
+      return {
+        id: userData.id,
+        date: userData.createdAt || null,
+        userId: userData.userId || null,
+        name: userData.name || null,
+        userRole: roleMap[userData.userRole] || `Role ${userData.userRole}`,
+        mobileNo: userData.mobileNo || null,
+        email: userData.email || null,
+        parentName: companyData.companyName || null,
+        parentRole: 'Enterprise',
+        company: companyData.companyName || null,
+        companyId: userData.companyId || null,
+        reportingTo: userData.reportingTo || null,
+        kycStatus: kycStatus,
+        kycSteps: userData.kycSteps || 0,
+        status: userData.isActive ? 'Active' : 'Inactive',
+        lock: isLocked,
+        onboardingTokenExpiresAt: onboardingTokenExpiresAt,
+        wallet: {
+          mainWallet: walletData.mainWallet || 0,
+          apesWallet: walletData.apesWallet || 0
+        }
+      };
+    });
+
+    return res.success({
+      message: 'Users Retrieved Successfully',
+      data: transformedUsers,
+      total: foundUsers.total,
+      paginator: foundUsers.paginator
+    });
+  } catch (error) {
+    console.log(error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   getProfile,
   upgradeUserRole,
-  degradeUserRole
+  degradeUserRole,
+  findAllUsers
 };
