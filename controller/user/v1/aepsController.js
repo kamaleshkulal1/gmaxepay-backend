@@ -728,7 +728,7 @@ const aepsTransaction = async (req, res) => {
             // Amount-based operator selection:
             // Your operator rows are like 100-500, 501-1000, ... 9001-10000 with operatorType="AEPS".
             // bankiin is BANK IIN (e.g. 109104) so DO NOT match it with operatorCode (AEPS011 etc).
-            const aepsOperators = await model.operator.findAll({ operatorType: 'AEPS' });
+            const aepsOperators = await model.operator.findAll({ where: { operatorType: 'AEPS' } });
 
             // Primary: pick matching min/max range
             const matched = pickBestByAmount(aepsOperators, amountNumber);
@@ -850,171 +850,203 @@ const aepsTransaction = async (req, res) => {
             }
         }
 
-        const status = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
+        const topStatus = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
+        const innerData =
+            parsedResponse && typeof parsedResponse === 'object' && parsedResponse.data && typeof parsedResponse.data === 'object'
+                ? parsedResponse.data
+                : null;
         const transactionStatusRaw =
-            parsedResponse?.data?.transactionStatus ??
-            parsedResponse?.data?.status ??
-            parsedResponse?.transactionStatus;
+            innerData?.transactionStatus ??
+            innerData?.status ??
+            parsedResponse?.transactionStatus ??
+            parsedResponse?.status;
         const transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
-        const responseCode = parsedResponse?.data?.responseCode;
+        const responseCode = innerData?.responseCode ?? parsedResponse?.responseCode;
 
         const isSuccess =
-            status === 'SUCCESS' ||
+            responseCode === '00' ||
             transactionStatus === 'SUCCESS' ||
             transactionStatus === 'SUCCESSFUL' ||
-            responseCode === '00';
+            topStatus === 'SUCCESS';
 
         const paymentStatus = isSuccess ? 'SUCCESS' : 'FAILED';
 
-        // Record AEPS history and credit AEPS wallet (apesWallet) with net retailer commercial
-        await model.sequelize.transaction(async (t) => {
-            let wallet = await model.wallet.findOne({
-                where: { refId: req.user.id, companyId: req.user.companyId }
-            });
+        // If gateway returns contradictory wrapper status (e.g. status="ERROR" but responseCode="00"),
+        // normalize it so API consumers don't see ERROR inside a successful response.
+        const normalizedGatewayResponse =
+            parsedResponse && typeof parsedResponse === 'object' && Object.prototype.hasOwnProperty.call(parsedResponse, 'status')
+                ? { ...parsedResponse, status: isSuccess ? 'SUCCESS' : (topStatus || 'ERROR') }
+                : parsedResponse;
 
-            if (!wallet) {
-                wallet = await model.wallet.create(
-                    {
-                        refId: req.user.id,
-                        companyId: req.user.companyId,
-                        roleType: req.user.userType,
-                        mainWallet: 0,
-                        apesWallet: 0,
-                        addedBy: req.user.id,
-                        updatedBy: req.user.id
-                    },
-                    { transaction: t }
-                );
-            }
+        const merchantTransactionId =
+            innerData?.merchantTxnId ||
+            innerData?.merchantTransactionId ||
+            normalizedGatewayResponse?.merchantTxnId ||
+            normalizedGatewayResponse?.merchantTransactionId ||
+            payload.transactionId;
 
-            const openingAepsWallet = round2(wallet.apesWallet || 0);
-            const creditToApply = isSuccess ? retailerNetCredit : 0;
-            const closingAepsWallet = round2(openingAepsWallet + creditToApply);
-
-            if (isSuccess && creditToApply) {
-                await wallet.update(
-                    {
-                        apesWallet: closingAepsWallet,
-                        updatedBy: req.user.id
-                    }
-                );
-            }
-
-            const safeRequest = {
-                ...payload,
-                biometricData: undefined,
-                biometricDataPresent: Boolean(payload.biometricData)
-            };
-
-            await model.walletHistory.create(
-                {
-                    refId: req.user.id,
-                    companyId: req.user.companyId,
-                    walletType: 'AEPS',
-                    operator: operator?.operatorName || normalizedBankiin,
-                    amount: amountNumber,
-                    comm: retailerCom === null ? 0 : Number(retailerCom || 0),
-                    surcharge: 0,
-                    openingAmt: openingAepsWallet,
-                    closingAmt: isSuccess ? closingAepsWallet : openingAepsWallet,
-                    credit: creditToApply,
-                    debit: 0,
-                    merchantTransactionId:
-                        parsedResponse?.data?.merchantTxnId ||
-                        parsedResponse?.data?.merchantTransactionId ||
-                        safeRequest.transactionId,
-                    transactionId: safeRequest.transactionId,
+        // If failed: DO NOT update wallet/commissions/history, just return the gateway response.
+        if (!isSuccess) {
+            return res.failure({
+                message:
+                    normalizedGatewayResponse?.message ||
+                    innerData?.message ||
+                    'AEPS transaction failed',
+                data: {
                     paymentStatus,
-                    paymentInstrument: {
-                        service: 'AEPS',
-                        request: safeRequest,
-                        response: parsedResponse
-                    },
-                    remark: `AEPS ${normalizedTxnType}`,
-                    aepsTxnType: normalizedTxnType,
-                    bankiin: normalizedBankiin,
-                    superadminComm,
-                    whitelabelComm,
-                    masterDistributorCom,
-                    masterDistrbutorCom: masterDistributorCom,
-                    distributorCom,
-                    retailerCom,
-                    reatilerCom: retailerCom,
-                    superadminCommTDS,
-                    superAdminComTDS: superadminCommTDS,
-                    whitelabelCommTDS,
-                    whitelabelComTDS: whitelabelCommTDS,
-                    masterDistributorComTDS,
-                    masterDistrbutorComTDS: masterDistributorComTDS,
-                    distributorComTDS,
-                    retailerComTDS,
-                    reatilerComTDS: retailerComTDS,
-                    addedBy: req.user.id,
-                    updatedBy: req.user.id,
-                    userDetails: {
-                        id: existingUser.id,
-                        userType: existingUser.userType,
-                        mobileNo: existingUser.mobileNo
-                    }
+                    responseCode,
+                    transactionStatus,
+                    merchantTransactionId,
+                    gatewayResponse: normalizedGatewayResponse
                 }
-            );
+            });
+        }
 
-            // Separate AEPS history (for reporting)
-            if (model.aepsHistory) {
-                await model.aepsHistory.create(
-                    {
-                        refId: req.user.id,
-                        companyId: req.user.companyId,
-                        operator: operator?.operatorName || normalizedBankiin,
-                        bankiin: normalizedBankiin,
-                        aepsTxnType: normalizedTxnType,
-                        captureType: normalizedCaptureType,
-                        amount: amountNumber,
-                        transactionId: safeRequest.transactionId,
-                        merchantTransactionId:
-                            parsedResponse?.data?.merchantTxnId ||
-                            parsedResponse?.data?.merchantTransactionId ||
-                            safeRequest.transactionId,
-                        bankRRN: parsedResponse?.data?.bankRRN || parsedResponse?.data?.bankRrn,
-                        fpTransactionId: parsedResponse?.data?.fpTransactionId || parsedResponse?.data?.FingpayTransactionId,
-                        responseCode: parsedResponse?.data?.responseCode,
-                        status: paymentStatus,
-                        message: parsedResponse?.message || parsedResponse?.data?.errorMessage || parsedResponse?.data?.responseMessage,
-                        requestPayload: safeRequest,
-                        responsePayload: parsedResponse,
-                        openingAepsWallet,
-                        closingAepsWallet: isSuccess ? closingAepsWallet : openingAepsWallet,
-                        credit: creditToApply,
-                        superadminComm,
-                        whitelabelComm,
-                        masterDistributorCom,
-                        masterDistrbutorCom: masterDistributorCom,
-                        distributorCom,
-                        retailerCom,
-                        reatilerCom: retailerCom,
-                        superadminCommTDS,
-                        superAdminComTDS: superadminCommTDS,
-                        whitelabelCommTDS,
-                        whitelabelComTDS: whitelabelCommTDS,
-                        masterDistributorComTDS,
-                        masterDistrbutorComTDS: masterDistributorComTDS,
-                        distributorComTDS,
-                        retailerComTDS,
-                        reatilerComTDS: retailerComTDS,
-                        addedBy: req.user.id,
-                        updatedBy: req.user.id
-                    }
-                );
+        // Success: record AEPS history and credit AEPS wallet (apesWallet) with net retailer commercial
+        let wallet = await model.wallet.findOne({
+            where: { refId: req.user.id, companyId: req.user.companyId }
+        });
+
+        if (!wallet) {
+            wallet = await model.wallet.create({
+                refId: req.user.id,
+                companyId: req.user.companyId,
+                roleType: req.user.userType,
+                mainWallet: 0,
+                apesWallet: 0,
+                addedBy: req.user.id,
+                updatedBy: req.user.id
+            });
+        }
+
+        const openingAepsWallet = round2(wallet.apesWallet || 0);
+        const creditToApply = isSuccess ? retailerNetCredit : 0;
+        const closingAepsWallet = round2(openingAepsWallet + creditToApply);
+
+        if (isSuccess && creditToApply) {
+            await wallet.update({
+                apesWallet: closingAepsWallet,
+                updatedBy: req.user.id
+            });
+        }
+
+        const safeRequest = {
+            ...payload,
+            biometricData: undefined,
+            biometricDataPresent: Boolean(payload.biometricData)
+        };
+
+        await model.walletHistory.create({
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            walletType: 'AEPS',
+            operator: operator?.operatorName || normalizedBankiin,
+            amount: amountNumber,
+            comm: retailerCom === null ? 0 : Number(retailerCom || 0),
+            surcharge: 0,
+            openingAmt: openingAepsWallet,
+            closingAmt: isSuccess ? closingAepsWallet : openingAepsWallet,
+            credit: creditToApply,
+            debit: 0,
+            merchantTransactionId,
+            transactionId: safeRequest.transactionId,
+            paymentStatus,
+            paymentInstrument: {
+                service: 'AEPS',
+                request: safeRequest,
+                response: normalizedGatewayResponse
+            },
+            remark: `AEPS ${normalizedTxnType}`,
+            aepsTxnType: normalizedTxnType,
+            bankiin: normalizedBankiin,
+            superadminComm,
+            whitelabelComm,
+            masterDistributorCom,
+            masterDistrbutorCom: masterDistributorCom,
+            distributorCom,
+            retailerCom,
+            reatilerCom: retailerCom,
+            superadminCommTDS,
+            superAdminComTDS: superadminCommTDS,
+            whitelabelCommTDS,
+            whitelabelComTDS: whitelabelCommTDS,
+            masterDistributorComTDS,
+            masterDistrbutorComTDS: masterDistributorComTDS,
+            distributorComTDS,
+            retailerComTDS,
+            reatilerComTDS: retailerComTDS,
+            addedBy: req.user.id,
+            updatedBy: req.user.id,
+            userDetails: {
+                id: existingUser.id,
+                userType: existingUser.userType,
+                mobileNo: existingUser.mobileNo
             }
         });
 
-        if (isSuccess) {
-            return res.success({ message: 'AEPS transaction successful', data: parsedResponse });
+        // Separate AEPS history (for reporting)
+        if (model.aepsHistory) {
+            await model.aepsHistory.create({
+                refId: req.user.id,
+                companyId: req.user.companyId,
+                operator: operator?.operatorName || normalizedBankiin,
+                bankiin: normalizedBankiin,
+                aepsTxnType: normalizedTxnType,
+                captureType: normalizedCaptureType,
+                amount: amountNumber,
+                transactionId: safeRequest.transactionId,
+                merchantTransactionId,
+                bankRRN:
+                    innerData?.bankRRN ||
+                    innerData?.bankRrn ||
+                    normalizedGatewayResponse?.bankRRN ||
+                    normalizedGatewayResponse?.bankRrn,
+                fpTransactionId:
+                    innerData?.fpTransactionId ||
+                    innerData?.FingpayTransactionId ||
+                    normalizedGatewayResponse?.fpTransactionId ||
+                    normalizedGatewayResponse?.FingpayTransactionId,
+                responseCode,
+                status: paymentStatus,
+                message:
+                    normalizedGatewayResponse?.message ||
+                    innerData?.errorMessage ||
+                    innerData?.responseMessage,
+                requestPayload: safeRequest,
+                responsePayload: normalizedGatewayResponse,
+                openingAepsWallet,
+                closingAepsWallet: isSuccess ? closingAepsWallet : openingAepsWallet,
+                credit: creditToApply,
+                superadminComm,
+                whitelabelComm,
+                masterDistributorCom,
+                masterDistrbutorCom: masterDistributorCom,
+                distributorCom,
+                retailerCom,
+                reatilerCom: retailerCom,
+                superadminCommTDS,
+                superAdminComTDS: superadminCommTDS,
+                whitelabelCommTDS,
+                whitelabelComTDS: whitelabelCommTDS,
+                masterDistributorComTDS,
+                masterDistrbutorComTDS: masterDistributorComTDS,
+                distributorComTDS,
+                retailerComTDS,
+                reatilerComTDS: retailerComTDS,
+                addedBy: req.user.id,
+                updatedBy: req.user.id
+            });
         }
 
-        return res.failure({
-            message: parsedResponse?.message || parsedResponse?.data?.message || 'AEPS transaction failed',
-            data: parsedResponse
+        return res.success({
+            message: 'AEPS transaction successful',
+            data: {
+                paymentStatus,
+                responseCode,
+                transactionStatus,
+                merchantTransactionId,
+                gatewayResponse: normalizedGatewayResponse
+            }
         });
     }
     catch (error) {
