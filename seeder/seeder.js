@@ -13741,7 +13741,7 @@ async function serviceCharges() {
 
 async function seedData() {
   
-  //  await roles();
+   await roles();
    await permissions();
    await insertPermissions();
    await rolePermission();
