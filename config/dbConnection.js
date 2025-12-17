@@ -3,6 +3,12 @@
  * @description :: database connection using sequelize
  */
 const { Sequelize, DataTypes } = require('sequelize');
+// Enable CLS so queries inside sequelize.transaction(...) automatically use the active transaction
+// without manually passing { transaction } to every call.
+// Ref: Sequelize.useCLS(namespace)
+const cls = require('cls-hooked');
+const namespace = cls.createNamespace('gmaxepay-sequelize-transaction');
+Sequelize.useCLS(namespace);
 const dbConfig = require('./db');
 const pg = require('pg');
 

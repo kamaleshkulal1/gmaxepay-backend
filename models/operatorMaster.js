@@ -133,6 +133,39 @@ let Operator = sequelize.define(
         isIn: [['NO', 'API', 'TABLE']]
       }
     },
+    // --- AEPS commercials (optional; can be null) ---
+    // Store per-transaction commercial amounts (simple fixed values).
+    // Used by AEPS transaction controller to credit retailer AEPS wallet and write AEPS history.
+    superadminComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    whitelabelComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    masterDistributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Typo-friendly alias (some code/data uses this key)
+    masterDistrbutorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    distributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    retailerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Typo-friendly alias
+    reatilerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
     ...reusableSMSAttribute
   },
   {

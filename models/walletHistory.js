@@ -153,16 +153,92 @@ let WalletHistory = sequelize.define(
       type: DataTypes.FLOAT,
       defaultValue: 0
     },
+    // --- AEPS commission breakdown (nullable; only populated for AEPS transactions) ---
+    superadminComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    whitelabelComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    masterDistributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Backward/typo-friendly aliases (some clients expect these exact keys)
+    masterDistrbutorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    distributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    retailerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Backward/typo-friendly alias
+    reatilerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    superadminCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Alias (camel-cased)
+    superAdminComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    whitelabelCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Alias
+    whitelabelComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    masterDistributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Alias
+    masterDistrbutorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    distributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    retailerComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Alias
+    reatilerComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // AEPS metadata (optional)
+    aepsTxnType: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    bankiin: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     payOutId: {
       type: DataTypes.INTEGER,
       allowNull: true
     },
     userDetails: {
       type: DataTypes.JSON
-    },
-    whitelabelCommission: {
-      type: DataTypes.FLOAT,
-      defaultValue: 0
     }
   },
   {

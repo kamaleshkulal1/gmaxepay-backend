@@ -51,6 +51,7 @@ db.gstState = require('./gstState');
 // Financial Models
 db.wallet = require('./wallet');
 db.walletHistory = require('./walletHistory');
+db.aepsHistory = require('./aepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 

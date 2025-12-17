@@ -2,6 +2,8 @@ const asl = require('../../../services/asl');
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
+const { generateTransactionID } = require('../../../utils/transactionID');
+// const { Op } = require('sequelize'); // no longer needed (commission is operator-based, no slabs/ranges)
 
 
 const getOnboardingStatus = async (req, res) => {
@@ -606,62 +608,388 @@ const aeps2FaAuthentication = async (req, res) => {
 
 const aepsTransaction = async (req, res) => {
     try{
-        const { amount, txnType, captureType, biometricData } = req.body;
+        const {
+            amount,
+            txnType,
+            captureType,
+            biometricData,
+            bankiin
+        } = req.body || {};
+
+        const round2 = (num) => {
+            const n = Number(num);
+            if (!Number.isFinite(n)) return 0;
+            return Math.round((n + Number.EPSILON) * 100) / 100;
+        };
+
+        const normalizeTxnType = (value) => (value ? String(value).trim().toUpperCase() : null);
+        const normalizeCaptureType = (value) => {
+            const t = value ? String(value).trim().toUpperCase() : null;
+            if (t === 'FINGURE') return 'FINGER';
+            return t;
+        };
+
+        const normalizedTxnType = normalizeTxnType(txnType);
+        const normalizedCaptureType = normalizeCaptureType(captureType);
+        const normalizedBankiin = bankiin;
+
         if(!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
-        if(!captureType || !['FACE', 'FINGER'].includes(captureType)) {
+        if(!normalizedCaptureType || !['FACE', 'FINGER'].includes(normalizedCaptureType)) {
             return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
         }
-        if(!txnType || !['DEPOSIT', 'WITHDRAWAL'].includes(txnType)) {
-            return res.failure({ message: 'Invalid transaction type. Allowed values are DEPOSIT or WITHDRAWAL' });
+        if(!normalizedTxnType || !['CW', 'BE', 'MS'].includes(normalizedTxnType)) {
+            return res.failure({ message: 'Invalid transaction type. Allowed values are CW, BE or MS' });
         }
-        if(!amount) {
-            return res.failure({ message: 'Amount is required' });
+        if(!normalizedBankiin) {
+            return res.failure({ message: 'bankiin is required' });
         }
+
+        const amountNumber = round2(amount || 0);
+        if (normalizedTxnType === 'CW' && (!amountNumber || amountNumber <= 0)) {
+            return res.failure({ message: 'Amount is required for CW and must be greater than 0' });
+        }
+
+        // Ensure daily 2FA is completed for today (IST date)
+        await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
+        const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
+        const existingDaily2FA = await dbService.findOne(model.aepsDailyLogin, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            loginDate: todayDateStr
+        });
+        if (!existingDaily2FA) {
+            return res.failure({ message: 'AEPS daily 2FA authentication is required before transaction' });
+        }
+
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if(!existingUser) {
             return res.failure({ message: 'User not found' });
         }
+        if(!existingUser.aadharDetails?.aadhaarNumber) {
+            return res.failure({ message: 'Aadhaar number not found for this user' });
+        }
+        if(!existingUser.latitude || !existingUser.longitude) {
+            return res.failure({ message: 'User latitude/longitude is required' });
+        }
+
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
             userId: req.user.id,
             companyId: req.user.companyId,
             merchantStatus: true
         });
+        if(!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not completed' });
+        }
+        if(!existingAepsOnboarding.merchantLoginId) {
+            return res.failure({ message: 'AEPS merchantLoginId not found' });
+        }
 
         const existingBioMetric = await dbService.findOne(model.bioMetric, {
             refId: req.user.id,
             companyId: req.user.companyId,
-            captureType: captureType
+            captureType: normalizedCaptureType
         });
         if(!existingBioMetric) {
             return res.failure({ message: 'Biometric data is required' });
         }
+
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+
+        const generatedTxnId = generateTransactionID(existingCompany?.companyName);
+
+        const resolveOperator = async () => {
+            const pickBestByAmount = (operators, amountVal) => {
+                if (!operators || !operators.length) return null;
+                const matches = operators.filter((op) => {
+                    const min = op.minValue !== undefined && op.minValue !== null ? Number(op.minValue) : null;
+                    const max = op.maxValue !== undefined && op.maxValue !== null ? Number(op.maxValue) : null;
+                    if (Number.isFinite(min) && amountVal < min) return false;
+                    if (Number.isFinite(max) && amountVal > max) return false;
+                    return true;
+                });
+                const candidates = matches.length ? matches : operators;
+                // Choose most specific range: smallest span, else highest minValue, else newest
+                candidates.sort((a, b) => {
+                    const aMin = Number.isFinite(Number(a.minValue)) ? Number(a.minValue) : -Infinity;
+                    const bMin = Number.isFinite(Number(b.minValue)) ? Number(b.minValue) : -Infinity;
+                    const aMax = Number.isFinite(Number(a.maxValue)) ? Number(a.maxValue) : Infinity;
+                    const bMax = Number.isFinite(Number(b.maxValue)) ? Number(b.maxValue) : Infinity;
+                    const aSpan = aMax - aMin;
+                    const bSpan = bMax - bMin;
+                    if (aSpan !== bSpan) return aSpan - bSpan;
+                    if (aMin !== bMin) return bMin - aMin;
+                    return (b.id || 0) - (a.id || 0);
+                });
+                return candidates[0];
+            };
+
+            // Amount-based operator selection:
+            // Your operator rows are like 100-500, 501-1000, ... 9001-10000 with operatorType="AEPS".
+            // bankiin is BANK IIN (e.g. 109104) so DO NOT match it with operatorCode (AEPS011 etc).
+            const aepsOperators = await model.operator.findAll({ operatorType: 'AEPS' });
+
+            // Primary: pick matching min/max range
+            const matched = pickBestByAmount(aepsOperators, amountNumber);
+            if (matched) return matched;
+
+            // Fallback: if no match (e.g. BE/MS amount=0), pick closest boundary
+            const sorted = (aepsOperators || []).slice().sort((a, b) => Number(a.minValue || 0) - Number(b.minValue || 0));
+            if (!sorted.length) return null;
+            if (amountNumber <= Number(sorted[0].minValue || 0)) return sorted[0];
+            return sorted[sorted.length - 1];
+        };
+
+        const operator = await resolveOperator();
+
+        // Commission/TDS: simple operator-based (no slabs/ranges). All fields can be null.
+        const toNullableNumber = (value) => {
+            if (value === undefined || value === null || value === '') return null;
+            const n = Number(value);
+            if (!Number.isFinite(n)) return null;
+            return round2(n);
+        };
+
+        const TDS_PERCENT = Number(process.env.AEPS_TDS_PERCENT || 2);
+        const calculateTdsAmount = (commValue) => {
+            if (commValue === null || commValue === undefined) return null;
+            return round2((Number(commValue) * TDS_PERCENT) / 100);
+        };
+
+        const calcCommByAmtType = (baseValue) => {
+            const base = toNullableNumber(baseValue);
+            if (base === null) return null;
+            const amtType = operator?.amtType ? String(operator.amtType).toLowerCase() : 'fix';
+            if (amtType === 'per') {
+                return round2((amountNumber * base) / 100);
+            }
+            return round2(base);
+        };
+
+        const superadminComm = calcCommByAmtType(operator?.superadminComm);
+        const whitelabelComm = calcCommByAmtType(operator?.whitelabelComm);
+        const masterDistributorCom = calcCommByAmtType(
+            operator?.masterDistributorCom ?? operator?.masterDistrbutorCom
+        );
+        const distributorCom = calcCommByAmtType(operator?.distributorCom);
+        // If retailerCom not configured, fallback to operator.comm
+        const retailerCommBase = operator?.retailerCom ?? operator?.reatilerCom ?? operator?.comm;
+        const retailerCom = calcCommByAmtType(retailerCommBase);
+
+        const superadminCommTDS = calculateTdsAmount(superadminComm);
+        const whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
+        const masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
+        const distributorComTDS = calculateTdsAmount(distributorCom);
+        const retailerComTDS = calculateTdsAmount(retailerCom);
+
+        const retailerNetCredit =
+            retailerCom === null ? 0 : round2(Number(retailerCom) - Number(retailerComTDS || 0));
+
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
-            type: captureType,
             aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
-            txnType: txnType,
+            txnType: normalizedTxnType,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
-            bankiin,
-            mobileNo:existingUser.mobileNo,
-            amount: amount, 
+            bankiin: normalizedBankiin,
+            mobile: existingUser.mobileNo,
+            mobileNo: existingUser.mobileNo,
+            amount: amountNumber, 
             latitude: existingUser.latitude,
             longitude: existingUser.longitude,
-            transactionId: existingBioMetric.transactionId,
-            captureType: captureType,
+            transactionId: generatedTxnId,
+            captureType: normalizedCaptureType,
             biometricData: biometricData
-        }
+        };
+
         const aepsResponse = await asl.aslAepsTransaction(payload);
-        console.log('aepsResponse', aepsResponse);
-        const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
-        const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
-        const responseCode = aepsResponse?.data?.responseCode;
-        const responseMessage = aepsResponse?.data?.responseMessage;
-        if(status === 'SUCCESS' || nestedStatus === 'SUCCESS' || responseCode === '00' || (responseMessage && responseMessage.toLowerCase().includes('completed'))) {
-            return res.success({ message: 'AEPS transaction successful', data: aepsResponse });
+
+        // Normalize response (sometimes comes as JSON string)
+        let parsedResponse = aepsResponse;
+        if (typeof aepsResponse === 'string') {
+            try {
+                parsedResponse = JSON.parse(aepsResponse);
+            } catch (e) {
+                const jsonMatch = aepsResponse.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    try {
+                        parsedResponse = JSON.parse(jsonMatch[0]);
+                    } catch (parseError) {
+                        parsedResponse = { status: 'ERROR', message: aepsResponse };
+                    }
+                } else {
+                    parsedResponse = { status: 'ERROR', message: aepsResponse };
+                }
+            }
         }
-        return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'AEPS transaction failed', data: aepsResponse });
+
+        const status = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
+        const transactionStatusRaw =
+            parsedResponse?.data?.transactionStatus ??
+            parsedResponse?.data?.status ??
+            parsedResponse?.transactionStatus;
+        const transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
+        const responseCode = parsedResponse?.data?.responseCode;
+
+        const isSuccess =
+            status === 'SUCCESS' ||
+            transactionStatus === 'SUCCESS' ||
+            transactionStatus === 'SUCCESSFUL' ||
+            responseCode === '00';
+
+        const paymentStatus = isSuccess ? 'SUCCESS' : 'FAILED';
+
+        // Record AEPS history and credit AEPS wallet (apesWallet) with net retailer commercial
+        await model.sequelize.transaction(async (t) => {
+            let wallet = await model.wallet.findOne({
+                refId: req.user.id,
+                companyId: req.user.companyId
+            });
+
+            if (!wallet) {
+                wallet = await model.wallet.create(
+                    {
+                        refId: req.user.id,
+                        companyId: req.user.companyId,
+                        roleType: req.user.userType,
+                        mainWallet: 0,
+                        apesWallet: 0,
+                        addedBy: req.user.id,
+                        updatedBy: req.user.id
+                    },
+                    { transaction: t }
+                );
+            }
+
+            const openingAepsWallet = round2(wallet.apesWallet || 0);
+            const creditToApply = isSuccess ? retailerNetCredit : 0;
+            const closingAepsWallet = round2(openingAepsWallet + creditToApply);
+
+            if (isSuccess && creditToApply) {
+                await wallet.update(
+                    {
+                        apesWallet: closingAepsWallet,
+                        updatedBy: req.user.id
+                    }
+                );
+            }
+
+            const safeRequest = {
+                ...payload,
+                biometricData: undefined,
+                biometricDataPresent: Boolean(payload.biometricData)
+            };
+
+            await model.walletHistory.create(
+                {
+                    refId: req.user.id,
+                    companyId: req.user.companyId,
+                    walletType: 'AEPS',
+                    operator: operator?.operatorName || normalizedBankiin,
+                    amount: amountNumber,
+                    comm: retailerCom === null ? 0 : Number(retailerCom || 0),
+                    surcharge: 0,
+                    openingAmt: openingAepsWallet,
+                    closingAmt: isSuccess ? closingAepsWallet : openingAepsWallet,
+                    credit: creditToApply,
+                    debit: 0,
+                    merchantTransactionId:
+                        parsedResponse?.data?.merchantTxnId ||
+                        parsedResponse?.data?.merchantTransactionId ||
+                        safeRequest.transactionId,
+                    transactionId: safeRequest.transactionId,
+                    paymentStatus,
+                    paymentInstrument: {
+                        service: 'AEPS',
+                        request: safeRequest,
+                        response: parsedResponse
+                    },
+                    remark: `AEPS ${normalizedTxnType}`,
+                    aepsTxnType: normalizedTxnType,
+                    bankiin: normalizedBankiin,
+                    superadminComm,
+                    whitelabelComm,
+                    masterDistributorCom,
+                    masterDistrbutorCom: masterDistributorCom,
+                    distributorCom,
+                    retailerCom,
+                    reatilerCom: retailerCom,
+                    superadminCommTDS,
+                    superAdminComTDS: superadminCommTDS,
+                    whitelabelCommTDS,
+                    whitelabelComTDS: whitelabelCommTDS,
+                    masterDistributorComTDS,
+                    masterDistrbutorComTDS: masterDistributorComTDS,
+                    distributorComTDS,
+                    retailerComTDS,
+                    reatilerComTDS: retailerComTDS,
+                    addedBy: req.user.id,
+                    updatedBy: req.user.id,
+                    userDetails: {
+                        id: existingUser.id,
+                        userType: existingUser.userType,
+                        mobileNo: existingUser.mobileNo
+                    }
+                }
+            );
+
+            // Separate AEPS history (for reporting)
+            if (model.aepsHistory) {
+                await model.aepsHistory.create(
+                    {
+                        refId: req.user.id,
+                        companyId: req.user.companyId,
+                        operator: operator?.operatorName || normalizedBankiin,
+                        bankiin: normalizedBankiin,
+                        aepsTxnType: normalizedTxnType,
+                        captureType: normalizedCaptureType,
+                        amount: amountNumber,
+                        transactionId: safeRequest.transactionId,
+                        merchantTransactionId:
+                            parsedResponse?.data?.merchantTxnId ||
+                            parsedResponse?.data?.merchantTransactionId ||
+                            safeRequest.transactionId,
+                        bankRRN: parsedResponse?.data?.bankRRN || parsedResponse?.data?.bankRrn,
+                        fpTransactionId: parsedResponse?.data?.fpTransactionId || parsedResponse?.data?.FingpayTransactionId,
+                        responseCode: parsedResponse?.data?.responseCode,
+                        status: paymentStatus,
+                        message: parsedResponse?.message || parsedResponse?.data?.errorMessage || parsedResponse?.data?.responseMessage,
+                        requestPayload: safeRequest,
+                        responsePayload: parsedResponse,
+                        openingAepsWallet,
+                        closingAepsWallet: isSuccess ? closingAepsWallet : openingAepsWallet,
+                        credit: creditToApply,
+                        superadminComm,
+                        whitelabelComm,
+                        masterDistributorCom,
+                        masterDistrbutorCom: masterDistributorCom,
+                        distributorCom,
+                        retailerCom,
+                        reatilerCom: retailerCom,
+                        superadminCommTDS,
+                        superAdminComTDS: superadminCommTDS,
+                        whitelabelCommTDS,
+                        whitelabelComTDS: whitelabelCommTDS,
+                        masterDistributorComTDS,
+                        masterDistrbutorComTDS: masterDistributorComTDS,
+                        distributorComTDS,
+                        retailerComTDS,
+                        reatilerComTDS: retailerComTDS,
+                        addedBy: req.user.id,
+                        updatedBy: req.user.id
+                    }
+                );
+            }
+        });
+
+        if (isSuccess) {
+            return res.success({ message: 'AEPS transaction successful', data: parsedResponse });
+        }
+
+        return res.failure({
+            message: parsedResponse?.message || parsedResponse?.data?.message || 'AEPS transaction failed',
+            data: parsedResponse
+        });
     }
     catch (error) {
         console.error('AEPS transaction error', error);
@@ -675,5 +1003,6 @@ module.exports = {
     validateAgentOtp, 
     resendAgentOtp, 
     bioMetricVerification, 
-    aeps2FaAuthentication 
+    aeps2FaAuthentication ,
+    aepsTransaction
 };

@@ -200,7 +200,7 @@ const aslAepsTransaction = async (data) => {
         {
             associateId: aslAssociateId,
             apiToken: aslApiToken,
-            ServiceType: 'AEPS',
+            Service: 'AEPS',
             ...data
         }, {
             headers: {
@@ -211,8 +211,8 @@ const aslAepsTransaction = async (data) => {
     console.log("response.data",response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
-    return error.response.data;
+    console.log("ASL AEPS Transaction error", error?.response?.data || error.message);
+    return error.response?.data || { status: 'error', message: 'Unable to reach ASL AEPS Transaction API' };
   }
 }
 
