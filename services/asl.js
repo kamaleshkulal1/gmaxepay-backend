@@ -209,6 +209,7 @@ const aslAepsTransaction = async (data) => {
         });
     console.log("response",response);
     console.log("response.data",response.data);
+    console.log("Response", json.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
     console.log("ASL AEPS Transaction error", error?.response?.data || error.message);
