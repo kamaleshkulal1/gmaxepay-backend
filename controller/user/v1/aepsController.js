@@ -892,7 +892,18 @@ const aepsTransaction = async (req, res) => {
             transactionStatus === 'SUCCESSFUL' ||
             topStatus === 'SUCCESS';
 
-        const paymentStatus = isSuccess ? 'SUCCESS' : 'FAILED';
+        const isPending =
+            !isSuccess &&
+            (
+                transactionStatus === 'PENDING' ||
+                transactionStatus === 'PROCESSING' ||
+                transactionStatus === 'INPROGRESS' ||
+                transactionStatus === 'IN_PROGRESS' ||
+                transactionStatus === 'INITIATED' ||
+                transactionStatus === 'SUBMITTED'
+            );
+
+        const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILED');
 
         // If gateway returns contradictory wrapper status (e.g. status="ERROR" but responseCode="00"),
         // normalize it so API consumers don't see ERROR inside a successful response.
@@ -908,24 +919,17 @@ const aepsTransaction = async (req, res) => {
             normalizedGatewayResponse?.merchantTransactionId ||
             payload.transactionId;
 
-        // If failed: DO NOT update wallet/commissions/history, just return the gateway response.
-        if (!isSuccess) {
-            return res.failure({
-                message:
-                    normalizedGatewayResponse?.message ||
-                    innerData?.message ||
-                    'AEPS transaction failed',
-                data: {
-                    paymentStatus,
-                    responseCode,
-                    transactionStatus,
-                    merchantTransactionId,
-                    gatewayResponse: normalizedGatewayResponse
-                }
-            });
-        }
+        // Prepare request payload for persistence (mask biometric)
+        const safeRequest = {
+            ...payload,
+            biometricData: undefined,
+            biometricDataPresent: Boolean(payload.biometricData),
+            ipAddress: resolvedIpAddress,
+            consumerAadhaarNumber,
+            consumerNumber
+        };
 
-        // Success: record AEPS history and credit AEPS wallet (apesWallet) with net retailer commercial
+        // Ensure wallet exists so we can snapshot opening/closing (even for FAILED/PENDING)
         let wallet = await model.wallet.findOne({
             where: { refId: req.user.id, companyId: req.user.companyId }
         });
@@ -944,23 +948,15 @@ const aepsTransaction = async (req, res) => {
 
         const openingAepsWallet = round2(wallet.apesWallet || 0);
         const creditToApply = isSuccess ? retailerNetCredit : 0;
-        const closingAepsWallet = round2(openingAepsWallet + creditToApply);
+        const closingAepsWallet = isSuccess ? round2(openingAepsWallet + creditToApply) : openingAepsWallet;
 
+        // Only credit AEPS wallet on SUCCESS
         if (isSuccess && creditToApply) {
             await wallet.update({
                 apesWallet: closingAepsWallet,
                 updatedBy: req.user.id
             });
         }
-
-        const safeRequest = {
-            ...payload,
-            biometricData: undefined,
-            biometricDataPresent: Boolean(payload.biometricData),
-            ipAddress: resolvedIpAddress,
-            consumerAadhaarNumber,
-            consumerNumber
-        };
 
         // Resolve complete address from latitude/longitude (best-effort: do not fail transaction if Google fails)
         let transactionCompleteAddress = null;
@@ -977,6 +973,7 @@ const aepsTransaction = async (req, res) => {
             transactionCompleteAddress = null;
         }
 
+        // Always store walletHistory + aepsHistory for SUCCESS / FAILED / PENDING.
         await model.walletHistory.create({
             refId: req.user.id,
             companyId: req.user.companyId,
@@ -986,7 +983,7 @@ const aepsTransaction = async (req, res) => {
             comm: retailerCom === null ? 0 : Number(retailerCom || 0),
             surcharge: 0,
             openingAmt: openingAepsWallet,
-            closingAmt: isSuccess ? closingAepsWallet : openingAepsWallet,
+            closingAmt: closingAepsWallet,
             credit: creditToApply,
             debit: 0,
             merchantTransactionId,
@@ -1064,11 +1061,12 @@ const aepsTransaction = async (req, res) => {
                 message:
                     normalizedGatewayResponse?.message ||
                     innerData?.errorMessage ||
-                    innerData?.responseMessage,
+                    innerData?.responseMessage ||
+                    innerData?.message,
                 requestPayload: safeRequest,
                 responsePayload: normalizedGatewayResponse,
                 openingAepsWallet,
-                closingAepsWallet: isSuccess ? closingAepsWallet : openingAepsWallet,
+                closingAepsWallet: closingAepsWallet,
                 credit: creditToApply,
                 superadminComm,
                 whitelabelComm,
@@ -1088,6 +1086,23 @@ const aepsTransaction = async (req, res) => {
                 reatilerComTDS: retailerComTDS,
                 addedBy: req.user.id,
                 updatedBy: req.user.id
+            });
+        }
+
+        // If FAILED/PENDING: do not stop persistence above; just return gateway response after storing
+        if (!isSuccess) {
+            return res.failure({
+                message:
+                    normalizedGatewayResponse?.message ||
+                    innerData?.message ||
+                    (isPending ? 'AEPS transaction pending' : 'AEPS transaction failed'),
+                data: {
+                    paymentStatus,
+                    responseCode,
+                    transactionStatus,
+                    merchantTransactionId,
+                    gatewayResponse: normalizedGatewayResponse
+                }
             });
         }
 
