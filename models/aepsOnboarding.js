@@ -200,6 +200,12 @@ const AepsOnboarding = sequelize.define(
   },
   {
     freezeTableName: true,
+    indexes: [
+      {
+        unique: false,
+        fields: ['userId', 'companyId']
+      }
+    ],
     hooks: {
       beforeCreate: (instance) => encryptFields(instance, SENSITIVE_FIELDS),
       beforeUpdate: (instance) => encryptFields(instance, SENSITIVE_FIELDS),

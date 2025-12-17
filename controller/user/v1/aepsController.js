@@ -17,6 +17,17 @@ const getOnboardingStatus = async (req, res) => {
         if(!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
+
+        // Daily 2FA status (IST date based)
+        await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
+        const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
+        const existingDaily2FA = await dbService.findOne(model.aepsDailyLogin, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            loginDate: todayDateStr
+        });
+        const isDaily2FACompleted = Boolean(existingDaily2FA);
+        const nextEligibleAt = aepsDailyLoginService.getNextMidnightIST();
         
         const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
         const isOtpValidated = Boolean(existingAepsOnboarding.isOtpValidated);
@@ -48,6 +59,12 @@ const getOnboardingStatus = async (req, res) => {
             bioMetricVerification: {
                 status: isBioMetricValidated ? 'completed' : 'pending',
                 isCompleted: isBioMetricValidated
+            },
+            daily2FAAuthentication: {
+                status: isDaily2FACompleted ? 'completed' : 'pending',
+                isCompleted: isDaily2FACompleted,
+                loginDate: todayDateStr,
+                nextEligibleAt: nextEligibleAt ? nextEligibleAt.toISOString() : null
             }
         };
         
@@ -164,7 +181,7 @@ const aepsOnboarding = async (req, res) => {
         if (!customerBankDetails) {
             return res.failure({ message: 'Customer bank not found' });
         }
-        if(existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
+        if(existingAepsOnboarding && existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
             return res.failure({ message: 'AEPS onboarding already completed' });
         }
 
@@ -257,6 +274,7 @@ const aepsOnboarding = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process AEPS onboarding' });
     }
 };
+
 
 // Validate Agent
 const validateAgentOtp = async (req, res) => {
@@ -449,10 +467,11 @@ const bioMetricVerification = async (req, res) => {
 const aeps2FaAuthentication = async (req, res) => {
     try{
         const { biometricData } = req.body;
-        const { captureType } = req.body;
+        let { captureType } = req.body;
         if(!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
+        captureType = captureType ? String(captureType).trim().toUpperCase() : null;
         if(!captureType || !['FACE', 'FINGER'].includes(captureType)) {
             return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
         }
@@ -488,13 +507,14 @@ const aeps2FaAuthentication = async (req, res) => {
         const existingDailyLogin = await dbService.findOne(model.aepsDailyLogin, {
             refId: req.user.id,
             companyId: req.user.companyId,
-            loginDate: todayDateStr,
-            isLoggedIn: true
+            loginDate: todayDateStr
         });
 
         if (existingDailyLogin) {
             const data = {
                 status: 'used',
+                loginDate: todayDateStr,
+                nextEligibleAt: aepsDailyLoginService.getNextMidnightIST()?.toISOString?.() || null
             }
             return res.success({ message: 'Already logged in today. You can login again after midnight (IST).',  data });
         }
