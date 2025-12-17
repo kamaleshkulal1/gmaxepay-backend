@@ -651,6 +651,18 @@ const aepsTransaction = async (req, res) => {
         if(!normalizedBankiin) {
             return res.failure({ message: 'bankiin is required' });
         }
+        if(!ipAddress){
+            return res.failure({ message: 'ipAddress is required' });
+        }
+        if(!aadharNumber){
+            return res.failure({ message: 'aadharNumber is required' });
+        }
+        if(!consumerNumber){
+            return res.failure({ message: 'consumerNumber is required' });
+        }
+        if(!latitude || !longitude){
+            return res.failure({ message: 'latitude and longitude are required' });
+        }
 
         const amountNumber = round2(amount || 0);
         if (normalizedTxnType === 'CW' && (!amountNumber || amountNumber <= 0)) {
