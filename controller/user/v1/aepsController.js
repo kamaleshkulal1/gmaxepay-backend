@@ -3,6 +3,7 @@ const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
 const { generateTransactionID } = require('../../../utils/transactionID');
+const googleMap = require('../../../services/googleMap');
 // const { Op } = require('sequelize'); // no longer needed (commission is operator-based, no slabs/ranges)
 
 
@@ -613,7 +614,12 @@ const aepsTransaction = async (req, res) => {
             txnType,
             captureType,
             biometricData,
-            bankiin
+            bankiin,
+            latitude,
+            longitude,
+            ipAddress,
+            aadharNumber,
+            consumerNumber
         } = req.body || {};
 
         const round2 = (num) => {
@@ -786,17 +792,22 @@ const aepsTransaction = async (req, res) => {
         const retailerNetCredit =
             retailerCom === null ? 0 : round2(Number(retailerCom) - Number(retailerComTDS || 0));
 
+        // Transaction metadata we want to persist for reporting/audit
+        const consumerAadhaarNumber = aadharNumber ? String(aadharNumber) : null;
+        const resolvedIpAddress = ipAddress ? String(ipAddress) : (req.ip ? String(req.ip) : null);
+        const txLatitude = latitude ?? existingUser.latitude;
+        const txLongitude = longitude ?? existingUser.longitude;
+
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
-            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
+            aadhaarNo: aadharNumber,
             txnType: normalizedTxnType,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
             bankiin: normalizedBankiin,
-            mobile: existingUser.mobileNo,
-            mobileNo: existingUser.mobileNo,
+            mobile: consumerNumber,
             amount: amountNumber, 
-            latitude: existingUser.latitude,
-            longitude: existingUser.longitude,
+            latitude: txLatitude,
+            longitude: txLongitude,
             transactionId: generatedTxnId,
             captureType: normalizedCaptureType,
             biometricData: biometricData
@@ -933,8 +944,26 @@ const aepsTransaction = async (req, res) => {
         const safeRequest = {
             ...payload,
             biometricData: undefined,
-            biometricDataPresent: Boolean(payload.biometricData)
+            biometricDataPresent: Boolean(payload.biometricData),
+            ipAddress: resolvedIpAddress,
+            consumerAadhaarNumber,
+            consumerNumber
         };
+
+        // Resolve complete address from latitude/longitude (best-effort: do not fail transaction if Google fails)
+        let transactionCompleteAddress = null;
+        try {
+            if (txLatitude !== undefined && txLatitude !== null && txLongitude !== undefined && txLongitude !== null) {
+                const geo = await googleMap.reverseGeocode(txLatitude, txLongitude);
+                transactionCompleteAddress =
+                    geo?.complete_address ||
+                    geo?.address ||
+                    geo?.formatted_address ||
+                    null;
+            }
+        } catch (geoErr) {
+            transactionCompleteAddress = null;
+        }
 
         await model.walletHistory.create({
             refId: req.user.id,
@@ -954,7 +983,13 @@ const aepsTransaction = async (req, res) => {
             paymentInstrument: {
                 service: 'AEPS',
                 request: safeRequest,
-                response: normalizedGatewayResponse
+                response: normalizedGatewayResponse,
+                metadata: {
+                    ipAddress: resolvedIpAddress,
+                    latitude: txLatitude,
+                    longitude: txLongitude,
+                    transactionCompleteAddress
+                }
             },
             remark: `AEPS ${normalizedTxnType}`,
             aepsTxnType: normalizedTxnType,
@@ -996,6 +1031,12 @@ const aepsTransaction = async (req, res) => {
                 amount: amountNumber,
                 transactionId: safeRequest.transactionId,
                 merchantTransactionId,
+                consumerNumber: consumerNumber ? String(consumerNumber) : null,
+                consumerAadhaarNumber,
+                ipAddress: resolvedIpAddress,
+                latitude: txLatitude !== undefined && txLatitude !== null ? Number(txLatitude) : null,
+                longitude: txLongitude !== undefined && txLongitude !== null ? Number(txLongitude) : null,
+                transactionCompleteAddress,
                 bankRRN:
                     innerData?.bankRRN ||
                     innerData?.bankRrn ||

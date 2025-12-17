@@ -90,6 +90,32 @@ let AepsHistory = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true
     },
+    // --- Consumer/transaction metadata (for reporting/search) ---
+    consumerNumber: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    consumerAadhaarNumber: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    ipAddress: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    latitude: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    longitude: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Convenience flattened address string
+    transactionCompleteAddress: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     // Wallet snapshot for AEPS wallet crediting
     openingAepsWallet: {
       type: DataTypes.FLOAT,
@@ -105,8 +131,14 @@ let AepsHistory = sequelize.define(
       defaultValue: 0
     },
     // --- AEPS commission breakdown (nullable) ---
-    superadminComm: { type: DataTypes.FLOAT, allowNull: true },
-    whitelabelComm: { type: DataTypes.FLOAT, allowNull: true },
+    superadminComm: { 
+      type: DataTypes.FLOAT, 
+      allowNull: true 
+    },
+    whitelabelComm: {
+        type: DataTypes.FLOAT, 
+        allowNull: true 
+    },
     masterDistributorCom: { type: DataTypes.FLOAT, allowNull: true },
     masterDistrbutorCom: { type: DataTypes.FLOAT, allowNull: true },
     distributorCom: { type: DataTypes.FLOAT, allowNull: true },
