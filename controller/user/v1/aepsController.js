@@ -803,6 +803,33 @@ const aepsTransaction = async (req, res) => {
         };
 
         const aepsResponse = await asl.aslAepsTransaction(payload);
+        const safeJsonStringify = (value) => {
+            try {
+                const seen = new WeakSet();
+                return JSON.stringify(
+                    value,
+                    (key, val) => {
+                        if (typeof val === 'bigint') return val.toString();
+                        if (val instanceof Error) {
+                            return { name: val.name, message: val.message, stack: val.stack };
+                        }
+                        if (typeof val === 'function') {
+                            return `[Function ${val.name || 'anonymous'}]`;
+                        }
+                        if (val && typeof val === 'object') {
+                            if (seen.has(val)) return '[Circular]';
+                            seen.add(val);
+                        }
+                        return val;
+                    },
+                    2
+                );
+            } catch (e) {
+                return String(value);
+            }
+        };
+        // Log response as JSON (prefer response.data if this is an axios response)
+        console.log('aepsResponse', safeJsonStringify(aepsResponse?.data ?? aepsResponse));
 
         // Normalize response (sometimes comes as JSON string)
         let parsedResponse = aepsResponse;
@@ -842,8 +869,7 @@ const aepsTransaction = async (req, res) => {
         // Record AEPS history and credit AEPS wallet (apesWallet) with net retailer commercial
         await model.sequelize.transaction(async (t) => {
             let wallet = await model.wallet.findOne({
-                refId: req.user.id,
-                companyId: req.user.companyId
+                where: { refId: req.user.id, companyId: req.user.companyId }
             });
 
             if (!wallet) {
