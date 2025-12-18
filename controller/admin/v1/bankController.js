@@ -196,7 +196,7 @@ const deleteBank = async (req, res) => {
     // soft delete to match other patterns
     const updated = await dbService.update(
       model.aslBankList,
-      { id: bankId },
+      { bankIIN: bankId },
       { isDeleted: true, isActive: false }
     );
 
