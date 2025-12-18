@@ -99,7 +99,7 @@ const updateBank = async (req, res) => {
     }
 
     if (!bankId) {
-      return res.validationError({ message: 'bankId is required' });
+      return res.failure({ message: 'bankId is required' });
     }
 
     const dataToUpdate = {};
@@ -107,7 +107,7 @@ const updateBank = async (req, res) => {
     if (body.bankIIN !== undefined) {
       const nextIIN = body.bankIIN ? String(body.bankIIN).trim() : '';
       if (!nextIIN) {
-        return res.validationError({ message: 'bankIIN is required' });
+        return res.failure({ message: 'bankIIN is required' });
       }
       dataToUpdate.bankIIN = nextIIN;
     }
