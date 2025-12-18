@@ -16,16 +16,19 @@ const createBank = async (req, res) => {
       return res.failure({ message: 'Unauthorized access' });
     }
     const bankName = (dataToCreate.bankName || '').trim();
-    const bankIIN = dataToCreate.bankIIN ? String(dataToCreate.bankIIN).trim() : null;
+    const bankIIN = dataToCreate.bankIIN ? String(dataToCreate.bankIIN).trim() : '';
     let bankLogo = dataToCreate.bankLogo ? String(dataToCreate.bankLogo).trim() : null;
 
     if (!bankName) {
       return res.validationError({ message: 'bankName is required' });
     }
+    if (!bankIIN) {
+      return res.validationError({ message: 'bankIIN is required' });
+    }
    
     // basic duplicate check (by bankName and/or bankIIN if provided)
     const dupWhere = [{ bankName: { [Op.iLike]: bankName } }];
-    if (bankIIN) dupWhere.push({ bankIIN });
+    dupWhere.push({ bankIIN });
 
     const existing = await dbService.findOne(model.aslBankList, {
       isDeleted: false,
@@ -101,7 +104,13 @@ const updateBank = async (req, res) => {
 
     const dataToUpdate = {};
     if (body.bankName !== undefined) dataToUpdate.bankName = String(body.bankName).trim();
-    if (body.bankIIN !== undefined) dataToUpdate.bankIIN = body.bankIIN ? String(body.bankIIN).trim() : null;
+    if (body.bankIIN !== undefined) {
+      const nextIIN = body.bankIIN ? String(body.bankIIN).trim() : '';
+      if (!nextIIN) {
+        return res.validationError({ message: 'bankIIN is required' });
+      }
+      dataToUpdate.bankIIN = nextIIN;
+    }
     // If logo file provided, replace logo in S3 and delete old
     if (req.file && req.file.buffer) {
       if (existingBank.bankLogo) {
