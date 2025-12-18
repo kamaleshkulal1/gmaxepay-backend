@@ -149,6 +149,8 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
       s3Key = `images/${companyId||'default'}/signature/${subtype}/${sanitizedFileName}`;
     } else if (type === 'company' && subtype) {
       s3Key = `images/company/${companyId||'default'}/${subtype}/${sanitizedFileName}`;
+    } else if (type === 'bank') {
+      s3Key = `images/bank/${subtype || 'bankLogo'}/${sanitizedFileName}`;
     } else if (type === 'profile' && userId && companyId) {
       // Simple path pattern: images/{userId}/{companyId}/profile/
       // Include subtype if provided (e.g., liveness)

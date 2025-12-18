@@ -2,6 +2,7 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
 const imageService = require('../../../services/imageService');
+const path = require('path');
 
 const createBank = async (req, res) => {
   try {
@@ -37,11 +38,13 @@ const createBank = async (req, res) => {
 
     // If logo file provided, upload to S3
     if (req.file && req.file.buffer) {
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const fixedFileName = `bankLogo${ext}`;
       const uploadResult = await imageService.uploadImageToS3(
         req.file.buffer,
-        req.file.originalname,
-        'company',
+        fixedFileName,
         'bank',
+        null,
         'bankLogo'
       );
       bankLogo = uploadResult?.key || uploadResult?.url || bankLogo;
@@ -104,11 +107,13 @@ const updateBank = async (req, res) => {
       if (existingBank.bankLogo) {
         await imageService.deleteImageFromS3(existingBank.bankLogo);
       }
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const fixedFileName = `bankLogo${ext}`;
       const uploadResult = await imageService.uploadImageToS3(
         req.file.buffer,
-        req.file.originalname,
-        'company',
+        fixedFileName,
         'bank',
+        null,
         'bankLogo'
       );
       dataToUpdate.bankLogo = uploadResult?.key || uploadResult?.url || null;
