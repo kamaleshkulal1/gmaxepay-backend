@@ -4,6 +4,17 @@ const { Op } = require('sequelize');
 const imageService = require('../../../services/imageService');
 const path = require('path');
 
+// Normalize bank record and attach public CDN URL for bankLogo
+const withBankLogoUrl = (bank) => {
+  if (!bank) return bank;
+  const data = bank?.toJSON ? bank.toJSON() : bank;
+  const bankLogoKey = data?.bankLogo || null;
+  return {
+    ...data,
+    bankLogo: bankLogoKey ? imageService.getImageUrl(bankLogoKey, false) : null
+  };
+};
+
 const createBank = async (req, res) => {
   try {
     const dataToCreate = { ...(req.body || {}) };
