@@ -4,7 +4,6 @@ const model = require('../../../models');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const googleMap = require('../../../services/googleMap');
-// const { Op } = require('sequelize'); // no longer needed (commission is operator-based, no slabs/ranges)
 
 
 const getOnboardingStatus = async (req, res) => {
@@ -1120,6 +1119,14 @@ const aepsTransaction = async (req, res) => {
     catch (error) {
         console.error('AEPS transaction error', error);
         return res.failure({ message: error.message || 'Unable to process AEPS transaction' });
+    }
+}
+
+const aepsTransactionHistory = async(req, res)=>{
+    try{
+
+    }catch(error){
+
     }
 }
 

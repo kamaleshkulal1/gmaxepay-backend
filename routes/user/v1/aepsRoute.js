@@ -10,6 +10,7 @@ router.post('/resend-otp', authentication, aepsController.resendAgentOtp);
 router.post('/bio-metric-verification', authentication, aepsController.bioMetricVerification);
 router.post('/2fa-authentication', authentication, aepsController.aeps2FaAuthentication);
 router.post('/transaction', authentication, aepsController.aepsTransaction);
+// router.post('/transaction-history', authentication, aepsController.aepsTransactionHistory);
 
 
 module.exports = router;

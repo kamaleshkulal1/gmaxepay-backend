@@ -455,6 +455,21 @@ const aslDmtMoneyTransfer = async (data) => {
     }
 }
 
+const alsWallet = async () => {
+    try{
+        const response = await axios.post(`${aslUrl}/check/walletBalance`,
+            {
+                apiToken : aslApiToken,
+                apiUserId: aslApiUserId
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error("error",error);
+        return error.response.data;
+    }
+}
+
 module.exports = {
     aslAepsOnboarding,
     aslAepsValidateAgentOtp,
@@ -471,5 +486,6 @@ module.exports = {
     aslDmtGetBeneficiary,
     aslDmtBeneficiaryDetails,
     aslDmtGetBeneficiaryNames,
-    aslDmtMoneyTransfer
+    aslDmtMoneyTransfer,
+    alsWallet
 }
