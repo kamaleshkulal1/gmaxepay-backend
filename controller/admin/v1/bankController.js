@@ -102,7 +102,7 @@ const updateBank = async (req, res) => {
     }
 
     const existingBank = await dbService.findOne(model.aslBankList, {
-      id: bankId,
+      bankIIN: bankId,
       isDeleted: false
     });
     if(!existingBank){
@@ -186,7 +186,7 @@ const deleteBank = async (req, res) => {
     }
 
     const existingBank = await dbService.findOne(model.aslBankList, {
-      id: bankId,
+      bankIIN: bankId,
       isDeleted: false
     });
     if(!existingBank){
@@ -215,11 +215,11 @@ const getBankById = async (req, res) => {
   try {
     const { bankId } = req.params;
     if (!bankId) {
-      return res.validationError({ message: 'bankId is required' });
+      return res.failure({ message: 'bankId is required' });
     }
 
     const found = await dbService.findOne(model.aslBankList, {
-      id: bankId,
+      bankIIN: bankId,
       isDeleted: false
     });
     if (!found) {
