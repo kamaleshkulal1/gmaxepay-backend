@@ -68,6 +68,7 @@ db.bank = require('./bank');
 db.customerBank = require('./customerBank');
 db.cardType = require('./cardType');
 db.paymentInstrument = require('./paymentInsturment');
+db.aslBankList = require('./aslBankList');
 
 // IP & Network Models
 db.ipInfo = require('./ipInfo');
