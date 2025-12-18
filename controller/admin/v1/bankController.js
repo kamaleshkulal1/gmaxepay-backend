@@ -63,7 +63,7 @@ const createBank = async (req, res) => {
 
     return res.success({
       message: 'Bank Created Successfully',
-      data: created
+      data: withBankLogoUrl(created)
     });
   } catch (error) {
     console.log(error);
@@ -144,7 +144,7 @@ const updateBank = async (req, res) => {
 
     return res.success({
       message: 'Bank Updated Successfully',
-      data: updated[0]
+      data: withBankLogoUrl(updated[0])
     });
   } catch (error) {
     console.log(error);
@@ -217,7 +217,7 @@ const getBankById = async (req, res) => {
 
     return res.success({
       message: 'Bank Retrieved Successfully',
-      data: found
+      data: withBankLogoUrl(found)
     });
   } catch (error) {
     console.log(error);
@@ -279,7 +279,7 @@ const getAllBanks = async (req, res) => {
 
     return res.success({
       message: 'Banks Retrieved Successfully',
-      data: result?.data || [],
+      data: (result?.data || []).map(withBankLogoUrl),
       total: result?.total || 0,
       paginator: result?.paginator
     });
