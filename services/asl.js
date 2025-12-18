@@ -459,8 +459,8 @@ const alsWallet = async () => {
     try{
         const response = await axios.post(`${aslUrl}/check/walletBalance`,
             {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId
+              apiToken : aslApiToken,
+              associateId: aslAssociateId
             }
         );
         return response.data;
