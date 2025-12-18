@@ -88,4 +88,6 @@ router.use('/company', require('./v1/companyRoute'));
 
 router.use('/ekyc-hub', require('./v1/ekycHubRoutes'));
 
+router.use('/wallet', require('./v1/walletRoute'));
+
 module.exports = router;
