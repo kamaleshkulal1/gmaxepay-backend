@@ -145,7 +145,7 @@ const updateBank = async (req, res) => {
 
     const updated = await dbService.update(
       model.aslBankList,
-      { id: bankId, isDeleted: false },
+      { bankIIN: bankId, isDeleted: false },
       dataToUpdate
     );
 
