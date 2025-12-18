@@ -1122,14 +1122,6 @@ const aepsTransaction = async (req, res) => {
     }
 }
 
-const aepsTransactionHistory = async(req, res)=>{
-    try{
-
-    }catch(error){
-
-    }
-}
-
 module.exports = { 
     getOnboardingStatus, 
     aepsOnboarding, 
