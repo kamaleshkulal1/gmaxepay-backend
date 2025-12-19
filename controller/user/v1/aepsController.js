@@ -637,7 +637,7 @@ const aepsTransaction = async (req, res) => {
 
         const normalizedTxnType = normalizeTxnType(txnType);
         const normalizedCaptureType = normalizeCaptureType(captureType);
-        const normalizedBankiin = bankiin;
+        const normalizedBankiin = bankiin ? String(bankiin).trim() : null;
 
         if(!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
@@ -1138,16 +1138,49 @@ const aepsTransaction = async (req, res) => {
             }
         }
 
-        // Get company logo URL
+        // Get company logo URL - check company.logo first, then companyImage table
         let companyLogo = null;
         if (existingCompany?.logo) {
             companyLogo = imageService.getImageUrl(existingCompany.logo, false);
+        } else if (existingCompany?.id) {
+            // Try to get logo from companyImage table (type: signature, subtype: logo)
+            const companyLogoImage = await dbService.findOne(model.companyImage, {
+                companyId: existingCompany.id,
+                type: 'signature',
+                subtype: 'logo',
+                isActive: true
+            });
+            if (companyLogoImage?.s3Key) {
+                companyLogo = imageService.getImageUrl(companyLogoImage.s3Key, false);
+            }
         }
 
         // Extract transaction date/time from gateway response
-        const transactionDateTime = innerData?.requestTransactionTime || 
-                                   normalizedGatewayResponse?.data?.requestTransactionTime ||
-                                   new Date().toISOString();
+        const transactionDateTimeRaw = innerData?.requestTransactionTime || 
+                                      normalizedGatewayResponse?.data?.requestTransactionTime ||
+                                      null;
+        
+        // Format transaction date/time (if from gateway, use as-is; otherwise use current time)
+        let transactionDateTime = transactionDateTimeRaw;
+        let transactionTime = transactionDateTimeRaw;
+        if (!transactionDateTimeRaw) {
+            const now = new Date();
+            // Format as DD/MM/YYYY HH:MM:SS
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            transactionDateTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+            transactionTime = `${hours}:${minutes}:${seconds}`;
+        } else {
+            // If gateway provides time, extract just time part if needed
+            const timeMatch = transactionDateTimeRaw.match(/(\d{2}:\d{2}:\d{2})/);
+            if (timeMatch) {
+                transactionTime = timeMatch[1];
+            }
+        }
 
         // Extract remaining balance from gateway response
         const remainingBalance = innerData?.balanceAmount || 
@@ -1167,17 +1200,13 @@ const aepsTransaction = async (req, res) => {
                 transactionId: clientTransactionId,
                 referenceId: merchantTransactionId,
                 transactionDate: transactionDateTime,
-                transactionTime: transactionDateTime,
+                transactionTime: transactionTime,
                 remainingBalance: remainingBalance,
                 bankName: bankName,
                 bankLogo: bankLogo,
                 companyName: existingCompany?.companyName || null,
                 companyLogo: companyLogo,
-                paymentStatus,
-                responseCode,
-                transactionStatus,
-                merchantTransactionId,
-                gatewayResponse: normalizedGatewayResponse
+
             }
         });
     }
