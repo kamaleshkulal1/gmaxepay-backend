@@ -911,12 +911,15 @@ const aepsTransaction = async (req, res) => {
                 ? { ...parsedResponse, status: isSuccess ? 'SUCCESS' : (topStatus || 'ERROR') }
                 : parsedResponse;
 
-        const merchantTransactionId =
-            innerData?.merchantTxnId ||
-            innerData?.merchantTransactionId ||
-            normalizedGatewayResponse?.merchantTxnId ||
-            normalizedGatewayResponse?.merchantTransactionId ||
-            payload.transactionId;
+        // Only set merchantTransactionId for SUCCESS transactions
+        // For FAILED/PENDING, it should be null
+        const merchantTransactionId = isSuccess
+            ? (innerData?.merchantTxnId ||
+               innerData?.merchantTransactionId ||
+               normalizedGatewayResponse?.merchantTxnId ||
+               normalizedGatewayResponse?.merchantTransactionId ||
+               payload.transactionId)
+            : null;
 
         // Prepare request payload for persistence (mask biometric)
         const safeRequest = {
@@ -1099,7 +1102,7 @@ const aepsTransaction = async (req, res) => {
                     paymentStatus,
                     responseCode,
                     transactionStatus,
-                    merchantTransactionId,
+                    merchantTransactionId: null,
                     gatewayResponse: normalizedGatewayResponse
                 }
             });
