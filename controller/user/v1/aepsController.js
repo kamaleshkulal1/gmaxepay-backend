@@ -268,7 +268,12 @@ const aepsOnboarding = async (req, res) => {
                 onboardingStatus: 'PENDING'
             });
 
-            return res.success({ message: 'AEPS onboarding successful', data: aepsOnboardingDetails });
+            const responseData = {
+                ...aepsOnboardingDetails,
+                phone: existingUser.mobileNo || null
+            };
+
+            return res.success({ message: 'AEPS onboarding successful', data: responseData });
         }
 
         return res.failure({ message: aepsOnboardingDetails?.message || 'AEPS onboarding failed', data: aepsOnboardingDetails });
