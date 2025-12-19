@@ -242,8 +242,8 @@ const getAllBanks = async (req, res) => {
       id: req.user.id,
       isActive: true
     });
-    if (!existingUser || existingUser.userRole !== 1) {
-      return res.failure({ message: 'Unauthorized access' });
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
     }
 
     const dataToFind = req.body || {};

@@ -5,6 +5,6 @@ const router = express.Router();
 router.use('/onboarding', require('./v1/onboardingRoute'));
 router.use('/userDetails', require('./v1/userRoute'));
 router.use('/aeps', require('./v1/aepsRoute'));
-
+router.use('/bank', require('./v1/bankRoutes'));
 
 module.exports = router;
