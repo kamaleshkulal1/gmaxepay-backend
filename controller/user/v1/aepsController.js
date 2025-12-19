@@ -18,10 +18,6 @@ const getOnboardingStatus = async (req, res) => {
             userId: existingUser.id,
             companyId: existingUser.companyId,
         });
-        if(!existingAepsOnboarding) {
-            return res.failure({ message: 'AEPS onboarding not found' });
-        }
-
         // Daily 2FA status (IST date based)
         await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
