@@ -815,7 +815,7 @@ const aepsTransaction = async (req, res) => {
             txnType: normalizedTxnType,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
             bankiin: normalizedBankiin,
-            mobileNo: consumerNumber,
+            mobile: consumerNumber,
             amount: amountNumber, 
             latitude: txLatitude,
             longitude: txLongitude,
