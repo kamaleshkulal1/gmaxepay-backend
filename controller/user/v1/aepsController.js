@@ -18,6 +18,7 @@ const getOnboardingStatus = async (req, res) => {
             userId: existingUser.id,
             companyId: existingUser.companyId,
         });
+        
         // Daily 2FA status (IST date based)
         await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
@@ -28,6 +29,32 @@ const getOnboardingStatus = async (req, res) => {
         });
         const isDaily2FACompleted = Boolean(existingDaily2FA);
         const nextEligibleAt = aepsDailyLoginService.getNextMidnightIST();
+        
+        // Handle case when onboarding doesn't exist yet (pending)
+        if (!existingAepsOnboarding) {
+            const statusData = {
+                onboardingStatus: 'PENDING',
+                aepsOnboarding: {
+                    status: 'pending',
+                    isCompleted: false
+                },
+                validateAgentOtp: {
+                    status: 'pending',
+                    isCompleted: false
+                },
+                bioMetricVerification: {
+                    status: 'pending',
+                    isCompleted: false
+                },
+                daily2FAAuthentication: {
+                    status: isDaily2FACompleted ? 'completed' : 'pending',
+                    isCompleted: isDaily2FACompleted,
+                    loginDate: todayDateStr,
+                    nextEligibleAt: nextEligibleAt ? nextEligibleAt.toISOString() : null
+                }
+            };
+            return res.success({ message: 'AEPS onboarding status', data: statusData });
+        }
         
         const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
         const isOtpValidated = Boolean(existingAepsOnboarding.isOtpValidated);
