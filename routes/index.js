@@ -10,9 +10,6 @@ const { generalLimit } = require('../middleware/ratelimiter');
 // SECURITY: Apply general rate limiting to all routes
 router.use(generalLimit);
 
-// router.use(require('./MainRoute/v1/index'));
-// router.use(require('./retailer/v1/index'));
-
 // Image proxy routes - accessible at /api/images/* (no v1 prefix)
 const imageController = require('../controller/company/v1/imageController');
 // Secure image route (with encrypted key)
