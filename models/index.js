@@ -375,6 +375,18 @@ db.user.hasOne(db.wallet, {
   sourceKey: 'id'
 });
 
+// AEPS History Company Relationships
+db.aepsHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.aepsHistory, {
+  foreignKey: 'companyId',
+  as: 'aepsHistories',
+  sourceKey: 'id'
+});
+
 // BBPS Operator Relationships (commented out as models don't exist yet)
 // db.bbpsOperator.belongsTo(db.bbpsOperatorCategory, {
 //   foreignKey: 'categoryId',

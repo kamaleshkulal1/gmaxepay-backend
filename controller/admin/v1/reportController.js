@@ -1,6 +1,7 @@
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models/index');
 const { Op } = require('sequelize');
+const imageService = require('../../../services/imageService');
 
 /**
  * Get AEPS Transaction Reports
@@ -62,12 +63,35 @@ const getAepsReports = async (req, res) => {
             }
         }
 
+        // Add include for company to get companyName and companyLogo
+        if (!options.include) {
+            options.include = [];
+        }
+        options.include.push({
+            model: model.company,
+            as: 'company',
+            attributes: ['id', 'companyName', 'logo'],
+            required: false // LEFT JOIN - include even if company not found
+        });
+
         // Use paginate for consistent pagination response
         const result = await dbService.paginate(model.aepsHistory, query, options);
 
+        // Map results to include companyName and companyLogo with CDN URL
+        const mappedData = (result?.data || []).map((transaction) => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const companyData = transactionData.company || {};
+            
+            return {
+                ...transactionData,
+                companyName: companyData.companyName || null,
+                companyLogo: companyData.logo ? imageService.getImageUrl(companyData.logo, false) : null
+            };
+        });
+
         return res.success({
             message: 'AEPS reports retrieved successfully',
-            data: result?.data || [],
+            data: mappedData,
             total: result?.total || 0,
             paginator: result?.paginator
         });
