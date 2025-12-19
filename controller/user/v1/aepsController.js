@@ -1324,6 +1324,98 @@ const recentBanks = async (req, res) => {
     }
 };
 
+const aepsTransactionHistory = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const userRole = existingUser.userRole;
+        const userId = existingUser.id;
+        const companyId = existingUser.companyId;
+
+        // Only userRole 3, 4, 5 can access this endpoint
+        if (![3, 4, 5].includes(userRole)) {
+            return res.failure({ message: 'Access denied. Only Master Distributor, Distributor, and Retailer can access transaction history.' });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { companyId: companyId };
+
+        // Role-based refId filtering
+        if (userRole === 4 || userRole === 5) {
+            // Distributor (4) and Retailer (5): Only their own transactions
+            query.refId = userId;
+        } else if (userRole === 3) {
+            // Master Distributor (3): Their own transactions + transactions of users reporting to them
+            const reportingUsers = await dbService.findAll(model.user, {
+                reportingTo: userId,
+                companyId: companyId,
+                isDeleted: false,
+                userRole: { [Op.in]: [4, 5] } // Only distributors and retailers reporting to master distributor
+            }, {
+                attributes: ['id']
+            });
+            const reportingUserIds = reportingUsers.map(user => user.id);
+            // Include master distributor's own transactions + reporting users' transactions
+            query.refId = { [Op.in]: [userId, ...reportingUserIds] };
+        }
+
+        // Build query from request body
+        if (dataToFind && dataToFind.query) {
+            query = { ...query, ...dataToFind.query };
+        }
+
+        // Handle options (pagination, sorting)
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+        }
+
+        // Handle customSearch (iLike search on multiple fields)
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const keys = Object.keys(dataToFind.customSearch);
+            const orConditions = [];
+
+            keys.forEach((key) => {
+                const value = dataToFind.customSearch[key];
+                if (value === undefined || value === null || String(value).trim() === '') return;
+
+                orConditions.push({
+                    [key]: {
+                        [Op.iLike]: `%${String(value).trim()}%`
+                    }
+                });
+            });
+
+            if (orConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.or]: orConditions
+                };
+            }
+        }
+
+        // Use paginate for consistent pagination response
+        const result = await dbService.paginate(model.aepsHistory, query, options);
+
+        return res.success({
+            message: 'AEPS transaction history retrieved successfully',
+            data: result?.data || [],
+            total: result?.total || 0,
+            paginator: result?.paginator
+        });
+    } catch (error) {
+        console.error('AEPS transaction history error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve AEPS transaction history' });
+    }
+}
+
 module.exports = { 
     getOnboardingStatus, 
     aepsOnboarding, 
@@ -1332,5 +1424,6 @@ module.exports = {
     bioMetricVerification, 
     aeps2FaAuthentication ,
     aepsTransaction,
-    recentBanks
+    recentBanks,
+    aepsTransactionHistory
 };
