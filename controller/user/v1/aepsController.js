@@ -794,14 +794,14 @@ const aepsTransaction = async (req, res) => {
         const retailerCommBase = operator?.retailerCom ?? operator?.reatilerCom ?? operator?.comm;
         const retailerCom = calcCommByAmtType(retailerCommBase);
 
-        const superadminCommTDS = calculateTdsAmount(superadminComm);
-        const whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
-        const masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
-        const distributorComTDS = calculateTdsAmount(distributorCom);
-        const retailerComTDS = calculateTdsAmount(retailerCom);
-
-        const retailerNetCredit =
-            retailerCom === null ? 0 : round2(Number(retailerCom) - Number(retailerComTDS || 0));
+        // TDS will be calculated later, only for SUCCESS transactions
+        // For now, initialize to 0 (will be recalculated after gateway response)
+        let superadminCommTDS = 0;
+        let whitelabelCommTDS = 0;
+        let masterDistributorComTDS = 0;
+        let distributorComTDS = 0;
+        let retailerComTDS = 0;
+        // retailerNetCredit will be calculated after TDS is determined
 
         // Transaction metadata we want to persist for reporting/audit
         const consumerAadhaarNumber = aadharNumber ? String(aadharNumber) : null;
@@ -903,6 +903,20 @@ const aepsTransaction = async (req, res) => {
             );
 
         const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILED');
+
+        // Calculate TDS only for SUCCESS transactions
+        // For FAILED/PENDING, TDS remains 0
+        if (isSuccess) {
+            superadminCommTDS = calculateTdsAmount(superadminComm);
+            whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
+            masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
+            distributorComTDS = calculateTdsAmount(distributorCom);
+            retailerComTDS = calculateTdsAmount(retailerCom);
+        }
+
+        // Recalculate retailerNetCredit after TDS (only matters for SUCCESS)
+        const retailerNetCredit =
+            retailerCom === null ? 0 : round2(Number(retailerCom) - Number(retailerComTDS || 0));
 
         // If gateway returns contradictory wrapper status (e.g. status="ERROR" but responseCode="00"),
         // normalize it so API consumers don't see ERROR inside a successful response.
