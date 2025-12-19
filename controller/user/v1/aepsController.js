@@ -4,6 +4,7 @@ const model = require('../../../models');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const googleMap = require('../../../services/googleMap');
+const imageService = require('../../../services/imageService');
 
 
 const getOnboardingStatus = async (req, res) => {
@@ -1122,9 +1123,56 @@ const aepsTransaction = async (req, res) => {
             });
         }
 
+        // Fetch bank details for response
+        let bankName = null;
+        let bankLogo = null;
+        if (normalizedBankiin) {
+            const bankDetails = await dbService.findOne(model.aslBankList, {
+                bankIIN: normalizedBankiin,
+                isDeleted: false,
+                isActive: true
+            });
+            if (bankDetails) {
+                bankName = bankDetails.bankName;
+                bankLogo = imageService.getImageUrl(bankDetails.bankLogo, false);
+            }
+        }
+
+        // Get company logo URL
+        let companyLogo = null;
+        if (existingCompany?.logo) {
+            companyLogo = imageService.getImageUrl(existingCompany.logo, false);
+        }
+
+        // Extract transaction date/time from gateway response
+        const transactionDateTime = innerData?.requestTransactionTime || 
+                                   normalizedGatewayResponse?.data?.requestTransactionTime ||
+                                   new Date().toISOString();
+
+        // Extract remaining balance from gateway response
+        const remainingBalance = innerData?.balanceAmount || 
+                                 normalizedGatewayResponse?.data?.balanceAmount || 
+                                 null;
+
+        // Extract client_transaction_id for transactionId
+        const clientTransactionId = normalizedGatewayResponse?.client_transaction_id || 
+                                    payload.transactionId;
+
+        // Format response with all required fields
         return res.success({
             message: 'AEPS transaction successful',
             data: {
+                status: paymentStatus,
+                service: 'AEPS',
+                transactionId: clientTransactionId,
+                referenceId: merchantTransactionId,
+                transactionDate: transactionDateTime,
+                transactionTime: transactionDateTime,
+                remainingBalance: remainingBalance,
+                bankName: bankName,
+                bankLogo: bankLogo,
+                companyName: existingCompany?.companyName || null,
+                companyLogo: companyLogo,
                 paymentStatus,
                 responseCode,
                 transactionStatus,
