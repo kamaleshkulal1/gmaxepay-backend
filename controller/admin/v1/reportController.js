@@ -18,32 +18,10 @@ const getAepsReports = async (req, res) => {
             return res.failure({ message: 'Unauthorized access' });
         }
 
-        const { query: queryFilter = {}, options: paginationOptions = {}, customSearch = {}, fromDate, toDate } = req.body || {};
+        const { query: queryFilter = {}, options: paginationOptions = {}, customSearch = {} } = req.body || {};
         
         // Build base query
         const query = { ...queryFilter };
-
-        // Handle date range filtering (fromDate/toDate or startDate/endDate)
-        if (fromDate || toDate || queryFilter.fromDate || queryFilter.toDate) {
-            const startDate = fromDate || queryFilter.fromDate || queryFilter.startDate;
-            const endDate = toDate || queryFilter.toDate || queryFilter.endDate;
-            
-            if (startDate && endDate) {
-                const start = new Date(startDate);
-                start.setHours(0, 0, 0, 0);
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                query.createdAt = { [Op.between]: [start, end] };
-            } else if (startDate) {
-                const start = new Date(startDate);
-                start.setHours(0, 0, 0, 0);
-                query.createdAt = { [Op.gte]: start };
-            } else if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                query.createdAt = { [Op.lte]: end };
-            }
-        }
 
         // Handle customSearch (iLike search on multiple fields)
         if (customSearch && typeof customSearch === 'object') {
@@ -72,16 +50,6 @@ const getAepsReports = async (req, res) => {
         // Fetch paginated results
         const result = await dbService.paginate(model.aepsHistory, query, options);
 
-        // Calculate total amount for filtered results
-        const totalAmountResult = await model.aepsHistory.findAll({
-            where: query,
-            attributes: [
-                [fn('SUM', col('amount')), 'totalAmount']
-            ],
-            raw: true
-        });
-        const totalAmount = parseFloat(totalAmountResult[0]?.totalAmount || 0);
-
         // Map results to include companyName and companyLogo with CDN URL
         const mappedData = result?.data?.map((transaction) => {
             const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
@@ -99,7 +67,6 @@ const getAepsReports = async (req, res) => {
             message: 'AEPS reports retrieved successfully',
             data: mappedData,
             total: result?.total || 0,
-            totalAmount: totalAmount,
             paginator: result?.paginator
         });
     } catch (error) {
