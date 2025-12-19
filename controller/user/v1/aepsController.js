@@ -651,6 +651,17 @@ const aepsTransaction = async (req, res) => {
         if(!normalizedBankiin) {
             return res.failure({ message: 'bankiin is required' });
         }
+
+        // Validate bankIIN exists in aslBankList
+        const bankDetails = await dbService.findOne(model.aslBankList, {
+            bankIIN: normalizedBankiin,
+            isDeleted: false,
+            isActive: true
+        });
+        if (!bankDetails) {
+            return res.failure({ message: 'Bank Name not found' });
+        }
+
         if(!ipAddress){
             return res.failure({ message: 'ipAddress is required' });
         }
@@ -1123,19 +1134,12 @@ const aepsTransaction = async (req, res) => {
             });
         }
 
-        // Fetch bank details for response
+        // Use bank details already fetched during validation
         let bankName = null;
         let bankLogo = null;
-        if (normalizedBankiin) {
-            const bankDetails = await dbService.findOne(model.aslBankList, {
-                bankIIN: normalizedBankiin,
-                isDeleted: false,
-                isActive: true
-            });
-            if (bankDetails) {
-                bankName = bankDetails.bankName;
-                bankLogo = imageService.getImageUrl(bankDetails.bankLogo, false);
-            }
+        if (bankDetails) {
+            bankName = bankDetails.bankName;
+            bankLogo = imageService.getImageUrl(bankDetails.bankLogo, false);
         }
 
         // Get company logo URL - check company.logo first, then companyImage table
