@@ -5,6 +5,7 @@ const aepsDailyLoginService = require('../../../services/aepsDailyLoginService')
 const { generateTransactionID } = require('../../../utils/transactionID');
 const googleMap = require('../../../services/googleMap');
 const imageService = require('../../../services/imageService');
+const { Op } = require('sequelize');
 
 
 const getOnboardingStatus = async (req, res) => {
@@ -282,7 +283,6 @@ const aepsOnboarding = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process AEPS onboarding' });
     }
 };
-
 
 // Validate Agent
 const validateAgentOtp = async (req, res) => {
@@ -1225,6 +1225,81 @@ const aepsTransaction = async (req, res) => {
     }
 }
 
+const recentBanks = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, { 
+            id: req.user.id, 
+            companyId: req.user.companyId 
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        // Get all AEPS transactions for this user, ordered by most recent first
+        const aepsTransactions = await dbService.findAll(model.aepsHistory, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            bankiin: { [Op.ne]: null }
+        }, {
+            attributes: ['bankiin', 'createdAt'],
+            sort: { createdAt: -1 }
+        });
+
+        // Extract unique bankIINs (first occurrence = most recent)
+        const uniqueBankIINs = [];
+        const seenBankIINs = new Set();
+        
+        for (const txn of aepsTransactions) {
+            const bankIIN = txn.bankiin ? String(txn.bankiin).trim() : null;
+            if (bankIIN && !seenBankIINs.has(bankIIN)) {
+                seenBankIINs.add(bankIIN);
+                uniqueBankIINs.push(bankIIN);
+                // Stop once we have 4 unique banks
+                if (uniqueBankIINs.length >= 4) break;
+            }
+        }
+
+        // If no recent transactions, return empty array
+        if (uniqueBankIINs.length === 0) {
+            return res.success({
+                message: 'Recent banks retrieved successfully',
+                data: []
+            });
+        }
+
+        // Get bank details from aslBankList
+        const banks = await dbService.findAll(model.aslBankList, {
+            bankIIN: { [Op.in]: uniqueBankIINs },
+            isDeleted: false,
+            isActive: true
+        });
+
+        // Map to response format with CDN URLs for logos, maintaining order
+        const bankMap = new Map();
+        banks.forEach(bank => {
+            const bankData = bank.toJSON ? bank.toJSON() : bank;
+            bankMap.set(bankData.bankIIN, {
+                bankIIN: bankData.bankIIN,
+                bankName: bankData.bankName,
+                bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
+            });
+        });
+
+        // Return banks in the order they appeared (most recent first)
+        const recentBanksData = uniqueBankIINs
+            .map(bankIIN => bankMap.get(bankIIN))
+            .filter(Boolean); // Remove any nulls if bank not found
+
+        return res.success({
+            message: 'Recent banks retrieved successfully',
+            data: recentBanksData
+        });
+    } catch (error) {
+        console.error('Recent banks error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve recent banks' });
+    }
+};
+
 module.exports = { 
     getOnboardingStatus, 
     aepsOnboarding, 
@@ -1232,5 +1307,6 @@ module.exports = {
     resendAgentOtp, 
     bioMetricVerification, 
     aeps2FaAuthentication ,
-    aepsTransaction
+    aepsTransaction,
+    recentBanks
 };
