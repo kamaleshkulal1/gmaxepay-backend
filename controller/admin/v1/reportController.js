@@ -7,8 +7,15 @@ const imageService = require('../../../services/imageService');
 const getAepsReports = async (req, res) => {
     try {
         // Use userRole directly from req.user (set by authentication middleware)
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
         if (req.user?.userRole !== 1) {
-            return res.failure({ message: 'Admin access required' });
+            return res.failure({ message: 'Unauthorized access' });
         }
 
         const { query: queryFilter = {}, options: paginationOptions = {}, customSearch = {} } = req.body || {};
