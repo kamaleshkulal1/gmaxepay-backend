@@ -1210,6 +1210,7 @@ const aepsTransaction = async (req, res) => {
                 referenceId: merchantTransactionId,
                 transactionDate: transactionDateTime,
                 transactionTime: transactionTime,
+                amount: amountNumber,
                 remainingBalance: remainingBalance,
                 bankName: bankName,
                 bankLogo: bankLogo,
