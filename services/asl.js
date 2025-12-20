@@ -1,17 +1,31 @@
 const axios = require('axios');
+const https = require('https');
 const FormData = require('form-data');
 const aslUrl = process.env.ASL_URL;
 const aslApiToken = process.env.ASL_API_TOKEN;
 const aslAssociateId = process.env.ASL_ASSOCIATE_ID;
 const aslApiUserId = process.env.ASL_USER_ID;
-const FILE_DOWNLOAD_TIMEOUT_MS = Number(process.env.ASL_FILE_DOWNLOAD_TIMEOUT_MS || 15000);
+// Reduced timeout from 15s to 3s for faster failure
+const FILE_DOWNLOAD_TIMEOUT_MS = Number(process.env.ASL_FILE_DOWNLOAD_TIMEOUT_MS || 3000);
 const FILE_DOWNLOAD_MAX_BYTES = Number(process.env.ASL_FILE_DOWNLOAD_MAX_BYTES || 5 * 1024 * 1024);
+
+// Optimized HTTP agent with keep-alive for connection reuse
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 1000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: FILE_DOWNLOAD_TIMEOUT_MS
+});
 
 const fileDownloadClient = axios.create({
   timeout: FILE_DOWNLOAD_TIMEOUT_MS,
   responseType: 'arraybuffer',
   maxContentLength: FILE_DOWNLOAD_MAX_BYTES,
-  validateStatus: (status) => status >= 200 && status < 300
+  validateStatus: (status) => status >= 200 && status < 300,
+  httpsAgent: httpsAgent,
+  httpAgent: httpsAgent, // Also use for http requests
+  maxRedirects: 3
 });
 
 const AEPS_FILE_FIELDS = new Set([
@@ -37,11 +51,63 @@ const getFileNameFromUrl = (url, fallback) => {
   return fallback;
 };
 
-const appendFormField = async (formData, key, value) => {
+// Download a single image and return buffer with metadata
+const downloadImage = async (url, key) => {
+  const downloadStartedAt = Date.now();
+  try {
+    const fileResponse = await fileDownloadClient.get(url);
+    const filename = getFileNameFromUrl(url, `${key}.jpg`);
+    console.log(`[ASL AEPS] Downloaded ${key} (${filename}) in ${Date.now() - downloadStartedAt}ms`);
+    return {
+      buffer: fileResponse.data,
+      filename,
+      contentType: fileResponse.headers['content-type'] || 'application/octet-stream'
+    };
+  } catch (error) {
+    console.error(`[ASL AEPS] Failed to download ${key} from ${url}`, error.message);
+    throw new Error(`Unable to download ${key} asset: ${error.message}`);
+  }
+};
+
+// Process image value and return buffer or original value
+const processImageValue = async (value, key) => {
+  if (Buffer.isBuffer(value)) {
+    return { type: 'buffer', buffer: value, filename: `${key}.jpg` };
+  }
+
+  if (typeof value === 'string' && value.startsWith('data:')) {
+    const [, base64Part] = value.split(',');
+    const buffer = Buffer.from(base64Part, 'base64');
+    return { type: 'buffer', buffer, filename: `${key}.jpg` };
+  }
+
+  if (isHttpUrl(value)) {
+    const result = await downloadImage(value, key);
+    return { type: 'buffer', ...result };
+  }
+
+  return { type: 'original', value };
+};
+
+const appendFormField = (formData, key, value, imageCache = null) => {
   if (value === undefined || value === null || value === '') {
     return;
   }
 
+  // Use cached processed image if available
+  if (AEPS_FILE_FIELDS.has(key) && imageCache && imageCache[key]) {
+    const cached = imageCache[key];
+    if (cached.type === 'buffer') {
+      formData.append(key, cached.buffer, {
+        filename: cached.filename,
+        contentType: cached.contentType || 'application/octet-stream'
+      });
+      return;
+    }
+    // If cached but type is 'original', fall through to handle as non-image
+  }
+
+  // Handle image fields that weren't cached (shouldn't happen in optimized flow)
   if (AEPS_FILE_FIELDS.has(key)) {
     if (Buffer.isBuffer(value)) {
       formData.append(key, value, { filename: `${key}.jpg` });
@@ -54,25 +120,15 @@ const appendFormField = async (formData, key, value) => {
       formData.append(key, buffer, { filename: `${key}.jpg` });
       return;
     }
-
+    
+    // If it's an HTTP URL that wasn't processed, skip it (shouldn't happen)
     if (isHttpUrl(value)) {
-      const downloadStartedAt = Date.now();
-      try {
-        const fileResponse = await fileDownloadClient.get(value);
-        const filename = getFileNameFromUrl(value, `${key}.jpg`);
-        formData.append(key, fileResponse.data, {
-          filename,
-          contentType: fileResponse.headers['content-type'] || 'application/octet-stream'
-        });
-        console.log(`[ASL AEPS] Downloaded ${key} (${filename}) in ${Date.now() - downloadStartedAt}ms`);
-      } catch (error) {
-        console.error(`[ASL AEPS] Failed to download ${key} from ${value}`, error.message);
-        throw new Error(`Unable to download ${key} asset: ${error.message}`);
-      }
+      console.warn(`[ASL AEPS] Image field ${key} is a URL but wasn't pre-processed`);
       return;
     }
   }
 
+  // Handle non-image fields
   const normalizedValue =
     typeof value === 'number'
       ? value.toString()
@@ -92,19 +148,53 @@ const  aslAepsOnboarding = async (data) => {
       ...data
     };
 
-    const formData = new FormData();
-    const formBuildStart = Date.now();
-    await Promise.all(
-      Object.entries(payload).map(([key, value]) => appendFormField(formData, key, value))
-    );
+    const downloadStart = Date.now();
+    
+    // Step 1: Pre-download all images in parallel for maximum performance
+    const imageDownloadPromises = [];
+    
+    for (const [key, value] of Object.entries(payload)) {
+      if (AEPS_FILE_FIELDS.has(key) && value && (isHttpUrl(value) || Buffer.isBuffer(value) || (typeof value === 'string' && value.startsWith('data:')))) {
+        imageDownloadPromises.push(
+          processImageValue(value, key).then(result => ({ key, result })).catch(err => ({ key, error: err.message }))
+        );
+      }
+    }
 
+    // Download all images in parallel
+    const downloadedImages = await Promise.all(imageDownloadPromises);
+    const imageCache = {};
+    for (const item of downloadedImages) {
+      if (item.error) {
+        throw new Error(`Failed to process image ${item.key}: ${item.error}`);
+      }
+      imageCache[item.key] = item.result;
+    }
+
+    console.log(`[ASL AEPS] All images downloaded in ${Date.now() - downloadStart}ms`);
+
+    // Step 2: Build FormData synchronously with cached images
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(payload)) {
+      appendFormField(formData, key, value, imageCache);
+    }
+
+    // Step 3: Make API call with optimized timeout
+    const apiStart = Date.now();
     const response = await axios.post(`${aslUrl}/aeps/v1/onboarding`,
       formData,
       {
         headers: {
           ...formData.getHeaders()
         },
+        timeout: 3000, // 3 second timeout for API call (allowing ~1.9s for images + processing)
+        httpsAgent: httpsAgent,
+        httpAgent: httpsAgent
       });
+    
+    console.log(`[ASL AEPS] API call completed in ${Date.now() - apiStart}ms`);
+    console.log(`[ASL AEPS] Total onboarding time: ${Date.now() - downloadStart}ms`);
+    
     return response.data;
   } catch (error) {
     console.log("error",error?.response?.data || error.message);
