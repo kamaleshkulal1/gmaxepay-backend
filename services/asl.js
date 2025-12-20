@@ -80,23 +80,16 @@ const appendFormField = async (formData, key, value, sizeTracker = null) => {
     }
 
     if (isHttpUrl(value)) {
-      const downloadStartedAt = Date.now();
       try {
-        console.log(`[ASL AEPS] Starting download for ${key} from ${value.substring(0, 50)}...`);
         const fileResponse = await fileDownloadClient.get(value);
         const filename = getFileNameFromUrl(value, `${key}.jpg`);
         const fileSize = fileResponse.data.length;
         if (sizeTracker) sizeTracker.total += fileSize;
-        const downloadTime = Date.now() - downloadStartedAt;
-        const downloadSpeed = fileSize > 0 && downloadTime > 0 ? ((fileSize / 1024) / (downloadTime / 1000)).toFixed(2) : 0;
         formData.append(key, fileResponse.data, {
           filename,
           contentType: fileResponse.headers['content-type'] || 'application/octet-stream'
         });
-        console.log(`[ASL AEPS] ✅ Downloaded ${key} (${filename}) - ${(fileSize / 1024).toFixed(2)}KB in ${downloadTime}ms (${downloadSpeed} KB/s)`);
       } catch (error) {
-        const downloadTime = Date.now() - downloadStartedAt;
-        console.error(`[ASL AEPS] ❌ Failed to download ${key} from ${value} after ${downloadTime}ms:`, error.message);
         throw new Error(`Unable to download ${key} asset: ${error.message}`);
       }
       return;
@@ -114,39 +107,15 @@ const appendFormField = async (formData, key, value, sizeTracker = null) => {
 
 // ASL AEPS Onboarding
 const aslAepsOnboarding = async (data) => {
-  const aslFunctionStart = Date.now();
   try {
-    const payloadStart = Date.now();
     const payload = {
       associateId: aslAssociateId,
       apiToken: aslApiToken,
       Service: 'AEPS',
       ...data
     };
-    const payloadTime = Date.now() - payloadStart;
-    console.log(`[ASL AEPS] Payload created in ${payloadTime}ms`);
 
     const formData = new FormData();
-    const formBuildStart = Date.now();
-    
-    // Separate file fields for tracking
-    const fileFields = [];
-    const nonFileFields = [];
-    let totalFileSize = 0;
-    
-    for (const [key, value] of Object.entries(payload)) {
-      if (value === undefined || value === null || value === '') continue;
-      if (AEPS_FILE_FIELDS.has(key) && isHttpUrl(value)) {
-        fileFields.push({ key, url: value });
-      } else {
-        nonFileFields.push({ key, value });
-      }
-    }
-    
-    console.log(`[ASL AEPS] Processing ${fileFields.length} file fields and ${nonFileFields.length} non-file fields`);
-    
-    // Process file downloads in parallel and track total size
-    const fileDownloadStart = Date.now();
     const fileSizeTracker = { total: 0 };
     
     await Promise.all(
@@ -154,46 +123,17 @@ const aslAepsOnboarding = async (data) => {
         await appendFormField(formData, key, value, fileSizeTracker);
       })
     );
-    const formBuildTime = Date.now() - formBuildStart;
-    const fileDownloadTime = fileFields.length > 0 ? Date.now() - fileDownloadStart : 0;
-    
-    if (fileFields.length > 0) {
-      console.log(`[ASL AEPS] File downloads completed in ${fileDownloadTime}ms (${fileFields.length} files, total size: ${(fileSizeTracker.total / 1024).toFixed(2)}KB)`);
-    }
-    console.log(`[ASL AEPS] FormData built in ${formBuildTime}ms (total payload size: ~${(fileSizeTracker.total / 1024).toFixed(2)}KB files + form fields)`);
 
-    const apiRequestStart = Date.now();
-    const ASL_API_TIMEOUT = Number(process.env.ASL_API_TIMEOUT_MS || 60000); // Default 60 seconds
-    console.log(`[ASL AEPS] Sending request to ${aslUrl}/aeps/v1/onboarding with ${ASL_API_TIMEOUT}ms timeout...`);
-    
     const response = await axios.post(`${aslUrl}/aeps/v1/onboarding`,
       formData,
       {
         headers: {
           ...formData.getHeaders()
-        },
-        timeout: ASL_API_TIMEOUT,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
+        }
       });
-    const apiRequestTime = Date.now() - apiRequestStart;
-    const totalAslTime = Date.now() - aslFunctionStart;
-    console.log(`[ASL AEPS] ✅ API request completed successfully in ${apiRequestTime}ms. Total ASL function time: ${totalAslTime}ms`);
-    console.log("response.data",response.data);
+    console.log("response",response);
     return response.data;
   } catch (error) {
-    const totalAslTime = Date.now() - aslFunctionStart;
-    if (error.code === 'ECONNABORTED' && error.message && error.message.includes('timeout')) {
-      const ASL_API_TIMEOUT = Number(process.env.ASL_API_TIMEOUT_MS || 60000);
-      console.error(`[ASL AEPS] ❌ Request timeout after ${totalAslTime}ms (timeout set to ${ASL_API_TIMEOUT}ms)`);
-      console.error(`[ASL AEPS] The ASL API server is taking too long to respond. This may indicate:`);
-      console.error(`[ASL AEPS] - Server overload or slow processing`);
-      console.error(`[ASL AEPS] - Network connectivity issues`);
-      console.error(`[ASL AEPS] - Large payload being processed slowly`);
-      console.error(`[ASL AEPS] Consider: Increasing ASL_API_TIMEOUT_MS or contacting ASL API support`);
-    } else {
-      console.error(`[ASL AEPS] ❌ Error after ${totalAslTime}ms:`, error?.response?.data || error.message);
-    }
     return error.response?.data || { status: 'error', message: 'Unable to reach ASL onboarding API' };
   }
 }

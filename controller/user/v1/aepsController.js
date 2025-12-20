@@ -105,9 +105,7 @@ const getOnboardingStatus = async (req, res) => {
 
 // Onboarding Agent
 const aepsOnboarding = async (req, res) => {
-    const overallStartTime = Date.now();
     try {
-        console.log(`[AEPS Onboarding] Starting onboarding for user ${req.user.id} at ${new Date().toISOString()}`);
         const REQUIRED_FIELD_ERRORS = {
             retailerFirstName: 'Enter your first name [PAR001]',
             retailerLastName: 'Enter your last name [PAR001]',
@@ -178,7 +176,6 @@ const aepsOnboarding = async (req, res) => {
             }
             return null;
         };
-        const dbQueryStart = Date.now();
         const [
             existingUser,
             existingCompany,
@@ -196,8 +193,6 @@ const aepsOnboarding = async (req, res) => {
                 merchantStatus: true
             })
         ]);
-        const dbQueryTime = Date.now() - dbQueryStart;
-        console.log(`[AEPS Onboarding] Database queries completed in ${dbQueryTime}ms`);
 
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -217,7 +212,6 @@ const aepsOnboarding = async (req, res) => {
             return res.failure({ message: 'AEPS onboarding already completed' });
         }
 
-        const dataProcessingStart = Date.now();
         const retailerLatitude = pickValue(existingUser.latitude, outletDetails.latitude);
         const retailerLongitude = pickValue(existingUser.longitude, outletDetails.longitude);
         const retailerCountry = pickValue(existingUser.country, outletDetails.shopCountry, 'India');
@@ -264,19 +258,15 @@ const aepsOnboarding = async (req, res) => {
             retailerPanBackImage: buildImageUrl(existingUser.panBackImage || existingUser.panCardBackImage),
             retailerShopImage: buildImageUrl(outletDetails.shopImage || existingUser.profileImage)
         };
-        const dataProcessingTime = Date.now() - dataProcessingStart;
-        console.log(`[AEPS Onboarding] Data processing and payload building completed in ${dataProcessingTime}ms`);
 
         const validationError = validatePayload(payload);
         if (validationError) {
             return res.failure({ message: validationError });
         }
 
-        const aslApiStart = Date.now();
-        console.log(`[AEPS Onboarding] Calling ASL API at ${new Date().toISOString()}`);
         const aepsOnboardingDetails = await asl.aslAepsOnboarding(payload);
-        const aslApiTime = Date.now() - aslApiStart;
-        console.log(`[AEPS Onboarding] ASL API call completed in ${aslApiTime}ms`);
+
+        console.log("aepsOnboardingDetails",aepsOnboardingDetails);
 
         const normalizedStatus = aepsOnboardingDetails?.status ? String(aepsOnboardingDetails.status).toLowerCase() : null;
         const nestedStatus = aepsOnboardingDetails?.data?.status ? String(aepsOnboardingDetails.data.status).toLowerCase() : null;
@@ -288,7 +278,6 @@ const aepsOnboarding = async (req, res) => {
             merchantStatus;
 
         if (isSuccess) {
-            const dbWriteStart = Date.now();
             await dbService.createOne(model.aepsOnboarding, {
                 userId: req.user.id,
                 companyId: req.user.companyId,
@@ -304,25 +293,17 @@ const aepsOnboarding = async (req, res) => {
                 errorCodes: aepsOnboardingDetails.data?.data?.errorCodes || aepsOnboardingDetails.data?.errorCodes,
                 onboardingStatus: 'PENDING'
             });
-            const dbWriteTime = Date.now() - dbWriteStart;
-            console.log(`[AEPS Onboarding] Database write completed in ${dbWriteTime}ms`);
 
             const responseData = {
                 ...aepsOnboardingDetails,
                 phone: existingUser.mobileNo || null
             };
 
-            const totalTime = Date.now() - overallStartTime;
-            console.log(`[AEPS Onboarding] ✅ SUCCESS - Total time: ${totalTime}ms (DB Query: ${dbQueryTime}ms, Data Processing: ${dataProcessingTime}ms, ASL API: ${aslApiTime}ms, DB Write: ${dbWriteTime}ms)`);
             return res.success({ message: 'AEPS onboarding successful', data: responseData });
         }
 
-        const totalTime = Date.now() - overallStartTime;
-        console.log(`[AEPS Onboarding] ❌ FAILED - Total time: ${totalTime}ms (DB Query: ${dbQueryTime}ms, Data Processing: ${dataProcessingTime}ms, ASL API: ${aslApiTime}ms)`);
         return res.failure({ message: aepsOnboardingDetails?.message || 'AEPS onboarding failed', data: aepsOnboardingDetails });
     } catch (error) {
-        const totalTime = Date.now() - overallStartTime;
-        console.error(`[AEPS Onboarding] ❌ ERROR after ${totalTime}ms:`, error.message || error);
         return res.failure({ message: error.message || 'Unable to process AEPS onboarding' });
     }
 };
