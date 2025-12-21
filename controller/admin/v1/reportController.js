@@ -36,7 +36,7 @@ const getAepsReports = async (req, res) => {
             }
         }
 
-        // Prepare options with company and user includes
+        // Prepare options with company, user, and bank includes
         const options = {
             ...paginationOptions,
             include: [
@@ -51,6 +51,12 @@ const getAepsReports = async (req, res) => {
                     as: 'user',
                     attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo'],
                     required: false
+                },
+                {
+                    model: model.aslBankList,
+                    as: 'bank',
+                    attributes: ['id', 'bankName'],
+                    required: false
                 }
             ]
         };
@@ -58,17 +64,19 @@ const getAepsReports = async (req, res) => {
         // Fetch paginated results
         const result = await dbService.paginate(model.aepsHistory, query, options);
 
-        // Map results to include companyName, companyLogo, and user details with CDN URLs
+        // Map results to include companyName, companyLogo, user details, and bank name with CDN URLs
         const mappedData = result?.data?.map((transaction) => {
             const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
-            const { company, user, ...restData } = transactionData;
+            const { company, user, bank, ...restData } = transactionData;
             const companyData = company || {};
             const userData = user || {};
+            const bankData = bank || {};
             
             return {
                 ...restData,
                 companyName: companyData.companyName || null,
                 companyLogo: companyData.logo ? imageService.getImageUrl(companyData.logo, false) : null,
+                bankName: bankData.bankName || null,
                 userDetails: userData.id ? {
                     name: userData.name || null,
                     userRole: userData.userRole || null,

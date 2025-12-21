@@ -395,6 +395,19 @@ db.user.hasMany(db.aepsHistory, {
   sourceKey: 'id'
 });
 
+// AEPS History Bank Relationships
+db.aepsHistory.belongsTo(db.aslBankList, {
+  foreignKey: 'bankiin',
+  targetKey: 'bankIIN',
+  as: 'bank',
+  required: false
+});
+db.aslBankList.hasMany(db.aepsHistory, {
+  foreignKey: 'bankiin',
+  sourceKey: 'bankIIN',
+  as: 'aepsHistories'
+});
+
 // BBPS Operator Relationships (commented out as models don't exist yet)
 // db.bbpsOperator.belongsTo(db.bbpsOperatorCategory, {
 //   foreignKey: 'categoryId',
