@@ -90,7 +90,6 @@ let AepsHistory = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true
     },
-    // --- Consumer/transaction metadata (for reporting/search) ---
     consumerNumber: {
       type: DataTypes.STRING,
       allowNull: true
@@ -130,29 +129,48 @@ let AepsHistory = sequelize.define(
       allowNull: true,
       defaultValue: 0
     },
-    // --- AEPS commission breakdown (nullable) ---
-    superadminComm: { 
-      type: DataTypes.FLOAT, 
-      allowNull: true 
+    // --- AEPS Commission Breakdown (nullable) ---
+    superadminComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true
     },
     whitelabelComm: {
-        type: DataTypes.FLOAT, 
-        allowNull: true 
+      type: DataTypes.FLOAT,
+      allowNull: true
     },
-    masterDistributorCom: { type: DataTypes.FLOAT, allowNull: true },
-    masterDistrbutorCom: { type: DataTypes.FLOAT, allowNull: true },
-    distributorCom: { type: DataTypes.FLOAT, allowNull: true },
-    retailerCom: { type: DataTypes.FLOAT, allowNull: true },
-    reatilerCom: { type: DataTypes.FLOAT, allowNull: true },
-    superadminCommTDS: { type: DataTypes.FLOAT, allowNull: true },
-    superAdminComTDS: { type: DataTypes.FLOAT, allowNull: true },
-    whitelabelCommTDS: { type: DataTypes.FLOAT, allowNull: true },
-    whitelabelComTDS: { type: DataTypes.FLOAT, allowNull: true },
-    masterDistributorComTDS: { type: DataTypes.FLOAT, allowNull: true },
-    masterDistrbutorComTDS: { type: DataTypes.FLOAT, allowNull: true },
-    distributorComTDS: { type: DataTypes.FLOAT, allowNull: true },
-    retailerComTDS: { type: DataTypes.FLOAT, allowNull: true },
-    reatilerComTDS: { type: DataTypes.FLOAT, allowNull: true },
+    masterDistributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    distributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    retailerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // --- TDS on Commission (nullable, calculated only for SUCCESS transactions) ---
+    superadminCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    whitelabelCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    masterDistributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    distributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    retailerComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
     addedBy: {
       type: DataTypes.INTEGER,
       allowNull: true

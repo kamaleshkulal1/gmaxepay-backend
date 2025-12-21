@@ -2,6 +2,7 @@ const dbService = require('../../../utils/dbService');
 const model = require('../../../models/index');
 const { Op, fn, col } = require('sequelize');
 const imageService = require('../../../services/imageService');
+const e = require('express');
 
 
 const getAepsReports = async (req, res) => {
@@ -190,7 +191,88 @@ const getAepsReports = async (req, res) => {
     }
 };
 
+const getAepsTransactionDetailsById=async(req,res)=>{
+    try {
+        const { id } = req.params;
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        if (req.user?.userRole !== 1) {
+            return res.failure({ message: 'Unauthorized access' });
+        }
+        const transaction = await dbService.findOne(model.aepsHistory, { id });
+        if (!transaction) {
+            return res.failure({ message: 'Transaction not found' });
+        }
+        const existingUserDetails = await dbService.findOne(model.user, {
+            id: transaction.refId,
+            isActive: true
+        });
+        if (!existingUserDetails) {
+            return res.failure({ message: 'User details not found' });
+        }
+        const reportingUserDetails = await dbService.findOne(model.user, {
+            id: existingUserDetails.reportingTo,
+            isActive: true
+        });
+        
+        if (!reportingUserDetails) {
+            return res.failure({ message: 'Reporting user details not found' });
+        }
+        const companyDetails = await dbService.findOne(model.company, {
+            id: existingUserDetails.companyId,
+        });
+        
+        if (!companyDetails) {
+            return res.failure({ message: 'Company details not found' });
+        }
+        const companyAdmin = await dbService.findOne(model.user, {
+           companyId: companyDetails.id,
+           userRole: 2
+        });
+        if (!companyAdmin) {
+            return res.failure({ message: 'Company admin details not found' });
+        }
+        const existingbankDetails = await dbService.findOne(model.aslBankList, {
+            bankIIN: transaction.bankIIN,
+        });
+        if (!existingbankDetails) {
+            return res.failure({ message: 'Bank details not found' });
+        }
+        const data = {
+            userDetails: {
+                name: existingUserDetails.name,
+                userRole: existingUserDetails.userRole,
+                userId: existingUserDetails.userId,
+                mobileNo: existingUserDetails.mobileNo
+            },
+            reportingUserDetails: {
+               companyName: companyDetails.companyName,
+               parentName: reportingUserDetails.name ||companyAdmin.name,
+               parentRole: reportingUserDetails.userRole ||companyAdmin.userRole,
+               parentUserId: reportingUserDetails.userId ||companyAdmin.userId,
+            },
+            transactionDetails: {
+                amount: transaction.amount,
+                bankName: existingbankDetails.bankName,
+                aadharNumber: transaction.consumerAadhaarNumber,
+                commission: transaction.credit,
+            }
+          
+        }
+        return res.success({ message: 'AEPS transaction details retrieved successfully', data: transaction });
+    } catch (error) {
+        console.error('AEPS transaction details error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve AEPS transaction details' });
+    }
+}
+
 module.exports = {
-    getAepsReports
+    getAepsReports,
+    getAepsTransactionDetailsById
 };
 
