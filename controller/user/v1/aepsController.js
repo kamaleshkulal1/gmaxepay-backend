@@ -708,6 +708,9 @@ const aepsTransaction = async (req, res) => {
         if (normalizedTxnType === 'CW' && (!amountNumber || amountNumber <= 0)) {
             return res.failure({ message: 'Amount is required for CW and must be greater than 0' });
         }
+        if (normalizedTxnType === 'CW' && amountNumber < 100) {
+            return res.failure({ message: 'Minimum amount for CW transaction is 100' });
+        }
 
         // Ensure daily 2FA is completed for today (IST date)
         await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
