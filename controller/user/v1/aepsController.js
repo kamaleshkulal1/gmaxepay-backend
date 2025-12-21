@@ -864,7 +864,7 @@ const aepsTransaction = async (req, res) => {
             captureType: normalizedCaptureType,
             biometricData: biometricData
         };
-
+        console.log('payload', payload);
         const aepsResponse = await asl.aslAepsTransaction(payload);
         const safeJsonStringify = (value) => {
             try {
