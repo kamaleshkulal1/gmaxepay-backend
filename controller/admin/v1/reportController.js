@@ -261,10 +261,10 @@ const getAepsTransactionDetailsById=async(req,res)=>{
                 bankName: existingbankDetails.bankName,
                 aadharNumber: transaction.consumerAadhaarNumber,
                 commission: transaction.credit,
-            }
-          
+            },
+            transaction:transaction
         }
-        return res.success({ message: 'AEPS transaction details retrieved successfully', data: transaction });
+        return res.success({ message: 'AEPS transaction details retrieved successfully', data: data });
     } catch (error) {
         console.error('AEPS transaction details error', error);
         return res.failure({ message: error.message || 'Unable to retrieve AEPS transaction details' });
