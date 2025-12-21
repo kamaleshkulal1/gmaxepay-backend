@@ -86,7 +86,8 @@ const getAepsReports = async (req, res) => {
             };
         }) || [];
 
-        return res.success({
+        return res.status(200).json({
+            status: 'SUCCESS',
             message: 'AEPS reports retrieved successfully',
             data: mappedData,
             total: result?.total || mappedData.length || 0,
