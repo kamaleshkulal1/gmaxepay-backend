@@ -89,7 +89,8 @@ const getAepsReports = async (req, res) => {
         return res.success({
             message: 'AEPS reports retrieved successfully',
             data: mappedData,
-            total: result?.total || 0,
+            total: result?.total || mappedData.length || 0,
+            count: mappedData.length || 0,
             paginator: result?.paginator
         });
     } catch (error) {
