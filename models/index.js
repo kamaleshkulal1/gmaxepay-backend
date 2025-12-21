@@ -388,11 +388,7 @@ db.company.hasMany(db.aepsHistory, {
 });
 
 // AEPS History User Relationships
-db.aepsHistory.belongsTo(db.user, {
-  foreignKey: 'refId',
-  as: 'user',
-  targetKey: 'id'
-});
+// Note: belongsTo is already defined in aepsHistory.js model file
 db.user.hasMany(db.aepsHistory, {
   foreignKey: 'refId',
   as: 'aepsHistories',
