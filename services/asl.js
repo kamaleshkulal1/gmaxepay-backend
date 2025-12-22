@@ -483,6 +483,22 @@ const aslDmtMoneyTransfer = async (data) => {
     }
 }
 
+const alsWallet = async()=>{
+    try{
+        const response = await axios.get(`${aslUrl}/check/walletBalance`, {
+            associateId: aslAssociateId,
+            apiToken: aslApiToken,   
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });  
+        return response.data;
+    }catch(error){
+        console.log("error",error);
+        return error.response.data;
+    }
+}
 module.exports = {
     aslAepsOnboarding,
     aslAepsValidateAgentOtp,
