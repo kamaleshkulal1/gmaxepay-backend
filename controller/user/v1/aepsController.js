@@ -439,7 +439,7 @@ const bioMetricVerification = async (req, res) => {
 
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
-            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
+            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             otpReferenceID: existingAepsOnboarding.otpReferenceId,
             hash: existingAepsOnboarding.hash,
             biometricData: formattedBiometricData,
