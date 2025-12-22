@@ -222,6 +222,7 @@ const aepsOnboarding = async (req, res) => {
         const retailerLastName = existingUser.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0]);
         const retailerMiddleName = existingUser.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : undefined);
 
+        console.log("existingiUser", existingUser.aadharDetails);
         const payload = {
             retailerFirstName,
             retailerMiddleName,
