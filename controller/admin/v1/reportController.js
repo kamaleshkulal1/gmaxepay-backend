@@ -255,7 +255,7 @@ const getAepsTransactionDetailsById=async(req,res)=>{
                companyName: companyDetails.companyName,
                parentName: reportingUserDetails?.name ||companyAdmin.name,
                parentRole: reportingUserDetails?.userRole ||companyAdmin.userRole,
-               parentUserId: reportingUserDetails?.userId ||companyAdmin.userId,
+               parentUserId: reportingUserDetails?.userId ||companyAdmin.userId
             },
             transactionDetails: {
                 amount: transaction.amount,
