@@ -114,6 +114,7 @@ const aslAepsOnboarding = async (data) => {
       Service: 'AEPS',
       ...data
     };
+    console.log('payload', payload);
 
     const formData = new FormData();
     const fileSizeTracker = { total: 0 };
