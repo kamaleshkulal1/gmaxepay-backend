@@ -485,7 +485,7 @@ const aslDmtMoneyTransfer = async (data) => {
 
 const alsWallet = async()=>{
     try{
-        const response = await axios.get(`${aslUrl}/check/walletBalance`, {
+        const response = await axios.post(`${aslUrl}/check/walletBalance`, {
             associateId: aslAssociateId,
             apiToken: aslApiToken,   
         }, {
