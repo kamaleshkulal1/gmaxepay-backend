@@ -234,7 +234,7 @@ const aepsOnboarding = async (req, res) => {
             retailerState: existingUser.state || outletDetails.shopState,
             retailerCountry,
             retailerPincode: existingUser.zipcode || outletDetails.shopPincode,
-            aadharNo: existingUser.aadharDetails?.aadhaarNumber,
+            aadharNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             panNo: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
             bankAccountNo: customerBankDetails.accountNumber,
             bankIfsc: customerBankDetails.ifsc,
