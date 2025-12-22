@@ -515,5 +515,6 @@ module.exports = {
     aslDmtGetBeneficiary,
     aslDmtBeneficiaryDetails,
     aslDmtGetBeneficiaryNames,
-    aslDmtMoneyTransfer
+    aslDmtMoneyTransfer,
+    alsWallet
 }
