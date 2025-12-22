@@ -332,7 +332,7 @@ const validateAgentOtp = async (req, res) => {
     }
     const payload = {
         uniqueID: existingAepsOnboarding.uniqueID,
-        aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
+        aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
         otpReferenceID: existingAepsOnboarding.otpReferenceId,
         otp,
         hash: existingAepsOnboarding.hash,
@@ -556,7 +556,7 @@ const aeps2FaAuthentication = async (req, res) => {
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
             type: captureType,
-            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber,
+            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             serviceType: "CashDeposit",
             latitude: existingUser.latitude,
             longitude: existingUser.longitude,
