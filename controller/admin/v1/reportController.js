@@ -212,16 +212,13 @@ const getAepsTransactionDetailsById=async(req,res)=>{
             id: transaction.refId,
             isActive: true
         });
-        console.log('existingUserDetails', existingUserDetails);
         if (!existingUserDetails) {
             return res.failure({ message: 'User details not found' });
         }
         const reportingUserDetails = await dbService.findOne(model.user, {
             id: existingUserDetails.reportingTo,
             isActive: true
-        });
-        console.log('reportingUserDetails', reportingUserDetails);
-        
+        });        
         const companyDetails = await dbService.findOne(model.company, {
             id: existingUserDetails.companyId,
         });
@@ -233,14 +230,12 @@ const getAepsTransactionDetailsById=async(req,res)=>{
            companyId: companyDetails.id,
            userRole: 2
         });
-        console.log('companyAdmin', companyAdmin);
         if (!companyAdmin) {
             return res.failure({ message: 'Company admin details not found' });
         }
         const existingbankDetails = await dbService.findOne(model.aslBankList, {
             bankIIN: transaction.bankiin,
         });
-        console.log('existingbankDetails', existingbankDetails);
         if (!existingbankDetails) {
             return res.failure({ message: 'Bank details not found' });
         }
