@@ -258,6 +258,7 @@ const aepsOnboarding = async (req, res) => {
             retailerPanBackImage: buildImageUrl(existingUser.panBackImage || existingUser.panCardBackImage),
             retailerShopImage: buildImageUrl(outletDetails.shopImage || existingUser.profileImage)
         };
+        console.log('payload', payload);
 
         const validationError = validatePayload(payload);
         if (validationError) {
