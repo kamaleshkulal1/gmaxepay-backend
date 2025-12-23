@@ -489,10 +489,37 @@ const bioMetricVerification = async (req, res) => {
             );
             return res.success({ message: 'Bio metric verification successful', data: aepsResponse });
         }
+        
+        // Update isOtpValidated to false on error
+        await dbService.update(
+            model.aepsOnboarding,
+            { id: existingAepsOnboarding.id },
+            { isOtpValidated: false, onboardingStatus: 'PENDING' }
+        );
+        
         return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'Bio metric verification failed', data: aepsResponse });
     }
     catch (error) {
         console.error('Bio metric verification error', error);
+        
+        // Update isOtpValidated to false on exception
+        try {
+            const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+                userId: req.user.id,
+                companyId: req.user.companyId,
+                merchantStatus: true
+            });
+            if(existingAepsOnboarding) {
+                await dbService.update(
+                    model.aepsOnboarding,
+                    { id: existingAepsOnboarding.id },
+                    { isOtpValidated: false, onboardingStatus: 'PENDING' }
+                );
+            }
+        } catch (updateError) {
+            console.error('Error updating aepsOnboarding on exception:', updateError);
+        }
+        
         return res.failure({ message: error.message || 'Unable to process Bio metric verification' });
     }
 }
