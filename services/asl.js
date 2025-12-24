@@ -171,7 +171,6 @@ const aslAepsValidateAgentBiometric = async (data) => {
         {
             associateId: aslAssociateId,
             apiToken: aslApiToken,
-            Service: 'AEPS',
             ...data
         }, {
             headers: {

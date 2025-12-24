@@ -351,7 +351,7 @@ const validateAgentOtp = async (req, res) => {
         await dbService.update(
             model.aepsOnboarding,
             { id: existingAepsOnboarding.id },
-            { isOtpValidated: true, onboardingStatus }
+            { isOtpValidated: true, onboardingStatus, otp: otp }
         );
         return res.success({ message: 'AEPS OTP validation successful', data: aepsResponse });
     }
@@ -433,7 +433,9 @@ const bioMetricVerification = async (req, res) => {
         if (typeof biometricData !== 'string' || biometricData.trim() === '') {
             return res.failure({ message: 'Biometric data must be a valid PID XML string' });
         }
-
+        if(!existingAepsOnboarding.otp) {
+            return res.failure({ message: 'AEPS OTP is required before bio metric verification' });
+        }
         // Ensure biometricData is properly formatted (trim whitespace)
         const formattedBiometricData = biometricData.trim();
 
@@ -441,6 +443,7 @@ const bioMetricVerification = async (req, res) => {
             uniqueID: existingAepsOnboarding.uniqueID,
             aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             otpReferenceID: existingAepsOnboarding.otpReferenceId,
+            otp: existingAepsOnboarding.otp,
             hash: existingAepsOnboarding.hash,
             biometricData: formattedBiometricData,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
@@ -523,7 +526,6 @@ const bioMetricVerification = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process Bio metric verification' });
     }
 }
-
 
 const aeps2FaAuthentication = async (req, res) => {
     try{
@@ -771,6 +773,9 @@ const aepsTransaction = async (req, res) => {
         }
         if(!existingAepsOnboarding.merchantLoginId) {
             return res.failure({ message: 'AEPS merchantLoginId not found' });
+        }
+        if(!existingAepsOnboarding.isOtpValidated) {
+            return res.failure({ message: 'AEPS OTP validation is required before transaction' });
         }
 
         const existingBioMetric = await dbService.findOne(model.bioMetric, {

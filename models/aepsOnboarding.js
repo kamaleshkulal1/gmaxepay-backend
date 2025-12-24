@@ -17,7 +17,8 @@ const SENSITIVE_FIELDS = {
   remarks: 'string',
   superMerchantId: 'number',
   merchantLoginId: 'string',
-  errorCodes: 'string'
+  errorCodes: 'string',
+  otp: 'string'
 };
 
 const serializeValue = (value, type) => {
@@ -193,6 +194,10 @@ const AepsOnboarding = sequelize.define(
       defaultValue: 'PENDING'
     },
     errorCodes: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    otp: {
       type: DataTypes.STRING,
       allowNull: true
     },
