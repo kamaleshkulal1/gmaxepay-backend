@@ -584,7 +584,7 @@ const aeps2FaAuthentication = async (req, res) => {
 
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
-            type: captureType,
+            type: 'DAILY_LOGIN',
             aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             serviceType: "CashDeposit",
             latitude: existingUser.latitude,
