@@ -582,6 +582,10 @@ const aeps2FaAuthentication = async (req, res) => {
             return res.success({ message: 'Already logged in today. You can login again after midnight (IST).',  data });
         }
 
+        // Fetch company to get company name for transaction ID generation
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+        const generatedTxnId = generateTransactionID(existingCompany?.companyName);
+
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
             type: 'DAILY_LOGIN',
@@ -589,7 +593,7 @@ const aeps2FaAuthentication = async (req, res) => {
             serviceType: "CashDeposit",
             latitude: existingUser.latitude,
             longitude: existingUser.longitude,
-            transactionId: existingBioMetric.transactionId,
+            transactionId: generatedTxnId,
             captureType: captureType,
             biometricData: biometricData,
             merchantLoginId: existingAepsOnboarding.merchantLoginId
