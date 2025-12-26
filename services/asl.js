@@ -193,7 +193,6 @@ const aslAeps2FA = async (data) => {
       {
         associateId: aslAssociateId,
         apiToken: aslApiToken,
-        Service: 'AEPS',
         ...data
       },
       {
@@ -202,6 +201,8 @@ const aslAeps2FA = async (data) => {
         }
       }
     );
+    console.log("response",response);
+    console.log("response.data",response.data);
     return response.data;
   } catch (error) {
     console.error('ASL AEPS 2FA error:', error.message);
