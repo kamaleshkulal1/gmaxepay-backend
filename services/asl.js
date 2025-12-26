@@ -189,12 +189,14 @@ const aslAepsValidateAgentBiometric = async (data) => {
 // ASL AEPS 2FA
 const aslAeps2FA = async (data) => {
   try {
+    const payload = {
+      associateId: aslAssociateId,
+      apiToken: aslApiToken,
+      ...data
+    };
+    console.log("aslAeps2FA payload:", JSON.stringify(payload, null, 2));
     const response = await axios.post(`${aslUrl}/aeps/v1/two-factor-authenticate`,
-      {
-        associateId: aslAssociateId,
-        apiToken: aslApiToken,
-        ...data
-      },
+      payload,
       {
         headers: {
           'Content-Type': 'application/json'
