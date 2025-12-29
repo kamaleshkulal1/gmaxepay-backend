@@ -53,209 +53,133 @@ jobs:
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-    - name: 🐳 Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+    - name: 🚀 Deploy to EC2
+      id: deploy
+      uses: appleboy/ssh-action@master
       with:
-        driver-opts: network=host
-
-    - name: 🔐 Configure AWS credentials for ECR (ASG)
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ASG_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_ASG_SECRET_ACCESS_KEY }}
-        aws-region: ap-south-2
-
-    - name: 🔑 Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-
-    - name: 💾 Docker layer caching
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-
-
-    - name: 🏗️ Build and push Docker image to ECR
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: |
-          ${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.ap-south-2.amazonaws.com/${{ secrets.ECR_NAME }}:dev
-          ${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.ap-south-2.amazonaws.com/${{ secrets.ECR_NAME }}:${{ github.sha }}
-        cache-from: type=local,src=/tmp/.buildx-cache
-        cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
-
-    # OLD DEPLOYMENT METHOD - COMMENTED OUT (Using ECR + Auto Scaling Group now)
-    # - name: 💾 Save Docker image
-    #   run: |
-    #     docker save gmaxepay-backend:latest | gzip > gmaxepay-backend-image.tar.gz
-    #     echo "📦 Image size: $(du -h gmaxepay-backend-image.tar.gz | cut -f1)"
-
-    # - name: 🚀 Deploy to EC2
-    #   id: deploy
-    #   uses: appleboy/scp-action@master
-    #   with:
-    #     host: ${{ secrets.EC2_HOST }}
-    #     username: ${{ secrets.EC2_USERNAME }}
-    #     key: ${{ secrets.EC2_PEM_KEY }}
-    #     port: 22
-    #     timeout: 30s
-    #     source: "gmaxepay-backend-image.tar.gz"
-    #     target: "/tmp/"
-
-    # - name: 🐳 Load and deploy Docker container on EC2
-    #   id: docker_deploy
-    #   uses: appleboy/ssh-action@master
-    #   with:
-    #     host: ${{ secrets.EC2_HOST }}
-    #     username: ${{ secrets.EC2_USERNAME }}
-    #     key: ${{ secrets.EC2_PEM_KEY }}
-    #     port: 22
-    #     timeout: 30s
-    #     command_timeout: 5m
-    #     script: |
-    #       set -e
-    #       REPO_DIR="/home/${{ secrets.EC2_USERNAME }}/gmaxepay-backend"
-    #       REPO_URL="https://github.com/kamaleshkulal1/gmaxepay-backend.git"
-    #       IMAGE_FILE="/tmp/gmaxepay-backend-image.tar.gz"
-    #       
-    #       echo "🚀 Starting Docker deployment..."
-    #       
-    #       # Install Docker if not present
-    #       if ! command -v docker &> /dev/null; then
-    #         echo "🐳 Installing Docker..."
-    #         curl -fsSL https://get.docker.com -o get-docker.sh
-    #         sudo sh get-docker.sh
-    #         sudo usermod -aG docker $USER
-    #         rm get-docker.sh
-    #         echo "✅ Docker installed"
-    #       fi
-    #       
-    #       # Ensure Docker service is running
-    #       sudo systemctl start docker || true
-    #       sudo systemctl enable docker || true
-    #       
-    #       # Load Docker image
-    #       echo "📦 Loading Docker image..."
-    #       docker load < $IMAGE_FILE
-    #       rm -f $IMAGE_FILE
-    #       echo "✅ Docker image loaded"
-    #       
-    #       # Clone/update repository for .env and other config files
-    #       if [ ! -d "$REPO_DIR" ]; then
-    #         echo "📥 Cloning repository..."
-    #         git clone $REPO_URL $REPO_DIR
-    #       else
-    #         echo "🔄 Pulling latest changes..."
-    #         cd $REPO_DIR
-    #         
-    #         # Preserve .env file if it exists
-    #         if [ -f .env ]; then
-    #           cp .env /tmp/.env.backup
-    #           echo "💾 Backed up .env file"
-    #         fi
-    #         
-    #         git fetch origin ${{ github.ref_name }}
-    #         git reset --hard origin/${{ github.ref_name }}
-    #         
-    #         # Restore .env file
-    #         if [ -f /tmp/.env.backup ]; then
-    #           cp /tmp/.env.backup .env
-    #           rm /tmp/.env.backup
-    #           echo "✅ Restored .env File"
-    #         fi
-    #       fi
-    #       
-    #       cd $REPO_DIR
-    #       
-    #       # Stop and remove existing container
-    #       echo "🛑 Stopping existing container..."
-    #       docker stop gmaxepay-backend 2>/dev/null || true
-    #       docker rm gmaxepay-backend 2>/dev/null || true
-    #       
-    #       # Remove old images to save space
-    #       echo "🧹 Cleaning up old images..."
-    #       docker image prune -f || true
-    #       
-    #       # Run new container
-    #       echo "🚀 Starting new container..."
-    #       docker run -d \
-    #         --name gmaxepay-backend \
-    #         --restart unless-stopped \
-    #         -p 8005:8005 \
-    #         --env-file .env \
-    #         -v $(pwd)/logs:/app/logs \
-    #         -v $(pwd)/public:/app/public \
-    #         gmaxepay-backend:latest
-    #       
-    #       echo "⏳ Waiting for container to start..."
-    #       sleep 20
-    #       
-    #       echo "🔍 Checking container status..."
-    #       docker ps | grep gmaxepay-backend || (echo "❌ Container not running!" && docker logs gmaxepay-backend && exit 1)
-    #       
-    #       echo "🏥 Health check..."
-    #       echo "⏳ Attempting health check with retries..."
-    #       
-    #       # Health check with retries and proper status validation
-    #       HEALTH_CHECK_SUCCESS=false
-    #       MAX_RETRIES=5
-    #       RETRY_DELAY=10
-    #       
-    #       for i in $(seq 1 $MAX_RETRIES); do
-    #         echo "🔄 Health check attempt $i/$MAX_RETRIES..."
-    #         
-    #         # Make health check request and capture both status code and response
-    #         HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:8005/health" || echo -e "\n000")
-    #         HTTP_STATUS=$(echo "$HEALTH_RESPONSE" | tail -n1)
-    #         RESPONSE_BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
-    #         
-    #         echo "📊 HTTP Status: $HTTP_STATUS"
-    #         echo "📄 Response: $RESPONSE_BODY"
-    #         
-    #         # Check if HTTP status is 200 and JSON status is 'ok'
-    #         if [ "$HTTP_STATUS" = "200" ]; then
-    #           # Check if JSON response contains status: 'ok'
-    #           if echo "$RESPONSE_BODY" | grep -q '"status":"ok"'; then
-    #             echo "✅ Health check successful! Status: OK"
-    #             HEALTH_CHECK_SUCCESS=true
-    #             break
-    #           else
-    #             echo "⚠️ HTTP 200 but JSON status not 'ok': $RESPONSE_BODY"
-    #           fi
-    #         else
-    #           echo "❌ HTTP status not 200: $HTTP_STATUS"
-    #         fi
-    #         
-    #         if [ $i -lt $MAX_RETRIES ]; then
-    #           echo "⏳ Waiting $RETRY_DELAY seconds before retry..."
-    #           sleep $RETRY_DELAY
-    #         fi
-    #       done
-    #       
-    #       if [ "$HEALTH_CHECK_SUCCESS" = "true" ]; then
-    #         echo "✅ Deployment successful!"
-    #         echo "📋 Container logs (last 20 lines):"
-    #         docker logs --tail 20 gmaxepay-backend
-    #         exit 0
-    #       else
-    #         echo "❌ Health check failed after $MAX_RETRIES attempts"
-    #         echo "📋 Container Status:"
-    #         docker ps -a | grep gmaxepay-backend
-    #         echo "📋 Container Logs:"
-    #         docker logs --tail 50 gmaxepay-backend
-    #         exit 1
-    #       fi
-
-    - name: ✅ Verify ECR Image Push
-      run: |
-        echo "✅ Docker image successfully pushed to ECR"
-        echo "📦 Image: ${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.ap-south-2.amazonaws.com/${{ secrets.ECR_NAME }}:dev"
-        echo "📦 Tagged: ${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.ap-south-2.amazonaws.com/${{ secrets.ECR_NAME }}:${{ github.sha }}"
-        echo "🚀 Auto Scaling Group will automatically pull and deploy the new image"
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_PEM_KEY }}
+        port: 22
+        timeout: 30s
+        command_timeout: 5m
+        script: |
+          set -e
+          REPO_DIR="/home/${{ secrets.EC2_USERNAME }}/gmaxepay-backend"
+          REPO_URL="https://github.com/kamaleshkulal1/gmaxepay-backend.git"
+          
+          echo "🚀 Starting deployment..."
+          
+          # Update code
+          if [ ! -d "$REPO_DIR" ]; then
+            echo "📥 Cloning repository..."
+            git clone $REPO_URL $REPO_DIR
+          else
+            echo "🔄 Pulling latest changes..."
+            cd $REPO_DIR
+            
+            # Reset any local changes (except .env if it exists)
+            echo "🧹 Cleaning working directory..."
+            git fetch origin ${{ github.ref_name }}
+            
+            # Force clean the working directory
+            git clean -fd
+            git reset --hard HEAD
+            
+            # Preserve .env file if it exists
+            if [ -f .env ]; then
+              cp .env /tmp/.env.backup
+              echo "💾 Backed up .env file"
+            fi
+            
+            # Hard reset to latest branch
+            git reset --hard origin/${{ github.ref_name }}
+            
+            # Restore .env file
+            if [ -f /tmp/.env.backup ]; then
+              cp /tmp/.env.backup .env
+              rm /tmp/.env.backup
+              echo "✅ Restored .env File"
+            fi
+            
+            echo "✅ Updated to latest code from ${{ github.ref_name }} branch"
+          fi
+          
+          cd $REPO_DIR
+          echo "📦 Installing dependencies...."
+          npm install --silent
+          
+          # Setup PM2
+          if ! command -v pm2 &> /dev/null; then
+            echo "⚙️ Installing PM2..."
+            npm install -g pm2 --silent
+          fi
+          
+          echo "🔄 Restarting application..."
+          pm2 delete gmaxepay-backend 2>/dev/null || true
+          pm2 start index.js --name gmaxepay-backend --silent
+          pm2 save --silent
+          
+          echo "⏳ Waiting for startup..."
+          sleep 20
+          
+          echo "🔍 Checking PM2 status..."
+          pm2 list
+          
+          echo "🏥 Health check..."
+          echo "⏳ Attempting health check with retries..."
+          
+          # Health check with retries and proper status validation
+          HEALTH_CHECK_SUCCESS=false
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Health check attempt $i/$MAX_RETRIES..."
+            
+            # Make health check request and capture both status code and response
+            HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:8005/health")
+            HTTP_STATUS=$(echo "$HEALTH_RESPONSE" | tail -n1)
+            RESPONSE_BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
+            
+            echo "📊 HTTP Status: $HTTP_STATUS"
+            echo "📄 Response: $RESPONSE_BODY"
+            
+            # Check if HTTP status is 200 and JSON status is 'ok'
+            if [ "$HTTP_STATUS" = "200" ]; then
+              # Check if JSON response contains status: 'ok'
+              if echo "$RESPONSE_BODY" | grep -q '"status":"ok"'; then
+                echo "✅ Health check successful! Status: OK"
+                HEALTH_CHECK_SUCCESS=true
+                break
+              else
+                echo "⚠️ HTTP  200 but JSON status not 'ok': $RESPONSE_BODY"
+              fi
+            else
+              echo "❌ HTTP status not 200: $HTTP_STATUS"
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⏳ Waiting $RETRY_DELAY seconds before retry..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          if [ "$HEALTH_CHECK_SUCCESS" = "true" ]; then
+            echo "✅ Deployment successful!"
+            exit 0
+          else
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
+            echo "📋 PM2 Status:"
+            pm2 list
+            echo "📋 Recent Logs:"
+            pm2 logs gmaxepay-backend --lines 20
+            echo "📋 Environment Check:"
+            echo "PORT: $PORT"
+            echo "NODE_ENV: $NODE_ENV"
+            # Health check failed - exit code will indicate failure
+            exit 1
+          fi
           
     - name: ✅ Notify Slack - Success
       uses: 8398a7/action-slack@v3
@@ -272,8 +196,7 @@ jobs:
                 {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
                 {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
                 {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
-                {"title": "ECR Image", "value": "${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.ap-south-2.amazonaws.com/${{ secrets.ECR_NAME }}:dev", "short": false}
-                {"title": "Note", "value": "Auto Scaling Group will deploy automatically", "short": false}
+                {"title": "URL", "value": "http://${{ secrets.EC2_HOST }}", "short": false}
               ]
             }]
           }
@@ -282,7 +205,7 @@ jobs:
 
     - name: 🏥 Health Check Failure Notification
       uses: 8398a7/action-slack@v3
-      if: failure()
+      if: failure() && steps.deploy.outcome == 'failure'
       with:
         status: failure
         custom_payload: |
@@ -295,8 +218,8 @@ jobs:
                 {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
                 {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
                 {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
-                {"title": "Error", "value": "ECR push or deployment failed", "short": false},
-                {"title": "Action", "value": "Check GitHub Actions logs and Auto Scaling Group health", "short": false}
+                {"title": "Error", "value": "Application deployed but health check failed", "short": false},
+                {"title": "Action", "value": "Check application logs and database connection", "short": false}
               ]
             }]
           }
