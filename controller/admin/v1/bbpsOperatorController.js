@@ -1,4 +1,4 @@
-const model = require('../../../model/index');
+const model = require('../../../models');
 const { Op } = require('sequelize');
 const dbService = require('../../../utils/dbService');
 
