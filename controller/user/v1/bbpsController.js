@@ -903,11 +903,33 @@ const fetchBill = async (req, res) => {
 
     const { customerMobile } = customerInfo;
 
+    // Extract Aadhaar number from nested object
+    let aadharNumber = '';
+    if (existingUser.aadharDetails) {
+      if (typeof existingUser.aadharDetails === 'string') {
+        aadharNumber = existingUser.aadharDetails;
+      } else if (existingUser.aadharDetails.aadhaarNumber) {
+        aadharNumber = existingUser.aadharDetails.aadhaarNumber;
+      }
+    }
+
+    // Extract PAN number from nested object
+    let panNumber = '';
+    if (existingUser.panDetails) {
+      if (typeof existingUser.panDetails === 'string') {
+        panNumber = existingUser.panDetails;
+      } else if (existingUser.panDetails.data?.pan_number) {
+        panNumber = existingUser.panDetails.data.pan_number;
+      } else if (existingUser.panDetails.pan_number) {
+        panNumber = existingUser.panDetails.pan_number;
+      }
+    }
+
     const finalCustomerInfo = {
       customerMobile: customerMobile,
       customerEmail: existingUser.email,
-      customerAdhaar: existingUser.aadharDetails,
-      customerPan: existingUser.panDetails
+      customerAdhaar: aadharNumber,
+      customerPan: panNumber
     };
 
     // Format inputParams to ensure correct structure
