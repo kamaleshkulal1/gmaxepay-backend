@@ -400,14 +400,12 @@ db.aepsHistory.belongsTo(db.aslBankList, {
   foreignKey: 'bankiin',
   targetKey: 'bankIIN',
   as: 'bank',
-  required: false,
-  constraints: false // Disable database foreign key constraint to avoid migration issues
+  required: false
 });
 db.aslBankList.hasMany(db.aepsHistory, {
   foreignKey: 'bankiin',
   sourceKey: 'bankIIN',
-  as: 'aepsHistories',
-  constraints: false // Disable database foreign key constraint to avoid migration issues
+  as: 'aepsHistories'
 });
 
 // BBPS Operator Relationships
