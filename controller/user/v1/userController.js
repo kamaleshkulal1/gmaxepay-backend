@@ -583,21 +583,35 @@ const findAllUsers = async (req, res) => {
   }
 };
 
-// Set MPIN - User can set their own MPIN
+// Set MPIN - User can set their own MPIN (first time only, no old MPIN needed)
 const setMPIN = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { oldMPIN, newMPIN } = req.body;
+    const { newMPIN, confirmMPIN } = req.body;
 
     // Validate new MPIN
     if (!newMPIN) {
       return res.failure({ message: 'New MPIN is required' });
     }
 
+    // Validate confirm MPIN
+    if (!confirmMPIN) {
+      return res.failure({ message: 'Confirm MPIN is required' });
+    }
+
     // Validate MPIN is 4 digits
     const mpinRegex = /^\d{4}$/;
     if (!mpinRegex.test(newMPIN)) {
-      return res.failure({ message: 'MPIN must be exactly 4 digits' });
+      return res.failure({ message: 'New MPIN must be exactly 4 digits' });
+    }
+
+    if (!mpinRegex.test(confirmMPIN)) {
+      return res.failure({ message: 'Confirm MPIN must be exactly 4 digits' });
+    }
+
+    // Check if new MPIN and confirm MPIN match
+    if (newMPIN !== confirmMPIN) {
+      return res.failure({ message: 'New MPIN and Confirm MPIN do not match' });
     }
 
     // Find user
@@ -608,23 +622,11 @@ const setMPIN = async (req, res) => {
 
     // Check if user already has an MPIN
     if (user.secureKey) {
-      // If old MPIN is provided, verify it
-      if (!oldMPIN) {
-        return res.failure({ message: 'Old MPIN is required to change existing MPIN' });
-      }
+      return res.failure({ message: 'MPIN already set. Please use reset MPIN to change it.' });
+    }
 
-      // Validate old MPIN format
-      if (!mpinRegex.test(oldMPIN)) {
-        return res.failure({ message: 'Old MPIN must be exactly 4 digits' });
-      }
-
-      // Verify old MPIN
-      const isOldMPINValid = await bcrypt.compare(oldMPIN, user.secureKey);
-      if (!isOldMPINValid) {
-        return res.failure({ message: 'Invalid old MPIN' });
-      }
-
-      // Check if new MPIN is same as old MPIN
+    // Check if new MPIN is same as old MPIN (if exists)
+    if (user.secureKey) {
       const isSameMPIN = await bcrypt.compare(newMPIN, user.secureKey);
       if (isSameMPIN) {
         return res.failure({ message: 'New MPIN cannot be the same as old MPIN' });
@@ -651,7 +653,7 @@ const setMPIN = async (req, res) => {
         userName: user.name || 'User',
         userEmail: user.email || '',
         userMobile: user.mobileNo || '',
-        actionType: user.secureKey ? 'reset' : 'set',
+        actionType: 'set',
         logoUrl,
         illustrationUrl
       });
@@ -661,7 +663,7 @@ const setMPIN = async (req, res) => {
     }
 
     return res.success({
-      message: user.secureKey ? 'MPIN updated successfully' : 'MPIN set successfully',
+      message: 'MPIN set successfully',
       data: {
         userId: userId,
         mpinSet: true
@@ -673,11 +675,11 @@ const setMPIN = async (req, res) => {
   }
 };
 
-// Reset MPIN - For admin/company to reset user's MPIN
+// Reset MPIN - User can reset their own MPIN (requires old MPIN, new MPIN, and confirm MPIN)
 const resetMPIN = async (req, res) => {
   try {
     const currentUser = req.user;
-    const { userId, newMPIN } = req.body;
+    const { userId, oldMPIN, newMPIN, confirmMPIN } = req.body;
 
     // Validate permissions - Only Master Distributor (3), Distributor (4), or Company Admin (2) can reset MPIN
     const allowedRoles = [2, 3, 4];
@@ -685,55 +687,109 @@ const resetMPIN = async (req, res) => {
       return res.failure({ message: 'You are not authorized to reset MPIN' });
     }
 
-    if (!userId) {
-      return res.failure({ message: 'User ID is required' });
+    // If userId is provided, it's admin resetting another user's MPIN
+    // Otherwise, user is resetting their own MPIN
+    const targetUserId = userId || currentUser.id;
+
+    // Validate old MPIN (required for reset)
+    if (!oldMPIN) {
+      return res.failure({ message: 'Old MPIN is required' });
     }
 
-    // If newMPIN is provided, validate it
-    let hashedMPIN = null;
-    if (newMPIN) {
-      const mpinRegex = /^\d{4}$/;
-      if (!mpinRegex.test(newMPIN)) {
-        return res.failure({ message: 'MPIN must be exactly 4 digits' });
-      }
-      hashedMPIN = await bcrypt.hash(newMPIN, 8);
-    } else {
-      // Generate a random 4-digit MPIN if not provided
-      const randomMPIN = Math.floor(1000 + Math.random() * 9000).toString();
-      hashedMPIN = await bcrypt.hash(randomMPIN, 8);
+    // Validate new MPIN
+    if (!newMPIN) {
+      return res.failure({ message: 'New MPIN is required' });
+    }
+
+    // Validate confirm MPIN
+    if (!confirmMPIN) {
+      return res.failure({ message: 'Confirm MPIN is required' });
+    }
+
+    // Validate MPIN is 4 digits
+    const mpinRegex = /^\d{4}$/;
+    if (!mpinRegex.test(oldMPIN)) {
+      return res.failure({ message: 'Old MPIN must be exactly 4 digits' });
+    }
+
+    if (!mpinRegex.test(newMPIN)) {
+      return res.failure({ message: 'New MPIN must be exactly 4 digits' });
+    }
+
+    if (!mpinRegex.test(confirmMPIN)) {
+      return res.failure({ message: 'Confirm MPIN must be exactly 4 digits' });
+    }
+
+    // Check if new MPIN and confirm MPIN match
+    if (newMPIN !== confirmMPIN) {
+      return res.failure({ message: 'New MPIN and Confirm MPIN do not match' });
     }
 
     // Find the user whose MPIN needs to be reset
-    const userToReset = await dbService.findOne(model.user, {
-      id: userId,
-      companyId: currentUser.companyId,
-      isDeleted: false
-    });
+    let userToReset;
+    
+    if (userId) {
+      // Admin resetting another user's MPIN
+      userToReset = await dbService.findOne(model.user, {
+        id: userId,
+        companyId: currentUser.companyId,
+        isDeleted: false
+      });
 
-    if (!userToReset) {
-      return res.failure({ message: 'User not found' });
+      if (!userToReset) {
+        return res.failure({ message: 'User not found' });
+      }
+
+      // Check if user is in the same company hierarchy
+      if (currentUser.userRole === 3) {
+        // Master Distributor can reset MPIN for Distributors and Retailers under them
+        if (![4, 5].includes(userToReset.userRole)) {
+          return res.failure({ message: 'You can only reset MPIN for Distributors and Retailers' });
+        }
+      } else if (currentUser.userRole === 4) {
+        // Distributor can only reset MPIN for Retailers under them
+        if (userToReset.userRole !== 5) {
+          return res.failure({ message: 'You can only reset MPIN for Retailers' });
+        }
+        if (userToReset.reportingTo !== currentUser.id) {
+          return res.failure({ message: 'You can only reset MPIN for users under you' });
+        }
+      }
+    } else {
+      // User resetting their own MPIN
+      userToReset = await dbService.findOne(model.user, {
+        id: targetUserId,
+        isDeleted: false
+      });
+
+      if (!userToReset) {
+        return res.failure({ message: 'User not found' });
+      }
     }
 
-    // Check if user is in the same company hierarchy
-    if (currentUser.userRole === 3) {
-      // Master Distributor can reset MPIN for Distributors and Retailers under them
-      if (![4, 5].includes(userToReset.userRole)) {
-        return res.failure({ message: 'You can only reset MPIN for Distributors and Retailers' });
-      }
-    } else if (currentUser.userRole === 4) {
-      // Distributor can only reset MPIN for Retailers under them
-      if (userToReset.userRole !== 5) {
-        return res.failure({ message: 'You can only reset MPIN for Retailers' });
-      }
-      if (userToReset.reportingTo !== currentUser.id) {
-        return res.failure({ message: 'You can only reset MPIN for users under you' });
-      }
+    // Verify old MPIN
+    if (!userToReset.secureKey) {
+      return res.failure({ message: 'User does not have an MPIN set. Please use set MPIN instead.' });
     }
+
+    const isOldMPINValid = await bcrypt.compare(oldMPIN, userToReset.secureKey);
+    if (!isOldMPINValid) {
+      return res.failure({ message: 'Invalid old MPIN' });
+    }
+
+    // Check if new MPIN is same as old MPIN
+    const isSameMPIN = await bcrypt.compare(newMPIN, userToReset.secureKey);
+    if (isSameMPIN) {
+      return res.failure({ message: 'New MPIN cannot be the same as old MPIN' });
+    }
+
+    // Hash new MPIN
+    const hashedMPIN = await bcrypt.hash(newMPIN, 8);
 
     // Update user's secureKey
     await dbService.update(
       model.user,
-      { id: userId },
+      { id: targetUserId },
       { secureKey: hashedMPIN }
     );
 
@@ -759,7 +815,7 @@ const resetMPIN = async (req, res) => {
     return res.success({
       message: 'MPIN reset successfully',
       data: {
-        userId: userId,
+        userId: targetUserId,
         mpinReset: true
       }
     });
