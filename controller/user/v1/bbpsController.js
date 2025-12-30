@@ -10,7 +10,6 @@ const bcrypt = require('bcrypt');
 const amezesmsService = require('../../../services/amezesmsApi');
 const agentIp = process.env.BBPS_AGENT_IP;
 const agentMac = process.env.BBPS_AGENT_MAC;
-const agentID = process.env.BBPS_AGENT_ID;
 const calculateCCF1 = (billAmount, flatFee, percentFee) => {
   const ccf1Base = (billAmount * percentFee) / 100 + flatFee;
   const gstAmount = (ccf1Base * 18) / 100;
