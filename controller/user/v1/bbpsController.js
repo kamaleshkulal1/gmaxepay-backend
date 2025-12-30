@@ -910,12 +910,30 @@ const fetchBill = async (req, res) => {
       customerPan: existingUser.panDetails
     };
 
+    // Format inputParams to ensure correct structure
+    let formattedInputParams;
+    if (inputParams && typeof inputParams === 'object') {
+      if (inputParams.input && Array.isArray(inputParams.input)) {
+        // Already in correct format: { input: [...] }
+        formattedInputParams = inputParams;
+      } else if (Array.isArray(inputParams)) {
+        // If it's an array, wrap it in input property
+        formattedInputParams = { input: inputParams };
+      } else {
+        // If it's an object without input property, try to extract or default
+        formattedInputParams = { input: inputParams.input || [] };
+      }
+    } else {
+      // Default to empty input array
+      formattedInputParams = { input: [] };
+    }
+
     let jsonData;
     if (operatorService === 'DTH') {
       jsonData = {
         agentId: existingUser.bbpsAgentId,
         billerId,
-        inputParams
+        inputParams: formattedInputParams
       };
     } else {
       jsonData = {
@@ -927,9 +945,11 @@ const fetchBill = async (req, res) => {
         },
         customerInfo: finalCustomerInfo,
         billerId,
-        inputParams
+        inputParams: formattedInputParams
       };
     }
+
+    console.log('BBPS fetchBill payload:', JSON.stringify(jsonData, null, 2));
 
     const { data: parsedResponse, requestId } = await bbpsService.fetchBillRequest(jsonData);
     payload = { requestId }; // Keep payload for error handling
