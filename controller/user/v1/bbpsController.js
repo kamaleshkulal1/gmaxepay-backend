@@ -1214,10 +1214,6 @@ const getBillerInfo = async (req, res) => {
   }
 };
 
-// Removed apiUserPayBill, apiUserFetchBill, apiUserGetBillerInfo - not needed for user API
-
-// Removed apiUserPayBill, apiUserFetchBill, apiUserGetBillerInfo - not needed for user API
-
 const getTransactionStatus = async (req, res) => {
   try {
     const { trackingType, trackingValue, fromDate, toDate } = req.body;
