@@ -161,6 +161,46 @@ const payBill = async (paymentDetails) => {
   }
 };
 
+const payBillRequest = async (jsonData, fetchRefId) => {
+  try {
+    const payload = buildSecurePayload({ jsonData });
+
+    const url = `${BBPS_URL}/billpay/extBillPayCntrl/billPayRequest/json?accessCode=${payload.access_code}&requestId=${fetchRefId}&ver=${payload.version}&instituteId=${payload.bbpsInstituteId}&encRequest=${payload.enc_request}`;
+
+    const response = await axios.post(url, {}, {
+      headers: {
+        'Content-Type': 'text/plain'
+      }
+    });
+
+    const decryptedResponse = decrypt(response.data);
+    let parsedResponse;
+
+    try {
+      if (typeof decryptedResponse === 'string') {
+        parsedResponse = JSON.parse(decryptedResponse);
+      } else {
+        parsedResponse = decryptedResponse;
+      }
+
+      if (typeof parsedResponse === 'string') {
+        parsedResponse = JSON.parse(parsedResponse);
+      }
+    } catch (parseError) {
+      console.error('Error parsing response:', parseError);
+      throw new Error('Invalid response format');
+    }
+
+    return {
+      data: parsedResponse,
+      requestId: fetchRefId
+    };
+  } catch (error) {
+    console.error('Error paying bill request:', error);
+    throw error;
+  }
+};
+
 const getTransactionStatus = async (transactionId) => {
   try {
     const payload = buildSecurePayload({
@@ -247,6 +287,7 @@ module.exports = {
   fetchBill,
   fetchBillRequest,
   payBill,
+  payBillRequest,
   getTransactionStatus,
   getTransactionHistory,
   getBillerInfo,

@@ -21,26 +21,7 @@ const payBill = async (req, res) => {
   try {
     const userId = req.user.id;
     const companyId = req.companyId;
-    const { fetchRefId, secureKey, walletType } = req.body;
-
-    // Validate walletType
-    const validWalletTypes = ['runpaisa', 'mobikwik'];
-    if (!validWalletTypes.includes(walletType?.toLowerCase())) {
-      return res.failure({
-        message: `Invalid walletType. Must be one of: ${validWalletTypes.join(', ')}`
-      });
-    }
-
-    // Map frontend walletType to database expected values
-    const getDbWalletType = (walletType) => {
-      const typeMapping = {
-        runpaisa: 'Runpaisa',
-        mobikwik: 'Mobikwik'
-      };
-      return typeMapping[walletType.toLowerCase()] || 'Runpaisa';
-    };
-
-    const dbWalletType = getDbWalletType(walletType);
+    const { fetchRefId, secureKey } = req.body;
 
     const convertRupeesToPaisa = (amount) =>
       Math.round(parseFloat(amount) * 100).toString();
@@ -309,19 +290,8 @@ const payBill = async (req, res) => {
 
     if (!foundUserWallet) return res.failure({ message: 'Wallet not found!' });
 
-    // Get wallet balance based on walletType
-    const getWalletBalance = (wallet, type) => {
-      switch (type.toLowerCase()) {
-        case 'runpaisa':
-          return wallet.runpaisa;
-        case 'mobikwik':
-          return wallet.mobikwik;
-        default:
-          return wallet.runpaisa;
-      }
-    };
-
-    const currentWalletBalance = getWalletBalance(foundUserWallet, walletType);
+    // Use mainWallet balance
+    const currentWalletBalance = foundUserWallet.mainWallet || 0;
 
     if (foundOperator.minValue && foundOperator.maxValue) {
       if (
@@ -351,40 +321,19 @@ const payBill = async (req, res) => {
 
     if (currentWalletBalance < debit)
       return res.failure({
-        message: `Insufficient ${walletType} wallet balance!`
+        message: 'Insufficient wallet balance!'
       });
 
     const transactionID = generateTransactionID();
-    const payload = bbpsService.buildSecurePayload({ jsonData });
 
     // Simple transaction - no commission tracking
 
     let parsedResponse = null;
 
     try {
-      const response = await axios.post(
-        `${BBPS_URL}/billpay/extBillPayCntrl/billPayRequest/json?accessCode=${payload.access_code}&requestId=${fetchRefId}&ver=${payload.version}&instituteId=${payload.bbpsInstituteId}&encRequest=${payload.enc_request}`,
-        {
-          headers: { 'Content-Type': 'text/plain' }
-        }
-      );
-
-      const decryptedResponse = decrypt(response.data);
-      console.log('reposeData', decryptedResponse);
-      try {
-        if (typeof decryptedResponse === 'string') {
-          parsedResponse = JSON.parse(decryptedResponse);
-        } else {
-          parsedResponse = decryptedResponse;
-        }
-
-        if (typeof parsedResponse === 'string') {
-          parsedResponse = JSON.parse(parsedResponse);
-        }
-      } catch (parseError) {
-        console.error('Error parsing response:', parseError);
-        throw new Error('Invalid response format');
-      }
+      const { data: responseData } = await bbpsService.payBillRequest(jsonData, fetchRefId);
+      parsedResponse = responseData;
+      console.log('reposeData', parsedResponse);
 
       // Convert respAmount to rupees if present
       if (parsedResponse?.respAmount) {
@@ -426,7 +375,7 @@ const payBill = async (req, res) => {
           operator: foundOperator.operatorName,
           billNumber: responseData?.billDetails?.billNumber || billerId,
           api: 'BBPS',
-          walletType: dbWalletType,
+          walletType: 'MainWallet',
           billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
           amount: billAmount,
           debit: 0,
@@ -510,11 +459,11 @@ const payBill = async (req, res) => {
         companyId: companyId,
         operatorId: foundOperator.id,
         operator: foundOperator.operatorName,
-        billNumber: responseData?.billDetails?.billNumber || billerId,
-        api: 'BBPS',
-        walletType: dbWalletType,
-        amount: billAmount,
-        debit: billStatus === 'Failed' ? 0 : debit,
+          billNumber: responseData?.billDetails?.billNumber || billerId,
+          api: 'BBPS',
+          walletType: 'MainWallet',
+          amount: billAmount,
+          debit: billStatus === 'Failed' ? 0 : debit,
         comm: 0,
         surcharge: 0,
         opening: currentWalletBalance,
@@ -606,33 +555,17 @@ const payBill = async (req, res) => {
           });
         }
 
-        // Helper function to update wallet balance
-        const updateWalletBalance = (currentWallet, walletType, newBalance) => {
-          const updateData = { updatedBy: userId };
-          switch (walletType.toLowerCase()) {
-            case 'prepaid':
-              updateData.prepaid = newBalance;
-              break;
-            case 'runpaisa':
-              updateData.runpaisa = newBalance;
-              break;
-            case 'mobikwik':
-              updateData.mobikwik = newBalance;
-              break;
-            default:
-              updateData.prepaid = newBalance;
-          }
-          return updateData;
-        };
-
         const updates = [];
 
-        // Update user wallet only - no commission logic
+        // Update user mainWallet - no commission logic
         updates.push(
           dbService.update(
             model.wallet,
             { refId: userId, companyId },
-            updateWalletBalance(foundUserWallet, walletType, balance)
+            { 
+              mainWallet: balance,
+              updatedBy: userId 
+            }
           )
         );
 
@@ -650,7 +583,7 @@ const payBill = async (req, res) => {
           const userWalletHistory = {
             refId: userId,
             companyId: companyId,
-            walletType: dbWalletType,
+            walletType: 'MainWallet',
             remark: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName} - Bill No: ${responseData?.billDetails?.billNumber || billerId}`,
             operator: foundOperator.operatorName,
             amount: billAmount,
@@ -772,7 +705,7 @@ const payBill = async (req, res) => {
         billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
         billNumber: responseData?.billDetails?.billNumber || billerId,
         api: 'BBPS',
-        walletType: dbWalletType,
+        walletType: 'MainWallet',
         amount: billAmount,
         debit: 0,
         comm: 0,
