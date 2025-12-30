@@ -1,168 +1,108 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="x-apple-disable-message-reformatting">
     <title>Welcome to GMAXEPAY</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: #fafbfc;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        .email-wrapper {
-            max-width: 750px;
-            margin: 0 auto;
-        }
-        .email-container {
-            background-color: #ffffff;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-        }
-        .header {
-            background-color: #ffffff;
-            padding: 30px 20px 20px;
-            text-align: right;
-        }
-        .logo-container {
-            display: inline-block;
-        }
-        .logo-container img {
-            width: 80px;
-            height: 80px;
-            display: block;
-            object-fit: contain;
-        }
-        .content {
-            padding: 25px 20px 30px;
-            text-align: center;
-        }
-        .illustration {
-            margin: 0 auto 30px;
-            max-width: 280px;
-        }
-        .illustration img {
-            width: 90%;
-            max-width: 90%;
-            height: auto;
-            display: block;
-            margin: 0 auto;
-        }
-        .greeting {
-            font-size: 32px;
-            font-weight: 400;
-            color: #4a4a4a;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        .message {
-            font-size: 16px;
-            color: #666666;
-            line-height: 1.6;
-            margin-bottom: 35px;
-            text-align: center;
-            max-width: 480px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .cta-container {
-            text-align: center;
-            margin: 40px 0;
-        }
-        .cta-button {
-            display: inline-block;
-            padding: 14px 50px;
-            background-color: #5B8DEE;
-            color: #ffffff !important;
-            text-decoration: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 500;
-            letter-spacing: 0.3px;
-            box-shadow: 0 2px 8px rgba(91, 141, 238, 0.3);
-            transition: all 0.3s ease;
-        }
-        .cta-button:hover {
-            background-color: #4a7dd9;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(91, 141, 238, 0.4);
-        }
-        .footer {
-            background-color: #f9f9f9;
-            padding: 25px 20px;
-            text-align: center;
-            border-top: 1px solid #eeeeee;
-        }
-        .footer p {
-            font-size: 13px;
-            color: #999999;
-            margin: 5px 0;
-            line-height: 1.5;
-        }
-        @media only screen and (max-width: 750px) {
-            body {
-                padding: 10px;
-            }
-            .content {
-                padding: 20px 15px 25px;
-            }
-            .greeting {
-                font-size: 26px;
-            }
-            .message {
-                font-size: 15px;
-            }
-            .illustration {
-                max-width: 240px;
-            }
-            .illustration img {
-                width: 90%;
-                max-width: 90%;
-            }
-            .logo-container img {
-                width: 64px;
-                height: 64px;
-            }
-            .cta-button {
-                padding: 12px 40px;
-                font-size: 15px;
-            }
-        }
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td {font-family: Arial, Helvetica, sans-serif !important;}
+        .cta-button {padding: 14px 50px !important;}
     </style>
+    <![endif]-->
 </head>
-<body>
-    <div class="email-wrapper">
-        <div class="email-container">
-            <div class="header">
-                <div class="logo-container">
-                    <img src="{{LOGO_URL}}" alt="GMAXEPAY Logo" />
-                </div>
-            </div>
-            <div class="content">
-                <div class="illustration">
-                    <img src="{{ILLUSTRATION_URL}}" alt="Onboarding Illustration" />
-                </div>
-                <div class="greeting">Dear {{USER_NAME}},</div>
-                <div class="message">
-                    Click on Go Through Link button & Complete Onboarding Process to activate your account.
-                </div>
-                <div class="cta-container">
-                    <a href="{{ONBOARDING_LINK}}" class="cta-button">Go Through Link</a>
-                </div>
-            </div>
-            <div class="footer">
-                <p>&copy; {{YEAR}} GMAXEPAY. All rights reserved.</p>
-                <p>08062179126, 8088651844 | support@gmaxepay.com</p>
-                <p>This is an automated email. Please do not reply to this message.</p>
-            </div>
-        </div>
-    </div>
+<body style="margin: 0; padding: 0; background-color: #fafbfc; font-family: Arial, Helvetica, sans-serif;">
+    <!-- Wrapper Table -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #fafbfc; padding: 20px;">
+        <tr>
+            <td align="center">
+                <!-- Main Container Table -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e2e8f0;">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #ffffff; padding: 30px 20px 20px; text-align: right;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="right">
+                                        <img src="{{LOGO_URL}}" alt="GMAXEPAY Logo" width="80" height="80" style="display: block; border: 0;" />
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 25px 20px 30px; text-align: center;">
+                            <!-- Illustration -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding-bottom: 30px;">
+                                        <img src="{{ILLUSTRATION_URL}}" alt="Onboarding Illustration" width="280" style="display: block; max-width: 280px; width: 100%; height: auto; border: 0;" />
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Greeting -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td style="padding-bottom: 30px;">
+                                        <p style="margin: 0; font-size: 32px; font-weight: 400; color: #4a4a4a; font-family: Arial, Helvetica, sans-serif;">Dear {{USER_NAME}},</p>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Message -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="480" style="max-width: 480px;">
+                                            <tr>
+                                                <td style="padding-bottom: 35px;">
+                                                    <p style="margin: 0; font-size: 16px; color: #666666; line-height: 1.6; font-family: Arial, Helvetica, sans-serif;">Click on Go Through Link button & Complete Onboarding Process to activate your account.</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- CTA Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 40px 0;">
+                                        <!--[if mso]>
+                                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ONBOARDING_LINK}}" style="height:50px;v-text-anchor:middle;width:200px;" arcsize="6%" stroke="f" fillcolor="#5B8DEE">
+                                            <w:anchorlock/>
+                                            <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:500;">Go Through Link</center>
+                                        </v:roundrect>
+                                        <![endif]-->
+                                        <!--[if !mso]><!-- -->
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                            <tr>
+                                                <td align="center" style="background-color: #5B8DEE; padding: 14px 50px; border-radius: 6px;">
+                                                    <a href="{{ONBOARDING_LINK}}" style="display: inline-block; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 500; letter-spacing: 0.3px; font-family: Arial, Helvetica, sans-serif;">Go Through Link</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        <!--<![endif]-->
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9f9f9; padding: 25px 20px; text-align: center; border-top: 1px solid #eeeeee;">
+                            <p style="margin: 0 0 5px 0; font-size: 13px; color: #999999; font-family: Arial, Helvetica, sans-serif;">&copy; {{YEAR}} GMAXEPAY. All rights reserved.</p>
+                            <p style="margin: 0 0 5px 0; font-size: 13px; color: #999999; font-family: Arial, Helvetica, sans-serif;">08062179126, 8088651844 | support@gmaxepay.com</p>
+                            <p style="margin: 0; font-size: 13px; color: #999999; font-family: Arial, Helvetica, sans-serif;">This is an automated email. Please do not reply to this message.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

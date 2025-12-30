@@ -8,4 +8,8 @@ router.post('/list', authentication, userController.findAllUsers);
 router.post('/upgradeUser', authentication, whitelabelController.upgradeUserRole);
 router.post('/degradeUser', authentication, whitelabelController.degradeUserRole);
 
+// MPIN endpoints
+router.post('/setMPIN', authentication, userController.setMPIN);
+router.post('/resetMPIN', authentication, userController.resetMPIN);
+
 module.exports = router;

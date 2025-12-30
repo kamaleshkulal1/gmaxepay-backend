@@ -194,3 +194,63 @@ module.exports.sendTempPasswordEmail = async ({ to, userName, tempPassword, logo
   }
 };
 
+/**
+ * Send MPIN set/reset notification email
+ * @param {Object} options
+ * @param {string} options.to
+ * @param {string} options.userName
+ * @param {string} options.userEmail
+ * @param {string} options.userMobile
+ * @param {string} options.actionType - 'set' or 'reset'
+ * @param {string} options.logoUrl
+ * @param {string} options.illustrationUrl
+ */
+module.exports.sendMPINSetEmail = async ({ 
+  to, 
+  userName, 
+  userEmail,
+  userMobile,
+  actionType = 'set',
+  logoUrl, 
+  illustrationUrl 
+}) => {
+  try {
+    const templatePath = path.join(__dirname, '../mailTemplate/mpinSetEmail.html');
+    let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
+
+    const actionText = actionType === 'reset' ? 'reset' : 'set';
+    const dateTime = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    htmlTemplate = htmlTemplate.replace(/{{USER_NAME}}/g, userName || 'User');
+    htmlTemplate = htmlTemplate.replace(/{{USER_EMAIL}}/g, userEmail || '');
+    htmlTemplate = htmlTemplate.replace(/{{USER_MOBILE}}/g, userMobile || '');
+    htmlTemplate = htmlTemplate.replace(/{{ACTION_TYPE}}/g, actionText);
+    htmlTemplate = htmlTemplate.replace(/{{DATE_TIME}}/g, dateTime);
+    htmlTemplate = htmlTemplate.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
+    htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
+    htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, illustrationUrl || '');
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
+      to,
+      subject: `Your MPIN Has Been ${actionText.charAt(0).toUpperCase() + actionText.slice(1)} Successfully - Gmaxepay`,
+      html: htmlTemplate,
+      text: `Dear ${userName},\n\nYour MPIN has been successfully ${actionText} for your GMAXEPAY account.\n\nAccount Details:\nEmail: ${userEmail}\nMobile: ${userMobile}\nDate & Time: ${dateTime}\n\nSecurity Reminder:\n• Never share your MPIN with anyone\n• Do not use easily guessable PINs\n• If you suspect your MPIN has been compromised, reset it immediately\n\nBest regards,\nGMAXEPAY Team`
+    };
+
+    const info = await transport.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId, response: info.response };
+  } catch (error) {
+    console.error('Error sending MPIN set email:', error);
+    throw new Error(`Failed to send MPIN set email: ${error.message}`);
+  }
+};
+

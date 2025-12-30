@@ -1,6 +1,8 @@
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op, Sequelize } = require('sequelize');
+const bcrypt = require('bcrypt');
+const emailService = require('../../../services/emailService');
 
 const findAllUsers = async (req, res) => {
     try {
@@ -317,6 +319,193 @@ const findAllUsers = async (req, res) => {
     }
   };
 
+// Set MPIN - Company admin can set their own MPIN
+const setMPIN = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { oldMPIN, newMPIN } = req.body;
+
+    // Only Company Admin (userRole 2) can set their own MPIN
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: 'Only company admin can set MPIN' });
+    }
+
+    // Validate new MPIN
+    if (!newMPIN) {
+      return res.failure({ message: 'New MPIN is required' });
+    }
+
+    // Validate MPIN is 4 digits
+    const mpinRegex = /^\d{4}$/;
+    if (!mpinRegex.test(newMPIN)) {
+      return res.failure({ message: 'MPIN must be exactly 4 digits' });
+    }
+
+    // Find user
+    const user = await dbService.findOne(model.user, { id: userId });
+    if (!user) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    // Check if user already has an MPIN
+    if (user.secureKey) {
+      // If old MPIN is provided, verify it
+      if (!oldMPIN) {
+        return res.failure({ message: 'Old MPIN is required to change existing MPIN' });
+      }
+
+      // Validate old MPIN format
+      if (!mpinRegex.test(oldMPIN)) {
+        return res.failure({ message: 'Old MPIN must be exactly 4 digits' });
+      }
+
+      // Verify old MPIN
+      const isOldMPINValid = await bcrypt.compare(oldMPIN, user.secureKey);
+      if (!isOldMPINValid) {
+        return res.failure({ message: 'Invalid old MPIN' });
+      }
+
+      // Check if new MPIN is same as old MPIN
+      const isSameMPIN = await bcrypt.compare(newMPIN, user.secureKey);
+      if (isSameMPIN) {
+        return res.failure({ message: 'New MPIN cannot be the same as old MPIN' });
+      }
+    }
+
+    // Hash new MPIN
+    const hashedMPIN = await bcrypt.hash(newMPIN, 8);
+
+    // Update user's secureKey
+    await dbService.update(
+      model.user,
+      { id: userId },
+      { secureKey: hashedMPIN }
+    );
+
+    // Send email notification
+    try {
+      const logoUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/images/logo.png` : '';
+      const illustrationUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/setmpin.png` : '';
+
+      await emailService.sendMPINSetEmail({
+        to: user.email,
+        userName: user.name || 'User',
+        userEmail: user.email || '',
+        userMobile: user.mobileNo || '',
+        actionType: user.secureKey ? 'reset' : 'set',
+        logoUrl,
+        illustrationUrl
+      });
+    } catch (emailError) {
+      console.error('Error sending MPIN set email:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    return res.success({
+      message: user.secureKey ? 'MPIN updated successfully' : 'MPIN set successfully',
+      data: {
+        userId: userId,
+        mpinSet: true
+      }
+    });
+  } catch (error) {
+    console.error('Error setting MPIN:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
+// Reset MPIN - Company admin can reset user's MPIN
+const resetMPIN = async (req, res) => {
+  try {
+    const currentUser = req.user;
+    const { userId, newMPIN } = req.body;
+
+    // Only Company Admin (userRole 2) can reset MPIN
+    if (currentUser.userRole !== 2) {
+      return res.failure({ message: 'Only company admin can reset MPIN' });
+    }
+
+    if (!userId) {
+      return res.failure({ message: 'User ID is required' });
+    }
+
+    // If newMPIN is provided, validate it
+    let hashedMPIN = null;
+    if (newMPIN) {
+      const mpinRegex = /^\d{4}$/;
+      if (!mpinRegex.test(newMPIN)) {
+        return res.failure({ message: 'MPIN must be exactly 4 digits' });
+      }
+      hashedMPIN = await bcrypt.hash(newMPIN, 8);
+    } else {
+      // Generate a random 4-digit MPIN if not provided
+      const randomMPIN = Math.floor(1000 + Math.random() * 9000).toString();
+      hashedMPIN = await bcrypt.hash(randomMPIN, 8);
+    }
+
+    // Find the user whose MPIN needs to be reset
+    let userToReset;
+    
+    // If companyId is 1, can reset for any company
+    if (currentUser.companyId === 1) {
+      userToReset = await dbService.findOne(model.user, {
+        id: userId,
+        isDeleted: false
+      });
+    } else {
+      // Otherwise, only users in the same company
+      userToReset = await dbService.findOne(model.user, {
+        id: userId,
+        companyId: currentUser.companyId,
+        isDeleted: false
+      });
+    }
+
+    if (!userToReset) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    // Update user's secureKey
+    await dbService.update(
+      model.user,
+      { id: userId },
+      { secureKey: hashedMPIN }
+    );
+
+    // Send email notification
+    try {
+      const logoUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/images/logo.png` : '';
+      const illustrationUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/setmpin.png` : '';
+
+      await emailService.sendMPINSetEmail({
+        to: userToReset.email,
+        userName: userToReset.name || 'User',
+        userEmail: userToReset.email || '',
+        userMobile: userToReset.mobileNo || '',
+        actionType: 'reset',
+        logoUrl,
+        illustrationUrl
+      });
+    } catch (emailError) {
+      console.error('Error sending MPIN reset email:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    return res.success({
+      message: 'MPIN reset successfully',
+      data: {
+        userId: userId,
+        mpinReset: true
+      }
+    });
+  } catch (error) {
+    console.error('Error resetting MPIN:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
-  findAllUsers
+  findAllUsers,
+  setMPIN,
+  resetMPIN
 };
