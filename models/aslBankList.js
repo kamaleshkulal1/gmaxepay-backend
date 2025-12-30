@@ -18,7 +18,8 @@ let AslBankList = sequelize.define(
     },
     bankIIN: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
+      unique: true
     },
     bankLogo: {
       type: DataTypes.STRING,
