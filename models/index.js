@@ -78,8 +78,8 @@ db.ipListType = require('./ipListType');
 db.outlet = require('./outlet');
 db.news = require('./news');
 db.customer = require('./customer');
-// db.bbpsOperatorCategory = require('./bbpsOperatorCategory');
-// db.bbpsOperator = require('./bbpsOperator');
+db.bbpsOperatorCategory = require('./bbpsOperatorCategory');
+db.bbpsOperator = require('./bbpsOperator');
 db.eService = require('./eServiceReport');
 db.eServices = require('./EService');
 // db.signUpResponses = require('./signUpResponses');
@@ -88,11 +88,11 @@ db.eServices = require('./EService');
 db.notification = require('./notification');
 // db.rechargeHistory = require('./rechargeHistory');
 // db.rechargeCount = require('./rechargeCount');
-// db.billPaymentHistory = require('./billPaymentHistory');
-// db.billFetchData = require('./billFetchData');
+db.billPaymentHistory = require('./billPaymentHistory');
+db.billFetchData = require('./billFetchData');
 // db.complain = require('./complain');
-// db.bbpsBillerInfo = require('./bbpsBillerInfo');
-// db.bbpsPaymentInfo = require('./bbpsPaymentInfo');
+db.bbpsBillerInfo = require('./bbpsBillerInfo');
+db.bbpsPaymentInfo = require('./bbpsPaymentInfo');
 // db.apiUser = require('./apiUser');
 // db.apiUserWallet = require('./apiUserWallet');
 // db.payInPaymentChannel = require('./payInPaymentChannel');
@@ -408,14 +408,14 @@ db.aslBankList.hasMany(db.aepsHistory, {
   as: 'aepsHistories'
 });
 
-// BBPS Operator Relationships (commented out as models don't exist yet)
-// db.bbpsOperator.belongsTo(db.bbpsOperatorCategory, {
-//   foreignKey: 'categoryId',
-//   as: 'category'
-// });
-// db.bbpsOperatorCategory.hasMany(db.bbpsOperator, {
-//   foreignKey: 'categoryId',
-//   as: 'operators'
-// });
+// BBPS Operator Relationships
+db.bbpsOperator.belongsTo(db.bbpsOperatorCategory, {
+  foreignKey: 'categoryId',
+  as: 'category'
+});
+db.bbpsOperatorCategory.hasMany(db.bbpsOperator, {
+  foreignKey: 'categoryId',
+  as: 'operators'
+});
 
 module.exports = db;
