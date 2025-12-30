@@ -1138,37 +1138,7 @@ const getBillerInfo = async (req, res) => {
       console.error('Database query error:', err);
     }
 
-    const jsonData = { billerId: [billerId] };
-    const payload = bbpsService.buildSecurePayload({ jsonData });
-
-    const url = `${BBPS_URL}/billpay/extMdmCntrl/mdmRequestNew/json?accessCode=${payload.access_code}&requestId=${payload.requestId}&ver=${payload.version}&instituteId=${payload.bbpsInstituteId}`;
-
-    const response = await axios.post(url, payload.enc_request, {
-      headers: {
-        'Content-Type': 'text/plain'
-      }
-    });
-
-    let parsedResponse;
-    if (typeof response.data === 'object' && response.data !== null) {
-      parsedResponse = response.data;
-    } else if (typeof response.data === 'string') {
-      try {
-        parsedResponse = JSON.parse(response.data);
-      } catch (jsonParseError) {
-        try {
-          const decryptedResponse = decrypt(response.data);
-          parsedResponse = JSON.parse(decryptedResponse);
-        } catch (decryptError) {
-          console.error('Decryption error:', decryptError);
-          throw new Error(
-            `Failed to process response: ${decryptError.message}`
-          );
-        }
-      }
-    } else {
-      throw new Error(`Unexpected response data type: ${typeof response.data}`);
-    }
+    const { data: parsedResponse, requestId } = await bbpsService.getBillerInfo(billerId);
 
     if (parsedResponse.responseCode !== '000') {
       const errorMessage =
@@ -1185,14 +1155,14 @@ const getBillerInfo = async (req, res) => {
       return res.failure({
         message: errorMessage,
         data: parsedResponse,
-        requestId: payload.requestId
+        requestId: requestId
       });
     }
 
     try {
       await model.bbpsBillerInfo.upsert({
         billerId: billerId,
-        requestId: payload.requestId,
+        requestId: requestId,
         response: parsedResponse,
         responseCode: parsedResponse.responseCode || '000',
         updatedAt: new Date()
@@ -1204,7 +1174,7 @@ const getBillerInfo = async (req, res) => {
     return res.success({
       message: 'Biller info fetched successfully',
       data: parsedResponse,
-      requestId: payload.requestId
+      requestId: requestId
     });
   } catch (error) {
     console.error('BBPS getBillerInfo error:', error);

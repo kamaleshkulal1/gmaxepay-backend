@@ -1,6 +1,7 @@
 const axios = require('axios');
 const encrypt = require('../utils/encrypt');
 const generateRequestId = require('../utils/generateRequestId');
+const decrypt = require('../utils/decrypt');
 
 const BBPS_URL = process.env.BBPS_BASE_URL;
 const ACCESS_CODE = process.env.BBPS_ACCESS_CODE;
@@ -156,6 +157,50 @@ const getTransactionHistory = async (filters) => {
   }
 };
 
+const getBillerInfo = async (billerId) => {
+  try {
+    const jsonData = { billerId: [billerId] };
+    const payload = buildSecurePayload({ jsonData });
+
+    const url = `${BBPS_URL}/billpay/extMdmCntrl/mdmRequestNew/json?accessCode=${payload.access_code}&requestId=${payload.requestId}&ver=${payload.version}&instituteId=${payload.bbpsInstituteId}`;
+
+    const response = await axios.post(url, payload.enc_request, {
+      headers: {
+        'Content-Type': 'text/plain'
+      }
+    });
+
+    let parsedResponse;
+    if (typeof response.data === 'object' && response.data !== null) {
+      parsedResponse = response.data;
+    } else if (typeof response.data === 'string') {
+      try {
+        parsedResponse = JSON.parse(response.data);
+      } catch (jsonParseError) {
+        try {
+          const decryptedResponse = decrypt(response.data);
+          parsedResponse = JSON.parse(decryptedResponse);
+        } catch (decryptError) {
+          console.error('Decryption error:', decryptError);
+          throw new Error(
+            `Failed to process response: ${decryptError.message}`
+          );
+        }
+      }
+    } else {
+      throw new Error(`Unexpected response data type: ${typeof response.data}`);
+    }
+
+    return {
+      data: parsedResponse,
+      requestId: payload.requestId
+    };
+  } catch (error) {
+    console.error('Error getting biller info:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   fetchBillers,
   fetchBillParameters,
@@ -163,6 +208,7 @@ module.exports = {
   payBill,
   getTransactionStatus,
   getTransactionHistory,
+  getBillerInfo,
   buildSecurePayload,
   buildSecurePayloadComplaint
 };
