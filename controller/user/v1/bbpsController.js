@@ -845,7 +845,7 @@ const fetchBill = async (req, res) => {
 
   try {
     const {
-      customerInfo = {},
+      customerInfo = {}, 
       operatorService,
       billerId,
       inputParams = []
@@ -931,36 +931,10 @@ const fetchBill = async (req, res) => {
       };
     }
 
-    payload = bbpsService.buildSecurePayload({
-      jsonData
-    });
+    const { data: parsedResponse, requestId } = await bbpsService.fetchBillRequest(jsonData);
+    payload = { requestId }; // Keep payload for error handling
 
-    const url = `${BBPS_URL}/billpay/extBillCntrl/billFetchRequest/json?accessCode=${payload.access_code}&requestId=${payload.requestId}&ver=${payload.version}&instituteId=${payload.bbpsInstituteId}&encRequest=${payload.enc_request}`;
-
-    const response = await axios.post(url, {
-      headers: {
-        'Content-Type': 'text/plain'
-      }
-    });
-
-    const decryptedResponse = decrypt(response.data);
-    console.log('reposeData', decryptedResponse);
-    let parsedResponse;
-
-    try {
-      if (typeof decryptedResponse === 'string') {
-        parsedResponse = JSON.parse(decryptedResponse);
-      } else {
-        parsedResponse = decryptedResponse;
-      }
-
-      if (typeof parsedResponse === 'string') {
-        parsedResponse = JSON.parse(parsedResponse);
-      }
-    } catch (parseError) {
-      console.error('Error parsing response:', parseError);
-      throw new Error('Invalid response format');
-    }
+    console.log('reposeData', parsedResponse);
 
     if (parsedResponse.responseCode !== '000') {
       let errorMessage = 'Unable to fetch biller info. Please try again later.';
@@ -986,7 +960,7 @@ const fetchBill = async (req, res) => {
       expiryDate.setHours(expiryDate.getHours() + 24);
 
       await model.billFetchData.create({
-        fetchRefId: payload.requestId,
+        fetchRefId: requestId,
         billerId: billerId,
         refId: req.user.id,
         customerInfo: JSON.stringify(finalCustomerInfo),
@@ -1007,7 +981,7 @@ const fetchBill = async (req, res) => {
       return res.failure({
         message: errorMessage,
         data: parsedResponse,
-        requestId: payload.requestId
+        requestId: requestId
       });
     }
 
@@ -1034,7 +1008,7 @@ const fetchBill = async (req, res) => {
 
     const formattedResponse = {
       responseCode: convertedResponse.responseCode,
-      requestId: payload.requestId,
+      requestId: requestId,
       agentInitChannel: agentDeviceInfo.initChannel,
       inputParams: convertedResponse.inputParams || {},
       billDetails: formattedBillDetails,
@@ -1046,7 +1020,7 @@ const fetchBill = async (req, res) => {
     expiryDate.setHours(expiryDate.getHours() + 24);
 
     await model.billFetchData.create({
-      fetchRefId: payload.requestId,
+      fetchRefId: requestId,
       billerId: billerId,
       refId: req.user.id,
       customerInfo: JSON.stringify(finalCustomerInfo),
@@ -1089,8 +1063,8 @@ const fetchBill = async (req, res) => {
           requestId: payload.requestId
         });
       }
-    } catch (error) {
-      console.error('Failed to log error to database:', error);
+    } catch (dbError) {
+      console.error('Failed to log error to database:', dbError);
     }
     return res.internalServerError({ message: error.message });
   }
