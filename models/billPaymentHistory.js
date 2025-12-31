@@ -37,7 +37,7 @@ let BillPaymentHistory = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
       validate: {
-        isIn: [['Prepaid', 'Bank', 'Runpaisa', 'Mobikwik']]
+        isIn: [['MainWallet']]
       }
     },
     operator: {

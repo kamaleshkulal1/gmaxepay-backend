@@ -574,7 +574,6 @@ const payBill = async (req, res) => {
           const userWalletHistory = {
             refId: userId,
             companyId: companyId,
-            walletType: 'MainWallet',
             remark: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName} - Bill No: ${responseData?.billDetails?.billNumber || billerId}`,
             operator: foundOperator.operatorName,
             amount: billAmount,
@@ -696,7 +695,7 @@ const payBill = async (req, res) => {
         billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
         billNumber: responseData?.billDetails?.billNumber || billerId,
         api: 'BBPS',
-        walletType: 'MainWallet',
+        walletType: 'Prepaid',
         amount: billAmount,
         debit: 0,
         comm: 0,
