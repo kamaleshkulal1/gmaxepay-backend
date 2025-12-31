@@ -56,6 +56,11 @@ const panCardCrud = sequelize.define(
       allowNull: true,
       defaultValue: 'Pending'
     },
+    type: {
+      type: DataTypes.ENUM('new', 'correction'),
+      allowNull: false,
+      defaultValue: 'new'
+    },
     request: {
       type: DataTypes.TEXT,
       allowNull: true

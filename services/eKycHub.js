@@ -1,5 +1,6 @@
 const axios = require('axios');
 const ekychubUrl = process.env.EKYCHUB_URL;
+const ekychubPanCardUrl = process.env.EKYC_PAN_URL;
 const username = process.env.EKYCHUB_USERNAME;
 const token = process.env.EKYCHUB_TOKEN;
 const redirect_url = process.env.EKYCHUB_REDIRECT_URL;
@@ -207,43 +208,67 @@ const bankVerification = async (account_number, ifsc) => {
     });
 }
 
-const panRedirection = async (mobile_number) => {
+
+const panCardCorrection = async (number, mode) => {
   const orderid = generateSystemReference();
-  let config = {
+  const url = `${ekychubPanCardUrl}/v4/nsdl/correction?`;
+    let config = {
     method: 'get',
-    url: `${ekychubUrl}/verification/pan_redirection?`,
+    url: url,
     headers: {
       'Content-Type': 'application/json'
     },
     params: {
       username,
       token,
-      mobile_number,
+      number,
+      mode,
       orderid,
-      redirect_url
     }
-  };
+  }
   return axios
     .request(config)
     .then((response) => {
-      return { ...response.data, orderid };
+      return response.data;
     })
     .catch((error) => {
-      console.log('PAN redirection error:', error.response);
-      return error.response?.data || {
-        status: 'Failure',
-        message: error.message || 'Error creating PAN redirection URL',
-        orderid
-      };
+      return error.response.data;
     });
 }
 
+const panCardNew = async (number, mode) => {
+  const orderid = generateSystemReference();
+  const url = `${ekychubPanCardUrl}/v4/nsdl/new_pan?`;
+  let config = {
+    method: 'get',
+    url: url,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      number,
+      mode,
+      orderid
+    }
+  }
+  return axios
+    .request(config)
+    .then((response) => {
+      return response.data;
+    })
+    .catch((error) => {
+      return error.response.data;
+    });
+}
 module.exports = {
-    createAadharVerificationUrl,
-    createPanVerificationUrl,
-    getDocuments,
-    balanceEnquiry,
-    panVerification,
-    bankVerification,
-    panRedirection
+  createAadharVerificationUrl,
+  createPanVerificationUrl,
+  getDocuments,
+  balanceEnquiry,
+  panVerification,
+  bankVerification,
+  panCardCorrection,
+  panCardNew
 }
