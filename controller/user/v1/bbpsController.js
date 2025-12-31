@@ -335,18 +335,30 @@ const payBill = async (req, res) => {
       return round2((Number(commValue) * TDS_PERCENT) / 100);
     };
 
-    // TDS will be calculated later, only for SUCCESS transactions
-    // For now, initialize to 0 (will be recalculated after gateway response)
-    let commissionTDS = 0;
+    // Initialize all commissions to 0 - only user's role commission will be set to 0.97
+    let superadminComm = 0;
+    let whitelabelComm = 0;
+    let masterDistributorCom = 0;
+    let distributorCom = 0;
+    let retailerCom = 0;
     
-    // Store commission breakdown for history (using operator.comm as base)
-    const superadminComm = earnedCommission;
-    const whitelabelComm = earnedCommission;
-    const masterDistributorCom = earnedCommission;
-    const distributorCom = earnedCommission;
-    const retailerCom = earnedCommission;
+    // Determine user role and set only that role's commission to 0.97
+    // userRole: 1=Super Admin, 2=Whitelabel/Company Admin, 3=Master Distributor, 4=Distributor, 5=Retailer
+    const userRole = user.userRole;
     
-    // TDS breakdown (will be calculated after success)
+    if (userRole === 1) {
+      superadminComm = earnedCommission;
+    } else if (userRole === 2) {
+      whitelabelComm = earnedCommission;
+    } else if (userRole === 3) {
+      masterDistributorCom = earnedCommission;
+    } else if (userRole === 4) {
+      distributorCom = earnedCommission;
+    } else if (userRole === 5) {
+      retailerCom = earnedCommission;
+    }
+    
+    // TDS breakdown (will be calculated after success, only for user's role)
     let superadminCommTDS = 0;
     let whitelabelCommTDS = 0;
     let masterDistributorComTDS = 0;
@@ -511,33 +523,33 @@ const payBill = async (req, res) => {
 
       // Calculate TDS only for SUCCESS transactions
       // TDS is 2% of the earned commission (operator.comm = 0.97 rupees)
-      // Credit commission to the wallet of the user who made the payment based on their role
+      // Only calculate TDS for the user's role commission and credit remaining to wallet
       if (billStatus === 'Success') {
-        // Calculate TDS on earned commission for each role
-        superadminCommTDS = calculateTdsAmount(superadminComm);
-        whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
-        masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
-        distributorComTDS = calculateTdsAmount(distributorCom);
-        retailerComTDS = calculateTdsAmount(retailerCom);
-        
-        // Determine which commission to credit based on user role
-        // userRole: 1=Super Admin, 2=Whitelabel/Company Admin, 3=Master Distributor, 4=Distributor, 5=Retailer
-        const userRole = user.userRole;
-        
+        // Calculate TDS only for the user's role commission
         if (userRole === 1) {
-          // Super Admin - credit superadmin commission after TDS
+          // Super Admin - calculate TDS on superadmin commission
+          superadminCommTDS = calculateTdsAmount(superadminComm);
+          // Credit remaining commission after TDS to wallet
           userCommissionCredit = round2(superadminComm - superadminCommTDS);
         } else if (userRole === 2) {
-          // Whitelabel/Company Admin - credit whitelabel commission after TDS
+          // Whitelabel/Company Admin - calculate TDS on whitelabel commission
+          whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
+          // Credit remaining commission after TDS to wallet
           userCommissionCredit = round2(whitelabelComm - whitelabelCommTDS);
         } else if (userRole === 3) {
-          // Master Distributor - credit master distributor commission after TDS
+          // Master Distributor - calculate TDS on master distributor commission
+          masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
+          // Credit remaining commission after TDS to wallet
           userCommissionCredit = round2(masterDistributorCom - masterDistributorComTDS);
         } else if (userRole === 4) {
-          // Distributor - credit distributor commission after TDS
+          // Distributor - calculate TDS on distributor commission
+          distributorComTDS = calculateTdsAmount(distributorCom);
+          // Credit remaining commission after TDS to wallet
           userCommissionCredit = round2(distributorCom - distributorComTDS);
         } else if (userRole === 5) {
-          // Retailer - credit retailer commission after TDS
+          // Retailer - calculate TDS on retailer commission
+          retailerComTDS = calculateTdsAmount(retailerCom);
+          // Credit remaining commission after TDS to wallet
           userCommissionCredit = round2(retailerCom - retailerComTDS);
         }
         
