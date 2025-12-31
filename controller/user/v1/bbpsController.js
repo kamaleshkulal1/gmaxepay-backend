@@ -20,7 +20,7 @@ const calculateCCF1 = (billAmount, flatFee, percentFee) => {
 const payBill = async (req, res) => {
   try {
     const userId = req.user.id;
-    const companyId = req.companyId;
+    const companyId = req.companyId || req.user.companyId;
     const { fetchRefId, secureKey } = req.body;
 
     const convertRupeesToPaisa = (amount) =>
@@ -38,11 +38,18 @@ const payBill = async (req, res) => {
           'email',
           'secureKey',
           'mobileNo',
-          'reportingTo'
+          'reportingTo',
+          'companyId'
         ]
       }
     );
     if (!user) return res.failure({ message: 'User not found' });
+    
+    // Ensure companyId is available - use user.companyId as final fallback
+    const finalCompanyId = companyId || user.companyId;
+    if (!finalCompanyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
     if (!fetchRefId)
       return res.failure({ message: 'Required payment parameters missing' });
     if (!secureKey) return res.failure({ message: 'Secure key is required' });
@@ -361,7 +368,7 @@ const payBill = async (req, res) => {
         const billStatus = 'Failed';
         const failedHistoryData = {
           refId: userId,
-          companyId: companyId,
+          companyId: finalCompanyId,
           operatorId: foundOperator.id,
           operator: foundOperator.operatorName,
           billNumber: responseData?.billDetails?.billNumber || billerId,
@@ -447,7 +454,7 @@ const payBill = async (req, res) => {
 
       const historyData = {
         refId: userId,
-        companyId: companyId,
+        companyId: finalCompanyId,
         operatorId: foundOperator.id,
         operator: foundOperator.operatorName,
           billNumber: responseData?.billDetails?.billNumber || billerId,
@@ -552,7 +559,7 @@ const payBill = async (req, res) => {
         updates.push(
           dbService.update(
             model.wallet,
-            { refId: userId, companyId },
+            { refId: userId, companyId: finalCompanyId },
             { 
               mainWallet: balance,
               updatedBy: userId 
@@ -573,7 +580,7 @@ const payBill = async (req, res) => {
 
           const userWalletHistory = {
             refId: userId,
-            companyId: companyId,
+            companyId: finalCompanyId,
             remark: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName} - Bill No: ${responseData?.billDetails?.billNumber || billerId}`,
             operator: foundOperator.operatorName,
             amount: billAmount,
@@ -689,13 +696,13 @@ const payBill = async (req, res) => {
 
       const failedHistoryData = {
         refId: userId,
-        companyId: companyId,
+        companyId: finalCompanyId,
         operatorId: foundOperator.id,
         operator: foundOperator.operatorName,
         billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
         billNumber: responseData?.billDetails?.billNumber || billerId,
         api: 'BBPS',
-        walletType: 'Prepaid',
+        walletType: 'MainWallet',
         amount: billAmount,
         debit: 0,
         comm: 0,
