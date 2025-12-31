@@ -14,6 +14,7 @@ db.kycDocumentSetting = require('./kycDocument');
 db.ekycHub = require('./ekycHub');
 db.aadhaarCard = require('./aadhaarCard');
 db.panCard = require('./panCard');
+db.panCardCrud = require('./panCardCrud');
 db.digilockerDocument = require('./digilockerDocument');
 
 // User Management Models
@@ -416,6 +417,29 @@ db.bbpsOperator.belongsTo(db.bbpsOperatorCategory, {
 db.bbpsOperatorCategory.hasMany(db.bbpsOperator, {
   foreignKey: 'categoryId',
   as: 'operators'
+});
+
+// PAN Card CRUD Relationships
+db.panCardCrud.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.panCardCrud, {
+  foreignKey: 'refId',
+  as: 'panCardRequests',
+  sourceKey: 'id'
+});
+
+db.panCardCrud.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.panCardCrud, {
+  foreignKey: 'companyId',
+  as: 'panCardRequests',
+  sourceKey: 'id'
 });
 
 module.exports = db;

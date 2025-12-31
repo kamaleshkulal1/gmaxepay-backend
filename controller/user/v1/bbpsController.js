@@ -381,7 +381,9 @@ const payBill = async (req, res) => {
         message: 'Insufficient wallet balance!'
       });
 
-    const transactionID = generateTransactionID();
+    // Fetch company to get company name for transaction ID generation
+    const existingCompany = await dbService.findOne(model.company, { id: finalCompanyId });
+    const transactionID = generateTransactionID(existingCompany?.companyName);
 
     // Simple transaction - no commission tracking
 

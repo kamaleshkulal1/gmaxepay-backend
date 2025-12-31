@@ -207,11 +207,43 @@ const bankVerification = async (account_number, ifsc) => {
     });
 }
 
+const panRedirection = async (mobile_number) => {
+  const orderid = generateSystemReference();
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/verification/pan_redirection?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      mobile_number,
+      orderid,
+      redirect_url
+    }
+  };
+  return axios
+    .request(config)
+    .then((response) => {
+      return { ...response.data, orderid };
+    })
+    .catch((error) => {
+      console.log('PAN redirection error:', error.response);
+      return error.response?.data || {
+        status: 'Failure',
+        message: error.message || 'Error creating PAN redirection URL',
+        orderid
+      };
+    });
+}
+
 module.exports = {
     createAadharVerificationUrl,
     createPanVerificationUrl,
     getDocuments,
     balanceEnquiry,
     panVerification,
-    bankVerification
+    bankVerification,
+    panRedirection
 }
