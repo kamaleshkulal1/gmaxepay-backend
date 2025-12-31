@@ -213,7 +213,7 @@ const bankVerification = async (account_number, ifsc) => {
 
 const panCardCorrection = async (number, mode) => {
   const orderid = generateSystemReference();
-  const url = `${ekychubPanCardUrl}/nsdl/correction?`;
+  const url = `${inspayUrl}/nsdl/correction?`;
     let config = {
     method: 'get',
     url: url,
@@ -243,7 +243,7 @@ const panCardCorrection = async (number, mode) => {
 
 const panCardNew = async (number, mode) => {
   const orderid = generateSystemReference();
-  const url = `${ekychubPanCardUrl}/v4/nsdl/new_pan?`;
+  const url = `${inspayUrl}/nsdl/new_pan?`;
   let config = {
     method: 'get',
     url: url,
