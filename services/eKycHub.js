@@ -231,28 +231,11 @@ const panCardCorrection = async (number, mode) => {
     .then((response) => {
       console.log("request", response)
       console.log("response", response.data);
-      // Ensure orderid is included in response (use generated one if API doesn't return it)
-      const responseData = response.data || {};
-      return {
-        ...responseData,
-        orderid: responseData.orderid || orderid
-      };
+      return response.data;
     })
     .catch((error) => {
-      console.log("error", error.response?.data || error.message);
-      // Return error response with orderid included
-      if (error.response && error.response.data) {
-        return {
-          ...error.response.data,
-          orderid: error.response.data.orderid || orderid
-        };
-      }
-      // Return structured error when no response
-      return {
-        status: 'Failed',
-        message: error.message || 'Error connecting to PAN card service',
-        orderid: orderid
-      };
+      console.log("error", error.response.data);
+      return error.response.data;
     });
 }
 
@@ -276,30 +259,12 @@ const panCardNew = async (number, mode) => {
   return axios
   .request(config)
   .then((response) => {
-    console.log("request", response)
+    console.log("response", response)
     console.log("response", response.data);
-    // Ensure orderid is included in response (use generated one if API doesn't return it)
-    const responseData = response.data || {};
-    return {
-      ...responseData,
-      orderid: responseData.orderid || orderid
-    };
+    return response.data;
   })
   .catch((error) => {
-    console.log("error", error.response?.data || error.message);
-    // Return error response with orderid included
-    if (error.response && error.response.data) {
-      return {
-        ...error.response.data,
-        orderid: error.response.data.orderid || orderid
-      };
-    }
-    // Return structured error when no response
-    return {
-      status: 'Failed',
-      message: error.message || 'Error connecting to PAN card service',
-      orderid: orderid
-    };
+    return error.response.data;
   });
 }
 module.exports = {
