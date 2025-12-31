@@ -199,7 +199,7 @@ if (process.env.NODE_ENV !== 'test') {
   //     name();
   //     aepsLogout();
   //   });
-  // app.use(routes);
+  app.use(routes);
   httpServer.listen(process.env.PORT, () => {
     console.log(`gmaxepay is running on port ${process.env.PORT} successfully.`);
   });
