@@ -226,6 +226,67 @@ let BillPaymentHistory = sequelize.define(
         }
       }
     },
+    superadminComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    whitelabelComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    masterDistributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Typo-friendly alias
+    masterDistrbutorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    distributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    retailerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Typo-friendly alias
+    reatilerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // --- TDS on Commission (nullable, calculated only for SUCCESS transactions) ---
+    superadminCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    whitelabelCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    masterDistributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Typo-friendly alias
+    masterDistrbutorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    distributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    retailerComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    // Typo-friendly alias
+    reatilerComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
     ...reusableAttributes
   },
   {

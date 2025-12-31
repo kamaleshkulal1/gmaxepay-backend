@@ -145,7 +145,16 @@ const payBill = async (req, res) => {
           'operatorType',
           'operatorCode',
           'minValue',
-          'maxValue'
+          'maxValue',
+          'comm',
+          'superadminComm',
+          'whitelabelComm',
+          'masterDistributorCom',
+          'masterDistrbutorCom',
+          'distributorCom',
+          'retailerCom',
+          'reatilerCom',
+          'amtType'
         ]
       }
     );
@@ -300,9 +309,6 @@ const payBill = async (req, res) => {
     // Use mainWallet balance
     const currentWalletBalance = foundUserWallet.mainWallet || 0;
 
-    // Removed slab and commission logic - simple transaction only
-    // Removed min/max amount validation - no range restrictions
-
     let ccf1Rupees = needsCCF1
       ? parseFloat(convertPaisaToRupees(ccf1Amount))
       : 0;
@@ -311,10 +317,50 @@ const payBill = async (req, res) => {
         ? parseFloat(convertPaisaToRupees(foundCategory.custConvFee))
         : 0;
 
-    // Simple transaction - no commission/slab logic
+    // Commission/TDS calculation - use operator default commission
+    const round2 = (num) => {
+      const n = Number(num);
+      if (!Number.isFinite(n)) return 0;
+      return Math.round((n + Number.EPSILON) * 100) / 100;
+    };
+
+    const TDS_PERCENT = Number(process.env.BBPS_TDS_PERCENT || process.env.AEPS_TDS_PERCENT || 2);
+    
+    // Use operator default commission (comm field) - default is 0.97 rupees
+    const earnedCommission = foundOperator?.comm ? round2(Number(foundOperator.comm)) : 0.97;
+    
+    // Calculate TDS on earned commission (2% of commission)
+    const calculateTdsAmount = (commValue) => {
+      if (commValue === null || commValue === undefined || commValue === 0) return 0;
+      return round2((Number(commValue) * TDS_PERCENT) / 100);
+    };
+
+    // TDS will be calculated later, only for SUCCESS transactions
+    // For now, initialize to 0 (will be recalculated after gateway response)
+    let commissionTDS = 0;
+    
+    // Store commission breakdown for history (using operator.comm as base)
+    const superadminComm = earnedCommission;
+    const whitelabelComm = earnedCommission;
+    const masterDistributorCom = earnedCommission;
+    const distributorCom = earnedCommission;
+    const retailerCom = earnedCommission;
+    
+    // TDS breakdown (will be calculated after success)
+    let superadminCommTDS = 0;
+    let whitelabelCommTDS = 0;
+    let masterDistributorComTDS = 0;
+    let distributorComTDS = 0;
+    let retailerComTDS = 0;
+
+    // Simple transaction - debit calculation
     let debit = parseFloat(billAmount) + ccf1Rupees + custConvFeeRupees;
+    // Total commission credit (sum of ALL commissions after TDS) will be calculated after gateway response (only for SUCCESS)
+    // All commissions (superadmin, whitelabel, masterDistributor, distributor, retailer) are credited to retailer wallet
+    // For now, initialize to 0 (will be recalculated after gateway response)
+    let retailerNetCredit = 0;
     let balance = currentWalletBalance - debit;
-    let commission = 0;
+    let commission = earnedCommission;
     let surcharge = 0;
 
     if (currentWalletBalance < debit)
@@ -377,7 +423,7 @@ const payBill = async (req, res) => {
           billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
           amount: billAmount,
           debit: 0,
-          comm: 0,
+          comm: earnedCommission,
           surcharge: 0,
           opening: currentWalletBalance,
           closing: currentWalletBalance,
@@ -397,11 +443,28 @@ const payBill = async (req, res) => {
           isStatusChecked: false,
           distributerSurcharge: 0,
           distributorAmount: '0.00',
+          distributerComm: distributorCom === null ? '0.00' : String(distributorCom || 0),
           companyCommission: '0.00',
-          whitelabelCommission: 0,
+          whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
           adminAmount: '0.00',
           adminSurcharge: 0,
           adminComm: '0.00',
+          // Commission breakdown (for failed transactions, TDS remains 0)
+          superadminComm,
+          whitelabelComm,
+          masterDistributorCom,
+          masterDistrbutorCom: masterDistributorCom,
+          distributorCom,
+          retailerCom,
+          reatilerCom: retailerCom,
+          // TDS on commission (0 for failed transactions)
+          superadminCommTDS: 0,
+          whitelabelCommTDS: 0,
+          masterDistributorComTDS: 0,
+          masterDistrbutorComTDS: 0,
+          distributorComTDS: 0,
+          retailerComTDS: 0,
+          reatilerComTDS: 0,
           userDetails: {
             name: user.name,
             email: user.email,
@@ -449,8 +512,31 @@ const payBill = async (req, res) => {
             ? 'Pending'
             : 'Failed';
 
+      // Calculate TDS only for SUCCESS transactions
+      // TDS is 2% of the earned commission (operator.comm = 0.97 rupees)
+      if (billStatus === 'Success') {
+        // Calculate TDS on earned commission
+        commissionTDS = calculateTdsAmount(earnedCommission);
+        
+        // Set TDS for all commission types (all use the same earned commission)
+        superadminCommTDS = commissionTDS;
+        whitelabelCommTDS = commissionTDS;
+        masterDistributorComTDS = commissionTDS;
+        distributorComTDS = commissionTDS;
+        retailerComTDS = commissionTDS;
+        
+        // Calculate total commission credit: earned commission minus TDS
+        // All commission is credited to retailer wallet
+        retailerNetCredit = round2(earnedCommission - commissionTDS);
+      }
+
       const respAmountInRupees =
         parsedResponse?.respAmount || billAmount.toString();
+      
+      // Recalculate closing balance with commission credit (only for SUCCESS)
+      const closingBalance = billStatus === 'Success' 
+        ? round2(balance + retailerNetCredit)
+        : balance;
 
       const historyData = {
         refId: userId,
@@ -462,11 +548,11 @@ const payBill = async (req, res) => {
           walletType: 'MainWallet',
           amount: billAmount,
           debit: billStatus === 'Failed' ? 0 : debit,
-        comm: 0,
+        comm: earnedCommission,
         surcharge: 0,
         opening: currentWalletBalance,
-        closing: billStatus === 'Failed' ? currentWalletBalance : balance,
-        credit: 0,
+        closing: closingBalance,
+        credit: billStatus === 'Success' ? retailerNetCredit : 0,
         mobileNumber: customerInfo?.customerMobile || '',
         cardNumber: '',
         transactionType: 'BBPS',
@@ -483,12 +569,28 @@ const payBill = async (req, res) => {
         isStatusChecked: billStatus === 'Success',
         distributerSurcharge: 0,
         distributorAmount: '0.00',
-        distributerComm: '0.00',
+        distributerComm: distributorCom === null ? '0.00' : String(distributorCom || 0),
         companyCommission: '0.00',
-        whitelabelCommission: 0,
+        whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
         adminAmount: '0.00',
         adminSurcharge: 0,
         adminComm: '0.00',
+        // Commission breakdown
+        superadminComm,
+        whitelabelComm,
+        masterDistributorCom,
+        masterDistrbutorCom: masterDistributorCom,
+        distributorCom,
+        retailerCom,
+        reatilerCom: retailerCom,
+        // TDS on commission
+        superadminCommTDS,
+        whitelabelCommTDS,
+        masterDistributorComTDS,
+        masterDistrbutorComTDS: masterDistributorComTDS,
+        distributorComTDS,
+        retailerComTDS,
+        reatilerComTDS: retailerComTDS,
         userDetails: {
           name: user.name,
           email: user.email,
@@ -555,13 +657,13 @@ const payBill = async (req, res) => {
 
         const updates = [];
 
-        // Update user mainWallet - no commission logic
+        // Update user mainWallet - add commission credit for successful transactions
         updates.push(
           dbService.update(
             model.wallet,
             { refId: userId, companyId: finalCompanyId },
             { 
-              mainWallet: balance,
+              mainWallet: closingBalance,
               updatedBy: userId 
             }
           )
@@ -584,11 +686,11 @@ const payBill = async (req, res) => {
             remark: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName} - Bill No: ${responseData?.billDetails?.billNumber || billerId}`,
             operator: foundOperator.operatorName,
             amount: billAmount,
-            comm: 0,
+            comm: earnedCommission,
             surcharge: 0,
             openingAmt: currentWalletBalance,
-            closingAmt: balance,
-            credit: 0,
+            closingAmt: closingBalance,
+            credit: retailerNetCredit,
             debit: debit.toFixed(2),
             merchantTransactionId: transactionID,
             transactionId:
@@ -606,7 +708,23 @@ const payBill = async (req, res) => {
             distributorAmount: 0,
             adminSurcharge: 0,
             adminAmount: 0,
-            whitelabelCommission: 0,
+            whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
+            // Commission breakdown
+            superadminComm,
+            whitelabelComm,
+            masterDistributorCom,
+            masterDistrbutorCom: masterDistributorCom,
+            distributorCom,
+            retailerCom,
+            reatilerCom: retailerCom,
+            // TDS on commission
+            superadminCommTDS,
+            whitelabelCommTDS,
+            masterDistributorComTDS,
+            masterDistrbutorComTDS: masterDistributorComTDS,
+            distributorComTDS,
+            retailerComTDS,
+            reatilerComTDS: retailerComTDS,
             userDetails: {
               name: user.name,
               email: user.email,
@@ -705,7 +823,7 @@ const payBill = async (req, res) => {
         walletType: 'MainWallet',
         amount: billAmount,
         debit: 0,
-        comm: 0,
+        comm: earnedCommission,
         surcharge: 0,
         opening: currentWalletBalance,
         closing: currentWalletBalance,
@@ -725,10 +843,27 @@ const payBill = async (req, res) => {
         isStatusChecked: false,
         distributerSurcharge: 0,
         distributorAmount: '0.00',
+        distributerComm: distributorCom === null ? '0.00' : String(distributorCom || 0),
         companyCommission: '0.00',
-        whitelabelCommission: 0,
+        whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
         adminAmount: '0.00',
         adminSurcharge: 0,
+        // Commission breakdown (for failed transactions, TDS remains 0)
+        superadminComm,
+        whitelabelComm,
+        masterDistributorCom,
+        masterDistrbutorCom: masterDistributorCom,
+        distributorCom,
+        retailerCom,
+        reatilerCom: retailerCom,
+        // TDS on commission (0 for failed transactions)
+        superadminCommTDS: 0,
+        whitelabelCommTDS: 0,
+        masterDistributorComTDS: 0,
+        masterDistrbutorComTDS: 0,
+        distributorComTDS: 0,
+        retailerComTDS: 0,
+        reatilerComTDS: 0,
         userDetails: {
           name: user.name,
           email: user.email,

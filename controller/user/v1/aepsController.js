@@ -880,7 +880,8 @@ const aepsTransaction = async (req, res) => {
         let masterDistributorComTDS = 0;
         let distributorComTDS = 0;
         let retailerComTDS = 0;
-        // retailerNetCredit will be calculated after TDS is determined
+        // retailerNetCredit will be calculated after TDS is determined (sum of all commissions after TDS)
+        let retailerNetCredit = 0;
 
         // Transaction metadata we want to persist for reporting/audit
         const consumerAadhaarNumber = aadharNumber ? String(aadharNumber) : null;
@@ -993,9 +994,17 @@ const aepsTransaction = async (req, res) => {
             retailerComTDS = calculateTdsAmount(retailerCom);
         }
 
-        // Recalculate retailerNetCredit after TDS (only matters for SUCCESS)
-        const retailerNetCredit =
-            retailerCom === null ? 0 : round2(Number(retailerCom) - Number(retailerComTDS || 0));
+        // Calculate total commission credit: ALL commissions minus TDS (all credited to retailer wallet)
+        if (isSuccess) {
+            const superadminNet = (superadminComm === null ? 0 : Number(superadminComm || 0)) - (superadminCommTDS || 0);
+            const whitelabelNet = (whitelabelComm === null ? 0 : Number(whitelabelComm || 0)) - (whitelabelCommTDS || 0);
+            const masterDistributorNet = (masterDistributorCom === null ? 0 : Number(masterDistributorCom || 0)) - (masterDistributorComTDS || 0);
+            const distributorNet = (distributorCom === null ? 0 : Number(distributorCom || 0)) - (distributorComTDS || 0);
+            const retailerNet = (retailerCom === null ? 0 : Number(retailerCom || 0)) - (retailerComTDS || 0);
+            
+            // Total commission credit = sum of all commissions after TDS
+            retailerNetCredit = round2(superadminNet + whitelabelNet + masterDistributorNet + distributorNet + retailerNet);
+        }
 
         // If gateway returns contradictory wrapper status (e.g. status="ERROR" but responseCode="00"),
         // normalize it so API consumers don't see ERROR inside a successful response.
