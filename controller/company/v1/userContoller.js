@@ -378,8 +378,9 @@ const setMPIN = async (req, res) => {
 
     // Send email notification
     try {
-      const logoUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/images/logo.png` : '';
-      const illustrationUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/setmpin.png` : '';
+      const backendUrl = process.env.BASE_URL || process.env.APP_URL || 'http://localhost:3000';
+      const logoUrl = `${backendUrl}/gmaxepay.png`;
+      const illustrationUrl = `${backendUrl}/setmpin.png`;
 
       await emailService.sendMPINSetEmail({
         to: user.email,
@@ -516,8 +517,9 @@ const resetMPIN = async (req, res) => {
 
     // Send email notification
     try {
-      const logoUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/images/logo.png` : '';
-      const illustrationUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/setmpin.png` : '';
+      const backendUrl = process.env.BASE_URL || process.env.APP_URL || 'http://localhost:3000';
+      const logoUrl = `${backendUrl}/gmaxepay.png`;
+      const illustrationUrl = `${backendUrl}/setmpin.png`;
 
       await emailService.sendMPINSetEmail({
         to: userToReset.email,
