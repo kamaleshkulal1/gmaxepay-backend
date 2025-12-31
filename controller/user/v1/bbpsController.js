@@ -293,17 +293,8 @@ const payBill = async (req, res) => {
     // Use mainWallet balance
     const currentWalletBalance = foundUserWallet.mainWallet || 0;
 
-    if (foundOperator.minValue && foundOperator.maxValue) {
-      if (
-        foundOperator.minValue > billAmount ||
-        foundOperator.maxValue < billAmount
-      ) {
-        return res.failure({
-          message: `Amount should be between ${foundOperator.minValue} - ${foundOperator.maxValue}`
-        });
-      }
-    }
     // Removed slab and commission logic - simple transaction only
+    // Removed min/max amount validation - no range restrictions
 
     let ccf1Rupees = needsCCF1
       ? parseFloat(convertPaisaToRupees(ccf1Amount))

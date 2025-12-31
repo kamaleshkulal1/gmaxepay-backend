@@ -378,7 +378,7 @@ const setMPIN = async (req, res) => {
 
     // Send email notification
     try {
-      const backendUrl = process.env.BASE_URL || process.env.APP_URL || 'http://localhost:3000';
+      const backendUrl = process.env.BASE_URL 
       const logoUrl = `${backendUrl}/gmaxepay.png`;
       const illustrationUrl = `${backendUrl}/setmpin.png`;
 
