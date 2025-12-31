@@ -355,10 +355,11 @@ const payBill = async (req, res) => {
 
     // Simple transaction - debit calculation
     let debit = parseFloat(billAmount) + ccf1Rupees + custConvFeeRupees;
-    // Total commission credit (sum of ALL commissions after TDS) will be calculated after gateway response (only for SUCCESS)
-    // All commissions (superadmin, whitelabel, masterDistributor, distributor, retailer) are credited to retailer wallet
+    // Commission credit will be calculated after gateway response (only for SUCCESS)
+    // Credit commission to the wallet of the user who made the payment based on their role
     // For now, initialize to 0 (will be recalculated after gateway response)
-    let retailerNetCredit = 0;
+    let userCommissionCredit = 0;
+    let retailerNetCredit = 0; // For backward compatibility
     let balance = currentWalletBalance - debit;
     let commission = earnedCommission;
     let surcharge = 0;
@@ -453,18 +454,14 @@ const payBill = async (req, res) => {
           superadminComm,
           whitelabelComm,
           masterDistributorCom,
-          masterDistrbutorCom: masterDistributorCom,
           distributorCom,
           retailerCom,
-          reatilerCom: retailerCom,
           // TDS on commission (0 for failed transactions)
           superadminCommTDS: 0,
           whitelabelCommTDS: 0,
           masterDistributorComTDS: 0,
-          masterDistrbutorComTDS: 0,
           distributorComTDS: 0,
           retailerComTDS: 0,
-          reatilerComTDS: 0,
           userDetails: {
             name: user.name,
             email: user.email,
@@ -514,20 +511,38 @@ const payBill = async (req, res) => {
 
       // Calculate TDS only for SUCCESS transactions
       // TDS is 2% of the earned commission (operator.comm = 0.97 rupees)
+      // Credit commission to the wallet of the user who made the payment based on their role
       if (billStatus === 'Success') {
-        // Calculate TDS on earned commission
-        commissionTDS = calculateTdsAmount(earnedCommission);
+        // Calculate TDS on earned commission for each role
+        superadminCommTDS = calculateTdsAmount(superadminComm);
+        whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
+        masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
+        distributorComTDS = calculateTdsAmount(distributorCom);
+        retailerComTDS = calculateTdsAmount(retailerCom);
         
-        // Set TDS for all commission types (all use the same earned commission)
-        superadminCommTDS = commissionTDS;
-        whitelabelCommTDS = commissionTDS;
-        masterDistributorComTDS = commissionTDS;
-        distributorComTDS = commissionTDS;
-        retailerComTDS = commissionTDS;
+        // Determine which commission to credit based on user role
+        // userRole: 1=Super Admin, 2=Whitelabel/Company Admin, 3=Master Distributor, 4=Distributor, 5=Retailer
+        const userRole = user.userRole;
         
-        // Calculate total commission credit: earned commission minus TDS
-        // All commission is credited to retailer wallet
-        retailerNetCredit = round2(earnedCommission - commissionTDS);
+        if (userRole === 1) {
+          // Super Admin - credit superadmin commission after TDS
+          userCommissionCredit = round2(superadminComm - superadminCommTDS);
+        } else if (userRole === 2) {
+          // Whitelabel/Company Admin - credit whitelabel commission after TDS
+          userCommissionCredit = round2(whitelabelComm - whitelabelCommTDS);
+        } else if (userRole === 3) {
+          // Master Distributor - credit master distributor commission after TDS
+          userCommissionCredit = round2(masterDistributorCom - masterDistributorComTDS);
+        } else if (userRole === 4) {
+          // Distributor - credit distributor commission after TDS
+          userCommissionCredit = round2(distributorCom - distributorComTDS);
+        } else if (userRole === 5) {
+          // Retailer - credit retailer commission after TDS
+          userCommissionCredit = round2(retailerCom - retailerComTDS);
+        }
+        
+        // For backward compatibility, also set retailerNetCredit
+        retailerNetCredit = userCommissionCredit;
       }
 
       const respAmountInRupees =
@@ -535,7 +550,7 @@ const payBill = async (req, res) => {
       
       // Recalculate closing balance with commission credit (only for SUCCESS)
       const closingBalance = billStatus === 'Success' 
-        ? round2(balance + retailerNetCredit)
+        ? round2(balance + userCommissionCredit)
         : balance;
 
       const historyData = {
@@ -552,7 +567,7 @@ const payBill = async (req, res) => {
         surcharge: 0,
         opening: currentWalletBalance,
         closing: closingBalance,
-        credit: billStatus === 'Success' ? retailerNetCredit : 0,
+        credit: billStatus === 'Success' ? userCommissionCredit : 0,
         mobileNumber: customerInfo?.customerMobile || '',
         cardNumber: '',
         transactionType: 'BBPS',
@@ -579,18 +594,14 @@ const payBill = async (req, res) => {
         superadminComm,
         whitelabelComm,
         masterDistributorCom,
-        masterDistrbutorCom: masterDistributorCom,
         distributorCom,
         retailerCom,
-        reatilerCom: retailerCom,
         // TDS on commission
         superadminCommTDS,
         whitelabelCommTDS,
         masterDistributorComTDS,
-        masterDistrbutorComTDS: masterDistributorComTDS,
         distributorComTDS,
         retailerComTDS,
-        reatilerComTDS: retailerComTDS,
         userDetails: {
           name: user.name,
           email: user.email,
@@ -690,7 +701,7 @@ const payBill = async (req, res) => {
             surcharge: 0,
             openingAmt: currentWalletBalance,
             closingAmt: closingBalance,
-            credit: retailerNetCredit,
+            credit: userCommissionCredit,
             debit: debit.toFixed(2),
             merchantTransactionId: transactionID,
             transactionId:
@@ -713,18 +724,14 @@ const payBill = async (req, res) => {
             superadminComm,
             whitelabelComm,
             masterDistributorCom,
-            masterDistrbutorCom: masterDistributorCom,
             distributorCom,
             retailerCom,
-            reatilerCom: retailerCom,
             // TDS on commission
             superadminCommTDS,
             whitelabelCommTDS,
             masterDistributorComTDS,
-            masterDistrbutorComTDS: masterDistributorComTDS,
             distributorComTDS,
             retailerComTDS,
-            reatilerComTDS: retailerComTDS,
             userDetails: {
               name: user.name,
               email: user.email,
@@ -852,18 +859,14 @@ const payBill = async (req, res) => {
         superadminComm,
         whitelabelComm,
         masterDistributorCom,
-        masterDistrbutorCom: masterDistributorCom,
         distributorCom,
         retailerCom,
-        reatilerCom: retailerCom,
         // TDS on commission (0 for failed transactions)
         superadminCommTDS: 0,
         whitelabelCommTDS: 0,
         masterDistributorComTDS: 0,
-        masterDistrbutorComTDS: 0,
         distributorComTDS: 0,
         retailerComTDS: 0,
-        reatilerComTDS: 0,
         userDetails: {
           name: user.name,
           email: user.email,

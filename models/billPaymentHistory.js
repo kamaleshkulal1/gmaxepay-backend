@@ -238,21 +238,11 @@ let BillPaymentHistory = sequelize.define(
       type: DataTypes.FLOAT,
       allowNull: true
     },
-    // Typo-friendly alias
-    masterDistrbutorCom: {
-      type: DataTypes.FLOAT,
-      allowNull: true
-    },
     distributorCom: {
       type: DataTypes.FLOAT,
       allowNull: true
     },
     retailerCom: {
-      type: DataTypes.FLOAT,
-      allowNull: true
-    },
-    // Typo-friendly alias
-    reatilerCom: {
       type: DataTypes.FLOAT,
       allowNull: true
     },
@@ -269,21 +259,11 @@ let BillPaymentHistory = sequelize.define(
       type: DataTypes.FLOAT,
       allowNull: true
     },
-    // Typo-friendly alias
-    masterDistrbutorComTDS: {
-      type: DataTypes.FLOAT,
-      allowNull: true
-    },
     distributorComTDS: {
       type: DataTypes.FLOAT,
       allowNull: true
     },
     retailerComTDS: {
-      type: DataTypes.FLOAT,
-      allowNull: true
-    },
-    // Typo-friendly alias
-    reatilerComTDS: {
       type: DataTypes.FLOAT,
       allowNull: true
     },
