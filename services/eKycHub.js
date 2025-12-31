@@ -226,27 +226,22 @@ const panCardCorrection = async (number, mode) => {
       orderid,
     }
   }
- 
   return axios
     .request(config)
     .then((response) => {
-      console.log("response", response);
+      console.log("request", response)
       console.log("response", response.data);
       return response.data;
     })
     .catch((error) => {
-      console.log("error", error.response?.data || error.message);
-      return error.response?.data || {
-        status: 'Failed',
-        message: error.message || 'Error connecting to PAN card service',
-        orderid: orderid
-      };
+      console.log("error", error.response.data);
+      return error.response.data;
     });
 }
 
 const panCardNew = async (number, mode) => {
   const orderid = generateSystemReference();
-  const url = `${ekychubPanCardUrl}/nsdl/new_pan?`;
+  const url = `${ekychubPanCardUrl}/v4/nsdl/new_pan?`;
   let config = {
     method: 'get',
     url: url,
@@ -261,23 +256,15 @@ const panCardNew = async (number, mode) => {
       orderid
     }
   }
-  // Log the full request URL with query parameters
-  const requestUrl = `${url}username=${username}&token=${token}&number=${number}&mode=${mode}&orderid=${orderid}`;
-  console.log("PAN Card New Request URL:", requestUrl);
-  
   return axios
   .request(config)
   .then((response) => {
+    console.log("request", response)
     console.log("response", response.data);
     return response.data;
   })
   .catch((error) => {
-    console.log("error", error.response?.data || error.message);
-    return error.response?.data || {
-      status: 'Failed',
-      message: error.message || 'Error connecting to PAN card service',
-      orderid: orderid
-    };
+    return error.response.data;
   });
 }
 module.exports = {
