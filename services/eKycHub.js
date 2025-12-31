@@ -1,9 +1,11 @@
 const axios = require('axios');
 const ekychubUrl = process.env.EKYCHUB_URL;
-const ekychubPanCardUrl = process.env.EKYC_PAN_URL;
+const inspayUrl = process.env.INSPAY_URL;
+const inspayUsername = process.env.INSPAY_USERNAME;
+const inspayToken = process.env.INSPAY_TOKEN;
 const username = process.env.EKYCHUB_USERNAME;
 const token = process.env.EKYCHUB_TOKEN;
-const redirect_url = process.env.EKYCHUB_REDIRECT_URL;
+
 const {generateSystemReference} = require('../utils/generateSystemReferenceNumber');
 
 const  balanceEnquiry = async () => {
@@ -219,8 +221,8 @@ const panCardCorrection = async (number, mode) => {
       'Content-Type': 'application/json'
     },
     params: {
-      username,
-      token,
+      username: inspayUsername,
+      token: inspayToken,
       number,
       mode,
       orderid,
@@ -249,8 +251,8 @@ const panCardNew = async (number, mode) => {
       'Content-Type': 'application/json'
     },
     params: {
-      username,
-      token,
+      username: inspayUsername,
+      token: inspayToken,
       number,
       mode,
       orderid
