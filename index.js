@@ -193,6 +193,9 @@ if (process.env.NODE_ENV !== 'test') {
   models.sequelize
     .sync({ alter: true })
     .then(() => {})
+    .catch((error) => {
+      console.error('Database sync error:', error.message);
+    })
     .finally(() => {
       app.use(routes);
       // seeder();
