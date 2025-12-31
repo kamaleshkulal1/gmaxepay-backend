@@ -229,10 +229,20 @@ const panCardCorrection = async (number, mode) => {
   return axios
     .request(config)
     .then((response) => {
+      console.log("response", response.data);
       return response.data;
     })
     .catch((error) => {
-      return error.response.data;
+      // Handle network errors or cases where error.response is undefined
+      if (error.response && error.response.data) {
+        return error.response.data;
+      }
+      // Return a structured error response when there's no response from the API
+      return {
+        status: 'Failed',
+        message: error.message || 'Error connecting to PAN card service',
+        orderid: orderid
+      };
     });
 }
 
@@ -256,10 +266,20 @@ const panCardNew = async (number, mode) => {
   return axios
     .request(config)
     .then((response) => {
+      console.log("response", response.data); 
       return response.data;
     })
     .catch((error) => {
-      return error.response.data;
+      // Handle network errors or cases where error.response is undefined
+      if (error.response && error.response.data) {
+        return error.response.data;
+      }
+      // Return a structured error response when there's no response from the API
+      return {
+        status: 'Failed',
+        message: error.message || 'Error connecting to PAN card service',
+        orderid: orderid
+      };
     });
 }
 module.exports = {
