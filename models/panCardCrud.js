@@ -57,7 +57,7 @@ const panCardCrud = sequelize.define(
       defaultValue: 'Pending'
     },
     type: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING ,
       allowNull: false,
       defaultValue: 'new'
     },
