@@ -5383,6 +5383,170 @@ async function state() {
   }
 }
 
+async function rechargeStateCode() {
+  try {
+    let existingDoc = await dbService.findOne(model.rechargeStateCode, { id: 1 });
+    if (!existingDoc) {
+      const circleCodeData = [
+        {
+          name: 'JHARKHAND',
+          circleCode: '105',
+          isActive: true
+        },
+        {
+          name: 'MIZZORAM',
+          circleCode: '104',
+          isActive: true
+        },
+        {
+          name: 'MEGHALAY',
+          circleCode: '103',
+          isActive: true
+        },
+        {
+          name: 'GOA',
+          circleCode: '102',
+          isActive: true
+        },
+        {
+          name: 'CHHATISGARH',
+          circleCode: '101',
+          isActive: true
+        },
+        {
+          name: 'TRIPURA',
+          circleCode: '100',
+          isActive: true
+        },
+        {
+          name: 'SIKKIM',
+          circleCode: '99',
+          isActive: true
+        },
+        {
+          name: 'AP',
+          circleCode: '49',
+          isActive: true
+        },
+        {
+          name: 'KERALA',
+          circleCode: '95',
+          isActive: true
+        },
+        {
+          name: 'TAMIL NADU',
+          circleCode: '94',
+          isActive: true
+        },
+        {
+          name: 'CHENNAI',
+          circleCode: '40',
+          isActive: true
+        },
+        {
+          name: 'KARNATAKA',
+          circleCode: '06',
+          isActive: true
+        },
+        {
+          name: 'BIHAR',
+          circleCode: '52',
+          isActive: true
+        },
+        {
+          name: 'NESA',
+          circleCode: '16',
+          isActive: true
+        },
+        {
+          name: 'ASSAM',
+          circleCode: '56',
+          isActive: true
+        },
+        {
+          name: 'ORISSA',
+          circleCode: '53',
+          isActive: true
+        },
+        {
+          name: 'West Bengal',
+          circleCode: '51',
+          isActive: true
+        },
+        {
+          name: 'KOLKATTA',
+          circleCode: '31',
+          isActive: true
+        },
+        {
+          name: 'RAJASTHAN',
+          circleCode: '70',
+          isActive: true
+        },
+        {
+          name: 'MP',
+          circleCode: '93',
+          isActive: true
+        },
+        {
+          name: 'GUJARAT',
+          circleCode: '98',
+          isActive: true
+        },
+        {
+          name: 'MAHARASHTRA',
+          circleCode: '90',
+          isActive: true
+        },
+        {
+          name: 'MUMBAI',
+          circleCode: '92',
+          isActive: true
+        },
+        {
+          name: 'UP(East)',
+          circleCode: '54',
+          isActive: true
+        },
+        {
+          name: 'J&K',
+          circleCode: '55',
+          isActive: true
+        },
+        {
+          name: 'HARYANA',
+          circleCode: '96',
+          isActive: true
+        },
+        {
+          name: 'HP',
+          circleCode: '03',
+          isActive: true
+        },
+        {
+          name: 'PUNJAB',
+          circleCode: '02',
+          isActive: true
+        },
+        {
+          name: 'UP(West)',
+          circleCode: '97',
+          isActive: true
+        },
+        {
+          name: 'DELHI',
+          circleCode: '10',
+          isActive: true
+        }
+      ];
+
+      await dbService.createMany(model.rechargeStateCode, circleCodeData);
+    }
+  } catch (error) {
+    console.log('Failed to update RechargeStateCode due to:', error.message);
+  }
+}
+
 /*
  * async function copyOption () {
  *   try {
@@ -13751,6 +13915,7 @@ async function seedData() {
   //  await OperatorType();
   //  await state();
   //  await gstState();
+  //  await rechargeStateCode();
   //  await bank();
     // await services();
    
