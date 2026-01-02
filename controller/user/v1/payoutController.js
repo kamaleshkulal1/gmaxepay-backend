@@ -18,9 +18,12 @@ const payout = async (req, res) => {
         
         const user = req.user;
         
+        // Convert amount to number
+        const payoutAmount = parseFloat(amount);
+        
         // Validate required fields
-        if (!amount || amount <= 0) {
-            return res.validationError({ message: 'Amount is required and must be greater than 0' });
+        if (!amount || isNaN(payoutAmount) || payoutAmount <= 0) {
+            return res.validationError({ message: 'Amount is required and must be a valid number greater than 0' });
         }
         
         if (!mode || !['wallet', 'bank'].includes(mode)) {
@@ -46,8 +49,8 @@ const payout = async (req, res) => {
         
         // Check AEPS wallet balance (source wallet)
         const sourceWalletType = 'apesWallet';
-        const currentAepsBalance = wallet.apesWallet || 0;
-        if (currentAepsBalance < amount) {
+        const currentAepsBalance = parseFloat(wallet.apesWallet || 0);
+        if (currentAepsBalance < payoutAmount) {
             return res.validationError({ message: 'Insufficient AEPS wallet balance' });
         }
         
@@ -56,7 +59,7 @@ const payout = async (req, res) => {
         
         // Calculate opening and closing balance for AEPS wallet (source)
         const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
-        const aepsClosingBalance = parseFloat((aepsOpeningBalance - amount).toFixed(2));
+        const aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount).toFixed(2));
         
         // Create payout history record
         const payoutHistoryData = {
@@ -64,7 +67,7 @@ const payout = async (req, res) => {
             companyId: user.companyId,
             type: mode === 'wallet' ? 'internal' : 'external',
             transactionID: transactionID,
-            amount: parseFloat(amount),
+            amount: payoutAmount,
             walletType: sourceWalletType, // Always from apesWallet
             openingBalance: aepsOpeningBalance,
             closingBalance: aepsClosingBalance,
@@ -128,7 +131,7 @@ const payout = async (req, res) => {
                 beneficiaryName: customerBank.beneficiaryName,
                 bankName: customerBank.bankName,
                 ifscCode: customerBank.ifsc,
-                amount: amount.toString(),
+                amount: payoutAmount.toString(),
                 paymentMode: paymentMode,
                 latitude: latitude,
                 longitude: longitude,
@@ -173,8 +176,8 @@ const payout = async (req, res) => {
         if (payoutHistoryData.status === 'SUCCESS' || mode === 'wallet') {
             if (mode === 'wallet') {
                 // Internal transfer: Debit from apesWallet, Credit to mainWallet
-                const mainWalletOpeningBalance = parseFloat((wallet.mainWallet || 0).toFixed(2));
-                const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + amount).toFixed(2));
+                const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
+                const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
                 
                 // Update both wallets
                 await dbService.update(
@@ -192,7 +195,7 @@ const payout = async (req, res) => {
                     refId: user.id,
                     companyId: user.companyId,
                     walletType: 'apesWallet',
-                    amount: parseFloat(amount),
+                    amount: payoutAmount,
                     debit: parseFloat(amount),
                     credit: 0,
                     openingAmt: aepsOpeningBalance,
@@ -211,9 +214,9 @@ const payout = async (req, res) => {
                     refId: user.id,
                     companyId: user.companyId,
                     walletType: 'mainWallet',
-                    amount: parseFloat(amount),
+                    amount: payoutAmount,
                     debit: 0,
-                    credit: parseFloat(amount),
+                    credit: payoutAmount,
                     openingAmt: mainWalletOpeningBalance,
                     closingAmt: mainWalletClosingBalance,
                     transactionId: transactionID,
@@ -241,8 +244,8 @@ const payout = async (req, res) => {
                     refId: user.id,
                     companyId: user.companyId,
                     walletType: 'apesWallet',
-                    amount: parseFloat(amount),
-                    debit: parseFloat(amount),
+                    amount: payoutAmount,
+                    debit: payoutAmount,
                     credit: 0,
                     openingAmt: aepsOpeningBalance,
                     closingAmt: aepsClosingBalance,
@@ -279,8 +282,8 @@ const payout = async (req, res) => {
         
         // Add main wallet info for internal transfers
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {
-            const mainWalletOpeningBalance = parseFloat((wallet.mainWallet || 0).toFixed(2));
-            const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + amount).toFixed(2));
+            const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
+            const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
             responseData.mainWallet = {
                 openingBalance: mainWalletOpeningBalance,
                 closingBalance: mainWalletClosingBalance
