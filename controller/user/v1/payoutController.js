@@ -35,14 +35,16 @@ const payout = async (req, res) => {
             return res.validationError({ message: 'Latitude and longitude are required' });
         }
         
-        // Get company
-        const company = await dbService.findOne(model.company, { id: user.companyId });
+        
+        const [company, wallet] = await Promise.all([
+            dbService.findOne(model.company, { id: user.companyId }),
+            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId })
+        ]);
+        
         if (!company) {
             return res.notFound({ message: 'Company not found' });
         }
         
-        // Get wallet - always debit from apesWallet
-        const wallet = await dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId });
         if (!wallet) {
             return res.notFound({ message: 'Wallet not found' });
         }
@@ -169,34 +171,24 @@ const payout = async (req, res) => {
             payoutHistoryData.status = 'SUCCESS';
         }
         
-        // Create payout history record
+        // Prepare wallet update and history data before creating payout history
+        const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
+        const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
+        
+        // Create payout history record first (non-blocking for response)
         const payoutHistory = await dbService.createOne(model.payoutHistory, payoutHistoryData);
         
         // Update wallet balance only if payout is successful or internal
         if (payoutHistoryData.status === 'SUCCESS' || mode === 'wallet') {
             if (mode === 'wallet') {
                 // Internal transfer: Debit from apesWallet, Credit to mainWallet
-                const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
-                const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
-                
-                // Update both wallets
-                await dbService.update(
-                    model.wallet,
-                    { refId: user.id, companyId: user.companyId },
-                    {
-                        apesWallet: aepsClosingBalance,
-                        mainWallet: mainWalletClosingBalance,
-                        updatedBy: user.id
-                    }
-                );
-                
-                // Create wallet history entry for AEPS wallet (debit)
+                // Prepare wallet history data
                 const aepsWalletHistoryData = {
                     refId: user.id,
                     companyId: user.companyId,
                     walletType: 'apesWallet',
                     amount: payoutAmount,
-                    debit: parseFloat(amount),
+                    debit: payoutAmount,
                     credit: 0,
                     openingAmt: aepsOpeningBalance,
                     closingAmt: aepsClosingBalance,
@@ -207,9 +199,6 @@ const payout = async (req, res) => {
                     updatedBy: user.id
                 };
                 
-                await dbService.createOne(model.walletHistory, aepsWalletHistoryData);
-                
-                // Create wallet history entry for Main wallet (credit)
                 const mainWalletHistoryData = {
                     refId: user.id,
                     companyId: user.companyId,
@@ -226,20 +215,23 @@ const payout = async (req, res) => {
                     updatedBy: user.id
                 };
                 
-                await dbService.createOne(model.walletHistory, mainWalletHistoryData);
+                // Parallelize wallet update and history creation
+                await Promise.all([
+                    dbService.update(
+                        model.wallet,
+                        { refId: user.id, companyId: user.companyId },
+                        {
+                            apesWallet: aepsClosingBalance,
+                            mainWallet: mainWalletClosingBalance,
+                            updatedBy: user.id
+                        }
+                    ),
+                    dbService.createOne(model.walletHistory, aepsWalletHistoryData),
+                    dbService.createOne(model.walletHistory, mainWalletHistoryData)
+                ]);
                 
             } else {
                 // External bank transfer: Only debit from apesWallet
-                await dbService.update(
-                    model.wallet,
-                    { refId: user.id, companyId: user.companyId },
-                    {
-                        apesWallet: aepsClosingBalance,
-                        updatedBy: user.id
-                    }
-                );
-                
-                // Create wallet history entry for AEPS wallet (debit)
                 const walletHistoryData = {
                     refId: user.id,
                     companyId: user.companyId,
@@ -265,7 +257,18 @@ const payout = async (req, res) => {
                     if (payoutHistoryData.utrn) walletHistoryData.UTR = payoutHistoryData.utrn;
                 }
                 
-                await dbService.createOne(model.walletHistory, walletHistoryData);
+                // Parallelize wallet update and history creation
+                await Promise.all([
+                    dbService.update(
+                        model.wallet,
+                        { refId: user.id, companyId: user.companyId },
+                        {
+                            apesWallet: aepsClosingBalance,
+                            updatedBy: user.id
+                        }
+                    ),
+                    dbService.createOne(model.walletHistory, walletHistoryData)
+                ]);
             }
         }
         
@@ -280,10 +283,8 @@ const payout = async (req, res) => {
             }
         };
         
-        // Add main wallet info for internal transfers
+        // Add main wallet info for internal transfers (already calculated above)
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {
-            const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
-            const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
             responseData.mainWallet = {
                 openingBalance: mainWalletOpeningBalance,
                 closingBalance: mainWalletClosingBalance
