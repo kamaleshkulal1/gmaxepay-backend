@@ -14,6 +14,9 @@ const recharge = async (req, res) => {
 const findMobileNumberOperator = async (req, res) => {
     try {
         const { mobileNumber } = req.body;
+        if(!mobileNumber){
+            return res.failure({ message: 'Mobile number is required' });
+        }
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -36,6 +39,15 @@ const  findAllRechargePlanFetch = async (req, res) => {
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
+        }
+        if(!mobileNumber){
+            return res.failure({ message: 'Mobile number is required' });
+        }
+        if(!opCode){
+            return res.failure({ message: 'Operator code is required' });
+        }
+        if(!circle){
+            return res.failure({ message: 'Circle is required' });
         }
         const operator = await dbService.findOne(model.operator,{operatorCode:opCode});
         if (!operator) {

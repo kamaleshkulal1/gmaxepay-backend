@@ -34,7 +34,7 @@ const operatorFetch = async (mobile) => {
     });
 };
 
-const rechargePlanFetch = async (mobile,opCode,circle) => {
+const rechargePlanFetch = async (mobile,opcode,circle) => {
   const orderid = generateSystemReference();
   let config = {
     method: 'get',
@@ -46,7 +46,7 @@ const rechargePlanFetch = async (mobile,opCode,circle) => {
       username,
       token,
       mobile,
-      opCode,
+      opcode,
       circle,
       orderid
     }
