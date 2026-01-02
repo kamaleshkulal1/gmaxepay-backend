@@ -13909,6 +13909,7 @@ async function seedData() {
    await permissions();
    await insertPermissions();
    await rolePermission();
+  //  await rechargeStateCode();
   //  await KycDocumentSettings();
   //  await createBasicPackage();
   // //  await servicePush();
