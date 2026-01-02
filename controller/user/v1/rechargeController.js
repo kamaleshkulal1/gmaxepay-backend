@@ -37,6 +37,10 @@ const  findAllRechargePlanFetch = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
+        const operator = await dbService.findOne(model.operator,{operatorCode:opCode});
+        if (!operator) {
+            return res.failure({ message: 'Operator not found' });
+        }
         const response = await inspayService.rechargePlanFetch(mobileNumber,opCode,circle);
         console.log('response', response);
         if (response.status === 'Success') {
