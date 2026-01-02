@@ -26,7 +26,27 @@ const findMobileNumberOperator = async (req, res) => {
         }
     } catch (error) {
         console.log(error);
-        return res.internalServerError({ message: error.message });
+        return res.failure({ message: error.message });
+    }
+};
+
+const  findAllRechargePlanFetch = async (req, res) => {
+    try {
+        const { mobileNumber,opCode,circle } = req.body;
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const response = await inspayService.rechargePlanFetch(mobileNumber,opCode,circle);
+        console.log('response', response);
+        if (response.status === 'Success') {
+            return res.success({ message: 'Recharge plan retrieved successfully', data: response });
+        } else {
+            return res.failure({ message: response.message || 'Failed to fetch recharge plan' });
+        }
+    } catch (error) {
+        console.log(error);
+        return res.failure({ message: error.message });
     }
 };
 
@@ -51,5 +71,6 @@ const getRechargeHistory = async (req, res) => {
 module.exports = {
     recharge,
     findMobileNumberOperator,
-    getRechargeHistory
+    getRechargeHistory,
+    findAllRechargePlanFetch
 };
