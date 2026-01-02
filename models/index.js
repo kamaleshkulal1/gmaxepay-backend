@@ -24,6 +24,7 @@ db.userVerification = require('./userVerification');
 db.userPackage = require('./userPackage');
 db.onboardingToken = require('./onboardingToken');
 db.aepsOnboarding = require('./aepsOnboarding');
+db.kendraAepsOnboarding = require('./kendraAepsOnboarding');
 db.bioMetric = require('./bioMetric');
 db.aepsDailyLogin = require('./aepsDailyLogin');
 
@@ -470,6 +471,29 @@ db.payoutHistory.belongsTo(db.customerBank, {
 db.customerBank.hasMany(db.payoutHistory, {
   foreignKey: 'customerBankId',
   as: 'payoutHistories',
+  sourceKey: 'id'
+});
+
+// Kendra AEPS Onboarding Relationships
+db.kendraAepsOnboarding.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.kendraAepsOnboarding, {
+  foreignKey: 'userId',
+  as: 'kendraAepsOnboardings',
+  sourceKey: 'id'
+});
+
+db.kendraAepsOnboarding.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.kendraAepsOnboarding, {
+  foreignKey: 'companyId',
+  as: 'kendraAepsOnboardings',
   sourceKey: 'id'
 });
 
