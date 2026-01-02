@@ -4,7 +4,7 @@ const payoutController = require('../../../controller/user/v1/payoutController')
 const authentication = require('../../../middleware/authentication');
 
 // Get payout bank list
-router.get('/bank-list', authentication, payoutController.getPayoutBankList);
+router.post('/bank-list', authentication, payoutController.getPayoutBankList);
 
 // Process payout
 router.post('/payout', authentication, payoutController.payout);
