@@ -34,7 +34,37 @@ const operatorFetch = async (mobile) => {
     });
 };
 
+const rechargePlanFetch = async (mobile,opCode,circle) => {
+  const orderid = generateSystemReference();
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/verification/operator_plan_fetch?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      mobile,
+      opCode,
+      circle,
+      orderid
+    }
+  }; 
+  return axios
+    .request(config)
+    .then((response) => {
+      console.log('response', response);
+      console.log(response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      console.log(error.response);
+      return error.response ? error.response.data : error.message;
+    });
+};
 module.exports = {
-  operatorFetch
+  operatorFetch,
+  rechargePlanFetch
 };
 
