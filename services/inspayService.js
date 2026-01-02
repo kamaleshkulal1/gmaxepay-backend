@@ -24,6 +24,7 @@ const operatorFetch = async (mobile) => {
   return axios
     .request(config)
     .then((response) => {
+      console.log('response', response);
       console.log(response.data);
       return response.data;
     })

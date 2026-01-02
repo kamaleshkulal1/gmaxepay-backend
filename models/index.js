@@ -48,6 +48,7 @@ db.category = require('./category');
 // Location Models
 db.state = require('./state');
 db.gstState = require('./gstState');
+db.rechargeStateCode = require('./RechargeStateCode');
 
 // Financial Models
 db.wallet = require('./wallet');
