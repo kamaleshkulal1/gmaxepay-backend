@@ -5,7 +5,7 @@ const token = process.env.EKYCHUB_TOKEN;
 
 const { generateSystemReference } = require('../utils/generateSystemReferenceNumber');
 
-const operatorFetch = async (mobileNumber) => {
+const operatorFetch = async (mobile) => {
   const orderid = generateSystemReference();
   let config = {
     method: 'get',
@@ -16,7 +16,7 @@ const operatorFetch = async (mobileNumber) => {
     params: {
       username,
       token,
-      mobile:mobileNumber,
+      mobile,
       orderid
     }
   };
