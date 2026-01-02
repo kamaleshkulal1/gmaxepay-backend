@@ -6,6 +6,7 @@ const authentication = require('../../../middleware/authentication');
 router.post('/find-mobile-operator', authentication, rechargeController.findMobileNumberOperator);
 router.post('/recharge', authentication, rechargeController.recharge);
 router.post('/find-recharge-plan',authentication, rechargeController.findAllRechargePlanFetch);
+router.post('/recharge-offer',authentication, rechargeController.findRechargeOfferFetch);
 router.post('/get-recharge-history', authentication, rechargeController.getRechargeHistory);
 
 module.exports = router;

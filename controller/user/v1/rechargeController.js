@@ -66,6 +66,39 @@ const  findAllRechargePlanFetch = async (req, res) => {
     }
 };
 
+const findRechargeOfferFetch = async (req, res) => {
+    try {
+        const { mobileNumber,opCode,circle } = req.body;
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        if(!mobileNumber){
+            return res.failure({ message: 'Mobile number is required' });
+        }
+        if(!opCode){
+            return res.failure({ message: 'Operator code is required' });
+        }
+        if(!circle){
+            return res.failure({ message: 'Circle is required' });
+        }
+        const operator = await dbService.findOne(model.operator,{operatorCode:opCode});
+        if (!operator) {
+            return res.failure({ message: 'Operator not found' });
+        }
+        const response = await inspayService.RechargeOfferFetch(mobileNumber,opCode,circle);
+        console.log('response', response);
+        if (response.status === 'Success') {
+            return res.success({ message: 'Recharge offer retrieved successfully', data: response });
+        } else {
+            return res.failure({ message: response.message || 'Failed to fetch recharge offer' });
+        }
+    } catch (error) {   
+        console.log(error);
+        return res.failure({ message: error.message });
+    }
+};
+
 const getRechargeHistory = async (req, res) => {
     try {
         const { userId } = req.user;
@@ -88,5 +121,6 @@ module.exports = {
     recharge,
     findMobileNumberOperator,
     getRechargeHistory,
-    findAllRechargePlanFetch
+    findAllRechargePlanFetch,
+    findRechargeOfferFetch
 };
