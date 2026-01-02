@@ -9,4 +9,4 @@ router.post('/', authentication, payoutController.payout);
 // Get payout bank list
 router.post('/bank-list', authentication, payoutController.getPayoutBankList);
 
-module.exports = router;
+module.exports = router; 
