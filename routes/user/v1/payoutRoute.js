@@ -1,7 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const payoutController = require('../../../controller/user/v1/payoutController');
+const authentication = require('../../../middleware/authentication');
 
-router.post('/payout', payoutController.payout);
+// Get payout bank list
+router.get('/bank-list', authentication, payoutController.getPayoutBankList);
+
+// Process payout
+router.post('/payout', authentication, payoutController.payout);
 
 module.exports = router;

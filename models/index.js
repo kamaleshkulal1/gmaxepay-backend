@@ -55,6 +55,7 @@ db.walletHistory = require('./walletHistory');
 db.aepsHistory = require('./aepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
+db.payoutHistory = require('./payoutHistory');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -439,6 +440,36 @@ db.panCardCrud.belongsTo(db.company, {
 db.company.hasMany(db.panCardCrud, {
   foreignKey: 'companyId',
   as: 'panCardRequests',
+  sourceKey: 'id'
+});
+
+// Payout History Relationships
+// Note: belongsTo association is already defined in payoutHistory.js model file
+db.user.hasMany(db.payoutHistory, {
+  foreignKey: 'refId',
+  as: 'payoutHistories',
+  sourceKey: 'id'
+});
+
+db.payoutHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.payoutHistory, {
+  foreignKey: 'companyId',
+  as: 'payoutHistories',
+  sourceKey: 'id'
+});
+
+db.payoutHistory.belongsTo(db.customerBank, {
+  foreignKey: 'customerBankId',
+  as: 'customerBank',
+  targetKey: 'id'
+});
+db.customerBank.hasMany(db.payoutHistory, {
+  foreignKey: 'customerBankId',
+  as: 'payoutHistories',
   sourceKey: 'id'
 });
 

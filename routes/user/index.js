@@ -8,5 +8,6 @@ router.use('/aeps', require('./v1/aepsRoute'));
 router.use('/bank', require('./v1/bankRoutes'));
 router.use('/bbps', require('./v1/bbpsRoute'));
 router.use('/pan', require('./v1/panRoute'));
+router.use('/payout', require('./v1/payoutRoute'));
 
 module.exports = router;
