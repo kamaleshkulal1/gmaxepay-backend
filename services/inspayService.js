@@ -24,6 +24,7 @@ const operatorFetch = async (mobileNumber) => {
   return axios
     .request(config)
     .then((response) => {
+      console.log(response.data);
       return response.data;
     })
     .catch((error) => {
