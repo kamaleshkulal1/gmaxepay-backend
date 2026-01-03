@@ -223,6 +223,10 @@ const checkStatus = async (req, res) => {
         if (!orderid) {
             return res.failure({ message: 'Order ID is required' });
         }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
 
         // Find existing DTH recharge record
         const existingDthRecharge = await dbService.findOne(model.dthRecharge, {
