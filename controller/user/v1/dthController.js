@@ -216,6 +216,123 @@ const dthRecharge = async (req, res) => {
     }
 };
 
+// Helper function to update DTH recharge status (used by both checkStatus and callback)
+const updateDthRechargeStatus = async (orderid, newStatus, opid, companyId = null) => {
+    // Find existing DTH recharge record
+    const whereClause = { orderid };
+    if (companyId) {
+        whereClause.companyId = companyId;
+    }
+
+    const existingDthRecharge = await dbService.findOne(model.dthRecharge, whereClause);
+
+    if (!existingDthRecharge) {
+        return { success: false, message: 'DTH recharge record not found' };
+    }
+
+    const currentStatus = existingDthRecharge.status;
+
+    // Helper function for rounding
+    const round2 = (num) => {
+        const n = Number(num);
+        return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : 0;
+    };
+
+    // Prepare update data
+    const updateData = {
+        status: newStatus,
+        opid: opid || existingDthRecharge.opid,
+        updatedBy: existingDthRecharge.refId // Use the user who created the record
+    };
+
+    // Handle commission reversal on failure
+    if (newStatus === 'Failure') {
+        // Revert all commissions to 0
+        updateData.superadminComm = 0;
+        updateData.whitelabelComm = 0;
+        updateData.masterDistributorCom = 0;
+        updateData.distributorCom = 0;
+        updateData.retailerCom = 0;
+
+        // If status was previously Success, revert wallet credit
+        if (currentStatus === 'Success') {
+            const wallet = await model.wallet.findOne({
+                where: { refId: existingDthRecharge.refId, companyId: existingDthRecharge.companyId }
+            });
+
+            if (wallet) {
+                const totalCommission = round2(
+                    (existingDthRecharge.superadminComm || 0) +
+                    (existingDthRecharge.whitelabelComm || 0) +
+                    (existingDthRecharge.masterDistributorCom || 0) +
+                    (existingDthRecharge.distributorCom || 0) +
+                    (existingDthRecharge.retailerCom || 0)
+                );
+
+                if (totalCommission > 0) {
+                    const currentBalance = round2(wallet.mainWallet || 0);
+                    const newBalance = round2(Math.max(0, currentBalance - totalCommission));
+                    
+                    await wallet.update({
+                        mainWallet: newBalance,
+                        updatedBy: existingDthRecharge.refId
+                    });
+                }
+            }
+        }
+    } else if (newStatus === 'Success') {
+        // If changing to Success, keep existing commissions (don't recalculate, just update status)
+        updateData.superadminComm = existingDthRecharge.superadminComm;
+        updateData.whitelabelComm = existingDthRecharge.whitelabelComm;
+        updateData.masterDistributorCom = existingDthRecharge.masterDistributorCom;
+        updateData.distributorCom = existingDthRecharge.distributorCom;
+        updateData.retailerCom = existingDthRecharge.retailerCom;
+
+        // If status was previously Pending/Failure and now Success, credit wallet
+        if (currentStatus !== 'Success') {
+            const totalCommission = round2(
+                (existingDthRecharge.superadminComm || 0) +
+                (existingDthRecharge.whitelabelComm || 0) +
+                (existingDthRecharge.masterDistributorCom || 0) +
+                (existingDthRecharge.distributorCom || 0) +
+                (existingDthRecharge.retailerCom || 0)
+            );
+
+            if (totalCommission > 0) {
+                const wallet = await model.wallet.findOne({
+                    where: { refId: existingDthRecharge.refId, companyId: existingDthRecharge.companyId }
+                });
+
+                if (wallet) {
+                    const currentBalance = round2(wallet.mainWallet || 0);
+                    const newBalance = round2(currentBalance + totalCommission);
+                    
+                    await wallet.update({
+                        mainWallet: newBalance,
+                        updatedBy: existingDthRecharge.refId
+                    });
+                }
+            }
+        }
+    } else {
+        // For Pending or no status change, keep existing commissions
+        updateData.superadminComm = existingDthRecharge.superadminComm;
+        updateData.whitelabelComm = existingDthRecharge.whitelabelComm;
+        updateData.masterDistributorCom = existingDthRecharge.masterDistributorCom;
+        updateData.distributorCom = existingDthRecharge.distributorCom;
+        updateData.retailerCom = existingDthRecharge.retailerCom;
+    }
+
+    // Update DTH recharge record
+    await dbService.update(
+        model.dthRecharge,
+        { id: existingDthRecharge.id },
+        updateData
+    );
+
+    return { success: true, message: 'Status updated successfully', record: existingDthRecharge };
+};
+
 const checkStatus = async (req, res) => {
     try {
         const { orderid } = req.body;
@@ -243,109 +360,24 @@ const checkStatus = async (req, res) => {
         const newStatus = response.status === 'Success' || response.status === 'SUCCESS' 
             ? 'Success' 
             : (response.status === 'Pending' || response.status === 'PENDING' ? 'Pending' : 'Failure');
+
+        // Use helper function to update status
+        const result = await updateDthRechargeStatus(orderid, newStatus, response.opid, req.user.companyId);
         
-        const currentStatus = existingDthRecharge.status;
-        const statusChanged = currentStatus !== newStatus;
-
-        // Helper function for rounding
-        const round2 = (num) => {
-            const n = Number(num);
-            return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : 0;
-        };
-
-        // Prepare update data
-        const updateData = {
-            status: newStatus,
-            txid: response.txid || existingDthRecharge.txid,
-            opid: response.opid || existingDthRecharge.opid,
-            message: response.message || existingDthRecharge.message,
-            apiResponse: response,
-            updatedBy: req.user.id
-        };
-
-        // Handle commission reversal on failure
-        if (newStatus === 'Failure') {
-            // Revert all commissions to 0
-            updateData.superadminComm = 0;
-            updateData.whitelabelComm = 0;
-            updateData.masterDistributorCom = 0;
-            updateData.distributorCom = 0;
-            updateData.retailerCom = 0;
-
-            // If status was previously Success, revert wallet credit
-            if (currentStatus === 'Success') {
-                const wallet = await model.wallet.findOne({
-                    where: { refId: existingDthRecharge.refId, companyId: existingDthRecharge.companyId }
-                });
-
-                if (wallet) {
-                    const totalCommission = round2(
-                        (existingDthRecharge.superadminComm || 0) +
-                        (existingDthRecharge.whitelabelComm || 0) +
-                        (existingDthRecharge.masterDistributorCom || 0) +
-                        (existingDthRecharge.distributorCom || 0) +
-                        (existingDthRecharge.retailerCom || 0)
-                    );
-
-                    if (totalCommission > 0) {
-                        const currentBalance = round2(wallet.mainWallet || 0);
-                        const newBalance = round2(Math.max(0, currentBalance - totalCommission));
-                        
-                        await wallet.update({
-                            mainWallet: newBalance,
-                            updatedBy: req.user.id
-                        });
-                    }
-                }
-            }
-        } else if (newStatus === 'Success') {
-            // If changing to Success, keep existing commissions (don't recalculate, just update status)
-            updateData.superadminComm = existingDthRecharge.superadminComm;
-            updateData.whitelabelComm = existingDthRecharge.whitelabelComm;
-            updateData.masterDistributorCom = existingDthRecharge.masterDistributorCom;
-            updateData.distributorCom = existingDthRecharge.distributorCom;
-            updateData.retailerCom = existingDthRecharge.retailerCom;
-
-            // If status was previously Pending/Failure and now Success, credit wallet
-            if (currentStatus !== 'Success') {
-                const totalCommission = round2(
-                    (existingDthRecharge.superadminComm || 0) +
-                    (existingDthRecharge.whitelabelComm || 0) +
-                    (existingDthRecharge.masterDistributorCom || 0) +
-                    (existingDthRecharge.distributorCom || 0) +
-                    (existingDthRecharge.retailerCom || 0)
-                );
-
-                if (totalCommission > 0) {
-                    const wallet = await model.wallet.findOne({
-                        where: { refId: existingDthRecharge.refId, companyId: existingDthRecharge.companyId }
-                    });
-
-                    if (wallet) {
-                        const currentBalance = round2(wallet.mainWallet || 0);
-                        const newBalance = round2(currentBalance + totalCommission);
-                        
-                        await wallet.update({
-                            mainWallet: newBalance,
-                            updatedBy: req.user.id
-                        });
-                    }
-                }
-            }
-        } else {
-            // For Pending or no status change, keep existing commissions
-            updateData.superadminComm = existingDthRecharge.superadminComm;
-            updateData.whitelabelComm = existingDthRecharge.whitelabelComm;
-            updateData.masterDistributorCom = existingDthRecharge.masterDistributorCom;
-            updateData.distributorCom = existingDthRecharge.distributorCom;
-            updateData.retailerCom = existingDthRecharge.retailerCom;
+        if (!result.success) {
+            return res.failure({ message: result.message });
         }
 
-        // Update DTH recharge record
+        // Update additional fields from API response
         await dbService.update(
             model.dthRecharge,
-            { id: existingDthRecharge.id },
-            updateData
+            { id: result.record.id },
+            {
+                txid: response.txid || result.record.txid,
+                message: response.message || result.record.message,
+                apiResponse: response,
+                updatedBy: req.user.id
+            }
         );
 
         // Prepare response data

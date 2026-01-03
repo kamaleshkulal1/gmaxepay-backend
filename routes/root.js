@@ -18,6 +18,8 @@ router.get(/^\/images\/(.+)$/, imageController.serveImage);
 // Log routes (no rate limiting)
 router.use('/apilogger', require('./logRoutes'));
 
+// Payment Callback route (public, no authentication required)
+
 // Auth routes with rate limiting
 router.use('/auth', authLimit, require('./auth/index'));
 
