@@ -97,7 +97,7 @@ const RechargeOfferFetch = async (mobile,opcode,circle) => {
     });
 };  
 
-const recharge = async (mobile, opcode, amount,value1, value2, value3, value4) => {
+const Recharge = async (mobile, opcode, amount,value1, value2, value3, value4) => {
   const orderid = generateSystemReference();
   let config = {
     method: 'get',
@@ -140,10 +140,41 @@ const recharge = async (mobile, opcode, amount,value1, value2, value3, value4) =
       };
     });
 };
+
+
+const DTHPlanFetch = async (dth_number,opcode) => {
+  const orderid = generateSystemReference();
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/verification/dth_plan_fetch?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      opcode,
+      dth_number,
+      orderid
+    }
+  };
+  return axios
+    .request(config)
+    .then((response) => {
+      console.log('response', response);
+      console.log(response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      console.log(error.response);
+      return error.response ? error.response.data : error.message;
+    });
+};
 module.exports = {
   operatorFetch,
   rechargePlanFetch,
   RechargeOfferFetch,
-  recharge
+  Recharge,
+  DTHPlanFetch
 };
 

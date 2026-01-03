@@ -73,7 +73,7 @@ const recharge = async (req, res) => {
         );
         // Start wallet lookup and recharge service in parallel
         const [response, wallet] = await Promise.all([
-            inspayService.recharge(mobileNumber, opcode, amount, value1, value2, value3, value4),
+            inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4),
             model.wallet.findOne({
                 where: { refId: req.user.id, companyId: req.user.companyId }
             })
