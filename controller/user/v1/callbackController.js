@@ -2,9 +2,9 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 
 // Helper function to update DTH recharge status
-const updateDthRechargeStatus = async (orderid, newStatus, opid, companyId = null) => {
+const updateDthRechargeStatus = async (txid, newStatus, opid, companyId = null) => {
     // Find existing DTH recharge record
-    const whereClause = { orderid };
+    const whereClause = { txid };
     if (companyId) {
         whereClause.companyId = companyId;
     }
