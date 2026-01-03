@@ -65,6 +65,7 @@ db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
 db.recharge = require('./recharge');
+db.dthRecharge = require('./dthRecharge');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -491,6 +492,25 @@ db.recharge.belongsTo(db.company, {
 db.company.hasMany(db.recharge, {
   foreignKey: 'companyId',
   as: 'recharges',
+  sourceKey: 'id'
+});
+
+// DTH Recharge Relationships
+// Note: belongsTo association is already defined in dthRecharge.js model file
+db.user.hasMany(db.dthRecharge, {
+  foreignKey: 'refId',
+  as: 'dthRecharges',
+  sourceKey: 'id'
+});
+
+db.dthRecharge.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.dthRecharge, {
+  foreignKey: 'companyId',
+  as: 'dthRecharges',
   sourceKey: 'id'
 });
 
