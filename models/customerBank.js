@@ -82,7 +82,6 @@ let CustomerBank = sequelize.define('customerBank', {
     allowNull: false
   }
 }, {
-  freezeTableName: true,
   timestamps: true
 });
 
