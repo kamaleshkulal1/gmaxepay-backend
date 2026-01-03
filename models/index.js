@@ -50,6 +50,13 @@ db.state = require('./state');
 db.gstState = require('./gstState');
 db.rechargeStateCode = require('./RechargeStateCode');
 
+// Bank & Payment Models (Load customerBank early as payoutHistory depends on it)
+db.bank = require('./bank');
+db.customerBank = require('./customerBank');
+db.cardType = require('./cardType');
+db.paymentInstrument = require('./paymentInsturment');
+db.aslBankList = require('./aslBankList');
+
 // Financial Models
 db.wallet = require('./wallet');
 db.walletHistory = require('./walletHistory');
@@ -66,13 +73,6 @@ db.distributorSlabCom = require('./distributorSlabCom');
 db.range = require('./range');
 db.rangeCharges = require('./rangeCharges');
 db.rangeCommission = require('./rangeCommission');
-
-// Bank & Payment Models
-db.bank = require('./bank');
-db.customerBank = require('./customerBank');
-db.cardType = require('./cardType');
-db.paymentInstrument = require('./paymentInsturment');
-db.aslBankList = require('./aslBankList');
 
 // IP & Network Models
 db.ipInfo = require('./ipInfo');
