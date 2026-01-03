@@ -199,13 +199,41 @@ const DTHCustomerInfo = async (dth_number,opcode) => {
       return error.response ? error.response.data : error.message;
     });
 };
-    
+
+const checkStatus = async (orderid) => {
+  let config = {
+    method: 'get',
+    url: `${rechargeUrl}/recharge/api`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username: inspayUsername,
+      token: inspayToken,
+      orderid, 
+      format: 'json',
+    }
+  };
+  return axios
+    .request(config)
+    .then((response) => {
+      console.log('response', response);
+      console.log(response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      console.log(error.response);
+      return error.response ? error.response.data : error.message;
+    });
+};
+
 module.exports = {
   operatorFetch,
   rechargePlanFetch,
   RechargeOfferFetch,
   Recharge,
   DTHPlanFetch,
-  DTHCustomerInfo
+  DTHCustomerInfo,
+  checkStatus
 };
 
