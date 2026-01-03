@@ -81,6 +81,9 @@ let CustomerBank = sequelize.define('customerBank', {
     defaultValue: false,
     allowNull: false
   }
+}, {
+  freezeTableName: true,
+  timestamps: true
 });
 
 sequelizeTransforms(CustomerBank);
