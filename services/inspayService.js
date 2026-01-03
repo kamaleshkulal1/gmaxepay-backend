@@ -1,6 +1,8 @@
 const axios = require('axios');
 const ekychubUrl = process.env.EKYCHUB_URL;
 const rechargeUrl = process.env.INSPAY_RECHARGE_URL;
+const inspayUsername = process.env.INSPAY_USERNAME;
+const inspayToken = process.env.INSPAY_TOKEN;
 const username = process.env.EKYCHUB_USERNAME;
 const token = process.env.EKYCHUB_TOKEN;
 
@@ -104,8 +106,8 @@ const recharge = async (mobile, opcode, amount,value1, value2, value3, value4) =
       'Content-Type': 'application/json'
     },
     params: {
-      username,
-      token,
+      username: inspayUsername,
+      token: inspayToken,
       opcode,
       number: mobile,
       amount,
