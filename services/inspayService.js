@@ -203,7 +203,7 @@ const DTHCustomerInfo = async (dth_number,opcode) => {
 const checkStatus = async (orderid) => {
   let config = {
     method: 'get',
-    url: `${rechargeUrl}/recharge/api`,
+    url: `${rechargeUrl}/recharge/api?`,
     headers: {
       'Content-Type': 'application/json'
     },
