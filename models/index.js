@@ -57,6 +57,7 @@ db.aepsHistory = require('./aepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
+db.recharge = require('./recharge');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -471,6 +472,25 @@ db.payoutHistory.belongsTo(db.customerBank, {
 db.customerBank.hasMany(db.payoutHistory, {
   foreignKey: 'customerBankId',
   as: 'payoutHistories',
+  sourceKey: 'id'
+});
+
+// Recharge Relationships
+// Note: belongsTo association is already defined in recharge.js model file
+db.user.hasMany(db.recharge, {
+  foreignKey: 'refId',
+  as: 'recharges',
+  sourceKey: 'id'
+});
+
+db.recharge.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.recharge, {
+  foreignKey: 'companyId',
+  as: 'recharges',
   sourceKey: 'id'
 });
 
