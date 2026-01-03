@@ -26,6 +26,30 @@ const dthPlanFetch = async (req, res) => {
     }
 };
 
+const customerInfo = async (req, res) => {
+    try {
+        const { dth_number, opcode } = req.body;
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const operator = await dbService.findOne(model.operator, { operatorCode: opcode });
+        if (!operator) {
+            return res.failure({ message: 'Operator not found' });
+        }
+        const response = await inspayService.DTHCustomerInfo(dth_number, opcode);
+        if (response.status === 'Success') {
+            return res.success({ message: 'Customer info fetched successfully', data: response });
+        } else {
+            return res.failure({ message: response.message || 'Failed to fetch customer info' });
+        }
+    } catch (error) {
+        console.log(error);
+        return res.failure({ message: 'Failed to fetch customer info' });
+    }
+};
+
 module.exports = {
-    dthPlanFetch
+    dthPlanFetch,
+    customerInfo
 };

@@ -170,11 +170,42 @@ const DTHPlanFetch = async (dth_number,opcode) => {
       return error.response ? error.response.data : error.message;
     });
 };
+
+const DTHCustomerInfo = async (dth_number,opcode) => {
+  const orderid = generateSystemReference();
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/verification/dth_info?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      opcode,
+      dth_number,
+      orderid
+    }
+  };
+  return axios
+    .request(config)
+    .then((response) => {
+      console.log('response', response);
+      console.log(response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      console.log(error.response);
+      return error.response ? error.response.data : error.message;
+    });
+};
+    
 module.exports = {
   operatorFetch,
   rechargePlanFetch,
   RechargeOfferFetch,
   Recharge,
-  DTHPlanFetch
+  DTHPlanFetch,
+  DTHCustomerInfo
 };
 
