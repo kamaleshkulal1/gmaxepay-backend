@@ -71,7 +71,6 @@ const recharge = async (req, res) => {
             (distributorCom || 0) + 
             (retailerCom || 0)
         );
-
         // Start wallet lookup and recharge service in parallel
         const [response, wallet] = await Promise.all([
             inspayService.recharge(mobileNumber, opcode, amount, value1, value2, value3, value4),
@@ -79,6 +78,17 @@ const recharge = async (req, res) => {
                 where: { refId: req.user.id, companyId: req.user.companyId }
             })
         ]);
+        console.log('response', response);
+
+        // Log recharge response
+        console.log('[Recharge] API Response:', {
+            userId: req.user.id,
+            orderid: response?.orderid,
+            status: response?.status,
+            txid: response?.txid,
+            message: response?.message,
+            response: response
+        });
 
         // Extract response data
         const orderid = response.orderid;
