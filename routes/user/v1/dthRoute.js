@@ -5,4 +5,5 @@ const authentication = require('../../../middleware/authentication');
 router.post('/plan-fetch', authentication, dthController.dthPlanFetch);
 router.post('/customer-info', authentication, dthController.customerInfo);
 router.post('/recharge', authentication, dthController.dthRecharge);
+router.post('/check-status', authentication, dthController.checkStatus);
 module.exports = router;

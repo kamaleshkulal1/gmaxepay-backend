@@ -148,6 +148,8 @@ const dthRecharge = async (req, res) => {
         const closingMainWallet = isSuccess ? round2(openingMainWallet + creditToApply) : openingMainWallet;
 
         // Prepare DTH recharge data
+        // Store calculated commissions for all statuses (needed for checkStatus when status changes)
+        // But only credit wallet on Success
         const dthRechargeData = {
             refId: req.user.id,
             companyId: req.user.companyId,
@@ -160,11 +162,12 @@ const dthRecharge = async (req, res) => {
             opid: response.opid || null,
             message: response.message || null,
             apiResponse: response,
-            superadminComm: paymentStatus === 'Success' ? superadminComm : 0,
-            whitelabelComm: paymentStatus === 'Success' ? whitelabelComm : 0,
-            masterDistributorCom: paymentStatus === 'Success' ? masterDistributorCom : 0,
-            distributorCom: paymentStatus === 'Success' ? distributorCom : 0,
-            retailerCom: paymentStatus === 'Success' ? retailerCom : 0,
+            // Store calculated commissions for all statuses (will be reverted to 0 in checkStatus if Failure)
+            superadminComm: paymentStatus === 'Failure' ? 0 : superadminComm,
+            whitelabelComm: paymentStatus === 'Failure' ? 0 : whitelabelComm,
+            masterDistributorCom: paymentStatus === 'Failure' ? 0 : masterDistributorCom,
+            distributorCom: paymentStatus === 'Failure' ? 0 : distributorCom,
+            retailerCom: paymentStatus === 'Failure' ? 0 : retailerCom,
             isActive: true,
             addedBy: req.user.id
         };
@@ -213,8 +216,158 @@ const dthRecharge = async (req, res) => {
     }
 };
 
+const checkStatus = async (req, res) => {
+    try {
+        const { orderid } = req.body;
+        
+        if (!orderid) {
+            return res.failure({ message: 'Order ID is required' });
+        }
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        // Find existing DTH recharge record
+        const existingDthRecharge = await dbService.findOne(model.dthRecharge, {
+            orderid,
+            companyId: req.user.companyId
+        });
+
+        if (!existingDthRecharge) {
+            return res.failure({ message: 'DTH recharge record not found' });
+        }
+
+        // Check status from API
+        const response = await inspayService.checkStatus(orderid);
+        const newStatus = response.status === 'Success' || response.status === 'SUCCESS' 
+            ? 'Success' 
+            : (response.status === 'Pending' || response.status === 'PENDING' ? 'Pending' : 'Failure');
+        
+        const currentStatus = existingDthRecharge.status;
+        const statusChanged = currentStatus !== newStatus;
+
+        // Helper function for rounding
+        const round2 = (num) => {
+            const n = Number(num);
+            return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : 0;
+        };
+
+        // Prepare update data
+        const updateData = {
+            status: newStatus,
+            txid: response.txid || existingDthRecharge.txid,
+            opid: response.opid || existingDthRecharge.opid,
+            message: response.message || existingDthRecharge.message,
+            apiResponse: response,
+            updatedBy: req.user.id
+        };
+
+        // Handle commission reversal on failure
+        if (newStatus === 'Failure') {
+            // Revert all commissions to 0
+            updateData.superadminComm = 0;
+            updateData.whitelabelComm = 0;
+            updateData.masterDistributorCom = 0;
+            updateData.distributorCom = 0;
+            updateData.retailerCom = 0;
+
+            // If status was previously Success, revert wallet credit
+            if (currentStatus === 'Success') {
+                const wallet = await model.wallet.findOne({
+                    where: { refId: existingDthRecharge.refId, companyId: existingDthRecharge.companyId }
+                });
+
+                if (wallet) {
+                    const totalCommission = round2(
+                        (existingDthRecharge.superadminComm || 0) +
+                        (existingDthRecharge.whitelabelComm || 0) +
+                        (existingDthRecharge.masterDistributorCom || 0) +
+                        (existingDthRecharge.distributorCom || 0) +
+                        (existingDthRecharge.retailerCom || 0)
+                    );
+
+                    if (totalCommission > 0) {
+                        const currentBalance = round2(wallet.mainWallet || 0);
+                        const newBalance = round2(Math.max(0, currentBalance - totalCommission));
+                        
+                        await wallet.update({
+                            mainWallet: newBalance,
+                            updatedBy: req.user.id
+                        });
+                    }
+                }
+            }
+        } else if (newStatus === 'Success') {
+            // If changing to Success, keep existing commissions (don't recalculate, just update status)
+            updateData.superadminComm = existingDthRecharge.superadminComm;
+            updateData.whitelabelComm = existingDthRecharge.whitelabelComm;
+            updateData.masterDistributorCom = existingDthRecharge.masterDistributorCom;
+            updateData.distributorCom = existingDthRecharge.distributorCom;
+            updateData.retailerCom = existingDthRecharge.retailerCom;
+
+            // If status was previously Pending/Failure and now Success, credit wallet
+            if (currentStatus !== 'Success') {
+                const totalCommission = round2(
+                    (existingDthRecharge.superadminComm || 0) +
+                    (existingDthRecharge.whitelabelComm || 0) +
+                    (existingDthRecharge.masterDistributorCom || 0) +
+                    (existingDthRecharge.distributorCom || 0) +
+                    (existingDthRecharge.retailerCom || 0)
+                );
+
+                if (totalCommission > 0) {
+                    const wallet = await model.wallet.findOne({
+                        where: { refId: existingDthRecharge.refId, companyId: existingDthRecharge.companyId }
+                    });
+
+                    if (wallet) {
+                        const currentBalance = round2(wallet.mainWallet || 0);
+                        const newBalance = round2(currentBalance + totalCommission);
+                        
+                        await wallet.update({
+                            mainWallet: newBalance,
+                            updatedBy: req.user.id
+                        });
+                    }
+                }
+            }
+        } else {
+            // For Pending or no status change, keep existing commissions
+            updateData.superadminComm = existingDthRecharge.superadminComm;
+            updateData.whitelabelComm = existingDthRecharge.whitelabelComm;
+            updateData.masterDistributorCom = existingDthRecharge.masterDistributorCom;
+            updateData.distributorCom = existingDthRecharge.distributorCom;
+            updateData.retailerCom = existingDthRecharge.retailerCom;
+        }
+
+        // Update DTH recharge record
+        await dbService.update(
+            model.dthRecharge,
+            { id: existingDthRecharge.id },
+            updateData
+        );
+
+        // Prepare response data
+        const responseData = {
+            orderid,
+            status: newStatus,
+            apiResponse: response
+        };
+
+        return res.success({ 
+            message: 'Status checked successfully', 
+            data: responseData
+        });
+    } catch (error) {
+        console.error('Check Status error:', error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
 module.exports = {
     dthPlanFetch,
     customerInfo,
-    dthRecharge
+    dthRecharge,
+    checkStatus
 };
