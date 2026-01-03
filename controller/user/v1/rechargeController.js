@@ -80,15 +80,6 @@ const recharge = async (req, res) => {
         ]);
         console.log('response', response);
 
-        // Log recharge response
-        console.log('[Recharge] API Response:', {
-            userId: req.user.id,
-            orderid: response?.orderid,
-            status: response?.status,
-            txid: response?.txid,
-            message: response?.message,
-            response: response
-        });
 
         // Extract response data
         const orderid = response.orderid;
@@ -132,11 +123,11 @@ const recharge = async (req, res) => {
             value3: value3 || null,
             value4: value4 || null,
             apiResponse: response,
-            superadminComm,
-            whitelabelComm,
-            masterDistributorCom,
-            distributorCom,
-            retailerCom,
+            superadminComm: paymentStatus === 'Success' ? superadminComm : 0,
+            whitelabelComm: paymentStatus === 'Success' ? whitelabelComm : 0,
+            masterDistributorCom: paymentStatus === 'Success' ? masterDistributorCom : 0,
+            distributorCom: paymentStatus === 'Success' ? distributorCom : 0,
+            retailerCom: paymentStatus === 'Success' ? retailerCom : 0,
             isActive: true,
             addedBy: req.user.id
         };
