@@ -1,4 +1,5 @@
 const { DataTypes } = require('sequelize');
+const CustomerBank = require('./customerBank');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
@@ -30,7 +31,7 @@ let PayoutHistory = sequelize.define('payoutHistory', {
   customerBankId: {
     type: DataTypes.INTEGER,
     references: {
-      model: 'customerBanks',
+      model: CustomerBank,
       key: 'id'
     },
     allowNull: true
