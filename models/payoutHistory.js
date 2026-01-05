@@ -30,7 +30,7 @@ let PayoutHistory = sequelize.define('payoutHistory', {
   customerBankId: {
     type: DataTypes.INTEGER,
     references: {
-      model: 'customerBanks',
+      model: 'customerBank',
       key: 'id'
     },
     allowNull: true

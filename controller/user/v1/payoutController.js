@@ -7,18 +7,26 @@ const payout = async (req, res) => {
     try {
         const { 
             amount, 
-            mode, // 'wallet' or 'bank'
-            customerBankId, // For bank payout
-            bankId, // Alias for customerBankId (for bank payout)
-            accountNumber, // For bank payout (if not using customerBankId)
-            ifscCode, // For bank payout (if not using customerBankId)
-            paymentMode, // 'IMPS' or 'NEFT'
+            mode, 
+            customerBankId, 
+            bankId, 
+            accountNumber, 
+            ifscCode,
+            paymentMode,
             latitude,
             longitude
         } = req.body;
         
         // Support bankId as alias for customerBankId
-        const effectiveCustomerBankId = customerBankId || bankId;
+        // Convert to integer if provided as string
+        let effectiveCustomerBankId = customerBankId || bankId;
+        if (effectiveCustomerBankId !== null && effectiveCustomerBankId !== undefined) {
+            const parsedId = parseInt(effectiveCustomerBankId, 10);
+            if (isNaN(parsedId)) {
+                return res.failure({ message: 'Invalid customerBankId or bankId: must be a valid number' });
+            }
+            effectiveCustomerBankId = parsedId;
+        }
         
         const user = req.user;
         
@@ -108,7 +116,7 @@ const payout = async (req, res) => {
             // Get bank details
             // Priority: customerBankId (or bankId) takes precedence if provided, otherwise use accountNumber + ifscCode
             // Handle empty strings and null values properly
-            const hasCustomerBankId = effectiveCustomerBankId && effectiveCustomerBankId.toString().trim() !== '';
+            const hasCustomerBankId = effectiveCustomerBankId && !isNaN(effectiveCustomerBankId);
             const hasAccountNumber = accountNumber && accountNumber.toString().trim() !== '';
             const hasIfscCode = ifscCode && ifscCode.toString().trim() !== '';
             
@@ -121,7 +129,20 @@ const payout = async (req, res) => {
                 });
                 
                 if (!customerBank) {
-                    return res.failure({ message: 'Customer bank not found or inactive' });
+                    return res.failure({ 
+                        message: 'Customer bank not found or inactive',
+                        details: {
+                            searchedId: effectiveCustomerBankId,
+                            userId: user.id,
+                            companyId: user.companyId
+                        }
+                    });
+                }
+                
+                // Ensure customerBank.id is a valid integer
+                if (!customerBank.id || isNaN(parseInt(customerBank.id, 10))) {
+                    console.error('Invalid customerBank.id:', customerBank.id);
+                    return res.failure({ message: 'Invalid customer bank record: missing or invalid ID' });
                 }
             } else if (hasAccountNumber && hasIfscCode) {
                 customerBank = await dbService.findOne(model.customerBank, {
@@ -147,7 +168,20 @@ const payout = async (req, res) => {
                 });
             }
             
-            payoutHistoryData.customerBankId = customerBank.id;
+            // Convert customerBank.id to integer to ensure proper foreign key reference
+            payoutHistoryData.customerBankId = parseInt(customerBank.id, 10);
+            
+            // Validate the ID before proceeding
+            if (isNaN(payoutHistoryData.customerBankId)) {
+                console.error('Invalid customerBank.id after conversion:', customerBank.id);
+                return res.failure({ message: 'Invalid customer bank ID for payout history' });
+            }
+            
+            console.log('Setting customerBankId for payoutHistory:', {
+                originalId: customerBank.id,
+                convertedId: payoutHistoryData.customerBankId,
+                customerBankExists: !!customerBank
+            });
             payoutHistoryData.accountNumber = customerBank.accountNumber;
             payoutHistoryData.ifscCode = customerBank.ifsc;
             payoutHistoryData.beneficiaryName = customerBank.beneficiaryName;
