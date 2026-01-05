@@ -9,12 +9,16 @@ const payout = async (req, res) => {
             amount, 
             mode, // 'wallet' or 'bank'
             customerBankId, // For bank payout
+            bankId, // Alias for customerBankId (for bank payout)
             accountNumber, // For bank payout (if not using customerBankId)
             ifscCode, // For bank payout (if not using customerBankId)
             paymentMode, // 'IMPS' or 'NEFT'
             latitude,
             longitude
         } = req.body;
+        
+        // Support bankId as alias for customerBankId
+        const effectiveCustomerBankId = customerBankId || bankId;
         
         const user = req.user;
         
@@ -90,11 +94,27 @@ const payout = async (req, res) => {
             
             payoutHistoryData.paymentMode = paymentMode;
             
+            // Debug: Log received bank parameters
+            console.log('Bank payout parameters:', {
+                customerBankId: effectiveCustomerBankId,
+                bankId: bankId,
+                accountNumber: accountNumber,
+                ifscCode: ifscCode,
+                customerBankIdType: typeof effectiveCustomerBankId,
+                accountNumberType: typeof accountNumber,
+                ifscCodeType: typeof ifscCode
+            });
+            
             // Get bank details
-            // Priority: customerBankId takes precedence if provided, otherwise use accountNumber + ifscCode
-            if (customerBankId) {
+            // Priority: customerBankId (or bankId) takes precedence if provided, otherwise use accountNumber + ifscCode
+            // Handle empty strings and null values properly
+            const hasCustomerBankId = effectiveCustomerBankId && effectiveCustomerBankId.toString().trim() !== '';
+            const hasAccountNumber = accountNumber && accountNumber.toString().trim() !== '';
+            const hasIfscCode = ifscCode && ifscCode.toString().trim() !== '';
+            
+            if (hasCustomerBankId) {
                 customerBank = await dbService.findOne(model.customerBank, {
-                    id: customerBankId,
+                    id: effectiveCustomerBankId,
                     refId: user.id,
                     companyId: user.companyId,
                     isActive: true
@@ -103,10 +123,10 @@ const payout = async (req, res) => {
                 if (!customerBank) {
                     return res.failure({ message: 'Customer bank not found or inactive' });
                 }
-            } else if (accountNumber && ifscCode) {
+            } else if (hasAccountNumber && hasIfscCode) {
                 customerBank = await dbService.findOne(model.customerBank, {
-                    accountNumber: accountNumber,
-                    ifsc: ifscCode,
+                    accountNumber: accountNumber.toString().trim(),
+                    ifsc: ifscCode.toString().trim(),
                     refId: user.id,
                     companyId: user.companyId,
                     isActive: true
@@ -116,7 +136,15 @@ const payout = async (req, res) => {
                     return res.failure({ message: 'Customer bank not found with provided account number and IFSC' });
                 }
             } else {
-                return res.failure({ message: 'Either customerBankId or (accountNumber and ifscCode) is required for bank payout' });
+                return res.failure({ 
+                    message: 'Either customerBankId (or bankId) or (accountNumber and ifscCode) is required for bank payout',
+                    received: {
+                        customerBankId: effectiveCustomerBankId || null,
+                        bankId: bankId || null,
+                        accountNumber: accountNumber || null,
+                        ifscCode: ifscCode || null
+                    }
+                });
             }
             
             payoutHistoryData.customerBankId = customerBank.id;
