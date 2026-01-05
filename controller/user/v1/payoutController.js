@@ -23,16 +23,16 @@ const payout = async (req, res) => {
         
         // Validate required fields
         if (!amount || isNaN(payoutAmount) || payoutAmount <= 0) {
-            return res.validationError({ message: 'Amount is required and must be a valid number greater than 0' });
+            return res.failure({ message: 'Amount is required and must be a valid number greater than 0' });
         }
         
         if (!mode || !['wallet', 'bank'].includes(mode)) {
-            return res.validationError({ message: 'Valid mode is required (wallet or bank)' });
+            return res.failure({ message: 'Valid mode is required (wallet or bank)' });
         }
         
         // Validate location (required for both modes)
         if (!latitude || !longitude) {
-            return res.validationError({ message: 'Latitude and longitude are required' });
+            return res.failure({ message: 'Latitude and longitude are required' });
         }
         
         
@@ -42,18 +42,18 @@ const payout = async (req, res) => {
         ]);
         
         if (!company) {
-            return res.notFound({ message: 'Company not found' });
+            return res.failure({ message: 'Company not found' });
         }
         
         if (!wallet) {
-            return res.notFound({ message: 'Wallet not found' });
+            return res.failure({ message: 'Wallet not found' });
         }
         
         // Check AEPS wallet balance (source wallet)
         const sourceWalletType = 'apesWallet';
         const currentAepsBalance = parseFloat(wallet.apesWallet || 0);
         if (currentAepsBalance < payoutAmount) {
-            return res.validationError({ message: 'Insufficient AEPS wallet balance' });
+            return res.failure({ message: 'Insufficient AEPS wallet balance' });
         }
         
         // Generate transaction ID
@@ -85,7 +85,7 @@ const payout = async (req, res) => {
         if (mode === 'bank') {
             // Validate bank-specific fields
             if (!paymentMode || !['IMPS', 'NEFT'].includes(paymentMode)) {
-                return res.validationError({ message: 'Valid paymentMode is required (IMPS or NEFT) for bank payout' });
+                return res.failure({ message: 'Valid paymentMode is required (IMPS or NEFT) for bank payout' });
             }
             
             payoutHistoryData.paymentMode = paymentMode;
@@ -101,7 +101,7 @@ const payout = async (req, res) => {
                 });
                 
                 if (!customerBank) {
-                    return res.notFound({ message: 'Customer bank not found or inactive' });
+                    return res.failure({ message: 'Customer bank not found or inactive' });
                 }
             } else if (accountNumber && ifscCode) {
                 customerBank = await dbService.findOne(model.customerBank, {
@@ -113,10 +113,10 @@ const payout = async (req, res) => {
                 });
                 
                 if (!customerBank) {
-                    return res.notFound({ message: 'Customer bank not found with provided account number and IFSC' });
+                    return res.failure({ message: 'Customer bank not found with provided account number and IFSC' });
                 }
             } else {
-                return res.validationError({ message: 'Either customerBankId or (accountNumber and ifscCode) is required for bank payout' });
+                return res.failure({ message: 'Either customerBankId or (accountNumber and ifscCode) is required for bank payout' });
             }
             
             payoutHistoryData.customerBankId = customerBank.id;
@@ -139,6 +139,7 @@ const payout = async (req, res) => {
                 longitude: longitude,
                 agentTransactionID: transactionID
             };
+            console.log("aslPayload",aslPayload);
             
             const aslResponse = await aslAepsPayOut(aslPayload);
             
@@ -298,7 +299,7 @@ const payout = async (req, res) => {
         
     } catch (error) {
         console.log('Payout error:', error);
-        return res.internalServerError({ message: error.message || 'Internal server error' });
+        return res.failure({ message: error.message || 'Internal server error' });
     }
 }
 
