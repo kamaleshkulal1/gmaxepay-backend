@@ -103,16 +103,6 @@ const payout = async (req, res) => {
             payoutHistoryData.paymentMode = paymentMode;
             
             // Debug: Log received bank parameters
-            console.log('Bank payout parameters:', {
-                customerBankId: effectiveCustomerBankId,
-                bankId: bankId,
-                accountNumber: accountNumber,
-                ifscCode: ifscCode,
-                customerBankIdType: typeof effectiveCustomerBankId,
-                accountNumberType: typeof accountNumber,
-                ifscCodeType: typeof ifscCode
-            });
-            
             // Get bank details
             // Priority: customerBankId (or bankId) takes precedence if provided, otherwise use accountNumber + ifscCode
             // Handle empty strings and null values properly
@@ -144,6 +134,24 @@ const payout = async (req, res) => {
                     console.error('Invalid customerBank.id:', customerBank.id);
                     return res.failure({ message: 'Invalid customer bank record: missing or invalid ID' });
                 }
+                
+                // Double-check that the customerBank record actually exists in the database
+                // This prevents foreign key constraint errors
+                const verifyCustomerBank = await dbService.findOne(model.customerBank, {
+                    id: customerBank.id
+                });
+                
+                if (!verifyCustomerBank) {
+                    console.error('CustomerBank record not found in database:', customerBank.id);
+                    return res.failure({ 
+                        message: 'Customer bank record not found in database',
+                        details: {
+                            customerBankId: customerBank.id,
+                            userId: user.id,
+                            companyId: user.companyId
+                        }
+                    });
+                }
             } else if (hasAccountNumber && hasIfscCode) {
                 customerBank = await dbService.findOne(model.customerBank, {
                     accountNumber: accountNumber.toString().trim(),
@@ -155,6 +163,29 @@ const payout = async (req, res) => {
                 
                 if (!customerBank) {
                     return res.failure({ message: 'Customer bank not found with provided account number and IFSC' });
+                }
+                
+                // Ensure customerBank.id is a valid integer
+                if (!customerBank.id || isNaN(parseInt(customerBank.id, 10))) {
+                    console.error('Invalid customerBank.id:', customerBank.id);
+                    return res.failure({ message: 'Invalid customer bank record: missing or invalid ID' });
+                }
+                
+                // Double-check that the customerBank record actually exists in the database
+                const verifyCustomerBank = await dbService.findOne(model.customerBank, {
+                    id: customerBank.id
+                });
+                
+                if (!verifyCustomerBank) {
+                    console.error('CustomerBank record not found in database:', customerBank.id);
+                    return res.failure({ 
+                        message: 'Customer bank record not found in database',
+                        details: {
+                            customerBankId: customerBank.id,
+                            userId: user.id,
+                            companyId: user.companyId
+                        }
+                    });
                 }
             } else {
                 return res.failure({ 
@@ -190,7 +221,7 @@ const payout = async (req, res) => {
             
             // Call ASL API for bank payout
             const aslPayload = {
-                mobile: user.mobile || user.phone,
+                mobile: user.mobileNo,
                 accountNumber: customerBank.accountNumber,
                 beneficiaryName: customerBank.beneficiaryName,
                 bankName: customerBank.bankName,
