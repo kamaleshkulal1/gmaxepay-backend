@@ -115,15 +115,11 @@ const updateBank = async (req, res) => {
     if (!id) {
       return res.failure({ message: 'id is required' });
     }
-    console.log('id', id);
-    console.log(typeof id);
+
     const existingBank = await dbService.findOne(model.practomindBankList, {
       id: parseInt(id),
       isDeleted: false
-    });
-    console.log('existingBank', existingBank);
-
-    if (!existingBank) {
+    });    if (!existingBank) {
       return res.failure({ message: 'Bank not found' });
     }
 
@@ -199,7 +195,14 @@ const updateBank = async (req, res) => {
       dataToUpdate.bankLogo = body.bankLogo ? String(body.bankLogo).trim() : null;
     }
 
-    if (body.isActive !== undefined) dataToUpdate.isActive = !!body.isActive;
+    if (body.isActive !== undefined) {
+      // Properly convert string "false"/"true" to boolean
+      if (typeof body.isActive === 'string') {
+        dataToUpdate.isActive = body.isActive.toLowerCase() === 'true' || body.isActive === '1';
+      } else {
+        dataToUpdate.isActive = !!body.isActive;
+      }
+    }
     dataToUpdate.updatedBy = req.user.id;
 
     const updated = await dbService.update(
@@ -475,7 +478,14 @@ const updateCompanyCode = async (req, res) => {
       }
     }
 
-    if (body.isActive !== undefined) dataToUpdate.isActive = !!body.isActive;
+    if (body.isActive !== undefined) {
+      // Properly convert string "false"/"true" to boolean
+      if (typeof body.isActive === 'string') {
+        dataToUpdate.isActive = body.isActive.toLowerCase() === 'true' || body.isActive === '1';
+      } else {
+        dataToUpdate.isActive = !!body.isActive;
+      }
+    }
     dataToUpdate.updatedBy = req.user.id;
 
     const updated = await dbService.update(
@@ -772,7 +782,14 @@ const updateState = async (req, res) => {
       }
     }
 
-    if (body.isActive !== undefined) dataToUpdate.isActive = !!body.isActive;
+    if (body.isActive !== undefined) {
+      // Properly convert string "false"/"true" to boolean
+      if (typeof body.isActive === 'string') {
+        dataToUpdate.isActive = body.isActive.toLowerCase() === 'true' || body.isActive === '1';
+      } else {
+        dataToUpdate.isActive = !!body.isActive;
+      }
+    }
     dataToUpdate.updatedBy = req.user.id;
 
     const updated = await dbService.update(
