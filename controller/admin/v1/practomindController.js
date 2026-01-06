@@ -115,11 +115,13 @@ const updateBank = async (req, res) => {
     if (!id) {
       return res.failure({ message: 'id is required' });
     }
-
+    console.log('id', id);
+    console.log(typeof id);
     const existingBank = await dbService.findOne(model.practomindBankList, {
       id: parseInt(id),
       isDeleted: false
     });
+    console.log('existingBank', existingBank);
 
     if (!existingBank) {
       return res.failure({ message: 'Bank not found' });
