@@ -18,7 +18,7 @@ router.post('/company-codes/create', authentication, practomindController.create
 router.put('/company-codes/update/:id', authentication, practomindController.updateCompanyCode);
 router.post('/company-codes/delete/:id', authentication, practomindController.deleteCompanyCode);
 router.post('/company-codes/get/:id', authentication, practomindController.getCompanyCodeById);
-router.post('/company-codes/get-all', authentication, practomindController.getAllCompanyCodes);
+router.post('/company-codes/get-all',  practomindController.getAllCompanyCodes);
 
 router.post('/states/create', authentication, practomindController.createState);
 router.put('/states/update/:id', authentication, practomindController.updateState);
