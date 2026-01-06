@@ -19,26 +19,17 @@ let PractomindState = sequelize.define(
     stateId: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
-      validate: {
-        notEmpty: true
-      }
+      unique: true
     },
     state: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
-      validate: {
-        notEmpty: true
-      }
+      unique: true
     },
     stateCode: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
-      validate: {
-        notEmpty: true
-      }
+      unique: true
     },
     ...reusableModelAttribute
   },

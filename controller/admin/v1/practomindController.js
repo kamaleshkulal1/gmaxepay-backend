@@ -28,8 +28,13 @@ const createBank = async (req, res) => {
     }
 
     const dataToCreate = { ...(req.body || {}) };
+    const aeps_bank_id = (dataToCreate.aeps_bank_id || '').trim();
     const bankName = (dataToCreate.bankName || '').trim();
     const iinno = (dataToCreate.iinno || '').trim();
+
+    if (!aeps_bank_id) {  
+      return res.failure({ message: 'aeps_bank_id is required' });
+    }
 
     if (!bankName) {
       return res.failure({ message: 'bankName is required' });
@@ -41,8 +46,8 @@ const createBank = async (req, res) => {
     // Check for duplicates (iinno and bankName cannot repeat)
     const duplicateCheck = await checkUniqueFieldsInDatabase(
       model.practomindBankList,
-      ['iinno', 'bankName'],
-      { iinno, bankName },
+      ['iinno', 'bankName','aeps_bank_id'],
+      { iinno, bankName, aeps_bank_id },
       'INSERT'
     );
 
@@ -69,6 +74,7 @@ const createBank = async (req, res) => {
     }
 
     const created = await dbService.createOne(model.practomindBankList, {
+      aeps_bank_id,
       bankName,
       iinno,
       bankLogo,
@@ -133,6 +139,13 @@ const updateBank = async (req, res) => {
         return res.failure({ message: 'iinno cannot be empty' });
       }
       dataToUpdate.iinno = iinno;
+    }
+    if (body.aeps_bank_id !== undefined) {
+      const aeps_bank_id = String(body.aeps_bank_id).trim();
+      if (!aeps_bank_id) {
+        return res.failure({ message: 'aeps_bank_id cannot be empty' });
+      }
+      dataToUpdate.aeps_bank_id = aeps_bank_id;
     }
 
     // Check for duplicates if updating unique fields (excluding current record)
