@@ -19,18 +19,12 @@ let PractomindCompanyCode = sequelize.define(
     c_id: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
-      validate: {
-        notEmpty: true
-      }
+      unique: true
     },
     mccCode: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
-      validate: {
-        notEmpty: true
-      }
+      unique: true
     },
     description: {
       type: DataTypes.TEXT,
