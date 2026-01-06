@@ -189,11 +189,6 @@ const updateBank = async (req, res) => {
       dataToUpdate.bankLogo = body.bankLogo ? String(body.bankLogo).trim() : null;
     }
 
-    // Prevent updating isDeleted through update endpoint - use delete endpoint instead
-    if (body.isDeleted !== undefined) {
-      return res.failure({ message: 'isDeleted cannot be updated through this endpoint. Use delete endpoint instead.' });
-    }
-
     if (body.isActive !== undefined) {
       // Properly convert string "false"/"true" to boolean
       if (typeof body.isActive === 'string') {
@@ -475,11 +470,6 @@ const updateCompanyCode = async (req, res) => {
           return res.failure({ message: 'mccCode already exists' });
         }
       }
-    }
-
-    // Prevent updating isDeleted through update endpoint - use delete endpoint instead
-    if (body.isDeleted !== undefined) {
-      return res.failure({ message: 'isDeleted cannot be updated through this endpoint. Use delete endpoint instead.' });
     }
 
     if (body.isActive !== undefined) {
@@ -784,11 +774,6 @@ const updateState = async (req, res) => {
           return res.failure({ message: 'stateCode already exists' });
         }
       }
-    }
-
-    // Prevent updating isDeleted through update endpoint - use delete endpoint instead
-    if (body.isDeleted !== undefined) {
-      return res.failure({ message: 'isDeleted cannot be updated through this endpoint. Use delete endpoint instead.' });
     }
 
     if (body.isActive !== undefined) {
