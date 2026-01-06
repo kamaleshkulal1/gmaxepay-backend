@@ -133,17 +133,23 @@ const resetPassword = async (req, res) => {
             return res.failure({ message: 'Company not found!' });
         }
 
-        if (!newPassword || !confirmPassword) {
-            return res.failure({ message: 'New password and confirm password are required!!' });
-        }
-
-        if (newPassword.length < 8) {
-            return res.failure({ message: 'New password must be at least 8 characters long!' });
-        }
-
         if (!token) {
             return res.failure({ message: 'Token is required!' });
         }
+
+        // For forgot password flow, newPassword and confirmPassword are not required
+        // The service will auto-generate a temporary password
+        // For regular password reset, validate these fields
+        if (newPassword || confirmPassword) {
+            if (!newPassword || !confirmPassword) {
+                return res.failure({ message: 'Both new password and confirm password are required!' });
+            }
+
+            if (newPassword.length < 8) {
+                return res.failure({ message: 'New password must be at least 8 characters long!' });
+            }
+        }
+
         const result = await authService.resetPassword(
             token,
             newPassword,
@@ -310,6 +316,76 @@ const logout = async (req, res) => {
     }
 };
 
+const resendTemporaryPassword = async (req, res) => {
+    try {
+        const { mobileNo } = req.body;
+        if (!mobileNo) {
+            return res.failure({ message: 'Mobile number is required!' });
+        }   
+        const companyId = req.headers['x-company-id'];
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
+        const result = await authService.resendTemporaryPassword(mobileNo, companyId, req);
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const verifyForgotPasswordOTP = async (req, res) => {
+    try {
+        const { otp } = req.body;
+        const companyId = req.headers['x-company-id'];
+        const token = req.headers['token'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
+
+        if (!otp) {
+            return res.failure({ message: 'OTP is required!' });
+        }
+
+        if (!token) {
+            return res.failure({ message: 'Token is required!' });
+        }
+        
+        const result = await authService.verifyForgotPasswordOTP(
+            token,
+            otp,
+            companyId
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
 
 module.exports = {
     login,
@@ -318,5 +394,7 @@ module.exports = {
     handle2FA,
     refreshAccessToken,
     resendOTP,
-    logout
+    logout,
+    resendTemporaryPassword,
+    verifyForgotPasswordOTP
 };

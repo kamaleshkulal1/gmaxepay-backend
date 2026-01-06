@@ -1480,17 +1480,10 @@ const getPermissions = async (roleId) => {
 };
 const resetPassword = async (token, newPassword, confirmPassword, companyId) => {
   try {
-    if (!token || !newPassword || !confirmPassword) {
+    if (!token) {
       return {
         flag: true,
-        msg: 'token, new password and confirm password are required!'
-      };
-    }
-
-    if (newPassword !== confirmPassword) {
-      return {
-        flag: true,
-        msg: 'New password and confirm password do not match!'
+        msg: 'Token is required!'
       };
     }
 
@@ -1503,7 +1496,11 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
       };
     }
 
-    const { userId } = tokenValidation;
+    const userDetail = tokenValidation.userDetail;
+    const { userId, purpose } = userDetail;
+
+    // Check if this is a forgot password reset token
+    const isForgotPasswordFlow = purpose === 'forgot_password_reset';
 
     const where = {
       id: userId,
@@ -1521,6 +1518,53 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
         msg: 'User does not exist!'
       };
     }
+
+    // For forgot password flow, auto-generate 6-digit temporary password
+    if (isForgotPasswordFlow) {
+      // Auto-generate 6-digit temporary password
+      const tempPassword = random.randomNumber(6);
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+      const expireTime = moment().add(10, 'minutes').toISOString(); // 10 minutes validity
+      
+      // Store temporary password with expiry time
+      await dbService.update(
+        model.user,
+        { id: user.id },
+        { 
+          password: hashedPassword + '~' + expireTime,
+          tokenVersion: getRandomNumber()
+        }
+      );
+
+      // Send SMS with temporary password
+      const msg = `Dear user, your temporary password is ${tempPassword}. It is valid for 10 minutes. Team Gmaxepay`;
+      await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
+
+      return {
+        flag: false,
+        msg: 'Temporary password generated and sent successfully! It is valid for 10 minutes.',
+        data: {
+          requiresLogin: true,
+          tempPassword: tempPassword // Include in response for testing, remove in production if needed
+        }
+      };
+    }
+
+    // Original reset password flow (for regular password reset)
+    if (!newPassword || !confirmPassword) {
+      return {
+        flag: true,
+        msg: 'New password and confirm password are required!'
+      };
+    }
+
+    if (newPassword !== confirmPassword) {
+      return {
+        flag: true,
+        msg: 'New password and confirm password do not match!'
+      };
+    }
+
     if(!user.isResetPassword) {
       return {
         flag: true,
@@ -2187,6 +2231,264 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
   }
 };
 
+const resendTemporaryPassword = async(mobileNo, companyId, req)=>{
+  try {
+    if (!mobileNo) {
+      return {
+        flag: true,
+        msg: 'Mobile number is required!'
+      };
+    }
+    if (!companyId) {
+      return {
+        flag: true,
+        msg: 'Company ID is required!'
+      };
+    }
+    const existingCompany = await dbService.findOne(model.company, { id: companyId });
+    if (!existingCompany) {
+      return {
+        flag: true,
+        msg: 'Company not found!'
+      };
+    }
+    const user = await dbService.findOne(model.user, { mobileNo: mobileNo, companyId: companyId });
+    if (!user) {
+      return {
+        flag: true,
+        msg: 'User not found!'
+      };
+    }
+    if (!user.isActive) {
+      return {
+        flag: true,
+        msg: 'User is not active! Please contact support.'
+      };
+    }
+
+    // Check if OTP attempts are locked
+    if (user.isOtpLocked && user.isOtpLocked()) {
+      return {
+        flag: true,
+        msg: 'Cannot send OTP. Account is locked due to multiple failed attempts. Please contact admin for assistance.'
+      };
+    }
+
+    // Reset OTP attempts when generating new OTP
+    if (user.resetOtpAttempts) {
+      await user.resetOtpAttempts();
+    }
+
+    // Generate OTP
+    const code = random.randomNumber(6);
+    const hashedCode = await bcrypt.hash(code, 10);
+    const expireOTP = moment().add(120, 'seconds').toISOString(); // 2 minutes
+    
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { otpMobile: hashedCode + '~' + expireOTP }
+    );
+
+    // Send SMS
+    const msg = `Dear user, your OTP for password reset is ${code}. Team Gmaxepay`;
+    const smsResult = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
+
+    // Generate token for OTP verification
+    const ip = req?.headers['x-forwarded-for']?.split(',')[0] ||
+              req?.connection?.remoteAddress ||
+              req?.socket?.remoteAddress ||
+              req?.ip || '';
+    const userAgent = req?.headers['user-agent'] || '';
+
+    const sensitiveData = {
+      mobileNo: user.mobileNo,
+      email: user.email,
+      userRole: user.userRole,
+      userType: user.userType,
+      userId: user.id,
+      companyId: user.companyId,
+      ip: ip,
+      timestamp: Date.now(),
+      purpose: 'forgot_password_otp'
+    };
+    
+    const encryptionKey = crypto.randomBytes(32);
+    const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
+
+    const dataToken = {
+      data: encryptedData,
+      key: encryptionKey.toString('hex')
+    };
+
+    if (smsResult) {
+      return {
+        flag: false,
+        msg: 'OTP sent successfully!',
+        data: {
+          requiresOtpVerify: true,
+          token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+        }
+      };
+    } else {
+      return {
+        flag: true,
+        msg: 'Error sending OTP!'
+      };
+    }
+  }catch(error){
+    console.error('Error resending forgot password OTP:', error);
+    return {
+      flag: true,
+      msg: error.message
+    };
+  }
+}
+
+const verifyForgotPasswordOTP = async (token, otp, companyId) => {
+  try {
+    if (!token || !otp) {
+      return {
+        flag: true,
+        msg: 'Token and OTP are required!'
+      };
+    }
+
+    // Validate and decrypt dataToken with expiration check
+    const tokenValidation = await validateAndDecryptDataToken(token);
+    if (!tokenValidation.isValid) {
+      return {
+        flag: true,
+        msg: tokenValidation.error
+      };
+    }
+
+    const userDetail = tokenValidation.userDetail;
+    const { mobileNo, userId, companyId: tokenCompanyId, purpose } = userDetail;
+
+    // Verify this token is for forgot password
+    if (purpose !== 'forgot_password_otp') {
+      return {
+        flag: true,
+        msg: 'Invalid token purpose!'
+      };
+    }
+
+    const where = {
+      id: userId,
+      isActive: true,
+      isDeleted: false,
+      mobileNo
+    };
+    
+    if (companyId !== null) {
+      where.companyId = companyId;
+    }
+    
+    const user = await dbService.findOne(model.user, where);
+    if (!user) {
+      return {
+        flag: true,
+        msg: 'User does not exist!'
+      };
+    }
+    
+    // Check if account is locked
+    if (user.isAccountLocked && user.isAccountLocked()) {
+      return {
+        flag: true,
+        msg: 'Account is locked due to multiple failed attempts. Please contact admin for assistance.'
+      };
+    }
+
+    // Verify OTP
+    if (!user.otpMobile) {
+      return {
+        flag: true,
+        msg: 'OTP is not set. Please request a new OTP.'
+      };
+    }
+
+    const [hashedOtp, expireOTP] = user.otpMobile.split('~');
+    const currentTime = moment().toISOString();
+    
+    if (moment(currentTime).isAfter(expireOTP)) {
+      return {
+        flag: true,
+        msg: 'OTP has expired. Please request a new OTP.'
+      };
+    }
+    
+    if (otp.length !== 6) {
+      return {
+        flag: true,
+        msg: 'Please provide a valid OTP!'
+      };
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, hashedOtp);
+    if (!isOtpValid) {
+      // Increment OTP attempts
+      if (user.incrementOtpAttempts) {
+        await user.incrementOtpAttempts();
+      }
+      
+      const updatedUser = await dbService.findOne(model.user, { id: user.id });
+      if (updatedUser.isOtpLocked && updatedUser.isOtpLocked()) {
+        return {
+          flag: true,
+          msg: 'OTP verification locked due to multiple failed attempts. Please contact admin for assistance.'
+        };
+      }
+      
+      const remainingAttempts = 3 - (updatedUser.loginAttempts || 0);
+      return {
+        flag: true,
+        msg: `OTP is incorrect. ${remainingAttempts} attempts remaining before OTP lock.`
+      };
+    }
+
+    // Reset OTP attempts on successful verification
+    if (user.resetOtpAttempts) {
+      await user.resetOtpAttempts();
+    }
+
+    // Generate token for password reset
+    const sensitiveData = {
+      mobileNo: user.mobileNo,
+      email: user.email,
+      userRole: user.userRole,
+      userType: user.userType,
+      userId: user.id,
+      companyId: user.companyId,
+      timestamp: Date.now(),
+      purpose: 'forgot_password_reset'
+    };
+    
+    const encryptionKey = crypto.randomBytes(32);
+    const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
+
+    const dataToken = {
+      data: encryptedData,
+      key: encryptionKey.toString('hex')
+    };
+
+    return {
+      flag: false,
+      msg: 'OTP verified successfully!',
+      data: {
+        requiresPasswordReset: true,
+        token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+      }
+    };
+  } catch (error) {
+    console.error('Error verifying forgot password OTP:', error);
+    return {
+      flag: true,
+      msg: error.message
+    };
+  }
+};
 module.exports = {
   loginUser,
   getLoggedInUser,
@@ -2205,5 +2507,7 @@ module.exports = {
   verify2FA,
   resetPassword,
   setup2FA,
-  handle2FA
+  handle2FA,
+  resendTemporaryPassword,
+  verifyForgotPasswordOTP
 };

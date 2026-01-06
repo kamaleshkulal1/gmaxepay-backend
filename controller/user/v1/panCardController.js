@@ -8,7 +8,7 @@ const panCardActions = async (req, res) => {
   try {
     const userId = req.user.id;
     const companyId = req.user.companyId;
-    const { mobile_number,action} = req.body;
+    const { mobile_number, action} = req.body;
 
     // Get user details
     const user = await dbService.findOne(
