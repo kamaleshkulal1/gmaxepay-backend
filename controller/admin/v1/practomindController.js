@@ -89,13 +89,7 @@ const createBank = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.failure({ message: 'Duplicate entry: iinno or bankName already exists' });
-    }
-    if (error.name === 'SequelizeValidationError') {
-      return res.failure({ message: error.errors[0].message });
-    }
-    return res.failure({ message: error.message });
+    return res.failure({ message: 'Bank Creation Failed' });
   }
 };
 
@@ -193,6 +187,11 @@ const updateBank = async (req, res) => {
       dataToUpdate.bankLogo = uploadResult?.key || uploadResult?.url || null;
     } else if (body.bankLogo !== undefined) {
       dataToUpdate.bankLogo = body.bankLogo ? String(body.bankLogo).trim() : null;
+    }
+
+    // Prevent updating isDeleted through update endpoint - use delete endpoint instead
+    if (body.isDeleted !== undefined) {
+      return res.failure({ message: 'isDeleted cannot be updated through this endpoint. Use delete endpoint instead.' });
     }
 
     if (body.isActive !== undefined) {
@@ -476,6 +475,11 @@ const updateCompanyCode = async (req, res) => {
           return res.failure({ message: 'mccCode already exists' });
         }
       }
+    }
+
+    // Prevent updating isDeleted through update endpoint - use delete endpoint instead
+    if (body.isDeleted !== undefined) {
+      return res.failure({ message: 'isDeleted cannot be updated through this endpoint. Use delete endpoint instead.' });
     }
 
     if (body.isActive !== undefined) {
@@ -780,6 +784,11 @@ const updateState = async (req, res) => {
           return res.failure({ message: 'stateCode already exists' });
         }
       }
+    }
+
+    // Prevent updating isDeleted through update endpoint - use delete endpoint instead
+    if (body.isDeleted !== undefined) {
+      return res.failure({ message: 'isDeleted cannot be updated through this endpoint. Use delete endpoint instead.' });
     }
 
     if (body.isActive !== undefined) {
