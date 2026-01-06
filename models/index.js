@@ -56,6 +56,9 @@ db.customerBank = require('./customerBank');
 db.cardType = require('./cardType');
 db.paymentInstrument = require('./paymentInsturment');
 db.aslBankList = require('./aslBankList');
+db.practomindBankList = require('./practomindBankList');
+db.practomindCompanyCode = require('./practomindCompanyCode');
+db.practomindState = require('./practomindState');
 
 // Financial Models
 db.wallet = require('./wallet');

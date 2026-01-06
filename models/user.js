@@ -13,6 +13,7 @@ const {
 } = require('../utils/common');
 const authConstantEnum = require('../constants/authConstant');
 const bcrypt = require('bcrypt');
+const moment = require('moment');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Package = require('./packages');
 const Company = require('./company');
@@ -808,6 +809,17 @@ const User = sequelize.define(
 );
 User.prototype.isPasswordMatch = async function (password) {
   const user = this;
+  // Check if password contains expiry time (format: hashedPassword~expiryTime)
+  if (user.password && user.password.includes('~')) {
+    const [hashedPassword, expireTime] = user.password.split('~');
+    // Check if temporary password has expired
+    if (expireTime && moment(expireTime).isBefore(moment())) {
+      return false; // Temporary password has expired
+    }
+    // Compare with the hashed password part
+    return bcrypt.compare(password, hashedPassword);
+  }
+  // Regular password comparison
   return bcrypt.compare(password, user.password);
 };
 

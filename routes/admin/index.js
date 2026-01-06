@@ -90,5 +90,6 @@ router.use('/bank', require('./v1/bankRoutes'));
 router.use('/wallet', require('./v1/walletRoute'));
 router.use('/reports', require('./v1/reportsRoutes'));
 router.use('/bbps', require('./v1/bbpsOperatorRoutes'));
+router.use('/practomind', require('./v1/practomindRoutes'));
 
 module.exports = router;
