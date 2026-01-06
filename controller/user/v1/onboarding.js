@@ -1762,8 +1762,11 @@ const postShopDetails = async (req, res) => {
     }
 
     const { user, outlet, customerBank } = userCtx;
-    const { shopName, ipAddress, latitude, longitude } = req.body || {};
-
+    const { shopName, ipAddress, latitude, longitude , shopCategoryId} = req.body || {};
+    
+    if(!shopCategoryId){
+      return res.failure({ message: 'shopCategoryId is required' });
+    }
 
     if (!shopName ) {
       return res.failure({ 
@@ -1847,6 +1850,7 @@ const postShopDetails = async (req, res) => {
       shopPincode: addressData?.address_components?.postal_code,
       shopLatitude: latitude,
       shopLongitude: longitude,
+      shopCategoryId: shopCategoryId,
       shopCountry: "India"
     };
 
