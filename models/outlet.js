@@ -187,6 +187,15 @@ let Outlet = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true
     },
+    shopCategoryId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+      references: {
+        model: 'practomindCompanyCode',
+        key: 'id'
+      }
+    },
     branchName: {
       type: DataTypes.STRING,
       allowNull: true
