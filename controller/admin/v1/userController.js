@@ -845,6 +845,11 @@ const getCompleteKycData = async (req, res) => {
       return imageService.getImageUrl(plainKey, false);
     };
 
+    const shopCategory = await dbService.findOne(model.practomindCompanyCode, {
+      id: outlet.shopCategoryId,
+      isDeleted: false
+    });
+
     const kycData = {
       userId: foundUser.id,
       userDetails: {
@@ -873,7 +878,8 @@ const getCompleteKycData = async (req, res) => {
         gstNo: outlet.gstNo,
         mobileNo: outlet.mobileNo,
         zipCode: outlet.zipCode,
-        shopImage: getShopImageUrl(outlet.shopImage)
+        shopImage: getShopImageUrl(outlet.shopImage),
+        shopCategory: shopCategory ? shopCategory.description : null
       } : null,
       customerBankDetails: customerBank ? {
         customerBankId: customerBank.id,
