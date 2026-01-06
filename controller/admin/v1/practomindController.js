@@ -572,14 +572,6 @@ const getCompanyCodeById = async (req, res) => {
 
 const getAllCompanyCodes = async (req, res) => {
   try {
-    const existingUser = await dbService.findOne(model.user, {
-      id: req.user.id,
-      isActive: true
-    });
-    if (!existingUser) {
-      return res.failure({ message: 'User not found' });
-    }
-
     const dataToFind = req.body || {};
     let options = {};
     let query = { isDeleted: false };
@@ -617,9 +609,18 @@ const getAllCompanyCodes = async (req, res) => {
 
     const result = await dbService.paginate(model.practomindCompanyCode, query, options);
 
+    // Map results to only include id and description
+    const filteredData = (result?.data || []).map(item => {
+      const itemData = item?.toJSON ? item.toJSON() : item;
+      return {
+        id: itemData.id,
+        description: itemData.description || null
+      };
+    });
+
     return res.success({
       message: 'Company Codes Retrieved Successfully',
-      data: result?.data || [],
+      data: filteredData,
       total: result?.total || 0,
       paginator: result?.paginator
     });
