@@ -30,8 +30,7 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
     console.log('Practomind onboarding response:', JSON.stringify(response.data, null, 2));
     return response.data;
