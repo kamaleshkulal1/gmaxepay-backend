@@ -181,7 +181,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
         const existingCompanyCode = await dbService.findOne(model.practomindCompanyCode, { 
             id: existingOutlet.shopCategoryId
         });
-        
+
         if (!existingCompanyCode) {
             return res.failure({ message: 'Company code not found. Please configure MCC code in outlet settings.' });
         }
@@ -234,7 +234,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             backgroundImageOfShop: backgroundImageOfShopBase64,
             merchantPanImage: merchantPanImageBase64
         };
-
+        console.log("onboardingData", JSON.stringify(onboardingData,null,2));
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         const isSuccess = response.status === true || response.status === 'true';
 
