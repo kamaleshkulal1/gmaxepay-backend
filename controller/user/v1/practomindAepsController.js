@@ -202,6 +202,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             state: existingUser?.state
         })
 
+
         const existingShopStateCode = await dbService.findOne(model.practomindState,{
             state: existingOutlet?.shopState
         })
@@ -253,7 +254,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             companyBankName: existingCustomerBank?.bankName,
             bankAccountName: existingCustomerBank?.beneficiaryName,
             bankBranchName: existingCustomerBank?.branch,
-            c_code: existingOutlet?.mccCode,
+            c_code: existingCompanyCode?.c_id,
             shopAddress: existingOutlet?.shopAddress,
             shopCity: existingOutlet?.shopCity,
             shopDistrict: existingOutlet?.shopDistrict,
