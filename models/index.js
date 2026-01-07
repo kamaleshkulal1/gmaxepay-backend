@@ -26,6 +26,8 @@ db.onboardingToken = require('./onboardingToken');
 db.aepsOnboarding = require('./aepsOnboarding');
 db.bioMetric = require('./bioMetric');
 db.aepsDailyLogin = require('./aepsDailyLogin');
+db.practomindAepsOnboarding = require('./practomindAepsOnbarding');
+db.practomindAepsDailyLogin = require('./practomindAepsDailyLogin');
 
 // Role & Permission Models
 db.permission = require('./permissions');
@@ -327,6 +329,52 @@ db.aepsDailyLogin.belongsTo(db.company, {
 db.company.hasMany(db.aepsDailyLogin, {
   foreignKey: 'companyId',
   as: 'aepsDailyLogins',
+  sourceKey: 'id'
+});
+
+// Practomind AEPS Onboarding Relationships
+db.practomindAepsOnboarding.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.practomindAepsOnboarding, {
+  foreignKey: 'userId',
+  as: 'practomindAepsOnboardings',
+  sourceKey: 'id'
+});
+
+db.practomindAepsOnboarding.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.practomindAepsOnboarding, {
+  foreignKey: 'companyId',
+  as: 'practomindAepsOnboardings',
+  sourceKey: 'id'
+});
+
+// Practomind AEPS Daily Login Relationships
+db.practomindAepsDailyLogin.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.practomindAepsDailyLogin, {
+  foreignKey: 'refId',
+  as: 'practomindAepsDailyLogins',
+  sourceKey: 'id'
+});
+
+db.practomindAepsDailyLogin.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.practomindAepsDailyLogin, {
+  foreignKey: 'companyId',
+  as: 'practomindAepsDailyLogins',
   sourceKey: 'id'
 });
 
