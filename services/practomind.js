@@ -6,14 +6,14 @@ const PRACTOMIND_SECRET_KEY = process.env.PRACTOMIND_SECRET_KEY;
 const PRACTOMIND_API_KEY = process.env.PRACTOMIND_API_KEY;
 
 // Practomind AEPS Onboarding
-const practomindAepsOnboarding = async (data) => {
+const practomindAepsOnboarding = async (data , merchantLoginId) => {
   try {
     if (!PRACTOMIND_SECRET_KEY || !PRACTOMIND_API_KEY) {
       throw new Error('Practomind API credentials not configured');
     }
 
     const tokenPayload = {
-      merchantLoginId: data.merchantLoginId,
+      merchantLoginId,
       iat: Math.floor(Date.now() / 1000),
       nbf: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600

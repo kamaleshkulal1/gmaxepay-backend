@@ -1,14 +1,10 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
-const practomindService = require('../../../services/practomindService');
+const practomindService = require('../../../services/practomind');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
-const { generateTransactionID } = require('../../../utils/transactionID');
+const { generateTransactionID, generateMerchantLoginId } = require('../../../utils/transactionID');
 const { Op } = require('sequelize');
 
-/**
- * Get Practomind AEPS Onboarding Status
- * @route POST /api/user/aeps2/onboarding-status
- */
 const getPractomindAepsOnboardingStatus = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -111,71 +107,100 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
     }
 };
 
-/**
- * Create Practomind AEPS Onboarding
- * @route POST /api/user/aeps2/onboarding
- */
+
 const createPractomindAepsOnboarding = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
         });
-        
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
 
-        // Check if onboarding already exists
+        const existingCompany = await dbService.findOne(model.company, { 
+            id: existingUser.companyId 
+        });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found' });
+        }
+
+        const existingOutlet = await dbService.findOne(model.outlet, { 
+            refId: existingUser.id, 
+            companyId: existingUser.companyId 
+        });
+
+        if (!existingOutlet) {
+            return res.failure({ message: 'Outlet not found' });
+        }
+        
+        const bankDetails = await dbService.findOne(model.customerBank, { 
+            refId: existingUser.id, 
+            companyId: existingUser.companyId 
+        });
+        if (!bankDetails) {
+            return res.failure({ message: 'Bank details not found' });
+        }
+
+        const existingCompanyCode = await dbService.findOne(model.practomindCompanyCode, { 
+            id: existingUser.shopCategoryId,
+            companyId: existingUser.companyId,
+            isActive: true
+        });
+        if (!existingCompanyCode) {
+            return res.failure({ message: 'Company code not found' });
+        }
+        
+
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
             userId: existingUser.id, 
             companyId: existingUser.companyId 
         });
 
-        if (existingOnboarding && existingOnboarding.onboardingStatus === 'COMPLETED') {
+        if (existingOnboarding?.onboardingStatus === 'COMPLETED') {
             return res.failure({ message: 'Practomind AEPS onboarding already completed' });
         }
 
-        // Generate unique merchant login ID
-        const merchantLoginId = generateTransactionID(existingUser.mobileNo || 'PRACTOMIND');
-
-        // Prepare onboarding data
+        const merchantLoginId = existingOnboarding?.merchantLoginId || 
+            generateMerchantLoginId(existingCompany.companyName, 
+                (await dbService.findAll(model.practomindAepsOnboarding, { companyId: existingCompany.id }))?.length || 0
+            );
+        
+        console.log("existingUser",existingUser);  
         const onboardingData = {
             merchantLoginId: merchantLoginId,
-            merchantFirstName: req.body.merchantFirstName || existingUser.firstName,
-            merchantPhoneNumber: req.body.merchantPhoneNumber || existingUser.mobileNo,
-            companyLegalName: req.body.companyLegalName,
-            emailId: req.body.emailId || existingUser.email,
-            merchantPinCode: req.body.merchantPinCode,
-            merchantCityName: req.body.merchantCityName,
-            merchantDistrictName: req.body.merchantDistrictName,
-            merchantState: req.body.merchantState,
-            merchantAddress: req.body.merchantAddress,
-            userPan: req.body.userPan,
-            aadhaarNumber: req.body.aadhaarNumber,
-            companyBankAccountNumber: req.body.companyBankAccountNumber,
-            bankIfscCode: req.body.bankIfscCode,
-            companyBankName: req.body.companyBankName,
-            bankAccountName: req.body.bankAccountName,
-            bankBranchName: req.body.bankBranchName,
-            c_code: req.body.c_code,
-            shopAddress: req.body.shopAddress,
-            shopCity: req.body.shopCity,
-            shopDistrict: req.body.shopDistrict,
-            shopState: req.body.shopState,
-            shopPincode: req.body.shopPincode,
-            latitude: req.body.latitude,
-            longitude: req.body.longitude,
-            maskedAadharImage: req.body.maskedAadharImage,
-            backgroundImageOfShop: req.body.backgroundImageOfShop,
-            merchantPanImage: req.body.merchantPanImage
+            merchantFirstName: existingUser.name,
+            merchantPhoneNumber: existingUser.mobileNo,
+            companyLegalName: existingCompany.companyName,
+            emailId: existingUser.email,
+            merchantPinCode: existingCompany.zipcode,
+            merchantCityName: existingCompany.city,
+            merchantDistrictName: existingCompany.district,
+            merchantState: existingCompany.state,
+            merchantAddress: existingCompany.fullAddress,
+            userPan: existingUser.panDetails?.data?.pan_number,
+            aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
+            companyBankAccountNumber: existingCompany.bankAccountNumber,
+            bankIfscCode: existingCompany.bankIfscCode,
+            companyBankName: existingCompany.bankName,
+            bankAccountName: existingCompany.bankAccountName,
+            bankBranchName: existingCompany.bankBranchName,
+            c_code: existingCompanyCode.mccCode,
+            shopAddress: existingOutlet.shopAddress,
+            shopCity: existingOutlet.shopCity,
+            shopDistrict: existingOutlet.shopDistrict,
+            shopState: existingOutlet.shopState,
+            shopPincode: existingOutlet.shopPincode,
+            latitude: existingOutlet.shopLatitude,
+            longitude: existingOutlet.shopLongitude,
+            maskedAadharImage: existingUser.aadharBackImage,
+            backgroundImageOfShop: existingOutlet.shopBackgroundImage,
+            merchantPanImage: existingUser.panCardFrontImage
         };
 
-        // Call Practomind API
-        const response = await practomindService.practomindAepsOnboarding(onboardingData);
-
-        // Parse response
+        const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         const isSuccess = response.status === true || response.status === 'true';
+
         const dbData = {
             userId: existingUser.id,
             companyId: existingUser.companyId,
@@ -185,43 +210,27 @@ const createPractomindAepsOnboarding = async (req, res) => {
             aadhaarNumber: onboardingData.aadhaarNumber,
             userPan: onboardingData.userPan,
             onboardingStatus: isSuccess ? 'COMPLETED' : 'PENDING',
-            status: response.status ? 'success' : 'failed',
+            status: isSuccess ? 'success' : 'failed',
             message: response.message,
             errorMessage: isSuccess ? null : JSON.stringify(response)
         };
 
-        // Update or create onboarding record
         if (existingOnboarding) {
-            await dbService.update(
-                model.practomindAepsOnboarding,
-                { id: existingOnboarding.id },
-                dbData
-            );
+            await dbService.update(model.practomindAepsOnboarding, { id: existingOnboarding.id }, dbData);
         } else {
             await dbService.createOne(model.practomindAepsOnboarding, dbData);
         }
 
-        if (isSuccess) {
-            return res.success({ 
-                message: 'Practomind AEPS onboarding successful', 
-                data: response 
-            });
-        } else {
-            return res.failure({ 
-                message: response.message || 'Practomind AEPS onboarding failed', 
-                data: response 
-            });
-        }
+        return isSuccess 
+            ? res.success({ message: 'Practomind AEPS onboarding successful', data: response })
+            : res.failure({ message: response.message || 'Practomind AEPS onboarding failed', data: response });
+
     } catch (err) {
         console.error('Create Practomind AEPS onboarding error:', err);
         return res.failure({ message: err.message || 'Failed to create onboarding' });
     }
 };
 
-/**
- * Send EKYC OTP
- * @route POST /api/user/aeps2/send-ekyc-otp
- */
 const sendEkycOtp = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -288,10 +297,6 @@ const sendEkycOtp = async (req, res) => {
     }
 };
 
-/**
- * Validate EKYC OTP
- * @route POST /api/user/aeps2/validate-ekyc-otp
- */
 const validateEkycOtp = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -356,10 +361,7 @@ const validateEkycOtp = async (req, res) => {
     }
 };
 
-/**
- * Resend EKYC OTP
- * @route POST /api/user/aeps2/resend-ekyc-otp
- */
+
 const resendEkycOtp = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -413,10 +415,6 @@ const resendEkycOtp = async (req, res) => {
     }
 };
 
-/**
- * EKYC Submit (Biometric verification)
- * @route POST /api/user/aeps2/ekyc-submit
- */
 const ekycSubmit = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -487,10 +485,7 @@ const ekycSubmit = async (req, res) => {
     }
 };
 
-/**
- * Daily Authentication (2FA)
- * @route POST /api/user/aeps2/daily-authentication
- */
+
 const dailyAuthentication = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -578,10 +573,6 @@ const dailyAuthentication = async (req, res) => {
     }
 };
 
-/**
- * Cash Withdrawal Transaction
- * @route POST /api/user/aeps2/cash-withdrawal
- */
 const cashWithdrawal = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -674,10 +665,6 @@ const cashWithdrawal = async (req, res) => {
     }
 };
 
-/**
- * Balance Enquiry
- * @route POST /api/user/aeps2/balance-enquiry
- */
 const balanceEnquiry = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -757,10 +744,6 @@ const balanceEnquiry = async (req, res) => {
     }
 };
 
-/**
- * Mini Statement
- * @route POST /api/user/aeps2/mini-statement
- */
 const miniStatement = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
