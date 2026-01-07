@@ -186,6 +186,10 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Company code not found. Please configure MCC code in outlet settings.' });
         }
 
+        const existingCustomerBank = await dbService.findOne(model.customerBank,{
+            refId: existingUser.id
+        })
+
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
             userId: existingUser.id, 
             companyId: existingUser.companyId 
@@ -244,11 +248,11 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantAddress: existingUser?.fullAddress,
             userPan: existingUser?.panDetails?.data?.pan_number,
             aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
-            companyBankAccountNumber: existingUser.accountNumber,
-            bankIfscCode: existingUser.ifsc,
-            companyBankName: existingUser.bankName,
-            bankAccountName: existingCompany?.bankAccountName,
-            bankBranchName: existingCompany?.bankBranchName,
+            companyBankAccountNumber: existingCustomerBank?.accountNumber,
+            bankIfscCode: existingCustomerBank?.ifsc,
+            companyBankName: existingCustomerBank?.bankName,
+            bankAccountName: existingCustomerBank?.bankAccountName,
+            bankBranchName: existingCustomerBank?.branch,
             c_code: existingOutlet?.mccCode,
             shopAddress: existingOutlet?.shopAddress,
             shopCity: existingOutlet?.shopCity,
