@@ -33,14 +33,14 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
       },
       timeout: 30000
     });
-    console.log("response", response);
-    console.log("responseStringfy", JSON.stringify(response,null,2));
-    console.log("responseStringJSON", JSON.stringify(response.data,null,2));
-    console.log('Practomind onboarding response:', response.data);
-    return response;
+    console.log('Practomind onboarding response:', JSON.stringify(response.data, null, 2));
+    return response.data;
   } catch (error) {
     console.error('Practomind AEPS Onboarding error:', error.message);
-    return error.response?.data || { status: false, message: 'Unable to reach Practomind onboarding API' };
+    console.error('Error response:', JSON.stringify(error.response?.data, null, 2));
+    console.error('Error status:', error.response?.status);
+    console.error('Request payload:', JSON.stringify(payload, null, 2));
+    return error.response?.data || { status: false, message: error.message || 'Unable to reach Practomind onboarding API' };
   }
 };
 
