@@ -1764,10 +1764,6 @@ const postShopDetails = async (req, res) => {
     const { user, outlet, customerBank } = userCtx;
     const { shopName, ipAddress, latitude, longitude , shopCategoryId} = req.body || {};
     
-    if(!shopCategoryId){
-      return res.failure({ message: 'shopCategoryId is required' });
-    }
-
     if (!shopName ) {
       return res.failure({ 
         message: 'shopName is required' 
@@ -1850,7 +1846,7 @@ const postShopDetails = async (req, res) => {
       shopPincode: addressData?.address_components?.postal_code,
       shopLatitude: latitude,
       shopLongitude: longitude,
-      shopCategoryId: shopCategoryId,
+      shopCategoryId: shopCategoryId? shopCategoryId : 1,
       shopCountry: "India"
     };
 
@@ -1866,8 +1862,19 @@ const postShopDetails = async (req, res) => {
       });
     }
 
-    // Set shopDetailsVerify to true in user table (prevents multiple shops)
-    await dbService.update(model.user, { id: user.id }, { shopDetailsVerify: true });
+    const userAddressPayload = {
+      shopDetailsVerify: true,
+      fullAddress: completeAddress,
+      city: addressData?.address_components?.city,
+      district: addressData?.address_components?.district,
+      state: addressData?.address_components?.state,
+      zipcode: addressData?.address_components?.postal_code,
+      country: "India",
+      latitude: latitude,
+      longitude: longitude,
+    };
+
+    await dbService.update(model.user, { id: user.id }, userAddressPayload);
 
     // Update KYC status
     await updateKycStatus(user.id, company.id, { outlet: updatedOutlet, customerBank: customerBank, aadhaarDoc: userCtx.aadhaarDoc, panDoc: userCtx.panDoc });
@@ -2193,7 +2200,6 @@ const postBankDetails = async (req, res) => {
   }
 };
 
-// Step 7: Profile
 const postProfile = async (req, res) => {
   try {
     const companyCtx = await getCompanyFromHeaders(req);
@@ -2406,7 +2412,7 @@ const postProfile = async (req, res) => {
   }
 };
 
-// Get pending steps
+
 const getPending = async (req, res) => {
   try {
     const companyCtx = await getCompanyFromHeaders(req);

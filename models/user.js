@@ -250,6 +250,10 @@ const User = sequelize.define(
     city: {
       type: DataTypes.STRING
     },
+    district: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     state: {
       type: DataTypes.STRING
     },
