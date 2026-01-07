@@ -31,7 +31,7 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/onboarding`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
       }
     });
