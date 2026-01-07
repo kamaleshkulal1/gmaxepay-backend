@@ -166,7 +166,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
                 (await dbService.findAll(model.practomindAepsOnboarding, { companyId: existingCompany.id }))?.length || 0
             );
         
-        console.log("existingUser",existingUser);  
         const onboardingData = {
             merchantLoginId: merchantLoginId,
             merchantFirstName: existingUser.name,
