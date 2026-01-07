@@ -35,6 +35,8 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
         'Content-Type': 'application/json'
       }
     });
+    console.log("response", response);
+    console.log("responseStringfy", JSON.stringify(response,null,2));
     console.log('Practomind onboarding response:', JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
