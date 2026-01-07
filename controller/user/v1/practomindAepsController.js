@@ -4,7 +4,7 @@ const practomindService = require('../../../services/practomind');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
 const { generateTransactionID, generateMerchantLoginId } = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
-
+const { Op } = require('sequelize');
 
 const convertImageToBase64 = async (imageData) => {
     try {
@@ -194,10 +194,29 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Practomind AEPS onboarding already completed' });
         }
 
-        const merchantLoginId = existingOnboarding?.merchantLoginId || 
-            generateMerchantLoginId(existingCompany.companyName, 
-                (await dbService.findAll(model.practomindAepsOnboarding, { companyId: existingCompany.id }))?.length || 0
-            );
+        let merchantLoginId;
+        if (existingOnboarding?.merchantLoginId) {
+            merchantLoginId = existingOnboarding.merchantLoginId;
+        } else {
+            // Find the last merchantLoginId to generate next sequential ID
+            const lastOnboarding = await model.practomindAepsOnboarding.findOne({
+                where: {
+                    merchantLoginId: {
+                        [Op.like]: 'GMAX%'
+                    }
+                },
+                order: [['merchantLoginId', 'DESC']],
+                attributes: ['merchantLoginId']
+            });
+
+            let nextNumber = 1;
+            if (lastOnboarding?.merchantLoginId) {
+                // Extract number from last merchantLoginId (e.g., GMAX000001 -> 1)
+                const lastNumber = parseInt(lastOnboarding.merchantLoginId.replace('GMAX', ''), 10);
+                nextNumber = isNaN(lastNumber) ? 1 : lastNumber + 1;
+            }
+            merchantLoginId = `GMAX${nextNumber.toString().padStart(6, '0')}`;
+        }
 
         // Convert images to base64
         const maskedAadharImageBase64 = await convertImageToBase64(existingUser.aadharBackImage);
