@@ -18,15 +18,13 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
       nbf: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600
     };
-
+    
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
 
     const payload = {
       ...data,
       Apikey: PRACTOMIND_API_KEY
     };
-
-    console.log('Practomind onboarding payload:', JSON.stringify(payload, null, 2));
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/onboarding`, payload, {
       headers: {
@@ -35,7 +33,6 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
       },
       timeout: 30000
     });
-
     console.log('Practomind onboarding response:', response.data);
     return response.data;
   } catch (error) {
