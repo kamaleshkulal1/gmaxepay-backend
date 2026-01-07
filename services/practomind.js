@@ -20,36 +20,22 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
     };
     
     token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
-    console.log("Token generated:", token);
-    console.log("Token payload:", JSON.stringify(tokenPayload, null, 2));
     
     payload = {
       ...data,
       Apikey: PRACTOMIND_API_KEY
     };
-    console.log("Request payload:", JSON.stringify(payload, null, 2));
-
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/onboarding`, payload, {
       headers: {
         'Authorization': token,
         'Content-Type': 'application/json'
       }
     });
-    console.log("response", response);
-    console.log("responseStringfy", JSON.stringify(response,null,2));
-    console.log('Practomind onboarding response:', JSON.stringify(response.data, null, 2));
+    console.log("Response", response)
     return response.data;
   } catch (error) {
-    console.error('Practomind AEPS Onboarding error:', error.message);
-    console.error('Error response:', JSON.stringify(error.response?.data, null, 2));
-    console.error('Error status:', error.response?.status);
-    if (payload) {
-      console.error('Request payload that failed:', JSON.stringify(payload, null, 2));
-    }
-    if (token) {
-      console.error('Token used:', token);
-    }
-    return error.response?.data || { status: false, message: error.message || 'Unable to reach Practomind onboarding API' };
+    console.error("Practomind AEPS Error", error)
+    return  error.response.data
   }
 };
 

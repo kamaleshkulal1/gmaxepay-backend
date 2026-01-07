@@ -2,7 +2,7 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const practomindService = require('../../../services/practomind');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
-const { generateTransactionID, generateMerchantLoginId } = require('../../../utils/transactionID');
+const { generateTransactionID} = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
 const { Op } = require('sequelize');
 
@@ -194,6 +194,14 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Practomind AEPS onboarding already completed' });
         }
 
+        const existingUserStateCode = await dbService.findOne(model.practomindState,{
+            state: existingUser?.state
+        })
+
+        const existingShopStateCode = await dbService.findOne(model.practomindState,{
+            state: existingOutlet?.shopState
+        })
+
         let merchantLoginId;
         if (existingOnboarding?.merchantLoginId) {
             merchantLoginId = existingOnboarding.merchantLoginId;
@@ -232,7 +240,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPinCode: existingUser?.zipcode,
             merchantCityName: existingUser?.city,
             merchantDistrictName: existingUser?.district,
-            merchantState: existingUser?.state,
+            merchantState: existingUserStateCode?.state,
             merchantAddress: existingUser?.fullAddress,
             userPan: existingUser?.panDetails?.data?.pan_number,
             aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
@@ -245,7 +253,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             shopAddress: existingOutlet?.shopAddress,
             shopCity: existingOutlet?.shopCity,
             shopDistrict: existingOutlet?.shopDistrict,
-            shopState: existingOutlet?.shopState,
+            shopState: existingShopStateCode,
             shopPincode: existingOutlet?.shopPincode,
             latitude: existingOutlet?.shopLatitude,
             longitude: existingOutlet?.shopLongitude,
