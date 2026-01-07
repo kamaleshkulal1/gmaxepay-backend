@@ -183,13 +183,13 @@ const createPractomindAepsOnboarding = async (req, res) => {
         if (!bankDetails) {
             return res.failure({ message: 'Bank details not found' });
         }
-
+        console.log("existingUser.shopCategoryId", existingUser.shopCategoryId);
         const existingCompanyCode = await dbService.findOne(model.practomindCompanyCode, { 
             id: existingUser.shopCategoryId,
             companyId: existingUser.companyId,
             isActive: true
         });
-        
+        console.log("existingCompanyCode", JSON.stringify(existingCompanyCode,null,2));
         if (!existingCompanyCode) {
             return res.failure({ message: 'Company code not found' });
         }
