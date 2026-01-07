@@ -149,24 +149,17 @@ const createPractomindAepsOnboarding = async (req, res) => {
             userRole: 2,
             companyId: existingCompany.id 
         });
-        console.log("existingCompanyAdmin", JSON.stringify(existingCompanyAdmin,null,2));
-
         if (!existingCompanyAdmin) {
             return res.failure({ message: 'Company admin not found' });
         }
-        const existingCompanyAdminDetails = await dbService.findOne(model.user, { 
-            id: existingCompanyAdmin.id, 
-            companyId: existingCompany.id 
-        });
-
-        console.log("existingCompanyAdminDetails", JSON.stringify(existingCompanyAdminDetails,null,2));
 
         const existingCompanyAdminBankDetails = await dbService.findOne(model.customerBank, { 
             refId: existingCompanyAdmin.id, 
             companyId: existingCompany.id 
         });
-
-        console.log("existingCompanyAdminBankDetails", JSON.stringify(existingCompanyAdminBankDetails,null,2));
+        if (!existingCompanyAdminBankDetails) {
+            return res.failure({ message: 'Company admin bank details not found' });
+        }
 
         const existingOutlet = await dbService.findOne(model.outlet, { 
             refId: existingUser.id, 
@@ -183,14 +176,14 @@ const createPractomindAepsOnboarding = async (req, res) => {
         if (!bankDetails) {
             return res.failure({ message: 'Bank details not found' });
         }
+
+
         const existingCompanyCode = await dbService.findOne(model.practomindCompanyCode, { 
-            id: existingUser.shopCategoryId,
-            companyId: existingUser.companyId,
-            isActive: true
+            id: existingOutlet.shopCategoryId
         });
-        console.log("existingCompanyCode", JSON.stringify(existingCompanyCode,null,2));
+        
         if (!existingCompanyCode) {
-            return res.failure({ message: 'Company code not found' });
+            return res.failure({ message: 'Company code not found. Please configure MCC code in outlet settings.' });
         }
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
@@ -241,7 +234,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             backgroundImageOfShop: backgroundImageOfShopBase64,
             merchantPanImage: merchantPanImageBase64
         };
-        console.log("onboardingData", JSON.stringify(onboardingData,null,2));
 
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         const isSuccess = response.status === true || response.status === 'true';
