@@ -253,7 +253,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             shopAddress: existingOutlet?.shopAddress,
             shopCity: existingOutlet?.shopCity,
             shopDistrict: existingOutlet?.shopDistrict,
-            shopState: existingShopStateCode,
+            shopState: existingShopStateCode?.stateCode,
             shopPincode: existingOutlet?.shopPincode,
             latitude: existingOutlet?.shopLatitude,
             longitude: existingOutlet?.shopLongitude,
