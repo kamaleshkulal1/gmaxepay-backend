@@ -20,7 +20,7 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
     };
     
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
-
+    console.log("token", token);
     const payload = {
       ...data,
       Apikey: PRACTOMIND_API_KEY
