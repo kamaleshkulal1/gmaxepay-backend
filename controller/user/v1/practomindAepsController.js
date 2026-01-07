@@ -3,7 +3,27 @@ const dbService = require('../../../utils/dbService');
 const practomindService = require('../../../services/practomind');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
 const { generateTransactionID, generateMerchantLoginId } = require('../../../utils/transactionID');
-const { Op } = require('sequelize');
+const imageService = require('../../../services/imageService');
+
+
+const convertImageToBase64 = async (imageData) => {
+    try {
+        if (!imageData) return null;
+
+        // Extract S3 key
+        const s3Key = imageService.extractS3Key(imageData);
+        if (!s3Key) return null;
+
+        // Get image buffer from S3
+        const imageBuffer = await imageService.getImageFromS3(s3Key);
+        
+        // Convert buffer to base64
+        return imageBuffer.toString('base64');
+    } catch (error) {
+        console.error('Error converting image to base64:', error);
+        return null;
+    }
+};
 
 const getPractomindAepsOnboardingStatus = async (req, res) => {
     try {
@@ -117,7 +137,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        console.log("existingUser", JSON.stringify(existingUser,null,2));
 
         const existingCompany = await dbService.findOne(model.company, { 
             id: existingUser.companyId 
@@ -126,11 +145,33 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Company not found' });
         }
 
+        const existingCompanyAdmin = await dbService.findOne(model.user, { 
+            userRole: 2,
+            companyId: existingCompany.id 
+        });
+        console.log("existingCompanyAdmin", JSON.stringify(existingCompanyAdmin,null,2));
+
+        if (!existingCompanyAdmin) {
+            return res.failure({ message: 'Company admin not found' });
+        }
+        const existingCompanyAdminDetails = await dbService.findOne(model.user, { 
+            id: existingCompanyAdmin.id, 
+            companyId: existingCompany.id 
+        });
+
+        console.log("existingCompanyAdminDetails", JSON.stringify(existingCompanyAdminDetails,null,2));
+
+        const existingCompanyAdminBankDetails = await dbService.findOne(model.customerBank, { 
+            refId: existingCompanyAdmin.id, 
+            companyId: existingCompany.id 
+        });
+
+        console.log("existingCompanyAdminBankDetails", JSON.stringify(existingCompanyAdminBankDetails,null,2));
+
         const existingOutlet = await dbService.findOne(model.outlet, { 
             refId: existingUser.id, 
             companyId: existingUser.companyId 
         });
-
         if (!existingOutlet) {
             return res.failure({ message: 'Outlet not found' });
         }
@@ -148,16 +189,15 @@ const createPractomindAepsOnboarding = async (req, res) => {
             companyId: existingUser.companyId,
             isActive: true
         });
+        
         if (!existingCompanyCode) {
             return res.failure({ message: 'Company code not found' });
         }
-        
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
             userId: existingUser.id, 
             companyId: existingUser.companyId 
         });
-
         if (existingOnboarding?.onboardingStatus === 'COMPLETED') {
             return res.failure({ message: 'Practomind AEPS onboarding already completed' });
         }
@@ -166,37 +206,43 @@ const createPractomindAepsOnboarding = async (req, res) => {
             generateMerchantLoginId(existingCompany.companyName, 
                 (await dbService.findAll(model.practomindAepsOnboarding, { companyId: existingCompany.id }))?.length || 0
             );
+
+        // Convert images to base64
+        const maskedAadharImageBase64 = await convertImageToBase64(existingUser.aadharBackImage);
+        const backgroundImageOfShopBase64 = await convertImageToBase64(existingOutlet.shopBackgroundImage);
+        const merchantPanImageBase64 = await convertImageToBase64(existingUser.panCardFrontImage);
         
         const onboardingData = {
             merchantLoginId: merchantLoginId,
-            merchantFirstName: existingUser.name,
-            merchantPhoneNumber: existingUser.mobileNo,
-            companyLegalName: existingCompany.companyName,
-            emailId: existingUser.email,
-            merchantPinCode: existingCompany.zipcode,
-            merchantCityName: existingCompany.city,
-            merchantDistrictName: existingCompany.district,
-            merchantState: existingCompany.state,
-            merchantAddress: existingCompany.fullAddress,
-            userPan: existingUser.panDetails?.data?.pan_number,
-            aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
-            companyBankAccountNumber: existingCompany.bankAccountNumber,
-            bankIfscCode: existingCompany.bankIfscCode,
-            companyBankName: existingCompany.bankName,
-            bankAccountName: existingCompany.bankAccountName,
-            bankBranchName: existingCompany.bankBranchName,
-            c_code: existingCompanyCode.mccCode,
-            shopAddress: existingOutlet.shopAddress,
-            shopCity: existingOutlet.shopCity,
-            shopDistrict: existingOutlet.shopDistrict,
-            shopState: existingOutlet.shopState,
-            shopPincode: existingOutlet.shopPincode,
-            latitude: existingOutlet.shopLatitude,
-            longitude: existingOutlet.shopLongitude,
-            maskedAadharImage: existingUser.aadharBackImage,
-            backgroundImageOfShop: existingOutlet.shopBackgroundImage,
-            merchantPanImage: existingUser.panCardFrontImage
+            merchantFirstName: existingUser?.name,
+            merchantPhoneNumber: existingUser?.mobileNo,
+            companyLegalName: existingCompany?.companyName,
+            emailId: existingUser?.email,
+            merchantPinCode: existingUser?.shopPincode,
+            merchantCityName: existingUser?.city,
+            merchantDistrictName: existingUser?.district,
+            merchantState: existingUser?.state,
+            merchantAddress: existingUser?.fullAddress,
+            userPan: existingUser?.panDetails?.data?.pan_number,
+            aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
+            companyBankAccountNumber: existingCompanyAdminBankDetails.accountNumber,
+            bankIfscCode: existingCompanyAdminBankDetails.ifsc,
+            companyBankName: existingCompanyAdminBankDetails.bankName,
+            bankAccountName: existingCompany?.bankAccountName,
+            bankBranchName: existingCompany?.bankBranchName,
+            c_code: existingCompanyCode?.mccCode,
+            shopAddress: existingOutlet?.shopAddress,
+            shopCity: existingOutlet?.shopCity,
+            shopDistrict: existingOutlet?.shopDistrict,
+            shopState: existingOutlet?.shopState,
+            shopPincode: existingOutlet?.shopPincode,
+            latitude: existingOutlet?.shopLatitude,
+            longitude: existingOutlet?.shopLongitude,
+            maskedAadharImage: maskedAadharImageBase64,
+            backgroundImageOfShop: backgroundImageOfShopBase64,
+            merchantPanImage: merchantPanImageBase64
         };
+        console.log("onboardingData", JSON.stringify(onboardingData,null,2));
 
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         const isSuccess = response.status === true || response.status === 'true';
