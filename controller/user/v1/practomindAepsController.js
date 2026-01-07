@@ -117,6 +117,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
+        console.log("existingUser", JSON.stringify(existingUser,null,2));
 
         const existingCompany = await dbService.findOne(model.company, { 
             id: existingUser.companyId 
