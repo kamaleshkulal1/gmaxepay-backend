@@ -251,7 +251,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             companyBankAccountNumber: existingCustomerBank?.accountNumber,
             bankIfscCode: existingCustomerBank?.ifsc,
             companyBankName: existingCustomerBank?.bankName,
-            bankAccountName: existingCustomerBank?.bankAccountName,
+            bankAccountName: existingCustomerBank?.beneficiaryName,
             bankBranchName: existingCustomerBank?.branch,
             c_code: existingOutlet?.mccCode,
             shopAddress: existingOutlet?.shopAddress,
