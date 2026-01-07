@@ -7,24 +7,27 @@ const PRACTOMIND_API_KEY = process.env.PRACTOMIND_API_KEY;
 
 // Practomind AEPS Onboarding
 const practomindAepsOnboarding = async (data , merchantLoginId) => {
+  let payload = null;
+  let token = null;
+  
   try {
     if (!PRACTOMIND_SECRET_KEY || !PRACTOMIND_API_KEY) {
       throw new Error('Practomind API credentials not configured');
     }
 
     const tokenPayload = {
-      merchantLoginId,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
+      merchantLoginId
     };
     
-    const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
-    console.log("token", token);
-    const payload = {
+    token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
+    console.log("Token generated:", token);
+    console.log("Token payload:", JSON.stringify(tokenPayload, null, 2));
+    
+    payload = {
       ...data,
       Apikey: PRACTOMIND_API_KEY
     };
+    console.log("Request payload:", JSON.stringify(payload, null, 2));
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/onboarding`, payload, {
       headers: {
@@ -32,13 +35,20 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
         'Content-Type': 'application/json'
       }
     });
+    console.log("response", response);
+    console.log("responseStringfy", JSON.stringify(response,null,2));
     console.log('Practomind onboarding response:', JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
     console.error('Practomind AEPS Onboarding error:', error.message);
     console.error('Error response:', JSON.stringify(error.response?.data, null, 2));
     console.error('Error status:', error.response?.status);
-    console.error('Request payload:', JSON.stringify(payload, null, 2));
+    if (payload) {
+      console.error('Request payload that failed:', JSON.stringify(payload, null, 2));
+    }
+    if (token) {
+      console.error('Token used:', token);
+    }
     return error.response?.data || { status: false, message: error.message || 'Unable to reach Practomind onboarding API' };
   }
 };
