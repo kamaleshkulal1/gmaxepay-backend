@@ -229,7 +229,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPhoneNumber: existingUser?.mobileNo,
             companyLegalName: existingCompany?.companyName,
             emailId: existingUser?.email,
-            merchantPinCode: existingUser?.shopPincode,
+            merchantPinCode: existingUser?.zipcode,
             merchantCityName: existingUser?.city,
             merchantDistrictName: existingUser?.district,
             merchantState: existingUser?.state,
