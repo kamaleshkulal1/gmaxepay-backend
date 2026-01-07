@@ -201,7 +201,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
 
         // Convert images to base64
         const maskedAadharImageBase64 = await convertImageToBase64(existingUser.aadharBackImage);
-        const backgroundImageOfShopBase64 = await convertImageToBase64(existingOutlet.shopBackgroundImage);
+        const backgroundImageOfShopBase64 = await convertImageToBase64(existingOutlet.shopImage);
         const merchantPanImageBase64 = await convertImageToBase64(existingUser.panCardFrontImage);
         
         const onboardingData = {
