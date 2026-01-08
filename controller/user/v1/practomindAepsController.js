@@ -4,7 +4,7 @@ const practomindService = require('../../../services/practomind');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
 const { generateTransactionID} = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
-const { Op } = require('sequelize');
+const { Op, Transaction } = require('sequelize');
 
 const convertImageToBase64 = async (imageData) => {
     try {
@@ -227,24 +227,36 @@ const createPractomindAepsOnboarding = async (req, res) => {
         if (existingOnboarding?.merchantLoginId) {
             merchantLoginId = existingOnboarding.merchantLoginId;
         } else {
-            // Find the last merchantLoginId to generate next sequential ID
-            const lastOnboarding = await model.practomindAepsOnboarding.findOne({
-                where: {
-                    merchantLoginId: {
-                        [Op.like]: 'GMAX%'
-                    }
-                },
-                order: [['merchantLoginId', 'DESC']],
-                attributes: ['merchantLoginId']
+            const transaction = await sequelize.transaction({
+                isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE
             });
+            
+            try {
+                const lastOnboarding = await model.practomindAepsOnboarding.findOne({
+                    where: {
+                        merchantLoginId: {
+                            [Op.like]: 'GMAX%',
+                            [Op.ne]: null
+                        }
+                    },
+                    order: [['id', 'DESC']],
+                    attributes: ['merchantLoginId'],
+                    lock: transaction.LOCK.UPDATE,
+                    transaction
+                });
 
-            let nextNumber = 1;
-            if (lastOnboarding?.merchantLoginId) {
-                // Extract number from last merchantLoginId (e.g., GMAX000001 -> 1)
-                const lastNumber = parseInt(lastOnboarding.merchantLoginId.replace('GMAX', ''), 10);
-                nextNumber = isNaN(lastNumber) ? 1 : lastNumber + 1;
+                let nextNumber = 1;
+                if (lastOnboarding?.merchantLoginId) {
+                    const lastNumber = parseInt(lastOnboarding.merchantLoginId.replace('GMAX', ''), 10);
+                    nextNumber = isNaN(lastNumber) ? 1 : lastNumber + 1;
+                }
+                merchantLoginId = `GMAX${nextNumber.toString().padStart(6, '0')}`;
+                
+                await transaction.commit();
+            } catch (error) {
+                await transaction.rollback();
+                throw error;
             }
-            merchantLoginId = `GMAX${nextNumber.toString().padStart(6, '0')}`;
         }
 
         // OPTIMIZATION: Convert all images to base64 in parallel
@@ -301,10 +313,18 @@ const createPractomindAepsOnboarding = async (req, res) => {
             errorMessage: isSuccess ? null : JSON.stringify(response)
         };
 
-        if (existingOnboarding) {
-            await dbService.update(model.practomindAepsOnboarding, { id: existingOnboarding.id }, dbData);
-        } else {
-            await dbService.createOne(model.practomindAepsOnboarding, dbData);
+        try {
+            if (existingOnboarding) {
+                await dbService.update(model.practomindAepsOnboarding, { id: existingOnboarding.id }, dbData);
+            } else {
+                await dbService.createOne(model.practomindAepsOnboarding, dbData);
+            }
+        } catch (dbError) {
+            if (dbError.name === 'SequelizeUniqueConstraintError') {
+                console.error('Duplicate merchantLoginId detected:', merchantLoginId);
+                return res.failure({ message: 'Merchant ID already exists. Please try again.' });
+            }
+            throw dbError;
         }
 
         return isSuccess 
