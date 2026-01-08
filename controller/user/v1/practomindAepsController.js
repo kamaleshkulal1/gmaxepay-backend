@@ -130,82 +130,98 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
 
 const createPractomindAepsOnboarding = async (req, res) => {
     try {
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
-        });
+        // OPTIMIZATION: Fetch all independent data in parallel (First batch)
+        const [existingUser, existingOnboarding] = await Promise.all([
+            dbService.findOne(model.user, { 
+                id: req.user.id, 
+                companyId: req.user.companyId 
+            }),
+            dbService.findOne(model.practomindAepsOnboarding, { 
+                userId: req.user.id, 
+                companyId: req.user.companyId 
+            })
+        ]);
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
 
-        const existingCompany = await dbService.findOne(model.company, { 
-            id: existingUser.companyId 
-        });
+        if (existingOnboarding?.onboardingStatus === 'COMPLETED') {
+            return res.failure({ message: 'Practomind AEPS onboarding already completed' });
+        }
+
+        // OPTIMIZATION: Fetch all dependent data in parallel (Second batch)
+        const [
+            existingCompany,
+            existingOutlet,
+            bankDetails,
+            existingUserStateCode
+        ] = await Promise.all([
+            dbService.findOne(model.company, { 
+                id: existingUser.companyId 
+            }),
+            dbService.findOne(model.outlet, { 
+                refId: existingUser.id, 
+                companyId: existingUser.companyId 
+            }),
+            dbService.findOne(model.customerBank, { 
+                refId: existingUser.id, 
+                companyId: existingUser.companyId 
+            }),
+            dbService.findOne(model.practomindState, {
+                state: existingUser?.state
+            })
+        ]);
+
         if (!existingCompany) {
             return res.failure({ message: 'Company not found' });
         }
 
-        const existingCompanyAdmin = await dbService.findOne(model.user, { 
-            userRole: 2,
-            companyId: existingCompany.id 
-        });
-        if (!existingCompanyAdmin) {
-            return res.failure({ message: 'Company admin not found' });
-        }
-
-        const existingCompanyAdminBankDetails = await dbService.findOne(model.customerBank, { 
-            refId: existingCompanyAdmin.id, 
-            companyId: existingCompany.id 
-        });
-        if (!existingCompanyAdminBankDetails) {
-            return res.failure({ message: 'Company admin bank details not found' });
-        }
-
-        const existingOutlet = await dbService.findOne(model.outlet, { 
-            refId: existingUser.id, 
-            companyId: existingUser.companyId 
-        });
         if (!existingOutlet) {
             return res.failure({ message: 'Outlet not found' });
         }
         
-        const bankDetails = await dbService.findOne(model.customerBank, { 
-            refId: existingUser.id, 
-            companyId: existingUser.companyId 
-        });
         if (!bankDetails) {
             return res.failure({ message: 'Bank details not found' });
         }
 
+        // OPTIMIZATION: Fetch all remaining dependent data in parallel (Third batch)
+        const [
+            existingCompanyAdmin,
+            existingCompanyCode,
+            existingShopStateCode
+        ] = await Promise.all([
+            dbService.findOne(model.user, { 
+                userRole: 2,
+                companyId: existingCompany.id 
+            }),
+            dbService.findOne(model.practomindCompanyCode, { 
+                id: existingOutlet.shopCategoryId
+            }),
+            dbService.findOne(model.practomindState, {
+                state: existingOutlet?.shopState
+            })
+        ]);
 
-        const existingCompanyCode = await dbService.findOne(model.practomindCompanyCode, { 
-            id: existingOutlet.shopCategoryId
-        });
+        if (!existingCompanyAdmin) {
+            return res.failure({ message: 'Company admin not found' });
+        }
 
         if (!existingCompanyCode) {
             return res.failure({ message: 'Company code not found. Please configure MCC code in outlet settings.' });
         }
 
-        const existingCustomerBank = await dbService.findOne(model.customerBank,{
-            refId: existingUser.id
-        })
-
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
+        // OPTIMIZATION: Fetch company admin bank details (depends on existingCompanyAdmin)
+        const existingCompanyAdminBankDetails = await dbService.findOne(model.customerBank, { 
+            refId: existingCompanyAdmin.id, 
+            companyId: existingCompany.id 
         });
-        if (existingOnboarding?.onboardingStatus === 'COMPLETED') {
-            return res.failure({ message: 'Practomind AEPS onboarding already completed' });
+
+        if (!existingCompanyAdminBankDetails) {
+            return res.failure({ message: 'Company admin bank details not found' });
         }
 
-        const existingUserStateCode = await dbService.findOne(model.practomindState,{
-            state: existingUser?.state
-        })
-
-
-        const existingShopStateCode = await dbService.findOne(model.practomindState,{
-            state: existingOutlet?.shopState
-        })
+        // Note: existingCustomerBank is same as bankDetails, removed duplicate query
 
         let merchantLoginId;
         if (existingOnboarding?.merchantLoginId) {
@@ -231,10 +247,12 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantLoginId = `GMAX${nextNumber.toString().padStart(6, '0')}`;
         }
 
-        // Convert images to base64
-        const maskedAadharImageBase64 = await convertImageToBase64(existingUser.aadharBackImage);
-        const backgroundImageOfShopBase64 = await convertImageToBase64(existingOutlet.shopImage);
-        const merchantPanImageBase64 = await convertImageToBase64(existingUser.panCardFrontImage);
+        // OPTIMIZATION: Convert all images to base64 in parallel
+        const [maskedAadharImageBase64, backgroundImageOfShopBase64, merchantPanImageBase64] = await Promise.all([
+            convertImageToBase64(existingUser.aadharBackImage),
+            convertImageToBase64(existingOutlet.shopImage),
+            convertImageToBase64(existingUser.panCardFrontImage)
+        ]);
         
         const onboardingData = {
             merchantLoginId: merchantLoginId,
@@ -249,11 +267,11 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantAddress: existingUser?.fullAddress,
             userPan: existingUser?.panDetails?.data?.pan_number,
             aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
-            companyBankAccountNumber: existingCustomerBank?.accountNumber,
-            bankIfscCode: existingCustomerBank?.ifsc,
-            companyBankName: existingCustomerBank?.bankName,
-            bankAccountName: existingCustomerBank?.beneficiaryName,
-            bankBranchName: existingCustomerBank?.branch,
+            companyBankAccountNumber: bankDetails?.accountNumber,
+            bankIfscCode: bankDetails?.ifsc,
+            companyBankName: bankDetails?.bankName,
+            bankAccountName: bankDetails?.beneficiaryName,
+            bankBranchName: bankDetails?.branch,
             c_code: existingCompanyCode?.mccCode,
             shopAddress: existingOutlet?.shopAddress,
             shopCity: existingOutlet?.shopCity,
