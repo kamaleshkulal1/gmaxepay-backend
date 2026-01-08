@@ -59,9 +59,6 @@ const practomindSendEkycOtp = async (data) => {
     const payload = {
       Apikey: PRACTOMIND_API_KEY
     };
-    console.log('Practomind send EKYC OTP payload:', JSON.stringify(payload, null, 2));
-    console.log('Practomind send EKYC OTP token:', token);
-    console.log('Practomind send EKYC OTP payload:', JSON.stringify(tokenPayload, null, 2));
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsendotp`, payload, {
       headers: {
@@ -89,10 +86,7 @@ const practomindValidateEkycOtp = async (data) => {
       merchantPhoneNumber: data.merchantPhoneNumber,
       merchantLoginId: data.merchantLoginId,
       KeyID: data.KeyID,
-      TxnId: data.TxnId,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
+      TxnId: data.TxnId
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
@@ -105,10 +99,9 @@ const practomindValidateEkycOtp = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/validateekycotp`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind validate EKYC OTP response:', response.data);
