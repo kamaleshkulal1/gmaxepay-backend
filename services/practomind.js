@@ -54,13 +54,13 @@ const practomindSendEkycOtp = async (data) => {
       longitude: data.longitude,
       merchantLoginId: data.merchantLoginId
     };
-
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
 
     const payload = {
       Apikey: PRACTOMIND_API_KEY
     };
-
+    console.log('Practomind send EKYC OTP payload:', JSON.stringify(payload, null, 2));
+    console.log('Practomind send EKYC OTP token:', token);
     console.log('Practomind send EKYC OTP payload:', JSON.stringify(tokenPayload, null, 2));
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsendotp`, payload, {
