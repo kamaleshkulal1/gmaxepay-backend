@@ -5,6 +5,7 @@ const aepsDailyLoginService = require('../../../services/aepsDailyLoginService')
 const { generateTransactionID} = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
 const { Op, Transaction } = require('sequelize');
+const sequelize = require('../../../config/dbConnection');
 
 const convertImageToBase64 = async (imageData) => {
     try {
