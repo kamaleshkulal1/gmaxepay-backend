@@ -358,9 +358,7 @@ const sendEkycOtp = async (req, res) => {
             return res.failure({ message: 'PAN and Aadhaar details are required from onboarding' });
         }
 
-        if (!req.body.latitude || !req.body.longitude) {
-            return res.failure({ message: 'Latitude and longitude are required' });
-        }
+
 
         const otpData = {
             merchantPhoneNumber: existingUser.mobileNo,
