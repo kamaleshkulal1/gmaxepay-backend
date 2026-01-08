@@ -65,10 +65,9 @@ const practomindSendEkycOtp = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsendotp`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind send EKYC OTP response:', response.data);
