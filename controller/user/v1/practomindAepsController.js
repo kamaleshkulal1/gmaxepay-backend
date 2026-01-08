@@ -131,7 +131,6 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
 
 const createPractomindAepsOnboarding = async (req, res) => {
     try {
-        // OPTIMIZATION: Fetch all independent data in parallel (First batch)
         const [existingUser, existingOnboarding] = await Promise.all([
             dbService.findOne(model.user, { 
                 id: req.user.id, 
@@ -186,7 +185,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Bank details not found' });
         }
 
-        // OPTIMIZATION: Fetch all remaining dependent data in parallel (Third batch)
         const [
             existingCompanyAdmin,
             existingCompanyCode,
@@ -212,7 +210,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Company code not found. Please configure MCC code in outlet settings.' });
         }
 
-        // OPTIMIZATION: Fetch company admin bank details (depends on existingCompanyAdmin)
         const existingCompanyAdminBankDetails = await dbService.findOne(model.customerBank, { 
             refId: existingCompanyAdmin.id, 
             companyId: existingCompany.id 
@@ -222,7 +219,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Company admin bank details not found' });
         }
 
-        // Note: existingCustomerBank is same as bankDetails, removed duplicate query
 
         let merchantLoginId;
         if (existingOnboarding?.merchantLoginId) {
@@ -260,7 +256,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             }
         }
 
-        // OPTIMIZATION: Convert all images to base64 in parallel
         const [maskedAadharImageBase64, backgroundImageOfShopBase64, merchantPanImageBase64] = await Promise.all([
             convertImageToBase64(existingUser.aadharBackImage),
             convertImageToBase64(existingOutlet.shopImage),
@@ -358,24 +353,29 @@ const sendEkycOtp = async (req, res) => {
             return res.failure({ message: 'Please complete onboarding first' });
         }
 
-        // Prepare OTP data
+        // Validate required fields from onboarding
+        if (!existingOnboarding.userPan || !existingOnboarding.aadhaarNumber) {
+            return res.failure({ message: 'PAN and Aadhaar details are required from onboarding' });
+        }
+
+        if (!req.body.latitude || !req.body.longitude) {
+            return res.failure({ message: 'Latitude and longitude are required' });
+        }
+
         const otpData = {
-            merchantPhoneNumber: existingOnboarding.merchantPhoneNumber || existingUser.mobileNo,
-            panNumber: existingOnboarding.userPan || req.body.panNumber,
-            aadhaarNumber: existingOnboarding.aadhaarNumber || req.body.aadhaarNumber,
-            latitude: req.body.latitude,
-            longitude: req.body.longitude,
+            merchantPhoneNumber: existingUser.mobileNo,
+            panNumber: existingUser.panDetails?.data?.pan_number,
+            aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
+            latitude: existingUser.latitude,
+            longitude: existingUser.longitude,
             merchantLoginId: existingOnboarding.merchantLoginId
         };
 
-        // Call Practomind API
         const response = await practomindService.practomindSendEkycOtp(otpData);
 
-        // Parse response
         const isSuccess = response.status === true || response.status === 'true';
 
         if (isSuccess && response.result) {
-            // Update onboarding record with OTP details
             await dbService.update(
                 model.practomindAepsOnboarding,
                 { id: existingOnboarding.id },

@@ -52,10 +52,7 @@ const practomindSendEkycOtp = async (data) => {
       aadhaarNumber: data.aadhaarNumber,
       latitude: data.latitude,
       longitude: data.longitude,
-      merchantLoginId: data.merchantLoginId,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
+      merchantLoginId: data.merchantLoginId
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
