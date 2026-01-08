@@ -357,15 +357,18 @@ const sendEkycOtp = async (req, res) => {
         if (!existingOnboarding.userPan || !existingOnboarding.aadhaarNumber) {
             return res.failure({ message: 'PAN and Aadhaar details are required from onboarding' });
         }
-
-
+        
+        const shopDetails = await dbService.findOne(model.outlet, { 
+            refId: existingUser.id, 
+            companyId: existingUser.companyId 
+        });
 
         const otpData = {
             merchantPhoneNumber: existingUser.mobileNo,
             panNumber: existingUser.panDetails?.data?.pan_number,
             aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
-            latitude: existingUser.latitude,
-            longitude: existingUser.longitude,
+            latitude: shopDetails.shopLatitude,
+            longitude: shopDetails.shopLongitude,
             merchantLoginId: existingOnboarding.merchantLoginId
         };
 
