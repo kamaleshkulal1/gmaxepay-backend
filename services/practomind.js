@@ -210,9 +210,6 @@ const practomindDailyAuthentication = async (data) => {
       userPan: data.userPan,
       aadhaarNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
@@ -228,8 +225,7 @@ const practomindDailyAuthentication = async (data) => {
       headers: {
         'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind daily authentication response:', response.data);
