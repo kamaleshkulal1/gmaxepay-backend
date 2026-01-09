@@ -66,6 +66,7 @@ db.practomindState = require('./practomindState');
 db.wallet = require('./wallet');
 db.walletHistory = require('./walletHistory');
 db.aepsHistory = require('./aepsHistory');
+db.practomindAepsHistory = require('./practomindAepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
@@ -462,6 +463,41 @@ db.aslBankList.hasMany(db.aepsHistory, {
   foreignKey: 'bankiin',
   sourceKey: 'bankIIN',
   as: 'aepsHistories'
+});
+
+// Practomind AEPS History Relationships
+db.practomindAepsHistory.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.practomindAepsHistory, {
+  foreignKey: 'refId',
+  as: 'practomindAepsHistories',
+  sourceKey: 'id'
+});
+
+db.practomindAepsHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.practomindAepsHistory, {
+  foreignKey: 'companyId',
+  as: 'practomindAepsHistories',
+  sourceKey: 'id'
+});
+
+db.practomindAepsHistory.belongsTo(db.practomindBankList, {
+  foreignKey: 'bankIin',
+  targetKey: 'aeps_bank_id',
+  as: 'bank',
+  required: false
+});
+db.practomindBankList.hasMany(db.practomindAepsHistory, {
+  foreignKey: 'bankIin',
+  sourceKey: 'aeps_bank_id',
+  as: 'practomindAepsHistories'
 });
 
 // BBPS Operator Relationships

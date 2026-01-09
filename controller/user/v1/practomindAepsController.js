@@ -816,8 +816,52 @@ const cashWithdrawal = async (req, res) => {
         // Parse response
         const isSuccess = response.status === true || response.status === 'true';
 
-        // TODO: Save transaction to aepsHistory model
-        // Similar to ALS AEPS implementation
+        // Save transaction to practomindAepsHistory
+        const historyData = {
+            refId: existingUser.id,
+            companyId: existingUser.companyId,
+            merchantLoginId: existingOnboarding.merchantLoginId,
+            transactionType: 'CW',
+            transactionAmount: transactionAmount || 0,
+            balanceAmount: response?.result?.balanceAmount || null,
+            transactionId: transactionId,
+            merchantTransactionId: response?.result?.merchantTransactionId || null,
+            bankRRN: response?.result?.bankRRN || null,
+            fpTransactionId: response?.result?.fpTransactionId || null,
+            partnerTxnid: response?.partnerTxnid || null,
+            transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+            status: isSuccess,
+            message: response.message || '',
+            device: response?.result?.device || null,
+            requestTransactionTime: response?.result?.requestTransactionTime || null,
+            consumerAadhaarNumber: existingOnboarding.aadhaarNumber,
+            mobileNumber: existingUser.mobileNo,
+            bankIin: practomindBank.aeps_bank_id,
+            latitude: latitude || null,
+            longitude: longitude || null,
+            receiptUrl: response?.url || null,
+            outletname: response?.outletname || null,
+            outletmobile: response?.outletmobile || null,
+            ministatement: response?.ministatement || null,
+            requestPayload: {
+                mobileNumber: transactionData.mobileNumber,
+                latitude: transactionData.latitude,
+                longitude: transactionData.longitude,
+                adhaarNumber: transactionData.adhaarNumber,
+                nationalBankIdurationNumber: transactionData.nationalBankIdurationNumber,
+                transactionAmount: transactionData.transactionAmount,
+                transactionId: transactionData.transactionId
+            },
+            responsePayload: response,
+            ipAddress: req.ip || req.connection?.remoteAddress,
+            addedBy: existingUser.id
+        };
+
+        try {
+            await dbService.createOne(model.practomindAepsHistory, historyData);
+        } catch (historyError) {
+            console.error('Failed to save cash withdrawal transaction history:', historyError);
+        }
 
         if (isSuccess) {
             return res.success({ 
