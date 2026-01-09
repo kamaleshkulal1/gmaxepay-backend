@@ -129,9 +129,6 @@ const practomindResendEkycOtp = async (data) => {
       TxnId: data.TxnId,
       latitude: data.latitude,
       longitude: data.longitude,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
@@ -144,10 +141,9 @@ const practomindResendEkycOtp = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/resendekycotp`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind resend EKYC OTP response:', response.data);
