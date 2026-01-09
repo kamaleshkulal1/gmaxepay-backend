@@ -49,7 +49,7 @@ const practomindSendEkycOtp = async (data) => {
     const tokenPayload = {
       merchantPhoneNumber: data.merchantPhoneNumber,
       panNumber: data.panNumber,
-      aadhaarNumber: data.aadhaarNumber,
+      aadharNumber: data.aadhaarNumber,
       latitude: data.latitude,
       longitude: data.longitude,
       merchantLoginId: data.merchantLoginId
