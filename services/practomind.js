@@ -89,7 +89,8 @@ const practomindValidateEkycOtp = async (data) => {
       merchantPhoneNumber: data.merchantPhoneNumber,
       merchantLoginId: data.merchantLoginId,
       KeyID: data.KeyID,
-      TxnId: data.TxnId
+      TxnId: data.TxnId,
+      otp: data.otp
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);

@@ -407,11 +407,15 @@ const sendEkycOtp = async (req, res) => {
 
 const validateEkycOtp = async (req, res) => {
     try {
+        const { otp } = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
         });
         
+        if (!otp) {
+            return res.failure({ message: 'OTP is required' });
+        }
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
@@ -430,7 +434,8 @@ const validateEkycOtp = async (req, res) => {
             merchantPhoneNumber: existingOnboarding.merchantPhoneNumber || existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
             KeyID: existingOnboarding.KeyID,
-            TxnId: existingOnboarding.TxnId
+            TxnId: existingOnboarding.TxnId,
+            otp: otp
         };
 
         // Call Practomind API
