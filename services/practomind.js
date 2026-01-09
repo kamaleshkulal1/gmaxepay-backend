@@ -208,7 +208,7 @@ const practomindDailyAuthentication = async (data) => {
       latitude: data.latitude,
       longitude: data.longitude,
       userPan: data.userPan,
-      aadhaarNumber: data.aadhaarNumber,
+      aadharNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
     };
 
@@ -251,10 +251,7 @@ const practomindCashWithdrawal = async (data) => {
       adhaarNumber: data.adhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdurationNumber,
       transactionAmount: data.transactionAmount,
-      transactionId: data.transactionId,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
+      transactionId: data.transactionId
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
@@ -270,8 +267,7 @@ const practomindCashWithdrawal = async (data) => {
       headers: {
         'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind cash withdrawal response:', response.data);
@@ -296,10 +292,7 @@ const practomindBalanceEnquiry = async (data) => {
       longitude: data.longitude,
       adhaarNumber: data.adhaarNumber,
       nationalBankIdurationNumber: data.nationalBankIdurationNumber,
-      transactionId: data.transactionId,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
+      transactionId: data.transactionId
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
@@ -315,8 +308,7 @@ const practomindBalanceEnquiry = async (data) => {
       headers: {
         'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind balance enquiry response:', response.data);
@@ -341,10 +333,7 @@ const practomindMiniStatement = async (data) => {
       longitude: data.longitude,
       adhaarNumber: data.adhaarNumber,
       nationalBankIdurationNumber: data.nationalBankIdurationNumber,
-      transactionId: data.transactionId,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
+      transactionId: data.transactionId
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
@@ -354,14 +343,11 @@ const practomindMiniStatement = async (data) => {
       txtPidData: data.txtPidData
     };
 
-    console.log('Practomind mini statement payload:', JSON.stringify({ ...tokenPayload, txtPidData: 'REDACTED' }, null, 2));
-
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/aepsministatement`, payload, {
       headers: {
         'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind mini statement response:', response.data);

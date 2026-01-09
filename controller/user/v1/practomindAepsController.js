@@ -733,6 +733,7 @@ const dailyAuthentication = async (req, res) => {
 
 const cashWithdrawal = async (req, res) => {
     try {
+        const { latitude, longitude, txtPidData, transactionAmount } = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -772,29 +773,41 @@ const cashWithdrawal = async (req, res) => {
             return res.failure({ message: 'Onboarding not completed' });
         }
 
-        // Validate required fields
-        if (!req.body.txtPidData) {
-            return res.failure({ message: 'Customer fingerprint data is required' });
-        }
+        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
+            refId: existingUser.id, 
+            companyId: existingUser.companyId,
+            isPrimary: true
+        });
 
-        if (!req.body.transactionAmount || req.body.transactionAmount <= 0) {
+        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
+            bankName: existingCustomerBank.bankName,
+            isActive: true
+         });
+        if (!practomindBank) {
+            return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
+        }
+        // Validate required fields
+       if (!txtPidData) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+        if (!transactionAmount || transactionAmount <= 0) {
             return res.failure({ message: 'Valid transaction amount is required' });
         }
 
         // Generate unique transaction ID
-        const transactionId = generateTransactionID(existingCompany.companyName || 'PRACTOMIND');
+        const transactionId = generateTransactionID(existingCompany?.companyName);
 
         // Prepare transaction data
         const transactionData = {
-            mobileNumber: req.body.mobileNumber || req.body.customerMobile,
+            mobileNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
-            latitude: req.body.latitude,
-            longitude: req.body.longitude,
-            adhaarNumber: req.body.adhaarNumber || req.body.aadhaarNumber,
-            nationalBankIdenticationNumber: req.body.nationalBankIdurationNumber || req.body.bankIin,
-            transactionAmount: req.body.transactionAmount,
+            latitude: latitude,
+            longitude: longitude,
+            adhaarNumber: existingOnboarding.aadhaarNumber,
+            nationalBankIdenticationNumber: practomindBank.aeps_bank_id,
+            transactionAmount: transactionAmount,
             transactionId: transactionId,
-            txtPidData: req.body.txtPidData
+            txtPidData: txtPidData
         };
 
         // Call Practomind API
@@ -825,6 +838,7 @@ const cashWithdrawal = async (req, res) => {
 
 const balanceEnquiry = async (req, res) => {
     try {
+        const { latitude, longitude, txtPidData } = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -857,26 +871,38 @@ const balanceEnquiry = async (req, res) => {
         }
 
         if (!req.body.txtPidData) {
-            return res.failure({ message: 'Customer fingerprint data is required' });
+            return res.failure({ message: 'Biometric data is required' });
         }
 
         const existingCompany = await dbService.findOne(model.company, { 
             id: req.user.companyId 
         });
+        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
+            refId: existingUser.id, 
+            companyId: existingUser.companyId,
+            isPrimary: true
+        });
+        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
+            bankName: existingCustomerBank.bankName,
+            isActive: true
+         });
+        if (!practomindBank) {
+            return res.failure({ message: 'Bank Is Not Supported For Balance Enquiry' });
+        }
 
         // Generate unique transaction ID
-        const transactionId = generateTransactionID(existingCompany?.companyName || 'PRACTOMIND');
+        const transactionId = generateTransactionID(existingCompany?.companyName);
 
         // Prepare enquiry data
         const enquiryData = {
-            mobileNumber: req.body.mobileNumber || req.body.customerMobile,
+            mobileNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
-            latitude: req.body.latitude,
-            longitude: req.body.longitude,
-            adhaarNumber: req.body.adhaarNumber || req.body.aadhaarNumber,
-            nationalBankIdurationNumber: req.body.nationalBankIdurationNumber || req.body.bankIin,
+            latitude: latitude,
+            longitude: longitude,
+            adhaarNumber: existingOnboarding.aadhaarNumber,
+            nationalBankIdurationNumber: practomindBank.aeps_bank_id,
             transactionId: transactionId,
-            txtPidData: req.body.txtPidData
+            txtPidData: txtPidData
         };
 
         // Call Practomind API
@@ -904,6 +930,7 @@ const balanceEnquiry = async (req, res) => {
 
 const miniStatement = async (req, res) => {
     try {
+        const { latitude, longitude, txtPidData } = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -936,26 +963,38 @@ const miniStatement = async (req, res) => {
         }
 
         if (!req.body.txtPidData) {
-            return res.failure({ message: 'Customer fingerprint data is required' });
+            return res.failure({ message: 'Biometric data is required' });
         }
 
         const existingCompany = await dbService.findOne(model.company, { 
             id: req.user.companyId 
         });
+        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
+            refId: existingUser.id, 
+            companyId: existingUser.companyId,
+            isPrimary: true
+        });
+        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
+            bankName: existingCustomerBank.bankName,
+            isActive: true
+         });    
+        if (!practomindBank) {
+            return res.failure({ message: 'Bank Is Not Supported For Mini Statement' });
+        }
 
         // Generate unique transaction ID
         const transactionId = generateTransactionID(existingCompany?.companyName || 'PRACTOMIND');
 
         // Prepare statement data
         const statementData = {
-            mobileNumber: req.body.mobileNumber || req.body.customerMobile,
+            mobileNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
-            latitude: req.body.latitude,
-            longitude: req.body.longitude,
-            adhaarNumber: req.body.adhaarNumber || req.body.aadhaarNumber,
-            nationalBankIdurationNumber: req.body.nationalBankIdurationNumber || req.body.bankIin,
+            latitude: latitude,
+            longitude: longitude,
+            adhaarNumber: existingOnboarding.aadhaarNumber,
+            nationalBankIdurationNumber: practomindBank.aeps_bank_id,
             transactionId: transactionId,
-            txtPidData: req.body.txtPidData
+            txtPidData: txtPidData
         };
 
         // Call Practomind API
