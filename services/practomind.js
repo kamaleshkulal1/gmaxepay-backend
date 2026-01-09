@@ -168,10 +168,7 @@ const practomindEkycSubmit = async (data) => {
       KeyID: data.KeyID,
       TxnId: data.TxnId,
       userPan: data.userPan,
-      aadhaarNumber: data.aadhaarNumber,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600
+      aadharNumber: data.aadhaarNumber
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
@@ -185,10 +182,9 @@ const practomindEkycSubmit = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsubmit`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      }
     });
 
     console.log('Practomind EKYC submit response:', response.data);
@@ -230,7 +226,7 @@ const practomindDailyAuthentication = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/aepstwofactord`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
       },
       timeout: 30000
@@ -276,7 +272,7 @@ const practomindCashWithdrawal = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/aepscashwithdrawl`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
       },
       timeout: 30000
@@ -321,7 +317,7 @@ const practomindBalanceEnquiry = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/aepsbalanceenquiry`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
       },
       timeout: 30000
@@ -366,7 +362,7 @@ const practomindMiniStatement = async (data) => {
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/aepsministatement`, payload, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': token,
         'Content-Type': 'application/json'
       },
       timeout: 30000

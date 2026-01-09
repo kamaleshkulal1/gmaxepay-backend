@@ -111,7 +111,9 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
             },
             ekycBiometric: {
                 status: isBioMetricValidated ? 'completed' : 'pending',
-                isCompleted: isBioMetricValidated
+                isCompleted: isBioMetricValidated,
+                ekycResponseCode: existingPractomindAepsOnboarding.ekycResponseCode || null,
+                retryRequired: existingPractomindAepsOnboarding.ekycResponseCode ? true : false
             },
             daily2FAAuthentication: {
                 status: isDaily2FACompleted ? 'completed' : 'pending',
@@ -530,6 +532,7 @@ const resendEkycOtp = async (req, res) => {
 
 const ekycSubmit = async (req, res) => {
     try {
+        const { txtPidData } = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -560,7 +563,7 @@ const ekycSubmit = async (req, res) => {
             TxnId: existingOnboarding.TxnId,
             userPan: existingOnboarding.userPan,
             aadhaarNumber: existingOnboarding.aadhaarNumber,
-            txtPidData: req.body.txtPidData
+            txtPidData: txtPidData
         };
 
         // Call Practomind API
@@ -570,22 +573,46 @@ const ekycSubmit = async (req, res) => {
         const isSuccess = response.status === true || response.status === 'true';
 
         if (isSuccess) {
-            // Update onboarding record
-            await dbService.update(
-                model.practomindAepsOnboarding,
-                { id: existingOnboarding.id },
-                {
-                    isBioMetricValidated: true,
-                    onboardingStatus: 'COMPLETED',
-                    status: 'ekyc_completed',
-                    message: response.message
-                }
-            );
+            // Check if kycResponseCode exists (means need to repeat the process)
+            const hasKycResponseCode = response.kycResponseCode && response.kycResponseCode !== '';
+            
+            if (hasKycResponseCode) {
+                // Update with kycResponseCode - user needs to repeat the process
+                await dbService.update(
+                    model.practomindAepsOnboarding,
+                    { id: existingOnboarding.id },
+                    {
+                        ekycResponseCode: response.kycResponseCode,
+                        isBioMetricValidated: false,
+                        status: 'ekyc_retry_required',
+                        message: response.message
+                    }
+                );
 
-            return res.success({ 
-                message: response.message || 'EKYC completed successfully', 
-                data: response 
-            });
+                return res.failure({ 
+                    message: `EKYC retry required. Response Code: ${response.kycResponseCode}. Please repeat the entire process from onboarding to EKYC.`, 
+                    data: response,
+                    kycResponseCode: response.kycResponseCode
+                });
+            } else {
+                // EKYC completed successfully without any response code
+                await dbService.update(
+                    model.practomindAepsOnboarding,
+                    { id: existingOnboarding.id },
+                    {
+                        isBioMetricValidated: true,
+                        onboardingStatus: 'COMPLETED',
+                        status: 'ekyc_completed',
+                        message: response.message,
+                        ekycResponseCode: null 
+                    }
+                );
+
+                return res.success({ 
+                    message: response.message || 'EKYC completed successfully', 
+                    data: response 
+                });
+            }
         } else {
             return res.failure({ 
                 message: response.message || 'EKYC submission failed', 
