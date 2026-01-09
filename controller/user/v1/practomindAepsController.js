@@ -628,6 +628,7 @@ const ekycSubmit = async (req, res) => {
 
 const dailyAuthentication = async (req, res) => {
     try {
+        const { txtPidData } = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -641,6 +642,23 @@ const dailyAuthentication = async (req, res) => {
             userId: existingUser.id, 
             companyId: existingUser.companyId 
         });
+
+        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
+            refId: existingUser.id, 
+            companyId: existingUser.companyId,
+            isPrimary: true
+        });
+
+        if (!existingCustomerBank) {
+            return res.failure({ message: 'Please add primary bank details first' });
+        }
+        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
+           bankName: existingCustomerBank.bankName,
+           isActive: true
+        });
+        if (!practomindBank) {
+            return res.failure({ message: 'Practomind bank not found' });
+        }
 
         if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') {
             return res.failure({ message: 'Please complete onboarding and EKYC first' });
@@ -659,20 +677,20 @@ const dailyAuthentication = async (req, res) => {
             return res.failure({ message: 'Already authenticated for today' });
         }
 
-        if (!req.body.txtPidData) {
-            return res.failure({ message: 'Fingerprint data is required' });
+        if (!txtPidData) {
+            return res.failure({ message: 'Biometric data is required' });
         }
 
         // Prepare 2FA data
         const authData = {
             mobileNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
-            latitude: req.body.latitude,
-            longitude: req.body.longitude,
+            latitude: existingUser.latitude,
+            longitude: existingUser.longitude,
             userPan: existingOnboarding.userPan,
             aadhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdenticationNumber: req.body.nationalBankIdurationNumber || req.body.bankIin,
-            txtPidData: req.body.txtPidData
+            nationalBankIdenticationNumber: practomindBank.aeps_bank_id,
+            txtPidData: txtPidData
         };
 
         // Call Practomind API
