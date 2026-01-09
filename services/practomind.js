@@ -168,7 +168,7 @@ const practomindEkycSubmit = async (data) => {
       KeyID: data.KeyID,
       TxnId: data.TxnId,
       userPan: data.userPan,
-      aadharNumber: data.aadhaarNumber
+      aadhaarNumber: data.aadhaarNumber
     };
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
