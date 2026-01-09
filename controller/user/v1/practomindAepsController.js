@@ -426,7 +426,7 @@ const validateEkycOtp = async (req, res) => {
             userId: existingUser.id, 
             companyId: existingUser.companyId 
         });
-
+        console.log('existingOnboarding', existingOnboarding);
         if (!existingOnboarding || !existingOnboarding.isOtpSent) {
             return res.failure({ message: 'Please send OTP first' });
         }
@@ -628,7 +628,7 @@ const ekycSubmit = async (req, res) => {
 
 const dailyAuthentication = async (req, res) => {
     try {
-        const { txtPidData } = req.body;
+        const { txtPidData, latitude, longitude } = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -685,8 +685,8 @@ const dailyAuthentication = async (req, res) => {
         const authData = {
             mobileNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
-            latitude: existingUser.latitude,
-            longitude: existingUser.longitude,
+            latitude: latitude,
+            longitude: longitude,
             userPan: existingOnboarding.userPan,
             aadhaarNumber: existingOnboarding.aadhaarNumber,
             nationalBankIdenticationNumber: practomindBank.aeps_bank_id,
