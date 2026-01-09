@@ -57,8 +57,10 @@ const practomindSendEkycOtp = async (data) => {
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
 
     const payload = {
+      ...tokenPayload,
       Apikey: PRACTOMIND_API_KEY
     };
+    console.log("Payload", payload)
 
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsendotp`, payload, {
       headers: {
