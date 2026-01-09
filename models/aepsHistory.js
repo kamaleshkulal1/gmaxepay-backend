@@ -33,6 +33,10 @@ let AepsHistory = sequelize.define(
       },
       allowNull: false
     },
+    serviceType: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     operator: {
       type: DataTypes.STRING,
       allowNull: true
