@@ -177,9 +177,9 @@ const practomindEkycSubmit = async (data) => {
       Apikey: PRACTOMIND_API_KEY,
       txtPidData: data.txtPidData
     };
-
-    console.log('Practomind EKYC submit payload:', JSON.stringify({ ...tokenPayload, txtPidData: 'REDACTED' }, null, 2));
-
+   console.log("tokenPayload",tokenPayload);
+   console.log("token", token);
+   
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsubmit`, payload, {
       headers: {
         'Authorization': token,
