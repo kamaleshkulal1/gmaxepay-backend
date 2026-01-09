@@ -106,6 +106,11 @@ const PractomindAepsOnboarding = sequelize.define(
       allowNull: true,
       comment: 'Error message if any'
     },
+    ekycResponseCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'EKYC response code (e.g., FP097) - indicates EKYC needs to be repeated'
+    },
     ...reusableModelAttribute
   },
   {
