@@ -426,7 +426,7 @@ const validateEkycOtp = async (req, res) => {
             userId: existingUser.id, 
             companyId: existingUser.companyId 
         });
-        console.log('existingOnboarding', existingOnboarding);
+
         if (!existingOnboarding || !existingOnboarding.isOtpSent) {
             return res.failure({ message: 'Please send OTP first' });
         }
