@@ -812,6 +812,7 @@ const cashWithdrawal = async (req, res) => {
 
         // Call Practomind API
         const response = await practomindService.practomindCashWithdrawal(transactionData);
+        console.log('response', response);
 
         // Parse response
         const isSuccess = response.status === true || response.status === 'true';
