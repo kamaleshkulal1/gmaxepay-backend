@@ -66,6 +66,7 @@ const practomindSendEkycOtp = async (data) => {
         'Content-Type': 'application/json'
       }
     });
+    console.log("Response", response)
 
     console.log('Practomind send EKYC OTP response:', response.data);
     return response.data;
