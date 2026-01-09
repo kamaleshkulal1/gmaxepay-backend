@@ -492,12 +492,12 @@ const resendEkycOtp = async (req, res) => {
 
         // Prepare resend data
         const resendData = {
-            merchantPhoneNumber: existingOnboarding.merchantPhoneNumber || existingUser.mobileNo,
+            merchantPhoneNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
-            latitude: req.body.latitude,
-            longitude: req.body.longitude
+            latitude: existingUser.latitude,
+            longitude: existingUser.longitude
         };
 
         // Call Practomind API
