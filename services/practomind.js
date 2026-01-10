@@ -178,6 +178,8 @@ const practomindEkycSubmit = async (data) => {
       txtPidData: data.txtPidData
     };
    console.log("tokenPayload",tokenPayload);
+   console.log("txtPidData", data.txtPidData);
+   console.log("Type of txtPidData", typeof data.txtPidData);
    console.log("payload", payload);
    console.log("token", token);
    
