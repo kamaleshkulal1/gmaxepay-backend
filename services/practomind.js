@@ -178,6 +178,7 @@ const practomindEkycSubmit = async (data) => {
       txtPidData: data.txtPidData
     };
    console.log("tokenPayload",tokenPayload);
+   console.log("payload", payload);
    console.log("token", token);
    
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsubmit`, payload, {
