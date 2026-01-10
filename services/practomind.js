@@ -1,6 +1,5 @@
 const axios = require('axios');
 const { generatePractomindToken } = require('../utils/aepsEncryption');
-const { Console } = require('winston/lib/winston/transports');
 
 const PRACTOMIND_BASE_URL = process.env.PRACTOMIND_BASE_URL;
 const PRACTOMIND_SECRET_KEY = process.env.PRACTOMIND_SECRET_KEY;
