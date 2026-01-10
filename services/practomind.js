@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { generatePractomindToken } = require('../utils/aepsEncryption');
+const { Console } = require('winston/lib/winston/transports');
 
 const PRACTOMIND_BASE_URL = process.env.PRACTOMIND_BASE_URL;
 const PRACTOMIND_SECRET_KEY = process.env.PRACTOMIND_SECRET_KEY;
@@ -178,6 +179,8 @@ const practomindEkycSubmit = async (data) => {
       txtPidData: data.txtPidData
     };
    console.log("tokenPayload",tokenPayload);
+   console.log("txtPidData", data.txtPidData);
+   Console.log("Type of txtPidData", typeof data.txtPidData);
    console.log("payload", payload);
    console.log("token", token);
    
