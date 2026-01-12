@@ -56,6 +56,11 @@ const PractomindAepsOnboarding = sequelize.define(
       defaultValue: 'PENDING',
       comment: 'PENDING, COMPLETED, FAILED'
     },
+    isAepsOnboardingCompleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false
+    },
     isOtpSent: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
