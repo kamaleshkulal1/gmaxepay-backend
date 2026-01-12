@@ -148,9 +148,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
-        if (existingOnboarding?.onboardingStatus === 'COMPLETED') {
-            return res.failure({ message: 'Practomind AEPS onboarding already completed' });
-        }
 
         // OPTIMIZATION: Fetch all dependent data in parallel (Second batch)
         const [
@@ -298,6 +295,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
         console.log("response", response);
         console.log("response.result.status", response.result.status);
         const isSuccess = response.result.status === true || response.result.status === 'true';
+        console.log("isSuccess", isSuccess);
 
         const dbData = {
             userId: existingUser.id,
