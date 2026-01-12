@@ -351,10 +351,6 @@ const sendEkycOtp = async (req, res) => {
             companyId: existingUser.companyId 
         });
 
-        if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') {
-            return res.failure({ message: 'Please complete onboarding first' });
-        }
-
         // Validate required fields from onboarding
         if (!existingOnboarding.userPan || !existingOnboarding.aadhaarNumber) {
             return res.failure({ message: 'PAN and Aadhaar details are required from onboarding' });
