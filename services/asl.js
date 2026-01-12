@@ -313,7 +313,7 @@ const aslAepsPayOut = async (data) => {
 // ASL DMT Sender Registration
 const aslDmtSenderRegistration = async (data) => {
     try{
-        const response = await axios.post(`${aslUrl}dmt/senderregistration`,
+        const response = await axios.post(`${aslUrl}/dmt/senderregistration`,
             {
                 apiToken : aslApiToken,
                 apiUserId: aslApiUserId,

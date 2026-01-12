@@ -1,3 +1,34 @@
+/**
+ * Practomind AEPS Controller
+ * 
+ * EKYC RETRY FLOW:
+ * ================
+ * When EKYC submission returns a kycResponseCode (e.g., "FP097"), it indicates that 
+ * the biometric verification failed and the entire EKYC process needs to be repeated.
+ * 
+ * Automatic Retry Process:
+ * 1. When ekycSubmit receives kycResponseCode in response:
+ *    - Resets all EKYC flags (isOtpSent, isOtpValidated, isBioMetricValidated)
+ *    - Clears session data (KeyID, TxnId, primaryKeyId, encodeFPTxnId)
+ *    - Increments ekycRetryCount
+ *    - Sets status to 'ekyc_retry_required'
+ *    - Returns failure with requiresRetry: true and nextStep: 'send_ekyc_otp'
+ * 
+ * 2. Frontend can retry the EKYC flow using the SAME endpoints:
+ *    - Call /send-ekyc-otp (will reset validation flags)
+ *    - Call /validate-ekyc-otp with new OTP
+ *    - Call /ekyc-submit with new biometric data
+ * 
+ * 3. Process repeats until kycResponseCode is absent from response
+ * 
+ * 4. No separate retry API needed - use existing endpoints
+ * 
+ * Onboarding:
+ * - Can be called multiple times (updates existing record)
+ * - Resets all EKYC fields when called
+ * - Status is 'COMPLETED' immediately on success
+ */
+
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const practomindService = require('../../../services/practomind');
@@ -113,7 +144,10 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
                 status: isBioMetricValidated ? 'completed' : 'pending',
                 isCompleted: isBioMetricValidated,
                 ekycResponseCode: existingPractomindAepsOnboarding.ekycResponseCode || null,
-                retryRequired: existingPractomindAepsOnboarding.ekycResponseCode ? true : false
+                retryRequired: existingPractomindAepsOnboarding.ekycResponseCode ? true : false,
+                retryCount: existingPractomindAepsOnboarding.ekycRetryCount || 0,
+                lastRetryAt: existingPractomindAepsOnboarding.lastRetryAt || null,
+                nextStep: existingPractomindAepsOnboarding.ekycResponseCode ? 'send_ekyc_otp' : null
             },
             daily2FAAuthentication: {
                 status: isDaily2FACompleted ? 'completed' : 'pending',
@@ -305,10 +339,21 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPhoneNumber: onboardingData.merchantPhoneNumber,
             aadhaarNumber: onboardingData.aadhaarNumber,
             userPan: onboardingData.userPan,
-            onboardingStatus: isSuccess ? 'COMPLETED' : 'PENDING',
+            onboardingStatus: isSuccess == true || isSuccess == 'true' ? 'COMPLETED' : 'PENDING',
             status: isSuccess ? 'success' : 'failed',
             message: response.message,
-            errorMessage: isSuccess ? null : JSON.stringify(response)
+            errorMessage: isSuccess ? null : JSON.stringify(response),
+            // Reset EKYC fields when re-onboarding (for retry scenarios)
+            isOtpSent: false,
+            isOtpValidated: false,
+            isBioMetricValidated: false,
+            KeyID: null,
+            TxnId: null,
+            primaryKeyId: null,
+            encodeFPTxnId: null,
+            ekycResponseCode: null,
+            ekycRetryCount: 0,
+            lastRetryAt: null
         };
 
         try {
@@ -351,6 +396,10 @@ const sendEkycOtp = async (req, res) => {
             companyId: existingUser.companyId 
         });
 
+        if (!existingOnboarding) {
+            return res.failure({ message: 'Please complete onboarding first' });
+        }
+
         // Validate required fields from onboarding
         if (!existingOnboarding.userPan || !existingOnboarding.aadhaarNumber) {
             return res.failure({ message: 'PAN and Aadhaar details are required from onboarding' });
@@ -375,6 +424,7 @@ const sendEkycOtp = async (req, res) => {
         const isSuccess = response.status === true || response.status === 'true';
 
         if (isSuccess && response.result) {
+            // Reset validation flags when sending new OTP (for retry scenarios)
             await dbService.update(
                 model.practomindAepsOnboarding,
                 { id: existingOnboarding.id },
@@ -382,6 +432,8 @@ const sendEkycOtp = async (req, res) => {
                     KeyID: response.result.KeyID,
                     TxnId: response.result.TxnId,
                     isOtpSent: true,
+                    isOtpValidated: false,
+                    isBioMetricValidated: false,
                     status: 'otp_sent',
                     message: response.message
                 }
@@ -573,22 +625,36 @@ const ekycSubmit = async (req, res) => {
             const hasKycResponseCode = response.kycResponseCode && response.kycResponseCode !== '';
             
             if (hasKycResponseCode) {
-                // Update with kycResponseCode - user needs to repeat the process
+                // Increment retry count
+                const retryCount = (existingOnboarding.ekycRetryCount || 0) + 1;
+                
+                // Reset EKYC process flags to allow retry from OTP step
                 await dbService.update(
                     model.practomindAepsOnboarding,
                     { id: existingOnboarding.id },
                     {
                         ekycResponseCode: response.kycResponseCode,
+                        ekycRetryCount: retryCount,
                         isBioMetricValidated: false,
+                        isOtpValidated: false,
+                        isOtpSent: false,
+                        KeyID: null,
+                        TxnId: null,
+                        primaryKeyId: null,
+                        encodeFPTxnId: null,
                         status: 'ekyc_retry_required',
-                        message: response.message
+                        message: response.message,
+                        lastRetryAt: new Date()
                     }
                 );
 
                 return res.failure({ 
-                    message: `EKYC retry required. Response Code: ${response.kycResponseCode}. Please repeat the entire process from onboarding to EKYC.`, 
+                    message: `EKYC verification failed with code ${response.kycResponseCode}. Please retry the EKYC process from OTP step. Attempt: ${retryCount}`, 
                     data: response,
-                    kycResponseCode: response.kycResponseCode
+                    kycResponseCode: response.kycResponseCode,
+                    retryCount: retryCount,
+                    requiresRetry: true,
+                    nextStep: 'send_ekyc_otp'
                 });
             } else {
                 // EKYC completed successfully without any response code
@@ -600,7 +666,8 @@ const ekycSubmit = async (req, res) => {
                         onboardingStatus: 'COMPLETED',
                         status: 'ekyc_completed',
                         message: response.message,
-                        ekycResponseCode: null 
+                        ekycResponseCode: null,
+                        ekycRetryCount: 0
                     }
                 );
 

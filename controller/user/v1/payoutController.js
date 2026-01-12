@@ -396,10 +396,7 @@ const payout = async (req, res) => {
     }
 }
 
-/**
- * Get payout bank list for the authenticated user
- * Returns all active customer banks with primary account marked
- */
+
 const getPayoutBankList = async (req, res) => {
     try {
         const user = req.user;
