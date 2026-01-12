@@ -1,33 +1,3 @@
-/**
- * Practomind AEPS Controller
- * 
- * EKYC RETRY FLOW:
- * ================
- * When EKYC submission returns a kycResponseCode (e.g., "FP097"), it indicates that 
- * the biometric verification failed and the entire EKYC process needs to be repeated.
- * 
- * Automatic Retry Process:
- * 1. When ekycSubmit receives kycResponseCode in response:
- *    - Resets all EKYC flags (isOtpSent, isOtpValidated, isBioMetricValidated)
- *    - Clears session data (KeyID, TxnId, primaryKeyId, encodeFPTxnId)
- *    - Increments ekycRetryCount
- *    - Sets status to 'ekyc_retry_required'
- *    - Returns failure with requiresRetry: true and nextStep: 'send_ekyc_otp'
- * 
- * 2. Frontend can retry the EKYC flow using the SAME endpoints:
- *    - Call /send-ekyc-otp (will reset validation flags)
- *    - Call /validate-ekyc-otp with new OTP
- *    - Call /ekyc-submit with new biometric data
- * 
- * 3. Process repeats until kycResponseCode is absent from response
- * 
- * 4. No separate retry API needed - use existing endpoints
- * 
- * Onboarding:
- * - Can be called multiple times (updates existing record)
- * - Resets all EKYC fields when called
- * - Status is 'COMPLETED' immediately on success
- */
 
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
@@ -344,6 +314,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             message: response.message,
             errorMessage: isSuccess ? null : JSON.stringify(response),
             // Reset EKYC fields when re-onboarding (for retry scenarios)
+            isAepsOnboardingCompleted: isSuccess == true || isSuccess == 'true' ? true : false,
             isOtpSent: false,
             isOtpValidated: false,
             isBioMetricValidated: false,
