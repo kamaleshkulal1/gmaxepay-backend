@@ -111,6 +111,17 @@ const PractomindAepsOnboarding = sequelize.define(
       allowNull: true,
       comment: 'EKYC response code (e.g., FP097) - indicates EKYC needs to be repeated'
     },
+    ekycRetryCount: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Number of times EKYC retry was attempted'
+    },
+    lastRetryAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Timestamp of last EKYC retry attempt'
+    },
     ...reusableModelAttribute
   },
   {
