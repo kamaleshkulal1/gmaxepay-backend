@@ -222,6 +222,70 @@ const aslAeps2FA = async (data) => {
   }
 }
 
+// ASL AEPS Bank KYC Send OTP
+const aslAepsBankKycSendOtp = async (data) => {
+  try{
+    
+    const response = await axios.post(`${aslUrl}/aeps/v1/bankKycSendOtp`,
+        {
+            associateId: aslAssociateId,
+            apiToken: aslApiToken,
+            ...data
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    console.log("response",response);
+    console.log("response.data",response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error",error);
+    return error.response.data;
+  }
+}
+// ASL AEPS Bank KYC Validate OTP
+const aslAepsBankKycValidateOtp = async (data) => {
+  try{
+    const response = await axios.post(`${aslUrl}/aeps/v1/bankKycOtpValidate`,
+        {
+            associateId: aslAssociateId,
+            apiToken: aslApiToken,
+            ...data
+        }, {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+        });
+    console.log("response",response);
+    console.log("response.data",response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error",error);
+    return error.response.data;
+  }
+}
+// ASL AEPS Bank KYC Biometric Validate
+const aslAepsBankKycBiometricValidate = async (data) => {
+  try{
+    const response = await axios.post(`${aslUrl}/aeps/v1/bankKycBiometricValidate`,
+        {
+            associateId: aslAssociateId,
+            apiToken: aslApiToken,
+            ...data
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    console.log("response",response);
+    console.log("response.data",response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error",error);
+    return error.response.data;
+  }
+}
 // ASL AEPS Transaction
 const aslAepsTransaction = async (data) => {
   try{
@@ -506,6 +570,9 @@ module.exports = {
     aslAepsOnboarding,
     aslAepsValidateAgentOtp,
     aslAepsValidateAgentBiometric,
+    aslAepsBankKycSendOtp,
+    aslAepsBankKycValidateOtp,
+    aslAepsBankKycBiometricValidate,
     aslAeps2FA,
     aslAepsTransaction,
     aslAepsReceiveOtp,

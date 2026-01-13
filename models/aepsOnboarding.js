@@ -18,7 +18,8 @@ const SENSITIVE_FIELDS = {
   superMerchantId: 'number',
   merchantLoginId: 'string',
   errorCodes: 'string',
-  otp: 'string'
+  otp: 'string',
+  bankKycOtpReferenceId: 'string'
 };
 
 const serializeValue = (value, type) => {
@@ -187,6 +188,21 @@ const AepsOnboarding = sequelize.define(
       allowNull: true,
       defaultValue: false
     },
+    isBankKycOtpValidated: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false
+    },
+    isBankKycBiometricValidated: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false
+    },
+    is2FACompleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false
+    },
     onboardingStatus: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -198,6 +214,10 @@ const AepsOnboarding = sequelize.define(
       allowNull: true
     },
     otp: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    bankKycOtpReferenceId: {
       type: DataTypes.STRING,
       allowNull: true
     },

@@ -34,20 +34,29 @@ const getOnboardingStatus = async (req, res) => {
         if (!existingAepsOnboarding) {
             const statusData = {
                 onboardingStatus: 'PENDING',
+                currentStep: 'aepsOnboarding',
                 aepsOnboarding: {
                     status: 'pending',
                     isCompleted: false
                 },
-                validateAgentOtp: {
+                ekycOtp: {
                     status: 'pending',
                     isCompleted: false
                 },
-                bioMetricVerification: {
+                ekycBiometric: {
                     status: 'pending',
                     isCompleted: false
                 },
-                daily2FAAuthentication: {
-                    status: isDaily2FACompleted ? 'completed' : 'pending',
+                bankKycOtp: {
+                    status: 'pending',
+                    isCompleted: false
+                },
+                bankKycBiometric: {
+                    status: 'pending',
+                    isCompleted: false
+                },
+                '2faAuthentication': {
+                    status: isDaily2FACompleted ? 'success' : 'pending',
                     isCompleted: isDaily2FACompleted,
                     loginDate: todayDateStr,
                     nextEligibleAt: nextEligibleAt ? nextEligibleAt.toISOString() : null
@@ -59,8 +68,29 @@ const getOnboardingStatus = async (req, res) => {
         const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
         const isOtpValidated = Boolean(existingAepsOnboarding.isOtpValidated);
         const isBioMetricValidated = Boolean(existingAepsOnboarding.isBioMetricValidated);
+        const isBankKycOtpValidated = Boolean(existingAepsOnboarding.isBankKycOtpValidated);
+        const isBankKycBiometricValidated = Boolean(existingAepsOnboarding.isBankKycBiometricValidated);
         
-        const isAllCompleted = isAepsOnboardingComplete && isOtpValidated && isBioMetricValidated;
+        // Determine current step and overall status
+        let currentStep = 'aepsOnboarding';
+        if (!isAepsOnboardingComplete) {
+            currentStep = 'aepsOnboarding';
+        } else if (!isOtpValidated) {
+            currentStep = 'ekycOtp';
+        } else if (!isBioMetricValidated) {
+            currentStep = 'ekycBiometric';
+        } else if (!isBankKycOtpValidated) {
+            currentStep = 'bankKycOtp';
+        } else if (!isBankKycBiometricValidated) {
+            currentStep = 'bankKycBiometric';
+        } else if (!isDaily2FACompleted) {
+            currentStep = '2faAuthentication';
+        } else {
+            currentStep = 'aepsTransaction';
+        }
+        
+        const isAllCompleted = isAepsOnboardingComplete && isOtpValidated && isBioMetricValidated && 
+                              isBankKycOtpValidated && isBankKycBiometricValidated;
         const overallStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
         
         // Update onboardingStatus in database if it needs to be updated
@@ -75,20 +105,29 @@ const getOnboardingStatus = async (req, res) => {
         const statusData = {
             ...existingAepsOnboarding.toJSON ? existingAepsOnboarding.toJSON() : existingAepsOnboarding,
             onboardingStatus: overallStatus,
+            currentStep: currentStep,
             aepsOnboarding: {
-                status: isAepsOnboardingComplete ? 'completed' : 'pending',
+                status: isAepsOnboardingComplete ? 'success' : 'pending',
                 isCompleted: isAepsOnboardingComplete
             },
-            validateAgentOtp: {
-                status: isOtpValidated ? 'completed' : 'pending',
+            ekycOtp: {
+                status: isOtpValidated ? 'success' : 'pending',
                 isCompleted: isOtpValidated
             },
-            bioMetricVerification: {
-                status: isBioMetricValidated ? 'completed' : 'pending',
+            ekycBiometric: {
+                status: isBioMetricValidated ? 'success' : 'pending',
                 isCompleted: isBioMetricValidated
             },
-            daily2FAAuthentication: {
-                status: isDaily2FACompleted ? 'completed' : 'pending',
+            bankKycOtp: {
+                status: isBankKycOtpValidated ? 'success' : 'pending',
+                isCompleted: isBankKycOtpValidated
+            },
+            bankKycBiometric: {
+                status: isBankKycBiometricValidated ? 'success' : 'pending',
+                isCompleted: isBankKycBiometricValidated
+            },
+            aeps2FaAuthentication: {
+                status: isDaily2FACompleted ? 'success' : 'pending',
                 isCompleted: isDaily2FACompleted,
                 loginDate: todayDateStr,
                 nextEligibleAt: nextEligibleAt ? nextEligibleAt.toISOString() : null
@@ -343,15 +382,11 @@ const validateAgentOtp = async (req, res) => {
     const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
     const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
     if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
-        const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
-        const isBioMetricValidated = Boolean(existingAepsOnboarding.isBioMetricValidated);
-        const isAllCompleted = isAepsOnboardingComplete && isBioMetricValidated;
-        const onboardingStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
-        
+        // Don't mark as COMPLETED yet - need to complete all steps including bank eKYC
         await dbService.update(
             model.aepsOnboarding,
             { id: existingAepsOnboarding.id },
-            { isOtpValidated: true, onboardingStatus, otp: otp }
+            { isOtpValidated: true, otp: otp }
         );
         return res.success({ message: 'AEPS OTP validation successful', data: aepsResponse });
     }
@@ -480,15 +515,11 @@ const bioMetricVerification = async (req, res) => {
         });
 
         if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
-            const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
-            const isOtpValidated = Boolean(existingAepsOnboarding.isOtpValidated);
-            const isAllCompleted = isAepsOnboardingComplete && isOtpValidated;
-            const onboardingStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
-            
+            // Don't mark as COMPLETED yet - need to complete bank eKYC steps too
             await dbService.update(
                 model.aepsOnboarding,
                 { id: existingAepsOnboarding.id },
-                { isBioMetricValidated: true, onboardingStatus }
+                { isBioMetricValidated: true }
             );
             return res.success({ message: 'Bio metric verification successful', data: aepsResponse });
         }
@@ -497,7 +528,7 @@ const bioMetricVerification = async (req, res) => {
         await dbService.update(
             model.aepsOnboarding,
             { id: existingAepsOnboarding.id },
-            { isOtpValidated: false, onboardingStatus: 'PENDING' }
+            { isOtpValidated: false }
         );
         
         return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'Bio metric verification failed', data: aepsResponse });
@@ -516,7 +547,7 @@ const bioMetricVerification = async (req, res) => {
                 await dbService.update(
                     model.aepsOnboarding,
                     { id: existingAepsOnboarding.id },
-                    { isOtpValidated: false, onboardingStatus: 'PENDING' }
+                    { isOtpValidated: false }
                 );
             }
         } catch (updateError) {
@@ -526,7 +557,240 @@ const bioMetricVerification = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process Bio metric verification' });
     }
 }
+const bankKycSendOtp = async (req, res) => {
+    try {
+        const {latitude, longitude} = req.body;
+        const existingUser = await dbService.findOne(model.user, { 
+            id: req.user.id, 
+            companyId: req.user.companyId 
+        });
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+        
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        
+        if (!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
+        
+        // Validate that eKYC biometric is completed
+        if (!existingAepsOnboarding.isBioMetricValidated) {
+            return res.failure({ message: 'Please complete eKYC biometric verification before bank eKYC' });
+        }
+        
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+        
+        const payload = {
+            latitude: latitude,
+            longitude: longitude,
+            mobileNo: existingUser.mobileNo,
+            aadhaarNumber:  existingUser.aadharDetails?.aadhaarNumber || '829763289274',
+            panNumber: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+        }
+        const bankKycSendOtpResponse = await asl.aslBankKycSendOtp(payload);
+        
+        // Store OTP reference if present in response
+        if (bankKycSendOtpResponse?.otpReferenceId || bankKycSendOtpResponse?.data?.otpReferenceId) {
+            await dbService.update(
+                model.aepsOnboarding,
+                { id: existingAepsOnboarding.id },
+                { bankKycOtpReferenceId: bankKycSendOtpResponse.otpReferenceId || bankKycSendOtpResponse.data.otpReferenceId }
+            );
+        }
+        
+        return res.success({
+            message: 'Bank KYC send OTP successful',
+            data: bankKycSendOtpResponse
+        });
+    } catch (error) {
+        console.error('Bank KYC send OTP error', error);
+        return res.failure({ message: error.message || 'Unable to send Bank KYC OTP' });
+    }
+}
+const bankKycValidateOtp = async (req, res) => {
+    try {
+        const { otp } = req.body;
+        
+        if (!otp) {
+            return res.failure({ message: 'OTP is required' });
+        }
+        
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if(!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+        if(!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
+        
+        // Validate that eKYC biometric is completed
+        if (!existingAepsOnboarding.isBioMetricValidated) {
+            return res.failure({ message: 'Please complete eKYC biometric verification before bank eKYC' });
+        }
+        
+        if (existingAepsOnboarding.isBankKycOtpValidated) {
+            return res.failure({ message: 'Bank eKYC OTP already validated' });
+        }
+        
+        const payload = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
+            otpReferenceID: existingAepsOnboarding.bankKycOtpReferenceId || existingAepsOnboarding.otpReferenceId,
+            hash: existingAepsOnboarding.hash,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+            otp: otp
+        }
+        const bankKycValidateOtpResponse = await asl.aslAepsBankKycValidateOtp(payload);
+        
+        const status = bankKycValidateOtpResponse?.status ? String(bankKycValidateOtpResponse.status).toUpperCase() : null;
+        const nestedStatus = bankKycValidateOtpResponse?.data?.status ? String(bankKycValidateOtpResponse.data.status).toUpperCase() : null;
+        
+        if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+            await dbService.update(
+                model.aepsOnboarding,
+                { id: existingAepsOnboarding.id },
+                { isBankKycOtpValidated: true }
+            );
+            return res.success({
+                message: 'Bank KYC validate OTP successful',
+                data: bankKycValidateOtpResponse
+            });
+        }
+        
+        return res.failure({ 
+            message: bankKycValidateOtpResponse?.message || bankKycValidateOtpResponse?.data?.message || 'Bank KYC OTP validation failed', 
+            data: bankKycValidateOtpResponse 
+        });
+    } catch (error) {
+        console.error('Bank KYC validate OTP error', error);
+        return res.failure({ message: error.message || 'Unable to process Bank KYC OTP validation' });
+    }
+}
 
+const bankKycBiometricValidate= async (req, res) => {
+    try {
+        const { biometricData } = req.body;
+        let { captureType } = req.body;
+        
+        if (!biometricData) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+        
+        captureType = captureType ? String(captureType).trim().toUpperCase() : null;
+        if (!captureType || !['FACE', 'FINGER'].includes(captureType)) {
+            return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
+        }
+        
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if(!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+        if(!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
+        
+        // Validate that bank eKYC OTP is completed
+        if (!existingAepsOnboarding.isBankKycOtpValidated) {
+            return res.failure({ message: 'Please complete bank eKYC OTP validation before biometric verification' });
+        }
+        
+        if (existingAepsOnboarding.isBankKycBiometricValidated) {
+            return res.failure({ message: 'Bank eKYC biometric already validated' });
+        }
+        
+        // Validate that biometricData is a string (PID XML)
+        if (typeof biometricData !== 'string' || biometricData.trim() === '') {
+            return res.failure({ message: 'Biometric data must be a valid PID XML string' });
+        }
+        
+        const formattedBiometricData = biometricData.trim();
+        
+        const payload = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
+            otpReferenceID: existingAepsOnboarding.bankKycOtpReferenceId || existingAepsOnboarding.otpReferenceId,
+            otp: existingAepsOnboarding.otp,
+            hash: existingAepsOnboarding.hash,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+            captureType: captureType,
+            biometricData: formattedBiometricData
+        }
+        const bankKycBiometricValidateResponse = await asl.aslAepsBankKycBiometricValidate(payload);
+        
+        const status = bankKycBiometricValidateResponse?.status ? String(bankKycBiometricValidateResponse.status).toUpperCase() : null;
+        const nestedStatus = bankKycBiometricValidateResponse?.data?.status ? String(bankKycBiometricValidateResponse.data.status).toUpperCase() : null;
+        
+        // Store biometric attempt in bioMetric table
+        const normalizedStatus = status || nestedStatus;
+        const sanitizedRequestPayload = {
+            uniqueID: payload.uniqueID,
+            aadhaarNo: payload.aadhaarNo,
+            otpReferenceID: payload.otpReferenceID,
+            hash: payload.hash,
+            merchantLoginId: payload.merchantLoginId,
+            captureType: captureType
+        };
+        
+        await dbService.createOne(model.bioMetric, {
+            refId: existingUser.id,
+            companyId: existingUser.companyId,
+            captureType,
+            status: normalizedStatus,
+            responseMessage: bankKycBiometricValidateResponse?.message || bankKycBiometricValidateResponse?.data?.message,
+            transactionId: bankKycBiometricValidateResponse?.data?.aslTransactionId || bankKycBiometricValidateResponse?.data?.reqId,
+            rrn: bankKycBiometricValidateResponse?.data?.rrn,
+            aadhaarNumber: bankKycBiometricValidateResponse?.data?.aadharNumber,
+            authCode: bankKycBiometricValidateResponse?.data?.authCode,
+            requestPayload: sanitizedRequestPayload,
+            responsePayload: bankKycBiometricValidateResponse,
+            addedBy: req.user.id,
+            updatedBy: req.user.id
+        });
+        
+        if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+            // Update onboarding status to COMPLETED if all steps are done
+            const isAllCompleted = existingAepsOnboarding.merchantStatus && 
+                                  existingAepsOnboarding.isOtpValidated && 
+                                  existingAepsOnboarding.isBioMetricValidated && 
+                                  existingAepsOnboarding.isBankKycOtpValidated;
+            const onboardingStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
+            
+            await dbService.update(
+                model.aepsOnboarding,
+                { id: existingAepsOnboarding.id },
+                { isBankKycBiometricValidated: true, onboardingStatus }
+            );
+            return res.success({
+                message: 'Bank KYC biometric validate successful',
+                data: bankKycBiometricValidateResponse
+            });
+        }
+        
+        return res.failure({ 
+            message: bankKycBiometricValidateResponse?.message || bankKycBiometricValidateResponse?.data?.message || 'Bank KYC biometric validation failed', 
+            data: bankKycBiometricValidateResponse 
+        });
+    } catch (error) {
+        console.error('Bank KYC biometric validate error', error);
+        return res.failure({ message: error.message || 'Unable to process Bank KYC biometric validation' });
+    }
+}
 const aeps2FaAuthentication = async (req, res) => {
     try{
         const { biometricData } = req.body;
@@ -550,6 +814,11 @@ const aeps2FaAuthentication = async (req, res) => {
 
         if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
+        }
+        
+        // Validate that bank eKYC biometric is completed before 2FA
+        if (!existingAepsOnboarding.isBankKycBiometricValidated) {
+            return res.failure({ message: 'Please complete bank eKYC biometric verification before 2FA authentication' });
         }
 
         const existingBioMetric = await dbService.findOne(model.bioMetric, {
@@ -671,6 +940,7 @@ const aeps2FaAuthentication = async (req, res) => {
     }
 }
 
+
 const aepsTransaction = async (req, res) => {
     try{
         const {
@@ -779,7 +1049,16 @@ const aepsTransaction = async (req, res) => {
             return res.failure({ message: 'AEPS merchantLoginId not found' });
         }
         if(!existingAepsOnboarding.isOtpValidated) {
-            return res.failure({ message: 'AEPS OTP validation is required before transaction' });
+            return res.failure({ message: 'AEPS eKYC OTP validation is required before transaction' });
+        }
+        if(!existingAepsOnboarding.isBioMetricValidated) {
+            return res.failure({ message: 'AEPS eKYC biometric validation is required before transaction' });
+        }
+        if(!existingAepsOnboarding.isBankKycOtpValidated) {
+            return res.failure({ message: 'Bank eKYC OTP validation is required before transaction' });
+        }
+        if(!existingAepsOnboarding.isBankKycBiometricValidated) {
+            return res.failure({ message: 'Bank eKYC biometric validation is required before transaction' });
         }
 
         const existingBioMetric = await dbService.findOne(model.bioMetric, {
@@ -1458,6 +1737,9 @@ module.exports = {
     validateAgentOtp, 
     resendAgentOtp, 
     bioMetricVerification, 
+    bankKycSendOtp,
+    bankKycValidateOtp,
+    bankKycBiometricValidate,
     aeps2FaAuthentication ,
     aepsTransaction,
     recentBanks,
