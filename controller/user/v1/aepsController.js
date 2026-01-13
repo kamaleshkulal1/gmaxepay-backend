@@ -524,13 +524,6 @@ const bioMetricVerification = async (req, res) => {
             return res.success({ message: 'Bio metric verification successful', data: aepsResponse });
         }
         
-        // Update isOtpValidated to false on error
-        await dbService.update(
-            model.aepsOnboarding,
-            { id: existingAepsOnboarding.id },
-            { isOtpValidated: false }
-        );
-        
         return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'Bio metric verification failed', data: aepsResponse });
     }
     catch (error) {
