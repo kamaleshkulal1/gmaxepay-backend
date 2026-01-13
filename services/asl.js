@@ -182,7 +182,11 @@ const aslAepsValidateAgentBiometric = async (data) => {
     return response.data;
   } catch (error) {
     console.log("error",error);
-    return error.response.data;
+    return error.response?.data || { 
+      status: 'ERROR', 
+      message: error.message || 'Network error occurred',
+      error: error.code || 'UNKNOWN_ERROR'
+    };
   }
 }
 
@@ -241,7 +245,11 @@ const aslAepsBankKycSendOtp = async (data) => {
     return response.data;
   } catch (error) {
     console.log("error",error);
-    return error.response.data;
+    return error.response?.data || { 
+      status: 'ERROR', 
+      message: error.message || 'Network error occurred',
+      error: error.code || 'UNKNOWN_ERROR'
+    };
   }
 }
 // ASL AEPS Bank KYC Validate OTP
