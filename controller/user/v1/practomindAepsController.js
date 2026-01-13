@@ -714,7 +714,7 @@ const dailyAuthentication = async (req, res) => {
             longitude: longitude,
             userPan: existingOnboarding.userPan,
             aadhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdenticationNumber: practomindBank.aeps_bank_id,
+            nationalBankIdenticationNumber: practomindBank.iinno,
             txtPidData: txtPidData
         };
 
@@ -829,7 +829,7 @@ const cashWithdrawal = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             adhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdenticationNumber: practomindBank.aeps_bank_id,
+            nationalBankIdenticationNumber: practomindBank.iinno,
             transactionAmount: transactionAmount,
             transactionId: transactionId,
             txtPidData: txtPidData
@@ -970,7 +970,7 @@ const balanceEnquiry = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             adhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdurationNumber: practomindBank.aeps_bank_id,
+            nationalBankIdurationNumber: practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
         };
@@ -1062,7 +1062,7 @@ const miniStatement = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             adhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdurationNumber: practomindBank.aeps_bank_id,
+            nationalBankIdurationNumber: practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
         };
