@@ -713,7 +713,7 @@ const dailyAuthentication = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             userPan: existingOnboarding.userPan,
-            aadharNumber: existingOnboarding.aadhaarNumber,
+            aadhaarNumber: existingOnboarding.aadhaarNumber,
             nationalBankIdenticationNumber: practomindBank.iinno,
             txtPidData: txtPidData
         };
@@ -1061,7 +1061,7 @@ const miniStatement = async (req, res) => {
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
-            adhaarNumber: existingOnboarding.aadhaarNumber,
+            aadhaarNumber: existingOnboarding.aadhaarNumber,
             nationalBankIdurationNumber: practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
