@@ -211,7 +211,7 @@ const practomindDailyAuthentication = async (data) => {
       latitude: data.latitude,
       longitude: data.longitude,
       userPan: data.userPan,
-      aadharNumber: data.aadhaarNumber,
+      adhaarNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
     };
 
