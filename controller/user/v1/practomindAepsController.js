@@ -713,7 +713,7 @@ const dailyAuthentication = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             userPan: existingOnboarding.userPan,
-            aadhaarNumber: existingOnboarding.aadhaarNumber,
+            aadharNumber: existingOnboarding.aadhaarNumber,
             nationalBankIdenticationNumber: practomindBank.iinno,
             txtPidData: txtPidData
         };
