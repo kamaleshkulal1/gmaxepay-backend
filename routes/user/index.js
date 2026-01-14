@@ -13,5 +13,6 @@ router.use('/recharge', require('./v1/rechargeRoute'));
 router.use('/dth', require('./v1/dthRoute'));
 router.use('/callback', require('./v1/callbackRoute'));
 router.use('/aeps2', require('./v1/practomindAepsRoute'));
+router.use('/fund', require('./v1/fundRoute'));
 
 module.exports = router;

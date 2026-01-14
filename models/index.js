@@ -72,6 +72,8 @@ db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
 db.recharge = require('./recharge');
 db.dthRecharge = require('./dthRecharge');
+db.fundRequest = require('./fundRequest');
+db.fundHistory = require('./fundHistrory');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -598,6 +600,96 @@ db.dthRecharge.belongsTo(db.company, {
 db.company.hasMany(db.dthRecharge, {
   foreignKey: 'companyId',
   as: 'dthRecharges',
+  sourceKey: 'id'
+});
+
+// Fund Request Relationships
+db.fundRequest.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'requester',
+  targetKey: 'id'
+});
+db.user.hasMany(db.fundRequest, {
+  foreignKey: 'refId',
+  as: 'fundRequests',
+  sourceKey: 'id'
+});
+
+db.fundRequest.belongsTo(db.user, {
+  foreignKey: 'approvalRefId',
+  as: 'approver',
+  targetKey: 'id'
+});
+db.user.hasMany(db.fundRequest, {
+  foreignKey: 'approvalRefId',
+  as: 'fundRequestsToApprove',
+  sourceKey: 'id'
+});
+
+db.fundRequest.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.fundRequest, {
+  foreignKey: 'companyId',
+  as: 'fundRequests',
+  sourceKey: 'id'
+});
+
+db.fundRequest.belongsTo(db.customerBank, {
+  foreignKey: 'bankId',
+  as: 'bank',
+  targetKey: 'id'
+});
+db.customerBank.hasMany(db.fundRequest, {
+  foreignKey: 'bankId',
+  as: 'fundRequests',
+  sourceKey: 'id'
+});
+
+// Fund History Relationships
+db.fundHistory.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'requester',
+  targetKey: 'id'
+});
+db.user.hasMany(db.fundHistory, {
+  foreignKey: 'refId',
+  as: 'fundHistories',
+  sourceKey: 'id'
+});
+
+db.fundHistory.belongsTo(db.user, {
+  foreignKey: 'approvalRefId',
+  as: 'approver',
+  targetKey: 'id'
+});
+db.user.hasMany(db.fundHistory, {
+  foreignKey: 'approvalRefId',
+  as: 'fundHistoriesApproved',
+  sourceKey: 'id'
+});
+
+db.fundHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.fundHistory, {
+  foreignKey: 'companyId',
+  as: 'fundHistories',
+  sourceKey: 'id'
+});
+
+db.fundHistory.belongsTo(db.fundRequest, {
+  foreignKey: 'fundRequestId',
+  as: 'fundRequest',
+  targetKey: 'id'
+});
+db.fundRequest.hasOne(db.fundHistory, {
+  foreignKey: 'fundRequestId',
+  as: 'fundHistory',
   sourceKey: 'id'
 });
 
