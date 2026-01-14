@@ -6,8 +6,13 @@ const imageService = require('../../../services/imageService');
 const fundTransferRequest = async (req, res) => {
     try {
         console.log('=== Fund Transfer Request Debug ===');
-        console.log('Body:', req.body);
-        console.log('File:', req.file ? 'File present' : 'No file');
+        console.log('Body:', JSON.stringify(req.body, null, 2));
+        console.log('File:', req.file ? JSON.stringify({
+            fieldname: req.file.fieldname,
+            originalname: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size
+        }) : 'No file');
         console.log('Content-Type:', req.headers['content-type']);
         console.log('===================================');
 
