@@ -446,31 +446,35 @@ const allbankDetails = async (req, res) => {
         if(!reportingUser){
             return res.failure({ message: 'Reporting user not found' });
         }
-        const bankDetails = await dbService.findOne(model.customerBank, { refId: reportingUser.id, companyId: reportingUser.companyId, isPrimary: true });
-        if(!bankDetails){
+        const bankDetailsList = await dbService.findAll(model.customerBank, { refId: reportingUser.id, companyId: reportingUser.companyId });
+        if(!bankDetailsList || bankDetailsList.length === 0){
             return res.failure({ message: 'Bank details not found' });
         }
         
-        let bankImage = null;
-        const bankImage1 = await dbService.findOne(model.practomindBankList, { bankName: bankDetails.bankName });
-        if(bankImage1 && bankImage1.bankLogo){
-            bankImage = bankImage1.bankLogo;
-        } else {
-            const bankImage2 = await dbService.findOne(model.aslBankList, { bankName: bankDetails.bankName });
-            if(bankImage2 && bankImage2.bankLogo){
-                bankImage = bankImage2.bankLogo;
+        // Process each bank detail to get bank image
+        const bankDataList = await Promise.all(bankDetailsList.map(async (bankDetails) => {
+            let bankImage = null;
+            const bankImage1 = await dbService.findOne(model.practomindBankList, { bankName: bankDetails.bankName });
+            if(bankImage1 && bankImage1.bankLogo){
+                bankImage = bankImage1.bankLogo;
+            } else {
+                const bankImage2 = await dbService.findOne(model.aslBankList, { bankName: bankDetails.bankName });
+                if(bankImage2 && bankImage2.bankLogo){
+                    bankImage = bankImage2.bankLogo;
+                }
             }
-        }
+            
+            return {
+                bankId: bankDetails.id,
+                bankName: bankDetails.bankName,
+                ifscCode: bankDetails.ifscCode,
+                accountNumber: bankDetails.accountNumber,
+                isPrimary: bankDetails.isPrimary || false,
+                bankImage: bankImage ? `${process.env.AWS_CDN_URL}/${bankImage}` : null
+            };
+        }));
         
-        const bankData = {
-            bankId: bankDetails.id,
-            bankName: bankDetails.bankName,
-            ifscCode: bankDetails.ifscCode,
-            accountNumber: bankDetails.accountNumber,
-            bankImage: `${process.env.CDN_URL}/${bankImage}` || null
-        };
-        
-        return res.success({ message: 'Bank details retrieved successfully', data: bankData });
+        return res.success({ message: 'All bank details retrieved successfully', data: bankDataList });
     }
     catch (error) {
         console.error('All bank details error:', error);
