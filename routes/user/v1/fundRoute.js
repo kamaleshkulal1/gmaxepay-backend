@@ -21,6 +21,8 @@ router.get(
     fundController.getFundRequests
 );
 
+router.post('/all-bank-details', authentication, fundController.allbankDetails);
+
 // Get fund history for current user
 router.get(
     '/fund-history', 

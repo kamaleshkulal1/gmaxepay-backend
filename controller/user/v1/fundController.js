@@ -436,9 +436,57 @@ const getFundHistory = async (req, res) => {
     }
 };
 
+const allbankDetails = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId, isActive: true });
+        if(!existingUser){
+            return res.failure({ message: 'User not found' });
+        }
+        const reportingUser = await dbService.findOne(model.user, { id: existingUser.reportingTo, companyId: req.user.companyId, isActive: true });
+        if(!reportingUser){
+            return res.failure({ message: 'Reporting user not found' });
+        }
+        const bankDetails = await dbService.findOne(model.customerBank, { refId: reportingUser.id, companyId: reportingUser.companyId, isPrimary: true });
+        if(!bankDetails){
+            return res.failure({ message: 'Bank details not found' });
+        }
+        
+        let bankImage = null;
+        const bankImage1 = await dbService.findOne(model.practomindBankList, { bankName: bankDetails.bankName });
+        if(bankImage1 && bankImage1.image){
+            bankImage = bankImage1.image;
+        } else {
+            const bankImage2 = await dbService.findOne(model.aslBankList, { bankName: bankDetails.bankName });
+            if(bankImage2 && bankImage2.image){
+                bankImage = bankImage2.image;
+            }
+        }
+        
+        const bankData = {
+            bankId: bankDetails.id,
+            bankName: bankDetails.bankName,
+            ifscCode: bankDetails.ifscCode,
+            accountNumber: bankDetails.accountNumber
+        };
+        
+        if(bankImage){
+            bankData.bankImage = bankImage;
+        }
+        
+        return res.success({ message: 'Bank details retrieved successfully', data: bankData });
+    }
+    catch (error) {
+        console.error('All bank details error:', error);
+        return res.failure({ 
+            message: error.message || 'Unable to retrieve bank details' 
+        });
+    }
+}
+
 module.exports = {
     fundTransferRequest,
     approveFundRequest,
     getFundRequests,
-    getFundHistory
+    getFundHistory,
+    allbankDetails
 };
