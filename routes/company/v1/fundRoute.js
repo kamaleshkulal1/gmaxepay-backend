@@ -10,4 +10,6 @@ router.post('/fund-transfer-request', authentication, upload.single('paySlip'), 
 // Approve or reject fund request (for requests assigned to company admin)
 router.post('/approve-fund-request', authentication, fundController.approveFundRequest);
 
+router.post('/fund-requests', authentication, fundController.getFundRequests);
+
 module.exports = router;

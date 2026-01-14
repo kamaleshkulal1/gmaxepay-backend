@@ -432,7 +432,170 @@ const approveFundRequest = async (req, res) => {
     }
 };
 
+const getFundRequests = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        if (req.user.userRole !== 2) {
+            return res.failure({ 
+                message: 'Only superadmin can access this endpoint' 
+            });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { 
+            companyId: req.user.companyId,
+            isActive: true,
+            isDelete: false
+        };
+
+        // Base filter: by refId (requests made by user) or approvalRefId (requests to approve)
+        const baseOrCondition = [
+            { refId: req.user.id },
+            { approvalRefId: req.user.id }
+        ];
+
+        // Build query from request body
+        if (dataToFind && dataToFind.query) {
+            query = { ...query, ...dataToFind.query };
+        }
+
+        // Handle options (pagination, sorting)
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+        }
+
+        // Add includes for user details (requester and approver)
+        options.include = [
+            {
+                model: model.user,
+                as: 'requester',
+                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
+                required: false
+            },
+            {
+                model: model.user,
+                as: 'approver',
+                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
+                required: false
+            },
+            {
+                model: model.customerBank,
+                as: 'bank',
+                attributes: ['id', 'bankName', 'accountNumber', 'ifsc', 'beneficiaryName'],
+                required: false
+            }
+        ];
+
+        // Handle customSearch (iLike search on multiple fields)
+        // Only support: name, transactionId
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const keys = Object.keys(dataToFind.customSearch);
+            const searchOrConditions = [];
+            let nameSearchValue = null;
+
+            for (const key of keys) {
+                const value = dataToFind.customSearch[key];
+                if (value === undefined || value === null || String(value).trim() === '') continue;
+
+                // Handle name search separately
+                if (key === 'userName' || key === 'name') {
+                    nameSearchValue = String(value).trim();
+                } else if (key === 'transactionId') {
+                    // Direct field search in fundRequest table
+                    searchOrConditions.push({
+                        [key]: {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                }
+            }
+
+            // If searching by name, find matching user IDs first
+            if (nameSearchValue) {
+                const matchingUsers = await dbService.findAll(model.user, {
+                    companyId: req.user.companyId,
+                    name: {
+                        [Op.iLike]: `%${nameSearchValue}%`
+                    },
+                    isActive: true,
+                    isDeleted: false
+                }, {
+                    attributes: ['id']
+                });
+
+                const userIds = matchingUsers.map(u => u.id);
+                
+                if (userIds.length > 0) {
+                    // Add condition to filter by these user IDs (either as requester or approver)
+                    searchOrConditions.push({
+                        [Op.or]: [
+                            { refId: { [Op.in]: userIds } },
+                            { approvalRefId: { [Op.in]: userIds } }
+                        ]
+                    });
+                } else {
+                    // No users found with that name, return empty results
+                    return res.success({ 
+                        message: 'Fund requests retrieved successfully',
+                        data: [],
+                        total: 0,
+                        paginator: {
+                            page: options.page || 1,
+                            paginate: options.paginate || 10,
+                            totalPages: 0
+                        }
+                    });
+                }
+            }
+
+            if (searchOrConditions.length > 0) {
+                // Combine base OR condition with search conditions using AND
+                query[Op.and] = [
+                    { [Op.or]: baseOrCondition },
+                    { [Op.and]: searchOrConditions }
+                ];
+            } else {
+                query[Op.or] = baseOrCondition;
+            }
+        } else {
+            query[Op.or] = baseOrCondition;
+        }
+
+        // Use paginate for consistent pagination response
+        const result = await dbService.paginate(model.fundRequest, query, options);
+
+        // Process data to decrypt profile images and add CDN URLs
+        const processedData = processFundRequestData(result?.data || []);
+
+        return res.success({ 
+            message: 'Fund requests retrieved successfully',
+            data: processedData,
+            total: result?.total || 0,
+            paginator: result?.paginator || {
+                page: options.page || 1,
+                paginate: options.paginate || 10,
+                totalPages: 0
+            }
+        });
+
+    } catch (error) {
+        console.error('Get fund requests error:', error);
+        return res.failure({ 
+            message: error.message || 'Unable to retrieve fund requests' 
+        });
+    }
+};
+
 module.exports = {
     fundTransferRequest,
-    approveFundRequest
+    approveFundRequest,
+    getFundRequests
 };
