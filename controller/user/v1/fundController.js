@@ -4,7 +4,6 @@ const { generateTransactionID } = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
 const { Op } = require('sequelize');
 const { decrypt } = require('../../../utils/encryption');
-const amezesmsApi = require('../../../services/amezesmsApi');
 const emailService = require('../../../services/emailService');
 
 const processFundRequestData = (data) => {
@@ -58,6 +57,13 @@ const processFundRequestData = (data) => {
 
 const fundTransferRequest = async (req, res) => {
     try {
+        // Check if user is regular user (userRole 3, 4, or 5)
+        if (![3, 4, 5].includes(req.user.userRole)) {
+            return res.failure({ 
+                message: 'Only users with role 3, 4, or 5 can access this endpoint' 
+            });
+        }
+
         const { amount, paymentMode, transactionDate, bankId, referenceNo, remarks } = req.body;
 
         if (!amount || !paymentMode || !transactionDate || !bankId) {
@@ -235,6 +241,12 @@ const fundTransferRequest = async (req, res) => {
 
 const approveFundRequest = async (req, res) => {
     try {
+        if (![3, 4].includes(req.user.userRole)) {
+            return res.failure({ 
+                message: 'Only users with role master distributor or distributor can access this endpoint' 
+            });
+        }
+
         const { fundRequestId, action, approvalRemarks } = req.body;
         const existingUser = await dbService.findOne(model.user, {
             id: req.user.id,
