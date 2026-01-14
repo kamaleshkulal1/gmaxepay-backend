@@ -1,6 +1,7 @@
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
+const imageService = require('../../../services/imageService');
 
 const fundTransferRequest = async (req, res) => {
     try {
@@ -83,9 +84,25 @@ const fundTransferRequest = async (req, res) => {
         const transactionId = generateTransactionID(company?.companyName || 'GMAXEPAY');
 
         // Handle paySlip file upload if exists
-        let paySlipPath = null;
-        if (req.file) {
-            paySlipPath = req.file.filename;
+        let paySlipKey = null;
+        if (req.file && req.file.buffer) {
+            try {
+                const uploadResult = await imageService.uploadImageToS3(
+                    req.file.buffer,
+                    req.file.originalname || `payslip_${transactionId}.jpg`,
+                    'fund-request',  
+                    company.id,       
+                    'payslip',        
+                    req.user.id  
+                );
+                paySlipKey = uploadResult.key;
+            } catch (uploadError) {
+                console.error('PaySlip upload error:', uploadError);
+                return res.failure({ 
+                    message: 'Failed to upload payment slip',
+                    error: uploadError.message 
+                });
+            }
         }
 
         // Create fund request
@@ -98,7 +115,7 @@ const fundTransferRequest = async (req, res) => {
             paymentMode: paymentMode,
             transactionDate: new Date(transactionDate),
             referenceNo: referenceNo || null,
-            paySlip: paySlipPath,
+            paySlip: paySlipKey,
             remarks: remarks || null,
             amount: parseFloat(amount),
             status: 'PENDING',
