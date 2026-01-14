@@ -69,9 +69,9 @@ let fundHistory = sequelize.define(
       defaultValue: 0
     },
     status: {
-      type: DataTypes.ENUM('APPROVED', 'CREDITED'),
+      type: DataTypes.ENUM('PENDING', 'APPROVED', 'CREDITED'),
       allowNull: false,
-      defaultValue: 'APPROVED'
+      defaultValue: 'PENDING'
     },
     remarks: {
       type: DataTypes.TEXT,

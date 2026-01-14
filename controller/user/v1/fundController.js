@@ -7,7 +7,6 @@ const fundTransferRequest = async (req, res) => {
     try {
         const { amount, paymentMode, transactionDate, bankId, referenceNo, remarks } = req.body;
 
-        // Validate required fields
         if (!amount || !paymentMode || !transactionDate || !bankId) {
             return res.failure({ 
                 message: 'Amount, payment mode, transaction date, and bank are required' 
@@ -105,6 +104,19 @@ const fundTransferRequest = async (req, res) => {
             }
         }
 
+        // Get requester's wallet for opening balance
+        const requesterWallet = await dbService.findOne(model.wallet, {
+            refId: req.user.id,
+            companyId: req.user.companyId
+        });
+
+        if (!requesterWallet) {
+            return res.failure({ message: 'Wallet not found' });
+        }
+
+        const openingBalance = parseFloat(requesterWallet.balance) || 0;
+        const requestAmount = parseFloat(amount);
+
         // Create fund request
         const fundRequestData = {
             companyId: req.user.companyId,
@@ -117,7 +129,7 @@ const fundTransferRequest = async (req, res) => {
             referenceNo: referenceNo || null,
             paySlip: paySlipKey,
             remarks: remarks || null,
-            amount: parseFloat(amount),
+            amount: requestAmount,
             status: 'PENDING',
             isActive: true,
             isDelete: false,
@@ -126,6 +138,27 @@ const fundTransferRequest = async (req, res) => {
 
         const fundRequest = await dbService.createOne(model.fundRequest, fundRequestData);
 
+        // Create fund history record in PENDING status
+        const fundHistoryData = {
+            companyId: req.user.companyId,
+            refId: req.user.id,
+            approvalRefId: approvalRefId,
+            fundRequestId: fundRequest.id,
+            transactionId: transactionId,
+            amount: requestAmount,
+            openingBalance: openingBalance,
+            closingBalance: openingBalance,
+            creditAmount: 0,
+            status: 'PENDING',
+            remarks: remarks || 'Fund transfer request created',
+            approvedAt: new Date(),
+            isActive: true,
+            isDelete: false,
+            addedBy: req.user.id
+        };
+
+        await dbService.createOne(model.fundHistory, fundHistoryData);
+
         return res.success({ 
             message: 'Fund transfer request submitted successfully', 
             data: {
@@ -133,7 +166,10 @@ const fundTransferRequest = async (req, res) => {
                 transactionId: fundRequest.transactionId,
                 amount: fundRequest.amount,
                 status: fundRequest.status,
-                approvalRefId: fundRequest.approvalRefId
+                approvalRefId: fundRequest.approvalRefId,
+                companyId: req.user.companyId,
+                userId: req.user.id,
+                paySlipPath: paySlipKey ? `fund-request/${company.id}/payslip/${req.user.id}/${paySlipKey.split('/').pop()}` : null
             }
         });
 
@@ -291,26 +327,22 @@ const approveFundRequest = async (req, res) => {
 
             await dbService.createOne(model.walletHistory, requesterWalletHistoryData);
 
-            // Create fund history record
-            const fundHistoryData = {
-                companyId: req.user.companyId,
-                refId: fundRequest.refId,
-                approvalRefId: req.user.id,
-                fundRequestId: fundRequest.id,
-                transactionId: fundRequest.transactionId,
-                amount: transferAmount,
+            // Update existing fund history record from PENDING to CREDITED
+            const fundHistoryUpdateData = {
                 openingBalance: requesterOpeningBalance,
                 closingBalance: requesterClosingBalance,
                 creditAmount: transferAmount,
                 status: 'CREDITED',
                 remarks: approvalRemarks || 'Fund request approved and credited',
                 approvedAt: new Date(),
-                isActive: true,
-                isDelete: false,
-                addedBy: req.user.id
+                updatedBy: req.user.id
             };
 
-            await dbService.createOne(model.fundHistory, fundHistoryData);
+            await dbService.updateOne(
+                model.fundHistory,
+                { fundRequestId: fundRequest.id },
+                fundHistoryUpdateData
+            );
         }
 
         return res.success({ 
