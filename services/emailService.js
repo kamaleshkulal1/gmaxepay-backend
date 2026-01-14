@@ -131,15 +131,7 @@ module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, log
   }
 };
 
-/**
- * Send temporary password email after onboarding completion
- * @param {Object} options
- * @param {string} options.to
- * @param {string} options.userName
- * @param {string} options.tempPassword
- * @param {string} options.logoUrl
- * @param {string} options.illustrationUrl
- */
+
 module.exports.sendTempPasswordEmail = async ({ to, userName, tempPassword, logoUrl, illustrationUrl }) => {
   try {
     const templatePath = path.join(__dirname, '../mailTemplate/tempPasswordEmail.html');
