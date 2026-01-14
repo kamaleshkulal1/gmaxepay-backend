@@ -272,12 +272,14 @@ const aslAepsBankKycValidateOtp = async (data) => {
 // ASL AEPS Bank KYC Biometric Validate
 const aslAepsBankKycBiometricValidate = async (data) => {
   try{
+    const payload = {
+        associateId: aslAssociateId,
+        apiToken: aslApiToken,
+        ...data
+    };
+    console.log("Complete Payload:", JSON.stringify(payload, null, 2));
     const response = await axios.post(`${aslUrl}/aeps/v1/bankKycBiometricValidate`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
+        payload, {
             headers: {
                 'Content-Type': 'application/json'
             }
@@ -313,6 +315,27 @@ const aslAepsTransaction = async (data) => {
   }
 }
 
+// ASL AEPS Check Status
+const aslAepsCheckStatus = async (data) => {
+  try{
+    const response = await axios.post(`${aslUrl}/aeps/v1/checkStatus`,
+        {
+            associateId: aslAssociateId,
+            apiToken: aslApiToken,
+            ...data
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    console.log("response",response);
+    console.log("response.data",response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error",error);
+    return error.response.data;
+  }
+}
 // ASL AEPS Receive OTP
 const aslAepsReceiveOtp = async (data) => {
   try{
@@ -578,6 +601,7 @@ module.exports = {
     aslAepsBankKycValidateOtp,
     aslAepsBankKycBiometricValidate,
     aslAeps2FA,
+    aslAepsCheckStatus,
     aslAepsTransaction,
     aslAepsReceiveOtp,
     aslAepsResendOtp,
