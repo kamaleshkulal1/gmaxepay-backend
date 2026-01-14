@@ -8,26 +8,16 @@ const { upload, multer } = require('../../../middleware/multerConfig');
 router.post('/fund-transfer-request', authentication, upload.single('paySlip'), multer, fundController.fundTransferRequest);
 
 // Approve or reject fund request
-router.post(
-    '/approve-fund-request', 
-    authentication, 
-    fundController.approveFundRequest
-);
+router.post('/approve-fund-request',  authentication, fundController.approveFundRequest );
 
 // Get fund requests (both created by user and assigned to user for approval)
-router.get(
-    '/fund-requests', 
-    authentication, 
-    fundController.getFundRequests
-);
+router.post( '/fund-requests', authentication,fundController.getFundRequests); 
 
 router.post('/all-bank-details', authentication, fundController.allbankDetails);
 
 // Get fund history for current user
-router.get(
-    '/fund-history', 
-    authentication, 
-    fundController.getFundHistory
-);
+router.get('/fund-history', authentication, fundController.getFundHistory);
+
+
 
 module.exports = router;
