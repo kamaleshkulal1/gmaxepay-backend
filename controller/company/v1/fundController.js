@@ -6,61 +6,12 @@ const { Op } = require('sequelize');
 const { decrypt } = require('../../../utils/encryption');
 const emailService = require('../../../services/emailService');
 
-const processFundRequestData = (data) => {
-    if (!data) return data;
-
-    // Handle array of records
-    if (Array.isArray(data)) {
-        return data.map(record => processFundRequestData(record));
-    }
-
-    // Process single record
-    const processed = { ...data.dataValues || data };
-
-    // Decrypt and add CDN URL for requester profileImage
-    if (processed.requester) {
-        const requester = { ...(processed.requester.dataValues || processed.requester) };
-        if (requester.profileImage) {
-            try {
-                const decryptedImage = decrypt(requester.profileImage);
-                requester.profileImage = `${process.env.AWS_CDN_URL}/${decryptedImage}`;
-            } catch (e) {
-                // If decryption fails, set to null
-                requester.profileImage = null;
-            }
-        }
-        processed.requester = requester;
-    }
-
-    // Decrypt and add CDN URL for approver profileImage
-    if (processed.approver) {
-        const approver = { ...(processed.approver.dataValues || processed.approver) };
-        if (approver.profileImage) {
-            try {
-                const decryptedImage = decrypt(approver.profileImage);
-                approver.profileImage = `${process.env.AWS_CDN_URL}/${decryptedImage}`;
-            } catch (e) {
-                // If decryption fails, set to null
-                approver.profileImage = null;
-            }
-        }
-        processed.approver = approver;
-    }
-
-    // Add CDN URL for paySlip
-    if (processed.paySlip) {
-        processed.paySlip = `${process.env.AWS_CDN_URL}/${processed.paySlip}`;
-    }
-
-    return processed;
-};
-
 const fundTransferRequest = async (req, res) => {
     try {
-        // Check if user is regular user (userRole 3, 4, or 5)
-        if (![3, 4, 5].includes(req.user.userRole)) {
+        // Check if user is company admin (userRole 2)
+        if (req.user.userRole !== 2) {
             return res.failure({ 
-                message: 'Only users with role 3, 4, or 5 can access this endpoint' 
+                message: 'Only company admin can access this endpoint' 
             });
         }
 
@@ -89,38 +40,19 @@ const fundTransferRequest = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
-        // Determine who will approve the request
-        let approvalRefId;
+        // Company admin requests go directly to superadmin (userRole 1, companyId 1)
+        const superAdmin = await dbService.findOne(model.user, { 
+            companyId: 1,
+            userRole: 1, // Superadmin
+            isActive: true,
+            isDeleted: false
+        });
         
-        if (existingUser.reportingTo && existingUser.reportingTo !== null) {
-            // If user has a reporting manager, request goes to them
-            const reportingUser = await dbService.findOne(model.user, { 
-                id: existingUser.reportingTo, 
-                companyId: req.user.companyId,
-                isActive: true,
-                isDeleted: false
-            });
-            
-            if (!reportingUser) {
-                return res.failure({ message: 'Reporting manager not found' });
-            }
-            
-            approvalRefId = reportingUser.id;
-        } else {
-            // If no reporting manager, find company admin
-            const companyAdmin = await dbService.findOne(model.user, { 
-                companyId: req.user.companyId,
-                userRole: 2, // Assuming roleId 1 is admin
-                isActive: true,
-                isDeleted: false
-            });
-            
-            if (!companyAdmin) {
-                return res.failure({ message: 'Company admin not found' });
-            }
-            
-            approvalRefId = companyAdmin.id;
+        if (!superAdmin) {
+            return res.failure({ message: 'Superadmin not found for approval' });
         }
+        
+        const approvalRefId = superAdmin.id;
 
         // Verify bank belongs to user
         const userBank = await dbService.findOne(model.customerBank, {
@@ -172,7 +104,7 @@ const fundTransferRequest = async (req, res) => {
             return res.failure({ message: 'Wallet not found' });
         }
 
-        const openingBalance = parseFloat(requesterWallet.balance) || 0;
+        const openingBalance = parseFloat(requesterWallet.mainWallet) || 0;
         const requestAmount = parseFloat(amount);
 
         // Create fund request
@@ -241,9 +173,10 @@ const fundTransferRequest = async (req, res) => {
 
 const approveFundRequest = async (req, res) => {
     try {
-        if (![3, 4].includes(req.user.userRole)) {
+        // Check if user is company admin (userRole 2)
+        if (req.user.userRole !== 2) {
             return res.failure({ 
-                message: 'Only users with role master distributor or distributor can access this endpoint' 
+                message: 'Only superadmin can access this endpoint' 
             });
         }
 
@@ -256,6 +189,7 @@ const approveFundRequest = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
+
         // Validate required fields
         if (!fundRequestId || !action) {
             return res.failure({ 
@@ -430,10 +364,9 @@ const approveFundRequest = async (req, res) => {
                 })
             ]);
 
-            // Send SMS and Email notifications to requester
+            // Send Email notifications to requester
             if (requester) {
                 try {
-
                     // Build logo and illustration URLs
                     const backendUrl = process.env.BASE_URL;
                     const logoUrl = (company && company.logo) ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
@@ -499,7 +432,6 @@ const approveFundRequest = async (req, res) => {
     }
 };
 
-
 const getFundRequests = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, {
@@ -509,6 +441,11 @@ const getFundRequests = async (req, res) => {
         });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
+        }
+        if (req.user.userRole !== 2) {
+            return res.failure({ 
+                message: 'Only superadmin can access this endpoint' 
+            });
         }
 
         const dataToFind = req.body || {};
@@ -657,202 +594,8 @@ const getFundRequests = async (req, res) => {
     }
 };
 
-const getFundHistory = async (req, res) => {
-    try {
-        const existingUser = await dbService.findOne(model.user, {
-            id: req.user.id,
-            companyId: req.user.companyId,
-            isActive: true
-        });
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
-
-        const dataToFind = req.body || {};
-        let options = {};
-        let query = { 
-            companyId: req.user.companyId,
-            refId: req.user.id,
-            isActive: true,
-            isDelete: false
-        };
-
-        // Build query from request body
-        if (dataToFind && dataToFind.query) {
-            query = { ...query, ...dataToFind.query };
-        }
-
-        // Handle options (pagination, sorting)
-        if (dataToFind && dataToFind.options !== undefined) {
-            options = { ...dataToFind.options };
-        }
-
-        // Add includes for user details (requester and approver)
-        options.include = [
-            {
-                model: model.user,
-                as: 'requester',
-                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
-                required: false
-            },
-            {
-                model: model.user,
-                as: 'approver',
-                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
-                required: false
-            },
-            {
-                model: model.fundRequest,
-                as: 'fundRequest',
-                attributes: ['id', 'transactionId', 'amount', 'status', 'paymentMode', 'transactionDate'],
-                required: false
-            }
-        ];
-
-        // Handle customSearch (iLike search on multiple fields)
-        // Only support: name, transactionId
-        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
-            const keys = Object.keys(dataToFind.customSearch);
-            const searchOrConditions = [];
-            let nameSearchValue = null;
-
-            for (const key of keys) {
-                const value = dataToFind.customSearch[key];
-                if (value === undefined || value === null || String(value).trim() === '') continue;
-
-                // Handle name search separately
-                if (key === 'userName' || key === 'name') {
-                    nameSearchValue = String(value).trim();
-                } else if (key === 'transactionId') {
-                    // Direct field search in fundHistory table
-                    searchOrConditions.push({
-                        [key]: {
-                            [Op.iLike]: `%${String(value).trim()}%`
-                        }
-                    });
-                }
-            }
-
-            // If searching by name, find matching user IDs first
-            if (nameSearchValue) {
-                const matchingUsers = await dbService.findAll(model.user, {
-                    companyId: req.user.companyId,
-                    name: {
-                        [Op.iLike]: `%${nameSearchValue}%`
-                    },
-                    isActive: true,
-                    isDeleted: false
-                }, {
-                    attributes: ['id']
-                });
-
-                const userIds = matchingUsers.map(u => u.id);
-                
-                if (userIds.length > 0) {
-                    // Add condition to filter by these user IDs (either as requester or approver)
-                    searchOrConditions.push({
-                        [Op.or]: [
-                            { refId: { [Op.in]: userIds } },
-                            { approvalRefId: { [Op.in]: userIds } }
-                        ]
-                    });
-                } else {
-                    // No users found with that name, return empty results
-                    return res.success({ 
-                        message: 'Fund history retrieved successfully',
-                        data: [],
-                        total: 0,
-                        paginator: {
-                            page: options.page || 1,
-                            paginate: options.paginate || 10,
-                            totalPages: 0
-                        }
-                    });
-                }
-            }
-
-            if (searchOrConditions.length > 0) {
-                query[Op.and] = searchOrConditions;
-            }
-        }
-
-        // Use paginate for consistent pagination response
-        const result = await dbService.paginate(model.fundHistory, query, options);
-
-        // Process data to decrypt profile images and add CDN URLs
-        const processedData = processFundRequestData(result?.data || []);
-
-        return res.success({ 
-            message: 'Fund history retrieved successfully',
-            data: processedData,
-            total: result?.total || 0,
-            paginator: result?.paginator || {
-                page: options.page || 1,
-                paginate: options.paginate || 10,
-                totalPages: 0
-            }
-        });
-
-    } catch (error) {
-        console.error('Get fund history error:', error);
-        return res.failure({ 
-            message: error.message || 'Unable to retrieve fund history' 
-        });
-    }
-};
-
-const allbankDetails = async (req, res) => {
-    try {
-        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId, isActive: true });
-        if(!existingUser){
-            return res.failure({ message: 'User not found' });
-        }
-        const reportingUser = await dbService.findOne(model.user, { id: existingUser.reportingTo, companyId: req.user.companyId, isActive: true });
-        if(!reportingUser){
-            return res.failure({ message: 'Reporting user not found' });
-        }
-        const bankDetailsList = await dbService.findAll(model.customerBank, { refId: reportingUser.id, companyId: reportingUser.companyId });
-        if(!bankDetailsList || bankDetailsList.length === 0){
-            return res.failure({ message: 'Bank details not found' });
-        }
-        
-        // Process each bank detail to get bank image
-        const bankDataList = await Promise.all(bankDetailsList.map(async (bankDetails) => {
-            let bankImage = null;
-            const bankImage1 = await dbService.findOne(model.practomindBankList, { bankName: bankDetails.bankName });
-            if(bankImage1 && bankImage1.bankLogo){
-                bankImage = bankImage1.bankLogo;
-            } else {
-                const bankImage2 = await dbService.findOne(model.aslBankList, { bankName: bankDetails.bankName });
-                if(bankImage2 && bankImage2.bankLogo){
-                    bankImage = bankImage2.bankLogo;
-                }
-            }
-            
-            return {
-                bankId: bankDetails.id,
-                bankName: bankDetails.bankName,
-                ifscCode: bankDetails.ifscCode,
-                accountNumber: bankDetails.accountNumber,
-                isPrimary: bankDetails.isPrimary || false,
-                bankImage: bankImage ? `${process.env.AWS_CDN_URL}/${bankImage}` : null
-            };
-        }));
-        
-        return res.success({ message: 'All bank details retrieved successfully', data: bankDataList });
-    }
-    catch (error) {
-        console.error('All bank details error:', error);
-        return res.failure({ 
-            message: error.message || 'Unable to retrieve bank details' 
-        });
-    }
-}
-
 module.exports = {
     fundTransferRequest,
     approveFundRequest,
-    getFundRequests,
-    getFundHistory,
-    allbankDetails
+    getFundRequests
 };
