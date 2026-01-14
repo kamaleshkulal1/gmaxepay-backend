@@ -3,6 +3,56 @@ const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
 const { Op } = require('sequelize');
+const { decrypt } = require('../../../utils/encryption');
+
+const processFundRequestData = (data) => {
+    if (!data) return data;
+
+    // Handle array of records
+    if (Array.isArray(data)) {
+        return data.map(record => processFundRequestData(record));
+    }
+
+    // Process single record
+    const processed = { ...data.dataValues || data };
+
+    // Decrypt and add CDN URL for requester profileImage
+    if (processed.requester) {
+        const requester = { ...(processed.requester.dataValues || processed.requester) };
+        if (requester.profileImage) {
+            try {
+                const decryptedImage = decrypt(requester.profileImage);
+                requester.profileImage = `${process.env.AWS_CDN_URL}/${decryptedImage}`;
+            } catch (e) {
+                // If decryption fails, set to null
+                requester.profileImage = null;
+            }
+        }
+        processed.requester = requester;
+    }
+
+    // Decrypt and add CDN URL for approver profileImage
+    if (processed.approver) {
+        const approver = { ...(processed.approver.dataValues || processed.approver) };
+        if (approver.profileImage) {
+            try {
+                const decryptedImage = decrypt(approver.profileImage);
+                approver.profileImage = `${process.env.AWS_CDN_URL}/${decryptedImage}`;
+            } catch (e) {
+                // If decryption fails, set to null
+                approver.profileImage = null;
+            }
+        }
+        processed.approver = approver;
+    }
+
+    // Add CDN URL for paySlip
+    if (processed.paySlip) {
+        processed.paySlip = `${process.env.AWS_CDN_URL}/${processed.paySlip}`;
+    }
+
+    return processed;
+};
 
 const fundTransferRequest = async (req, res) => {
     try {
@@ -499,9 +549,12 @@ const getFundRequests = async (req, res) => {
         // Use paginate for consistent pagination response
         const result = await dbService.paginate(model.fundRequest, query, options);
 
+        // Process data to decrypt profile images and add CDN URLs
+        const processedData = processFundRequestData(result?.data || []);
+
         return res.success({ 
             message: 'Fund requests retrieved successfully',
-            data: result?.data || [],
+            data: processedData,
             total: result?.total || 0,
             paginator: result?.paginator || {
                 page: options.page || 1,
@@ -640,9 +693,12 @@ const getFundHistory = async (req, res) => {
         // Use paginate for consistent pagination response
         const result = await dbService.paginate(model.fundHistory, query, options);
 
+        // Process data to decrypt profile images and add CDN URLs
+        const processedData = processFundRequestData(result?.data || []);
+
         return res.success({ 
             message: 'Fund history retrieved successfully',
-            data: result?.data || [],
+            data: processedData,
             total: result?.total || 0,
             paginator: result?.paginator || {
                 page: options.page || 1,
