@@ -236,7 +236,14 @@ const fundTransferRequest = async (req, res) => {
 const approveFundRequest = async (req, res) => {
     try {
         const { fundRequestId, action, approvalRemarks } = req.body;
-
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
         // Validate required fields
         if (!fundRequestId || !action) {
             return res.failure({ 
@@ -423,10 +430,6 @@ const approveFundRequest = async (req, res) => {
                     // Format amount with 2 decimal places
                     const formattedAmount = parseFloat(transferAmount).toFixed(2);
 
-                    // Send SMS notification
-                    const smsMessage = `Dear ${requester.name || 'User'}, your fund request of ₹${formattedAmount} has been approved. Transaction ID: ${fundRequest.transactionId}. Amount credited to your wallet. Team Gmaxepay`;
-                    await amezesmsApi.sendSmsSuccess(requester.mobileNo, smsMessage);
-
                     // Send Email notification
                     if (requester.email) {
                         await emailService.sendFundApprovalEmail({
@@ -434,6 +437,8 @@ const approveFundRequest = async (req, res) => {
                             userName: requester.name || 'User',
                             amount: formattedAmount,
                             transactionId: fundRequest.transactionId,
+                            companyName: company.companyName,
+                            approverName: existingUser.name || req.user.name,
                             logoUrl: logoUrl,
                             illustrationUrl: illustrationUrl
                         });
