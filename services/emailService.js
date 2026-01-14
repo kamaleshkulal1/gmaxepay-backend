@@ -3,17 +3,7 @@ const { transport } = require('../config/nodemailer.config');
 const fs = require('fs');
 const path = require('path');
 
-/**
- * Send welcome email with onboarding link
- * @param {Object} options - Email options
- * @param {String} options.to - Recipient email
- * @param {String} options.userName - User name
- * @param {String} options.onboardingLink - Onboarding link URL
- * @param {String} options.logoUrl - Company logo URL
- * @param {String} options.iconUrl - Mail icons URL
- * @param {String} options.expiryTime - Expiry time string (e.g., "6 days")
- * @returns {Promise<Object>}
- */
+
 const sendWelcomeEmail = async ({
   to,
   userName,
@@ -75,17 +65,7 @@ module.exports = {
   sendWelcomeEmail
 };
 
-/**
- * Send notification email (for account unlock, KYC revert, etc.)
- * @param {Object} options
- * @param {string} options.to
- * @param {string} options.userName
- * @param {string} options.subject
- * @param {string} options.successMessage - Main success message (e.g., "Your account has been unlocked successfully")
- * @param {string} options.message - Additional message text
- * @param {string} options.logoUrl
- * @param {string} options.illustrationUrl
- */
+
 module.exports.sendNotificationEmail = async ({ 
   to, 
   userName, 
@@ -122,14 +102,7 @@ module.exports.sendNotificationEmail = async ({
   }
 };
 
-/**
- * Send OTP email for verification
- * @param {Object} options
- * @param {string} options.to
- * @param {string} options.userName
- * @param {string} options.otp
- * @param {number} options.expiryMinutes
- */
+
 module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, logoUrl, illustrationUrl }) => {
   try {
     const templatePath = path.join(__dirname, '../mailTemplate/emailOtp.html');
@@ -158,15 +131,7 @@ module.exports.sendOtpEmail = async ({ to, userName, otp, expiryMinutes = 3, log
   }
 };
 
-/**
- * Send temporary password email after onboarding completion
- * @param {Object} options
- * @param {string} options.to
- * @param {string} options.userName
- * @param {string} options.tempPassword
- * @param {string} options.logoUrl
- * @param {string} options.illustrationUrl
- */
+
 module.exports.sendTempPasswordEmail = async ({ to, userName, tempPassword, logoUrl, illustrationUrl }) => {
   try {
     const templatePath = path.join(__dirname, '../mailTemplate/tempPasswordEmail.html');
@@ -194,17 +159,7 @@ module.exports.sendTempPasswordEmail = async ({ to, userName, tempPassword, logo
   }
 };
 
-/**
- * Send MPIN set/reset notification email
- * @param {Object} options
- * @param {string} options.to
- * @param {string} options.userName
- * @param {string} options.userEmail
- * @param {string} options.userMobile
- * @param {string} options.actionType - 'set' or 'reset'
- * @param {string} options.logoUrl
- * @param {string} options.illustrationUrl
- */
+
 module.exports.sendMPINSetEmail = async ({ 
   to, 
   userName, 
@@ -251,6 +206,42 @@ module.exports.sendMPINSetEmail = async ({
   } catch (error) {
     console.error('Error sending MPIN set email:', error);
     throw new Error(`Failed to send MPIN set email: ${error.message}`);
+  }
+};
+
+
+module.exports.sendFundApprovalEmail = async ({ 
+  to, 
+  userName, 
+  amount, 
+  transactionId, 
+  logoUrl, 
+  illustrationUrl 
+}) => {
+  try {
+    const templatePath = path.join(__dirname, '../mailTemplate/fundApprovalEmail.html');
+    let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
+
+    htmlTemplate = htmlTemplate.replace(/{{USER_NAME}}/g, userName || 'User');
+    htmlTemplate = htmlTemplate.replace(/{{AMOUNT}}/g, amount || '0.00');
+    htmlTemplate = htmlTemplate.replace(/{{TRANSACTION_ID}}/g, transactionId || '');
+    htmlTemplate = htmlTemplate.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
+    htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
+    htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, illustrationUrl || '');
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
+      to,
+      subject: 'Fund Request Approved - Gmaxepay',
+      html: htmlTemplate,
+      text: `Dear ${userName},\n\nYour fund request has been approved successfully!\n\nAmount: ₹${amount}\nTransaction ID: ${transactionId}\n\nThe amount has been credited to your wallet. You can now use it for your transactions.\n\nBest regards,\nGMAXEPAY Team`
+    };
+
+    const info = await transport.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId, response: info.response };
+  } catch (error) {
+    console.error('Error sending fund approval email:', error);
+    throw new Error(`Failed to send fund approval email: ${error.message}`);
   }
 };
 
