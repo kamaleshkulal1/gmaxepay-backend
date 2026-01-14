@@ -466,12 +466,9 @@ const allbankDetails = async (req, res) => {
             bankId: bankDetails.id,
             bankName: bankDetails.bankName,
             ifscCode: bankDetails.ifscCode,
-            accountNumber: bankDetails.accountNumber
+            accountNumber: bankDetails.accountNumber,
+            bankImage: bankImage || null
         };
-        
-        if(bankImage){
-            bankData.bankImage = bankImage;
-        }
         
         return res.success({ message: 'Bank details retrieved successfully', data: bankData });
     }
