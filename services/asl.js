@@ -167,12 +167,14 @@ const aslAepsValidateAgentOtp = async (data) => {
 // ASL AEPS Validate Agent Biometric
 const aslAepsValidateAgentBiometric = async (data) => {
   try{
+    const payload = {
+      associateId: aslAssociateId,
+      apiToken: aslApiToken,
+      ...data
+    };
+    console.log("Complete Payload:", JSON.stringify(payload, null, 2));
     const response = await axios.post(`${aslUrl}/aeps/v1/biometricValidate`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
+        payload, {
             headers: {
                 'Content-Type': 'application/json'
             }
