@@ -13,8 +13,10 @@ router.post('/bank-kyc-validate-otp', authentication, aepsController.bankKycVali
 router.post('/bank-kyc-biometric-validate', authentication, aepsController.bankKycBiometricValidate);
 router.post('/2fa-authentication', authentication, aepsController.aeps2FaAuthentication);
 router.post('/transaction', authentication, aepsController.aepsTransaction);
+router.post('/check-status', authentication, aepsController.checkStatus);
 router.post('/recent-banks', authentication, aepsController.recentBanks);
 router.post('/transaction-history', authentication, aepsController.aepsTransactionHistory);
+
 
 
 module.exports = router;

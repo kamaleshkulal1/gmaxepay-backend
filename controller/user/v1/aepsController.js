@@ -1564,6 +1564,48 @@ const aepsTransaction = async (req, res) => {
     }
 }
 
+const checkStatus = async (req, res) => {
+    try {
+        const {txnId} = req.body;
+        if (!txnId) {
+            return res.failure({ message: 'Transaction ID is required' });
+        }
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,    
+            companyId: req.user.companyId,
+            isActive: true  
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
+        const statusData = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+            txnId: txnId,
+        }   
+        const response = await asl.aslAepsCheckStatus(statusData);
+        console.log("response",response);
+        if (response.status === 'SUCCESS') {    
+            return res.success({ message: 'AEPS transaction status', data: response.data });
+        } else {
+            return res.failure({ message: 'AEPS transaction status', data: response.data });
+        }
+    }
+    catch (error) {
+        console.error('Check status error', error);
+        return res.failure({ message: error.message || 'Unable to check status' });
+    }
+}
+
 const recentBanks = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, { 
@@ -1742,6 +1784,7 @@ module.exports = {
     bankKycBiometricValidate,
     aeps2FaAuthentication ,
     aepsTransaction,
+    checkStatus,
     recentBanks,
     aepsTransactionHistory
 };
