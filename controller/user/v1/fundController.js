@@ -282,7 +282,7 @@ const approveFundRequest = async (req, res) => {
             updatedBy: req.user.id
         };
 
-        await dbService.updateOne(
+        await dbService.update(
             model.fundRequest, 
             { id: fundRequestId }, 
             updateData
@@ -302,11 +302,11 @@ const approveFundRequest = async (req, res) => {
                 return res.failure({ message: 'Approver wallet not found' });
             }
 
-            // Check if approver has sufficient balance
-            const approverBalance = parseFloat(approverWallet.balance) || 0;
+            // Check if approver has sufficient balance in main wallet
+            const approverBalance = parseFloat(approverWallet.mainWallet) || 0;
             if (approverBalance < transferAmount) {
                 return res.failure({ 
-                    message: `Insufficient balance. Available: ${approverBalance}, Required: ${transferAmount}` 
+                    message: `Insufficient wallet balance. Available: ${approverBalance}, Required: ${transferAmount}` 
                 });
             }
 
@@ -324,14 +324,14 @@ const approveFundRequest = async (req, res) => {
             const approverOpeningBalance = approverBalance;
             const approverClosingBalance = approverBalance - transferAmount;
 
-            const requesterOpeningBalance = parseFloat(requesterWallet.balance) || 0;
+            const requesterOpeningBalance = parseFloat(requesterWallet.mainWallet) || 0;
             const requesterClosingBalance = requesterOpeningBalance + transferAmount;
 
             // Debit from approver's wallet
-            await dbService.updateOne(
+            await dbService.update(
                 model.wallet,
                 { refId: req.user.id, companyId: req.user.companyId },
-                { balance: approverClosingBalance }
+                { mainWallet: approverClosingBalance }
             );
 
             // Create wallet history entry for approver (DEBIT)
@@ -353,10 +353,10 @@ const approveFundRequest = async (req, res) => {
             await dbService.createOne(model.walletHistory, approverWalletHistoryData);
 
             // Credit to requester's wallet
-            await dbService.updateOne(
+            await dbService.update(
                 model.wallet,
                 { refId: fundRequest.refId, companyId: req.user.companyId },
-                { balance: requesterClosingBalance }
+                { mainWallet: requesterClosingBalance }
             );
 
             // Create wallet history entry for requester (CREDIT)
@@ -388,7 +388,7 @@ const approveFundRequest = async (req, res) => {
                 updatedBy: req.user.id
             };
 
-            await dbService.updateOne(
+            await dbService.update(
                 model.fundHistory,
                 { fundRequestId: fundRequest.id },
                 fundHistoryUpdateData
