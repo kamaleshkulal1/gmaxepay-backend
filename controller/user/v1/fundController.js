@@ -422,41 +422,72 @@ const getFundRequests = async (req, res) => {
         ];
 
         // Handle customSearch (iLike search on multiple fields)
+        // Only support: name, transactionId
         if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
             const keys = Object.keys(dataToFind.customSearch);
             const searchOrConditions = [];
+            let nameSearchValue = null;
 
-            keys.forEach((key) => {
+            for (const key of keys) {
                 const value = dataToFind.customSearch[key];
-                if (value === undefined || value === null || String(value).trim() === '') return;
+                if (value === undefined || value === null || String(value).trim() === '') continue;
 
-                // Check if searching by userName (search in requester or approver name)
+                // Handle name search separately
                 if (key === 'userName' || key === 'name') {
-                    searchOrConditions.push({
-                        '$requester.name$': {
-                            [Op.iLike]: `%${String(value).trim()}%`
-                        }
-                    });
-                    searchOrConditions.push({
-                        '$approver.name$': {
-                            [Op.iLike]: `%${String(value).trim()}%`
-                        }
-                    });
-                } else {
-                    // Regular field search
+                    nameSearchValue = String(value).trim();
+                } else if (key === 'transactionId') {
+                    // Direct field search in fundRequest table
                     searchOrConditions.push({
                         [key]: {
                             [Op.iLike]: `%${String(value).trim()}%`
                         }
                     });
                 }
-            });
+            }
+
+            // If searching by name, find matching user IDs first
+            if (nameSearchValue) {
+                const matchingUsers = await dbService.findAll(model.user, {
+                    companyId: req.user.companyId,
+                    name: {
+                        [Op.iLike]: `%${nameSearchValue}%`
+                    },
+                    isActive: true,
+                    isDeleted: false
+                }, {
+                    attributes: ['id']
+                });
+
+                const userIds = matchingUsers.map(u => u.id);
+                
+                if (userIds.length > 0) {
+                    // Add condition to filter by these user IDs (either as requester or approver)
+                    searchOrConditions.push({
+                        [Op.or]: [
+                            { refId: { [Op.in]: userIds } },
+                            { approvalRefId: { [Op.in]: userIds } }
+                        ]
+                    });
+                } else {
+                    // No users found with that name, return empty results
+                    return res.success({ 
+                        message: 'Fund requests retrieved successfully',
+                        data: [],
+                        total: 0,
+                        paginator: {
+                            page: options.page || 1,
+                            paginate: options.paginate || 10,
+                            totalPages: 0
+                        }
+                    });
+                }
+            }
 
             if (searchOrConditions.length > 0) {
-                // Combine base OR condition with search OR condition using AND
+                // Combine base OR condition with search conditions using AND
                 query[Op.and] = [
                     { [Op.or]: baseOrCondition },
-                    { [Op.or]: searchOrConditions }
+                    { [Op.and]: searchOrConditions }
                 ];
             } else {
                 query[Op.or] = baseOrCondition;
@@ -472,7 +503,11 @@ const getFundRequests = async (req, res) => {
             message: 'Fund requests retrieved successfully',
             data: result?.data || [],
             total: result?.total || 0,
-            paginator: result?.paginator
+            paginator: result?.paginator || {
+                page: options.page || 1,
+                paginate: options.paginate || 10,
+                totalPages: 0
+            }
         });
 
     } catch (error) {
@@ -536,38 +571,69 @@ const getFundHistory = async (req, res) => {
         ];
 
         // Handle customSearch (iLike search on multiple fields)
+        // Only support: name, transactionId
         if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
             const keys = Object.keys(dataToFind.customSearch);
             const searchOrConditions = [];
+            let nameSearchValue = null;
 
-            keys.forEach((key) => {
+            for (const key of keys) {
                 const value = dataToFind.customSearch[key];
-                if (value === undefined || value === null || String(value).trim() === '') return;
+                if (value === undefined || value === null || String(value).trim() === '') continue;
 
-                // Check if searching by userName (search in requester or approver name)
+                // Handle name search separately
                 if (key === 'userName' || key === 'name') {
-                    searchOrConditions.push({
-                        '$requester.name$': {
-                            [Op.iLike]: `%${String(value).trim()}%`
-                        }
-                    });
-                    searchOrConditions.push({
-                        '$approver.name$': {
-                            [Op.iLike]: `%${String(value).trim()}%`
-                        }
-                    });
-                } else {
-                    // Regular field search
+                    nameSearchValue = String(value).trim();
+                } else if (key === 'transactionId') {
+                    // Direct field search in fundHistory table
                     searchOrConditions.push({
                         [key]: {
                             [Op.iLike]: `%${String(value).trim()}%`
                         }
                     });
                 }
-            });
+            }
+
+            // If searching by name, find matching user IDs first
+            if (nameSearchValue) {
+                const matchingUsers = await dbService.findAll(model.user, {
+                    companyId: req.user.companyId,
+                    name: {
+                        [Op.iLike]: `%${nameSearchValue}%`
+                    },
+                    isActive: true,
+                    isDeleted: false
+                }, {
+                    attributes: ['id']
+                });
+
+                const userIds = matchingUsers.map(u => u.id);
+                
+                if (userIds.length > 0) {
+                    // Add condition to filter by these user IDs (either as requester or approver)
+                    searchOrConditions.push({
+                        [Op.or]: [
+                            { refId: { [Op.in]: userIds } },
+                            { approvalRefId: { [Op.in]: userIds } }
+                        ]
+                    });
+                } else {
+                    // No users found with that name, return empty results
+                    return res.success({ 
+                        message: 'Fund history retrieved successfully',
+                        data: [],
+                        total: 0,
+                        paginator: {
+                            page: options.page || 1,
+                            paginate: options.paginate || 10,
+                            totalPages: 0
+                        }
+                    });
+                }
+            }
 
             if (searchOrConditions.length > 0) {
-                query[Op.or] = searchOrConditions;
+                query[Op.and] = searchOrConditions;
             }
         }
 
@@ -578,7 +644,11 @@ const getFundHistory = async (req, res) => {
             message: 'Fund history retrieved successfully',
             data: result?.data || [],
             total: result?.total || 0,
-            paginator: result?.paginator
+            paginator: result?.paginator || {
+                page: options.page || 1,
+                paginate: options.paginate || 10,
+                totalPages: 0
+            }
         });
 
     } catch (error) {
