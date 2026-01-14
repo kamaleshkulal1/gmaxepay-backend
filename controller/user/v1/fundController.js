@@ -438,10 +438,15 @@ const getFundHistory = async (req, res) => {
 
 const allbankDetails = async (req, res) => {
     try {
-        if(!req.user){
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId, isActive: true });
+        if(!existingUser){
             return res.failure({ message: 'User not found' });
         }
-        const bankDetails = await dbService.findOne(model.customerBank, { companyId: req.user.companyId, isPrimary: true });
+        const reportingUser = await dbService.findOne(model.user, { id: existingUser.reportingTo, companyId: req.user.companyId, isActive: true });
+        if(!reportingUser){
+            return res.failure({ message: 'Reporting user not found' });
+        }
+        const bankDetails = await dbService.findOne(model.customerBank, { refId: reportingUser.id, companyId: reportingUser.companyId, isPrimary: true });
         if(!bankDetails){
             return res.failure({ message: 'Bank details not found' });
         }
@@ -458,7 +463,7 @@ const allbankDetails = async (req, res) => {
         }
         
         const bankData = {
-            id: bankDetails.id,
+            bankId: bankDetails.id,
             bankName: bankDetails.bankName,
             ifscCode: bankDetails.ifscCode,
             accountNumber: bankDetails.accountNumber
