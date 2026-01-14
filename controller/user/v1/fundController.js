@@ -453,14 +453,12 @@ const allbankDetails = async (req, res) => {
         
         let bankImage = null;
         const bankImage1 = await dbService.findOne(model.practomindBankList, { bankName: bankDetails.bankName });
-        console.log("bankImage1", bankImage1);
-        if(bankImage1 && bankImage1.image){
-            bankImage = bankImage1.image;
+        if(bankImage1 && bankImage1.bankLogo){
+            bankImage = bankImage1.bankLogo;
         } else {
             const bankImage2 = await dbService.findOne(model.aslBankList, { bankName: bankDetails.bankName });
-            console.log("bankImage2", bankImage2);
-            if(bankImage2 && bankImage2.image){
-                bankImage = bankImage2.image;
+            if(bankImage2 && bankImage2.bankLogo){
+                bankImage = bankImage2.bankLogo;
             }
         }
         
@@ -469,7 +467,7 @@ const allbankDetails = async (req, res) => {
             bankName: bankDetails.bankName,
             ifscCode: bankDetails.ifscCode,
             accountNumber: bankDetails.accountNumber,
-            bankImage: bankImage || null
+            bankImage: imageService.getImageUrl(bankImage) || null
         };
         
         return res.success({ message: 'Bank details retrieved successfully', data: bankData });
