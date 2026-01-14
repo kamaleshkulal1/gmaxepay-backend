@@ -416,7 +416,7 @@ const getFundRequests = async (req, res) => {
             {
                 model: model.customerBank,
                 as: 'bank',
-                attributes: ['id', 'bankName', 'accountNumber', 'ifscCode', 'accountHolderName'],
+                attributes: ['id', 'bankName', 'accountNumber', 'ifsc', 'beneficiaryName'],
                 required: false
             }
         ];
