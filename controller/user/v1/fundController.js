@@ -453,10 +453,12 @@ const allbankDetails = async (req, res) => {
         
         let bankImage = null;
         const bankImage1 = await dbService.findOne(model.practomindBankList, { bankName: bankDetails.bankName });
+        console.log("bankImage1", bankImage1);
         if(bankImage1 && bankImage1.image){
             bankImage = bankImage1.image;
         } else {
             const bankImage2 = await dbService.findOne(model.aslBankList, { bankName: bankDetails.bankName });
+            console.log("bankImage2", bankImage2);
             if(bankImage2 && bankImage2.image){
                 bankImage = bankImage2.image;
             }
