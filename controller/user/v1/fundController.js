@@ -2,6 +2,7 @@ const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
+const { Op } = require('sequelize');
 
 const fundTransferRequest = async (req, res) => {
     try {
@@ -362,37 +363,116 @@ const approveFundRequest = async (req, res) => {
     }
 };
 
+
 const getFundRequests = async (req, res) => {
     try {
-        const { status, page = 1, limit = 10 } = req.query;
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
 
-        const filter = {
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { 
             companyId: req.user.companyId,
             isActive: true,
             isDelete: false
         };
 
-        // Filter by refId (requests made by user) or approvalRefId (requests to approve)
-        filter.$or = [
+        // Base filter: by refId (requests made by user) or approvalRefId (requests to approve)
+        const baseOrCondition = [
             { refId: req.user.id },
             { approvalRefId: req.user.id }
         ];
 
-        if (status) {
-            filter.status = status;
+        // Build query from request body
+        if (dataToFind && dataToFind.query) {
+            query = { ...query, ...dataToFind.query };
         }
 
-        const options = {
-            page: parseInt(page),
-            paginate: parseInt(limit),
-            order: [['createdAt', 'DESC']]
-        };
+        // Handle options (pagination, sorting)
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+        }
 
-        const fundRequests = await dbService.paginate(model.fundRequest, filter, options);
+        // Add includes for user details (requester and approver)
+        options.include = [
+            {
+                model: model.user,
+                as: 'requester',
+                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
+                required: false
+            },
+            {
+                model: model.user,
+                as: 'approver',
+                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
+                required: false
+            },
+            {
+                model: model.customerBank,
+                as: 'bank',
+                attributes: ['id', 'bankName', 'accountNumber', 'ifscCode', 'accountHolderName'],
+                required: false
+            }
+        ];
+
+        // Handle customSearch (iLike search on multiple fields)
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const keys = Object.keys(dataToFind.customSearch);
+            const searchOrConditions = [];
+
+            keys.forEach((key) => {
+                const value = dataToFind.customSearch[key];
+                if (value === undefined || value === null || String(value).trim() === '') return;
+
+                // Check if searching by userName (search in requester or approver name)
+                if (key === 'userName' || key === 'name') {
+                    searchOrConditions.push({
+                        '$requester.name$': {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                    searchOrConditions.push({
+                        '$approver.name$': {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                } else {
+                    // Regular field search
+                    searchOrConditions.push({
+                        [key]: {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                }
+            });
+
+            if (searchOrConditions.length > 0) {
+                // Combine base OR condition with search OR condition using AND
+                query[Op.and] = [
+                    { [Op.or]: baseOrCondition },
+                    { [Op.or]: searchOrConditions }
+                ];
+            } else {
+                query[Op.or] = baseOrCondition;
+            }
+        } else {
+            query[Op.or] = baseOrCondition;
+        }
+
+        // Use paginate for consistent pagination response
+        const result = await dbService.paginate(model.fundRequest, query, options);
 
         return res.success({ 
             message: 'Fund requests retrieved successfully',
-            data: fundRequests
+            data: result?.data || [],
+            total: result?.total || 0,
+            paginator: result?.paginator
         });
 
     } catch (error) {
@@ -405,26 +485,100 @@ const getFundRequests = async (req, res) => {
 
 const getFundHistory = async (req, res) => {
     try {
-        const { page = 1, limit = 10 } = req.query;
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
 
-        const filter = {
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { 
             companyId: req.user.companyId,
             refId: req.user.id,
             isActive: true,
             isDelete: false
         };
 
-        const options = {
-            page: parseInt(page),
-            paginate: parseInt(limit),
-            order: [['approvedAt', 'DESC']]
-        };
+        // Build query from request body
+        if (dataToFind && dataToFind.query) {
+            query = { ...query, ...dataToFind.query };
+        }
 
-        const fundHistory = await dbService.paginate(model.fundHistory, filter, options);
+        // Handle options (pagination, sorting)
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+        }
+
+        // Add includes for user details (requester and approver)
+        options.include = [
+            {
+                model: model.user,
+                as: 'requester',
+                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
+                required: false
+            },
+            {
+                model: model.user,
+                as: 'approver',
+                attributes: ['id', 'name', 'profileImage', 'email', 'mobileNo', 'userRole'],
+                required: false
+            },
+            {
+                model: model.fundRequest,
+                as: 'fundRequest',
+                attributes: ['id', 'transactionId', 'amount', 'status', 'paymentMode', 'transactionDate'],
+                required: false
+            }
+        ];
+
+        // Handle customSearch (iLike search on multiple fields)
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const keys = Object.keys(dataToFind.customSearch);
+            const searchOrConditions = [];
+
+            keys.forEach((key) => {
+                const value = dataToFind.customSearch[key];
+                if (value === undefined || value === null || String(value).trim() === '') return;
+
+                // Check if searching by userName (search in requester or approver name)
+                if (key === 'userName' || key === 'name') {
+                    searchOrConditions.push({
+                        '$requester.name$': {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                    searchOrConditions.push({
+                        '$approver.name$': {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                } else {
+                    // Regular field search
+                    searchOrConditions.push({
+                        [key]: {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                }
+            });
+
+            if (searchOrConditions.length > 0) {
+                query[Op.or] = searchOrConditions;
+            }
+        }
+
+        // Use paginate for consistent pagination response
+        const result = await dbService.paginate(model.fundHistory, query, options);
 
         return res.success({ 
             message: 'Fund history retrieved successfully',
-            data: fundHistory
+            data: result?.data || [],
+            total: result?.total || 0,
+            paginator: result?.paginator
         });
 
     } catch (error) {
