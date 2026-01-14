@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const fundController = require('../../../controller/user/v1/fundController');
 const authentication = require('../../../middleware/authentication');
-const uploadKyc = require('../../../middleware/upload');
+const { uploadSingle, multer } = require('../../../middleware/multerConfig');
 
 // Create fund transfer request (with optional payslip upload)
 router.post(
     '/fund-transfer-request', 
     authentication, 
-    uploadKyc.single('paySlip'), 
+    uploadSingle('paySlip'),
+    multer,
     fundController.fundTransferRequest
 );
 

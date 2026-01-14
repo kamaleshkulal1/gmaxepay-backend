@@ -18,7 +18,8 @@ let PractomindBankList = sequelize.define(
     },
     aeps_bank_id: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
+      unique: true
     },
     bankName: {
       type: DataTypes.STRING,
