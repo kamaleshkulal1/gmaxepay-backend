@@ -215,6 +215,7 @@ module.exports.sendFundApprovalEmail = async ({
   userName, 
   amount, 
   transactionId, 
+  approverName,
   logoUrl, 
   illustrationUrl 
 }) => {
@@ -229,12 +230,16 @@ module.exports.sendFundApprovalEmail = async ({
     htmlTemplate = htmlTemplate.replace(/{{LOGO_URL}}/g, logoUrl || '');
     htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, illustrationUrl || '');
 
+    const subject = approverName 
+      ? `Fund Request Approved by ${approverName} - Gmaxepay`
+      : 'Fund Request Approved - Gmaxepay';
+
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USERNAME,
       to,
-      subject: 'Fund Request Approved - Gmaxepay',
+      subject: subject,
       html: htmlTemplate,
-      text: `Dear ${userName},\n\nYour fund request has been approved successfully!\n\nAmount: ₹${amount}\nTransaction ID: ${transactionId}\n\nThe amount has been credited to your wallet. You can now use it for your transactions.\n\nBest regards,\nGMAXEPAY Team`
+      text: `Dear ${userName},\n\nYour fund request has been approved successfully${approverName ? ` by ${approverName}` : ''}!\n\nAmount: ₹${amount}\nTransaction ID: ${transactionId}\n\nThe amount has been credited to your wallet. You can now use it for your transactions.\n\nBest regards,\nGMAXEPAY Team`
     };
 
     const info = await transport.sendMail(mailOptions);
