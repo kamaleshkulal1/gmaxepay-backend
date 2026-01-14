@@ -467,7 +467,7 @@ const allbankDetails = async (req, res) => {
             bankName: bankDetails.bankName,
             ifscCode: bankDetails.ifscCode,
             accountNumber: bankDetails.accountNumber,
-            bankImage: imageService.getImageUrl(bankImage) || null
+            bankImage: `${process.env.CDN_URL}/${bankImage}` || null
         };
         
         return res.success({ message: 'Bank details retrieved successfully', data: bankData });
