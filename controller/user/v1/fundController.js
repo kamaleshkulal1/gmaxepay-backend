@@ -267,30 +267,10 @@ const approveFundRequest = async (req, res) => {
             });
         }
 
-        // Check if already processed or being processed
+        // Check if already processed
         if (fundRequest.status !== 'PENDING') {
             return res.failure({ 
                 message: `This request has already been ${fundRequest.status.toLowerCase()}` 
-            });
-        }
-
-        // Set status to PROCESSING to prevent concurrent approval attempts
-        await dbService.update(
-            model.fundRequest, 
-            { id: fundRequestId, status: 'PENDING' }, // Add status condition to prevent race condition
-            { status: 'PROCESSING', updatedBy: req.user.id }
-        );
-
-        // Verify the update was successful (in case of concurrent requests)
-        const processingRequest = await dbService.findOne(model.fundRequest, {
-            id: fundRequestId,
-            status: 'PROCESSING',
-            updatedBy: req.user.id
-        });
-
-        if (!processingRequest) {
-            return res.failure({ 
-                message: 'This request is already being processed by another user' 
             });
         }
 
@@ -305,25 +285,12 @@ const approveFundRequest = async (req, res) => {
             });
 
             if (!approverWallet) {
-                // Revert status back to PENDING
-                await dbService.update(
-                    model.fundRequest,
-                    { id: fundRequestId },
-                    { status: 'PENDING', updatedBy: req.user.id }
-                );
                 return res.failure({ message: 'Approver wallet not found' });
             }
 
             // Check if approver has sufficient balance in main wallet
             const approverBalance = parseFloat(approverWallet.mainWallet) || 0;
             if (approverBalance < transferAmount) {
-                // Revert status back to PENDING if insufficient balance
-                await dbService.update(
-                    model.fundRequest,
-                    { id: fundRequestId },
-                    { status: 'PENDING', updatedBy: req.user.id }
-                );
-                
                 return res.failure({ 
                     message: `Insufficient wallet balance. Available: ${approverBalance}, Required: ${transferAmount}` 
                 });
@@ -336,12 +303,6 @@ const approveFundRequest = async (req, res) => {
             });
 
             if (!requesterWallet) {
-                // Revert status back to PENDING
-                await dbService.update(
-                    model.fundRequest,
-                    { id: fundRequestId },
-                    { status: 'PENDING', updatedBy: req.user.id }
-                );
                 return res.failure({ message: 'Requester wallet not found' });
             }
 
@@ -419,10 +380,10 @@ const approveFundRequest = async (req, res) => {
                 fundHistoryUpdateData
             );
 
-            // Update final status to APPROVED
-            await dbService.update(
+            // Update final status to APPROVED (only if still PENDING to prevent race condition)
+            const approvedUpdate = await dbService.update(
                 model.fundRequest,
-                { id: fundRequestId },
+                { id: fundRequestId, status: 'PENDING' },
                 { 
                     status: 'APPROVED',
                     approvalRemarks: approvalRemarks || null,
@@ -430,11 +391,18 @@ const approveFundRequest = async (req, res) => {
                     updatedBy: req.user.id
                 }
             );
+
+            // Check if update was successful
+            if (!approvedUpdate || approvedUpdate[0] === 0) {
+                return res.failure({ 
+                    message: 'This request has already been processed by another user' 
+                });
+            }
         } else {
-            // Update final status to REJECTED
-            await dbService.update(
+            // Update final status to REJECTED (only if still PENDING to prevent race condition)
+            const rejectedUpdate = await dbService.update(
                 model.fundRequest,
-                { id: fundRequestId },
+                { id: fundRequestId, status: 'PENDING' },
                 { 
                     status: 'REJECTED',
                     approvalRemarks: approvalRemarks || null,
@@ -442,6 +410,13 @@ const approveFundRequest = async (req, res) => {
                     updatedBy: req.user.id
                 }
             );
+
+            // Check if update was successful
+            if (!rejectedUpdate || rejectedUpdate[0] === 0) {
+                return res.failure({ 
+                    message: 'This request has already been processed by another user' 
+                });
+            }
         }
 
         return res.success({ 
@@ -456,20 +431,6 @@ const approveFundRequest = async (req, res) => {
 
     } catch (error) {
         console.error('Approve fund request error:', error);
-        
-        // Revert status back to PENDING if error occurs during processing
-        try {
-            if (fundRequestId) {
-                await dbService.update(
-                    model.fundRequest,
-                    { id: fundRequestId, status: 'PROCESSING' },
-                    { status: 'PENDING' }
-                );
-            }
-        } catch (revertError) {
-            console.error('Error reverting fund request status:', revertError);
-        }
-        
         return res.failure({ 
             message: error.message || 'Unable to process fund request approval' 
         });
