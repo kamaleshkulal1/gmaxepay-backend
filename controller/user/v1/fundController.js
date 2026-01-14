@@ -437,6 +437,7 @@ const approveFundRequest = async (req, res) => {
                             userName: requester.name || 'User',
                             amount: formattedAmount,
                             transactionId: fundRequest.transactionId,
+                            companyName: company.companyName,
                             approverName: existingUser.name || req.user.name,
                             logoUrl: logoUrl,
                             illustrationUrl: illustrationUrl

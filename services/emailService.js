@@ -212,6 +212,7 @@ module.exports.sendMPINSetEmail = async ({
 
 module.exports.sendFundApprovalEmail = async ({ 
   to, 
+  companyName,
   userName, 
   amount, 
   transactionId, 
@@ -231,7 +232,7 @@ module.exports.sendFundApprovalEmail = async ({
     htmlTemplate = htmlTemplate.replace(/{{ILLUSTRATION_URL}}/g, illustrationUrl || '');
 
     const subject = approverName 
-      ? `Fund Request Approved by ${approverName} - Gmaxepay`
+      ? `Fund Request Approved by ${approverName} - ${companyName}`
       : 'Fund Request Approved - Gmaxepay';
 
     const mailOptions = {
