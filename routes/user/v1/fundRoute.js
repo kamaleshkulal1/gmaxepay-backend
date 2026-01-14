@@ -5,13 +5,7 @@ const authentication = require('../../../middleware/authentication');
 const { upload, multer } = require('../../../middleware/multerConfig');
 
 // Create fund transfer request (with optional payslip upload)
-router.post(
-    '/fund-transfer-request', 
-    authentication, 
-    upload.single('paySlip'),
-    multer,
-    fundController.fundTransferRequest
-);
+router.post('/fund-transfer-request', authentication, upload.single('paySlip'), multer, fundController.fundTransferRequest);
 
 // Approve or reject fund request
 router.post(
