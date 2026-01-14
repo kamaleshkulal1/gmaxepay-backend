@@ -5,12 +5,6 @@ const imageService = require('../../../services/imageService');
 
 const fundTransferRequest = async (req, res) => {
     try {
-        console.log('=== Fund Transfer Request Debug ===');
-        console.log('Body:', req.body);
-        console.log('File:', req.file ? 'File present' : 'No file');
-        console.log('Content-Type:', req.headers['content-type']);
-        console.log('===================================');
-
         const { amount, paymentMode, transactionDate, bankId, referenceNo, remarks } = req.body;
 
         if (!amount || !paymentMode || !transactionDate || !bankId) {
