@@ -255,7 +255,6 @@ const approveFundRequest = async (req, res) => {
             id: fundRequestId,
             companyId: req.user.companyId,
             isActive: true,
-            isDelete: false
         });
 
         if (!fundRequest) {
@@ -405,8 +404,7 @@ const approveFundRequest = async (req, res) => {
                 dbService.findOne(model.user, {
                     id: fundRequest.refId,
                     companyId: req.user.companyId,
-                    isActive: true,
-                    isDelete: false
+                    isActive: true
                 }),
                 dbService.findOne(model.company, {
                     id: req.user.companyId
