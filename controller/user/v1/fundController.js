@@ -4,6 +4,8 @@ const { generateTransactionID } = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
 const { Op } = require('sequelize');
 const { decrypt } = require('../../../utils/encryption');
+const amezesmsApi = require('../../../services/amezesmsApi');
+const emailService = require('../../../services/emailService');
 
 const processFundRequestData = (data) => {
     if (!data) return data;
@@ -278,14 +280,24 @@ const approveFundRequest = async (req, res) => {
         if (action === 'APPROVED') {
             const transferAmount = parseFloat(fundRequest.amount);
 
-            // Get approver's wallet (debit from)
-            const approverWallet = await dbService.findOne(model.wallet, {
-                refId: req.user.id,
-                companyId: req.user.companyId
-            });
+            // Parallel fetch: Get both wallets simultaneously
+            const [approverWallet, requesterWallet] = await Promise.all([
+                dbService.findOne(model.wallet, {
+                    refId: req.user.id,
+                    companyId: req.user.companyId
+                }),
+                dbService.findOne(model.wallet, {
+                    refId: fundRequest.refId,
+                    companyId: req.user.companyId
+                })
+            ]);
 
             if (!approverWallet) {
                 return res.failure({ message: 'Approver wallet not found' });
+            }
+
+            if (!requesterWallet) {
+                return res.failure({ message: 'Requester wallet not found' });
             }
 
             // Check if approver has sufficient balance in main wallet
@@ -296,16 +308,6 @@ const approveFundRequest = async (req, res) => {
                 });
             }
 
-            // Get requester's wallet (credit to)
-            const requesterWallet = await dbService.findOne(model.wallet, {
-                refId: fundRequest.refId,
-                companyId: req.user.companyId
-            });
-
-            if (!requesterWallet) {
-                return res.failure({ message: 'Requester wallet not found' });
-            }
-
             // Calculate balances
             const approverOpeningBalance = approverBalance;
             const approverClosingBalance = approverBalance - transferAmount;
@@ -313,14 +315,7 @@ const approveFundRequest = async (req, res) => {
             const requesterOpeningBalance = parseFloat(requesterWallet.mainWallet) || 0;
             const requesterClosingBalance = requesterOpeningBalance + transferAmount;
 
-            // Debit from approver's wallet
-            await dbService.update(
-                model.wallet,
-                { refId: req.user.id, companyId: req.user.companyId },
-                { mainWallet: approverClosingBalance }
-            );
-
-            // Create wallet history entry for approver (DEBIT)
+            // Prepare wallet history data
             const approverWalletHistoryData = {
                 refId: req.user.id,
                 companyId: req.user.companyId,
@@ -336,16 +331,6 @@ const approveFundRequest = async (req, res) => {
                 createdAt: new Date()
             };
 
-            await dbService.createOne(model.walletHistory, approverWalletHistoryData);
-
-            // Credit to requester's wallet
-            await dbService.update(
-                model.wallet,
-                { refId: fundRequest.refId, companyId: req.user.companyId },
-                { mainWallet: requesterClosingBalance }
-            );
-
-            // Create wallet history entry for requester (CREDIT)
             const requesterWalletHistoryData = {
                 refId: fundRequest.refId,
                 companyId: req.user.companyId,
@@ -361,7 +346,23 @@ const approveFundRequest = async (req, res) => {
                 createdAt: new Date()
             };
 
-            await dbService.createOne(model.walletHistory, requesterWalletHistoryData);
+            // Parallel execution: Update wallets and create history entries simultaneously
+            await Promise.all([
+                // Update wallets
+                dbService.update(
+                    model.wallet,
+                    { refId: req.user.id, companyId: req.user.companyId },
+                    { mainWallet: approverClosingBalance }
+                ),
+                dbService.update(
+                    model.wallet,
+                    { refId: fundRequest.refId, companyId: req.user.companyId },
+                    { mainWallet: requesterClosingBalance }
+                ),
+                // Create wallet history entries
+                dbService.createOne(model.walletHistory, approverWalletHistoryData),
+                dbService.createOne(model.walletHistory, requesterWalletHistoryData)
+            ]);
 
             // Update existing fund history record from PENDING to CREDITED
             const fundHistoryUpdateData = {
@@ -397,6 +398,52 @@ const approveFundRequest = async (req, res) => {
                 return res.failure({ 
                     message: 'This request has already been processed by another user' 
                 });
+            }
+
+            // Parallel fetch: Get requester and company details simultaneously
+            const [requester, company] = await Promise.all([
+                dbService.findOne(model.user, {
+                    id: fundRequest.refId,
+                    companyId: req.user.companyId,
+                    isActive: true,
+                    isDelete: false
+                }),
+                dbService.findOne(model.company, {
+                    id: req.user.companyId
+                })
+            ]);
+
+            // Send SMS and Email notifications to requester
+            if (requester) {
+                try {
+
+                    // Build logo and illustration URLs
+                    const backendUrl = process.env.BASE_URL;
+                    const logoUrl = (company && company.logo) ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
+                    const illustrationUrl = `${backendUrl}/walletload.png`;
+
+                    // Format amount with 2 decimal places
+                    const formattedAmount = parseFloat(transferAmount).toFixed(2);
+
+                    // Send SMS notification
+                    const smsMessage = `Dear ${requester.name || 'User'}, your fund request of ₹${formattedAmount} has been approved. Transaction ID: ${fundRequest.transactionId}. Amount credited to your wallet. Team Gmaxepay`;
+                    await amezesmsApi.sendSmsSuccess(requester.mobileNo, smsMessage);
+
+                    // Send Email notification
+                    if (requester.email) {
+                        await emailService.sendFundApprovalEmail({
+                            to: requester.email,
+                            userName: requester.name || 'User',
+                            amount: formattedAmount,
+                            transactionId: fundRequest.transactionId,
+                            logoUrl: logoUrl,
+                            illustrationUrl: illustrationUrl
+                        });
+                    }
+                } catch (notificationError) {
+                    // Log error but don't fail the approval process
+                    console.error('Error sending notifications:', notificationError);
+                }
             }
         } else {
             // Update final status to REJECTED (only if still PENDING to prevent race condition)
