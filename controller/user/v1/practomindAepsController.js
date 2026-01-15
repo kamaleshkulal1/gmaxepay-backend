@@ -878,7 +878,7 @@ const cashWithdrawal = async (req, res) => {
                 mobileNumber: transactionData.mobileNumber,
                 latitude: transactionData.latitude,
                 longitude: transactionData.longitude,
-                adhaarNumber: transactionData.adhaarNumber,
+                adhaarNumber: transactionData.aadhaarNumber || aadhaarNumber,
                 nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
                 transactionAmount: transactionData.transactionAmount,
                 transactionId: transactionData.transactionId

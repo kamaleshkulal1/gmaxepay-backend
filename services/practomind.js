@@ -251,12 +251,12 @@ const practomindCashWithdrawal = async (data) => {
       merchantLoginId: data.merchantLoginId,
       latitude: data.latitude,
       longitude: data.longitude,
-      aadhaarNumber: data.adhaarNumber,
+      adhaarNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionAmount: data.transactionAmount,
       transactionId: data.transactionId
     };
-
+    console.log("tokenPayload", tokenPayload);
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
 
     const payload = {
@@ -293,11 +293,12 @@ const practomindBalanceEnquiry = async (data) => {
       merchantLoginId: data.merchantLoginId,
       latitude: data.latitude,
       longitude: data.longitude,
-      aadhaarNumber: data.aadhaarNumber,
+      adhaarNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionId: data.transactionId
     };
 
+    console.log("tokenPayload", tokenPayload);
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
 
     const payload = {
