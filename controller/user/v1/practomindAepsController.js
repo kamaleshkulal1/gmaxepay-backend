@@ -834,7 +834,7 @@ const cashWithdrawal = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             adhaarNumber: aadhaarNumber,
-            nationalBankIdenticationNumber: bankIIN,
+            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
             transactionAmount: transactionAmount,
             transactionId: transactionId,
             txtPidData: txtPidData
@@ -913,7 +913,7 @@ const cashWithdrawal = async (req, res) => {
 
 const balanceEnquiry = async (req, res) => {
     try {
-        const { latitude, longitude, txtPidData } = req.body;
+        const { latitude, longitude, txtPidData, bankIIN, aadhaarNumber ,customerNumber} = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -952,13 +952,9 @@ const balanceEnquiry = async (req, res) => {
         const existingCompany = await dbService.findOne(model.company, { 
             id: req.user.companyId 
         });
-        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
-            refId: existingUser.id, 
-            companyId: existingUser.companyId,
-            isPrimary: true
-        });
+
         const practomindBank =  await dbService.findOne(model.practomindBankList, { 
-            bankName: existingCustomerBank.bankName,
+            iinno: bankIIN,
             isActive: true
          });
         if (!practomindBank) {
@@ -974,8 +970,8 @@ const balanceEnquiry = async (req, res) => {
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
-            adhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdurationNumber: practomindBank.iinno,
+            adhaarNumber: aadhaarNumber,
+            nationalBankIdurationNumber: bankIIN || practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
         };
@@ -1005,7 +1001,7 @@ const balanceEnquiry = async (req, res) => {
 
 const miniStatement = async (req, res) => {
     try {
-        const { latitude, longitude, txtPidData } = req.body;
+        const { latitude, longitude, txtPidData, bankIIN, aadhaarNumber ,customerNumber} = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -1066,8 +1062,8 @@ const miniStatement = async (req, res) => {
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
-            aadhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdurationNumber: practomindBank.iinno,
+            aadhaarNumber: aadhaarNumber,
+            nationalBankIdurationNumber: bankIIN || practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
         };
