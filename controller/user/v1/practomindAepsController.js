@@ -759,7 +759,7 @@ const dailyAuthentication = async (req, res) => {
 
 const cashWithdrawal = async (req, res) => {
     try {
-        const { latitude, longitude, txtPidData, transactionAmount, aadhaarNumber,  customerNumber ,bankId} = req.body;
+        const { latitude, longitude, txtPidData, transactionAmount, aadhaarNumber,  customerNumber ,bankIIN} = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -801,9 +801,10 @@ const cashWithdrawal = async (req, res) => {
 
 
         const practomindBank =  await dbService.findOne(model.practomindBankList, { 
-            id:bankId,
+            bankIIN:bankIIN,
             isActive: true
          });
+
         if (!practomindBank) {
             return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
         }
@@ -825,7 +826,7 @@ const cashWithdrawal = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             adhaarNumber: aadhaarNumber,
-            nationalBankIdenticationNumber: practomindBank.iinno,
+            nationalBankIdenticationNumber: bankIIN,
             transactionAmount: transactionAmount,
             transactionId: transactionId,
             txtPidData: txtPidData
@@ -856,9 +857,9 @@ const cashWithdrawal = async (req, res) => {
             message: response.message || '',
             device: response?.result?.device || null,
             requestTransactionTime: response?.result?.requestTransactionTime || null,
-            consumerAadhaarNumber: existingOnboarding.aadhaarNumber,
+            consumerAadhaarNumber: aadhaarNumber,
             mobileNumber: existingUser.mobileNo,
-            bankIin: practomindBank.aeps_bank_id,
+            bankIin: bankIIN,
             latitude: latitude || null,
             longitude: longitude || null,
             receiptUrl: response?.url || null,
@@ -870,7 +871,7 @@ const cashWithdrawal = async (req, res) => {
                 latitude: transactionData.latitude,
                 longitude: transactionData.longitude,
                 adhaarNumber: transactionData.adhaarNumber,
-                nationalBankIdurationNumber: transactionData.nationalBankIdurationNumber,
+                nationalBankIdurationNumber: bankIIN,
                 transactionAmount: transactionData.transactionAmount,
                 transactionId: transactionData.transactionId
             },
