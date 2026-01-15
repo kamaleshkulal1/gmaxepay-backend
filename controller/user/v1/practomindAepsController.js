@@ -799,21 +799,29 @@ const cashWithdrawal = async (req, res) => {
             return res.failure({ message: 'Onboarding not completed' });
         }
 
-
-        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
-            bankIIN:bankIIN,
-            isActive: true
-         });
-
-        if (!practomindBank) {
-            return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
+        if (!bankIIN) {
+            return res.failure({ message: 'Bank IIN is required' });
         }
-        // Validate required fields
-       if (!txtPidData) {
+        if (!aadhaarNumber) {
+            return res.failure({ message: 'Aadhaar number is required' });
+        }
+        if (!customerNumber) {
+            return res.failure({ message: 'Customer number is required' });
+        }
+        if (!txtPidData) {
             return res.failure({ message: 'Biometric data is required' });
         }
         if (!transactionAmount || transactionAmount <= 0) {
             return res.failure({ message: 'Valid transaction amount is required' });
+        }
+
+        const practomindBank = await dbService.findOne(model.practomindBankList, { 
+            iinno: bankIIN,
+            isActive: true
+        });
+
+        if (!practomindBank) {
+            return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
         }
 
         // Generate unique transaction ID
