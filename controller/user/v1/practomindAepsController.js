@@ -833,7 +833,7 @@ const cashWithdrawal = async (req, res) => {
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
-            adhaarNumber: aadhaarNumber,
+            aadhaarNumber: aadhaarNumber,
             nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
             transactionAmount: transactionAmount,
             transactionId: transactionId,
@@ -970,7 +970,7 @@ const balanceEnquiry = async (req, res) => {
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
-            adhaarNumber: aadhaarNumber,
+            aadhaarNumber: aadhaarNumber,
             nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
