@@ -251,7 +251,7 @@ const practomindCashWithdrawal = async (data) => {
       merchantLoginId: data.merchantLoginId,
       latitude: data.latitude,
       longitude: data.longitude,
-      adhaarNumber: data.adhaarNumber,
+      aadhaarNumber: data.adhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionAmount: data.transactionAmount,
       transactionId: data.transactionId
