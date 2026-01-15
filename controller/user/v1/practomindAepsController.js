@@ -867,7 +867,7 @@ const cashWithdrawal = async (req, res) => {
             requestTransactionTime: response?.result?.requestTransactionTime || null,
             consumerAadhaarNumber: aadhaarNumber,
             mobileNumber: existingUser.mobileNo,
-            bankIin: bankIIN,
+            bankIin: bankIIN || practomindBank.aeps_bank_id,
             latitude: latitude || null,
             longitude: longitude || null,
             receiptUrl: response?.url || null,
@@ -945,7 +945,17 @@ const balanceEnquiry = async (req, res) => {
             return res.failure({ message: 'Onboarding not completed' });
         }
 
-        if (!req.body.txtPidData) {
+        // Validate required fields
+        if (!bankIIN) {
+            return res.failure({ message: 'Bank IIN is required' });
+        }
+        if (!aadhaarNumber) {
+            return res.failure({ message: 'Aadhaar number is required' });
+        }
+        if (!customerNumber) {
+            return res.failure({ message: 'Customer number is required' });
+        }
+        if (!txtPidData) {
             return res.failure({ message: 'Biometric data is required' });
         }
 
@@ -953,10 +963,10 @@ const balanceEnquiry = async (req, res) => {
             id: req.user.companyId 
         });
 
-        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
+        const practomindBank = await dbService.findOne(model.practomindBankList, { 
             iinno: bankIIN,
             isActive: true
-         });
+        });
         if (!practomindBank) {
             return res.failure({ message: 'Bank Is Not Supported For Balance Enquiry' });
         }
@@ -966,7 +976,7 @@ const balanceEnquiry = async (req, res) => {
 
         // Prepare enquiry data
         const enquiryData = {
-            mobileNumber: existingUser.mobileNo,
+            mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
@@ -1033,22 +1043,28 @@ const miniStatement = async (req, res) => {
             return res.failure({ message: 'Onboarding not completed' });
         }
 
-        if (!req.body.txtPidData) {
+        // Validate required fields
+        if (!bankIIN) {
+            return res.failure({ message: 'Bank IIN is required' });
+        }
+        if (!aadhaarNumber) {
+            return res.failure({ message: 'Aadhaar number is required' });
+        }
+        if (!customerNumber) {
+            return res.failure({ message: 'Customer number is required' });
+        }
+        if (!txtPidData) {
             return res.failure({ message: 'Biometric data is required' });
         }
 
         const existingCompany = await dbService.findOne(model.company, { 
             id: req.user.companyId 
         });
-        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
-            refId: existingUser.id, 
-            companyId: existingUser.companyId,
-            isPrimary: true
-        });
-        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
-            bankName: existingCustomerBank.bankName,
+
+        const practomindBank = await dbService.findOne(model.practomindBankList, { 
+            iinno: bankIIN,
             isActive: true
-         });    
+        });
         if (!practomindBank) {
             return res.failure({ message: 'Bank Is Not Supported For Mini Statement' });
         }
