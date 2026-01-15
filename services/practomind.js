@@ -334,10 +334,11 @@ const practomindMiniStatement = async (data) => {
       merchantLoginId: data.merchantLoginId,
       latitude: data.latitude,
       longitude: data.longitude,
-      aadhaarNumber: data.aadhaarNumber,
+      aadharNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionId: data.transactionId
     };
+    console.log("tokenPayload", tokenPayload);
 
     const token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
 
