@@ -658,6 +658,7 @@ const dailyAuthentication = async (req, res) => {
             id: req.user.id, 
             companyId: req.user.companyId 
         });
+        console.log("txtPidData", txtPidData);
         
         if (!existingUser) {
         return res.failure({ message: 'User not found' });
