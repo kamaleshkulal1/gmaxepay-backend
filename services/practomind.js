@@ -293,7 +293,7 @@ const practomindBalanceEnquiry = async (data) => {
       merchantLoginId: data.merchantLoginId,
       latitude: data.latitude,
       longitude: data.longitude,
-      adhaarNumber: data.adhaarNumber,
+      aadhaarNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionId: data.transactionId
     };
@@ -334,7 +334,7 @@ const practomindMiniStatement = async (data) => {
       merchantLoginId: data.merchantLoginId,
       latitude: data.latitude,
       longitude: data.longitude,
-      adhaarNumber: data.adhaarNumber,
+      aadhaarNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionId: data.transactionId
     };
