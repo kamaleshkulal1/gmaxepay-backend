@@ -21,5 +21,6 @@ router.post('/cash-withdrawal', authentication, practomindAepsController.cashWit
 router.post('/balance-enquiry', authentication, practomindAepsController.balanceEnquiry);
 router.post('/mini-statement', authentication, practomindAepsController.miniStatement);
 
+router.post('/bank-list', authentication, practomindAepsController.bankList);
 module.exports = router;
 

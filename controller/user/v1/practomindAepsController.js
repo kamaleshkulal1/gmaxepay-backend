@@ -759,7 +759,7 @@ const dailyAuthentication = async (req, res) => {
 
 const cashWithdrawal = async (req, res) => {
     try {
-        const { latitude, longitude, txtPidData, transactionAmount } = req.body;
+        const { latitude, longitude, txtPidData, transactionAmount, aadhaarNumber,  customerNumber ,bankId} = req.body;
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -799,14 +799,9 @@ const cashWithdrawal = async (req, res) => {
             return res.failure({ message: 'Onboarding not completed' });
         }
 
-        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
-            refId: existingUser.id, 
-            companyId: existingUser.companyId,
-            isPrimary: true
-        });
 
         const practomindBank =  await dbService.findOne(model.practomindBankList, { 
-            bankName: existingCustomerBank.bankName,
+            id:bankId,
             isActive: true
          });
         if (!practomindBank) {
@@ -825,11 +820,11 @@ const cashWithdrawal = async (req, res) => {
 
         // Prepare transaction data
         const transactionData = {
-            mobileNumber: existingUser.mobileNo,
+            mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
-            adhaarNumber: existingOnboarding.aadhaarNumber,
+            adhaarNumber: aadhaarNumber,
             nationalBankIdenticationNumber: practomindBank.iinno,
             transactionAmount: transactionAmount,
             transactionId: transactionId,
@@ -1091,6 +1086,29 @@ const miniStatement = async (req, res) => {
     }
 };
 
+const bankList = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, { 
+            id: req.user.id, 
+            companyId: req.user.companyId 
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const bankList = await dbService.findAll(model.practomindBankList, {
+            isActive: true
+        });
+        return res.success({ 
+            message: 'Bank list retrieved successfully', 
+            data: bankList 
+        });
+    }
+    catch (err) {
+        console.error('Bank List error:', err);
+        return res.failure({ message: err.message || 'Failed to retrieve bank list' });
+    }
+};
+
 module.exports = {
     getPractomindAepsOnboardingStatus,
     createPractomindAepsOnboarding,
@@ -1101,5 +1119,6 @@ module.exports = {
     dailyAuthentication,
     cashWithdrawal,
     balanceEnquiry,
-    miniStatement
+    miniStatement,
+    bankList
 };
