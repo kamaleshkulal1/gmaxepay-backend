@@ -674,8 +674,7 @@ const getFundHistory = async (req, res) => {
         let query = { 
             companyId: req.user.companyId,
             refId: req.user.id,
-            isActive: true,
-            isDelete: false
+            isActive: true
         };
 
         // Build query from request body
