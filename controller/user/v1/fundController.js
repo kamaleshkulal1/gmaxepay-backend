@@ -125,11 +125,12 @@ const fundTransferRequest = async (req, res) => {
         // Verify bank belongs to user
         const userBank = await dbService.findOne(model.customerBank, {
             id: bankId,
+            refId: existingUser.reportingTo,
             companyId: req.user.companyId
         });
 
         if (!userBank) {
-            return res.failure({ message: 'Invalid bank selection' });
+            return res.failure({ message: 'Invalid bank nor found' });
         }
 
         // Get company details for transaction ID
