@@ -1095,12 +1095,23 @@ const bankList = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        const bankList = await dbService.findAll(model.practomindBankList, {
+        const banks = await dbService.findAll(model.practomindBankList, {
             isActive: true
         });
+        
+        // Map to response format with CDN URLs for logos
+        const formattedBankList = banks.map(bank => {
+            const bankData = bank.toJSON ? bank.toJSON() : bank;
+            return {
+                bankIIN: bankData.iinno,
+                bankName: bankData.bankName,
+                bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
+            };
+        });
+        
         return res.success({ 
             message: 'Bank list retrieved successfully', 
-            data: bankList 
+            data: formattedBankList 
         });
     }
     catch (err) {
