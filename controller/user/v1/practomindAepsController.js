@@ -1058,7 +1058,7 @@ const miniStatement = async (req, res) => {
 
         // Prepare statement data
         const statementData = {
-            mobileNumber: existingUser.mobileNo,
+            mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,

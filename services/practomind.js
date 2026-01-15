@@ -334,7 +334,7 @@ const practomindMiniStatement = async (data) => {
       merchantLoginId: data.merchantLoginId,
       latitude: data.latitude,
       longitude: data.longitude,
-      aadharNumber: data.aadhaarNumber,
+      aadhaarNumber: data.aadhaarNumber,
       nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionId: data.transactionId
     };
