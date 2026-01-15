@@ -879,7 +879,7 @@ const cashWithdrawal = async (req, res) => {
                 latitude: transactionData.latitude,
                 longitude: transactionData.longitude,
                 adhaarNumber: transactionData.adhaarNumber,
-                nationalBankIdurationNumber: bankIIN,
+                nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
                 transactionAmount: transactionData.transactionAmount,
                 transactionId: transactionData.transactionId
             },
@@ -971,7 +971,7 @@ const balanceEnquiry = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             adhaarNumber: aadhaarNumber,
-            nationalBankIdurationNumber: bankIIN || practomindBank.iinno,
+            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
         };
@@ -1063,7 +1063,7 @@ const miniStatement = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             aadhaarNumber: aadhaarNumber,
-            nationalBankIdurationNumber: bankIIN || practomindBank.iinno,
+            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
             transactionId: transactionId,
             txtPidData: txtPidData
         };

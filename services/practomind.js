@@ -252,7 +252,7 @@ const practomindCashWithdrawal = async (data) => {
       latitude: data.latitude,
       longitude: data.longitude,
       adhaarNumber: data.adhaarNumber,
-      nationalBankIdenticationNumber: data.nationalBankIdurationNumber,
+      nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionAmount: data.transactionAmount,
       transactionId: data.transactionId
     };
@@ -272,7 +272,7 @@ const practomindCashWithdrawal = async (data) => {
         'Content-Type': 'application/json'
       }
     });
-
+    console.log("response", response);
     console.log('Practomind cash withdrawal response:', response.data);
     return response.data;
   } catch (error) {
@@ -294,7 +294,7 @@ const practomindBalanceEnquiry = async (data) => {
       latitude: data.latitude,
       longitude: data.longitude,
       adhaarNumber: data.adhaarNumber,
-      nationalBankIdurationNumber: data.nationalBankIdurationNumber,
+      nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionId: data.transactionId
     };
 
@@ -313,7 +313,7 @@ const practomindBalanceEnquiry = async (data) => {
         'Content-Type': 'application/json'
       }
     });
-
+    console.log("response", response);
     console.log('Practomind balance enquiry response:', response.data);
     return response.data;
   } catch (error) {
@@ -335,7 +335,7 @@ const practomindMiniStatement = async (data) => {
       latitude: data.latitude,
       longitude: data.longitude,
       adhaarNumber: data.adhaarNumber,
-      nationalBankIdurationNumber: data.nationalBankIdurationNumber,
+      nationalBankIdenticationNumber: data.nationalBankIdenticationNumber,
       transactionId: data.transactionId
     };
 
@@ -352,7 +352,7 @@ const practomindMiniStatement = async (data) => {
         'Content-Type': 'application/json'
       }
     });
-
+    console.log("response", response);
     console.log('Practomind mini statement response:', response.data);
     return response.data;
   } catch (error) {
