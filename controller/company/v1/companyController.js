@@ -7,6 +7,7 @@ const getCompanyDettails = async (req, res) => {
     try {
         let companyDomain = req.query.domain;
         
+        
         // Map localhost to zpay.gmaxepay.in for development
         if(companyDomain === 'localhost') {
             companyDomain = 'app.gmaxepay.in';
