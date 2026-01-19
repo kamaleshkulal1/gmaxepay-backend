@@ -81,8 +81,7 @@ const fundTransferRequest = async (req, res) => {
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId,
-            isActive: true,
-            isDeleted: false
+            isActive: true
         });
 
         if (!existingUser) {
@@ -97,8 +96,7 @@ const fundTransferRequest = async (req, res) => {
             const reportingUser = await dbService.findOne(model.user, { 
                 id: existingUser.reportingTo, 
                 companyId: req.user.companyId,
-                isActive: true,
-                isDeleted: false
+                isActive: true
             });
             
             if (!reportingUser) {
@@ -516,8 +514,7 @@ const getFundRequests = async (req, res) => {
         let options = {};
         let query = { 
             companyId: req.user.companyId,
-            isActive: true,
-            isDelete: false
+            isActive: true
         };
 
         // Base filter: by refId (requests made by user) or approvalRefId (requests to approve)
@@ -740,8 +737,7 @@ const getFundHistory = async (req, res) => {
                     name: {
                         [Op.iLike]: `%${nameSearchValue}%`
                     },
-                    isActive: true,
-                    isDeleted: false
+                    isActive: true
                 }, {
                     attributes: ['id']
                 });
