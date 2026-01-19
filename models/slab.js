@@ -33,7 +33,7 @@ let Slab = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
       validate: {
-        isIn: [['Basic', 'Gold', 'Platinum', 'Custom', null]]
+        isIn: [['Basic', 'Gold', 'Platinum', null]]
       }
     },
     slabType: {
