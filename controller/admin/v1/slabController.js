@@ -138,6 +138,187 @@ const findAllslabComm = async (req, res) => {
   }
 };
 
+
+const updateSlabName = async (req, res) => {
+  try {
+    let permissions = req.permission;
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 1 &&
+        permission.dataValues.write === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: `User doesn't have Permission!` });
+    }
+
+    const { slabId, slabName, templateType, slabType, slabScope } = req.body;
+
+    if (!slabId) {
+      return res.failure({ message: 'slabId is required' });
+    }
+
+    // At least one field must be provided for update
+    if (!slabName && !templateType && !slabType && !slabScope) {
+      return res.failure({ message: 'At least one field (slabName, templateType, slabType, slabScope) must be provided' });
+    }
+
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+
+    // Find the slab
+    const slab = await dbService.findOne(model.slab, {
+      id: slabId,
+      ...(companyId !== null && companyId !== undefined ? { companyId } : {})
+    });
+
+    if (!slab) {
+      return res.failure({ message: 'Slab not found' });
+    }
+
+    // Build update data
+    const updateData = {
+      updatedBy: req.user.id
+    };
+
+    if (slabName !== undefined) {
+      if (!slabName || slabName.trim() === '') {
+        return res.failure({ message: 'slabName cannot be empty' });
+      }
+      updateData.slabName = slabName.trim();
+    }
+
+    if (templateType !== undefined) {
+      if (!['Basic', 'Gold', 'Platinum'].includes(templateType)) {
+        return res.failure({ message: 'templateType must be one of: Basic, Gold, Platinum' });
+      }
+      updateData.templateType = templateType;
+    }
+
+    if (slabType !== undefined) {
+      if (!['level', 'channel'].includes(slabType)) {
+        return res.failure({ message: 'slabType must be either "level" or "channel"' });
+      }
+      updateData.slabType = slabType;
+    }
+
+    if (slabScope !== undefined) {
+      if (!['global', 'private'].includes(slabScope)) {
+        return res.failure({ message: 'slabScope must be either "global" or "private"' });
+      }
+      updateData.slabScope = slabScope;
+    }
+
+    // Update the slab
+    const updatedSlab = await dbService.update(
+      model.slab,
+      { id: slabId },
+      updateData
+    );
+
+    if (!updatedSlab || updatedSlab.length === 0) {
+      return res.failure({ message: 'Failed to update slab' });
+    }
+
+    return res.success({
+      message: 'Slab updated successfully',
+      data: updatedSlab[0]
+    });
+  } catch (error) {
+    console.log(error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.failure({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.failure({ message: error.errors[0].message });
+    } else {
+      return res.failure({ message: error.message });
+    }
+  }
+};
+
+const updateSlabComm = async (req, res) => {
+  try {
+    let permissions = req.permission;
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 1 &&
+        permission.dataValues.write === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: `User doesn't have Permission!` });
+    }
+
+    const { id, commAmt, commType } = req.body;
+
+    if (!id) {
+      return res.failure({ message: 'id (slabComm id) is required' });
+    }
+
+    if (commAmt === undefined && commType === undefined) {
+      return res.failure({ message: 'At least one of commAmt or commType must be provided' });
+    }
+
+    // Validate commType if provided
+    if (commType !== undefined && !['com', 'sur'].includes(commType)) {
+      return res.failure({ message: 'commType must be either "com" or "sur"' });
+    }
+
+    // Validate commAmt if provided
+    if (commAmt !== undefined && (isNaN(commAmt) || commAmt < 0)) {
+      return res.failure({ message: 'commAmt must be a valid non-negative number' });
+    }
+
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+
+    // Find the slab commission entry
+    const slabComm = await dbService.findOne(model.commSlab, {
+      id,
+      ...(companyId !== null && companyId !== undefined ? { companyId } : {})
+    });
+
+    if (!slabComm) {
+      return res.failure({ message: 'Slab commission entry not found' });
+    }
+
+    // Build update data
+    const updateData = {
+        updatedBy: req.user.id
+      };
+
+    if (commAmt !== undefined) {
+      updateData.commAmt = parseFloat(commAmt);
+    }
+
+    if (commType !== undefined) {
+      updateData.commType = commType;
+    }
+
+    // Update the slab commission
+    const updatedSlabComm = await dbService.update(
+      model.commSlab,
+      { id },
+      updateData
+    );
+
+    if (!updatedSlabComm || updatedSlabComm.length === 0) {
+      return res.failure({ message: 'Failed to update slab commission' });
+    }
+
+    return res.success({
+      message: 'Slab commission updated successfully',
+      data: updatedSlabComm[0]
+    });
+  } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.failure({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.failure({ message: error.errors[0].message });
+    } else {
+      return res.failure({ message: error.message });
+    }
+  }
+};
+
 const createGlobalSlabTemplate = async (req, res) => {
   try {
     // Only SUPER_ADMIN can create global slab templates
@@ -197,7 +378,7 @@ const createGlobalSlabTemplate = async (req, res) => {
       );
       usersArray = companyUsers.map(user => user.id);
     }
-    
+
     const dataToCreate = {
       slabName,
       templateType,
@@ -890,6 +1071,8 @@ const getAllCompanySlabs = async (req, res) => {
 
 module.exports = {
   findAllslabComm,
+  updateSlabName,
+  updateSlabComm,
   createGlobalSlabTemplate,
   getAllGlobalSlabTemplates,
   assignGlobalSlabToCompany,
