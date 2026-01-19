@@ -1585,17 +1585,46 @@ const createGlobalSlabTemplate = async (req, res) => {
     // Get users for the company - only users with userRole === 2 (Admin/WhiteLabel Admin)
     let usersArray = [];
     if (companyId) {
-      const companyUsers = await dbService.findAll(
-        model.user,
-        { 
-          companyId: companyId,
-          userRole: 2, // Only Admin/WhiteLabel Admin users
-          isActive: true,
-          isDeleted: false
-        },
-        { select: ['id'] }
-      );
-      usersArray = companyUsers.map(user => user.id);
+      try {
+        const companyUsers = await dbService.findAll(
+          model.user,
+          { 
+            companyId: companyId,
+            userRole: 2,
+            isActive: true
+          },
+          { 
+            select: ['id'] 
+          }
+        );
+        
+        if (companyUsers && Array.isArray(companyUsers) && companyUsers.length > 0) {
+          // Extract IDs from Sequelize instances
+          usersArray = companyUsers.map(user => {
+            // Handle Sequelize instance
+            if (user && typeof user === 'object') {
+              // Try different ways to get the ID
+              if (user.id !== undefined) {
+                return user.id;
+              } else if (user.dataValues && user.dataValues.id !== undefined) {
+                return user.dataValues.id;
+              } else if (user.get && typeof user.get === 'function') {
+                return user.get('id');
+              } else if (user.toJSON && typeof user.toJSON === 'function') {
+                const json = user.toJSON();
+                return json.id;
+              }
+            }
+            return null;
+          }).filter(id => id !== null);
+        }
+        
+        console.log(`Found ${usersArray.length} users with userRole 2 for companyId ${companyId}:`, usersArray);
+      } catch (error) {
+        console.error('Error fetching users for slab:', error);
+        // Continue with empty array if query fails
+        usersArray = [];
+      }
     }
     
     // If no users with userRole === 2 found, keep users array empty
