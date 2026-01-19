@@ -22,12 +22,19 @@ let Slab = sequelize.define(
         model: 'company',
         key: 'id'
       },
-      allowNull: false
+      allowNull: true // Nullable for global slabs created by SuperAdmin
     },
     slabName: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
+      allowNull: false
+      // Unique constraint will be handled at application level (companyId + slabName)
+    },
+    templateType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isIn: [['Basic', 'Gold', 'Platinum', 'Custom', null]]
+      }
     },
     slabType: {
       type: DataTypes.STRING,

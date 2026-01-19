@@ -53,6 +53,8 @@ router.put('/slabs/users/:id', slabController.updateSlabUser);
 router.get('/slabs/all', slabController.getAllSlab);
 router.get('/slabs/commission/credit-card', slabController.creditCardSlabComm);
 
+// SuperAdmin Global Slab Template routes
+router.use('/slabs', require('./v1/slabRoutes'));
 // Package routes
 router.post('/packages', authentication, packageController.registerPackage);
 router.get('/packages', packageController.findAllPackage);

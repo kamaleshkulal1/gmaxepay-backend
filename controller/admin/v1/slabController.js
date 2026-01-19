@@ -1528,6 +1528,757 @@ const updateSlabUser = async (req, res) => {
   }
 };
 
+// ============================================
+// SUPERADMIN GLOBAL SLAB TEMPLATE FUNCTIONS
+// ============================================
+
+/**
+ * Create Global Slab Template (SuperAdmin only)
+ * Creates a global slab template (Basic, Gold, Platinum, Custom) that can be assigned to companies
+ */
+const createGlobalSlabTemplate = async (req, res) => {
+  try {
+    // Only SUPER_ADMIN can create global slab templates
+    if (req.user?.userType !== USER_TYPES.SUPER_ADMIN) {
+      return res.failure({ message: 'Only SUPER_ADMIN can create global slab templates' });
+    }
+
+    const { slabName, templateType, slabType, remark } = req.body;
+
+    // Validate required fields
+    if (!slabName || !templateType) {
+      return res.badRequest({ 
+        message: 'slabName and templateType are required' 
+      });
+    }
+
+    // Validate templateType
+    if (!['Basic', 'Gold', 'Platinum', 'Custom'].includes(templateType)) {
+      return res.badRequest({ 
+        message: 'templateType must be one of: Basic, Gold, Platinum, Custom' 
+      });
+    }
+
+    // Check if global slab template with same name and templateType already exists
+    const existingSlab = await dbService.findOne(model.slab, {
+      slabName,
+      templateType,
+      slabScope: 'global',
+      companyId: null
+    });
+
+    if (existingSlab) {
+      return res.badRequest({ 
+        message: `Global slab template "${slabName}" with type "${templateType}" already exists` 
+      });
+    }
+
+    const dataToCreate = {
+      slabName,
+      templateType,
+      slabType: slabType || 'level',
+      slabScope: 'global',
+      companyId: null, // Global slabs have no companyId
+      remark: remark || null,
+      isSignUpB2B: false,
+      users: [],
+      isActive: true,
+      addedBy: req.user.id,
+      type: req.user.userType
+    };
+
+    // Create the global slab template
+    const createdSlab = await dbService.createOne(model.slab, dataToCreate);
+
+    if (!createdSlab) {
+      return res.failure({ message: 'Failed to create global slab template' });
+    }
+
+    // Initialize commission structures (similar to registerService)
+    let operators = await dbService.findAll(
+      model.operator,
+      {},
+      { select: ['id', 'operatorName', 'operatorType'] }
+    );
+
+    let cardTypes = await dbService.findAll(
+      model.cardType,
+      {},
+      { select: ['id', 'name'] }
+    );
+
+    let paymentInstruments = await dbService.findAll(
+      model.paymentInstrument,
+      {},
+      { select: ['id', 'name', 'isCardType'] }
+    );
+
+    let roleTypes = [1, 2, 3, 4, 5];
+    let roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
+
+    let dataToInsert = [];
+    let dataToInsertRangeComm = [];
+    let dataToInsertRangeCharges = [];
+    let dataToInsertPgCommercials = [];
+
+    // Create commission entries for all operators and roles
+    operators.forEach((operator) => {
+      roleTypes.forEach((roleType, index) => {
+        dataToInsert.push({
+          slabId: createdSlab.id,
+          operatorId: operator.id,
+          operatorName: operator.operatorName,
+          operatorType: operator.operatorType,
+          roleType,
+          roleName: roleNames[index],
+          commAmt: 0,
+          commType: 'com',
+          amtType: 'fix',
+          companyId: null // Global slabs have no companyId
+        });
+      });
+    });
+
+    // Create range commission entries
+    for (const operator of operators) {
+      const ranges = await dbService.findAll(
+        model.range,
+        { operatorType: operator.operatorType },
+        { select: ['id', 'min', 'max'] }
+      );
+      for (const range of ranges) {
+        roleTypes.forEach((roleType, index) => {
+          dataToInsertRangeComm.push({
+            slabId: createdSlab.id,
+            operatorId: operator.id,
+            operatorName: operator.operatorName,
+            operatorType: operator.operatorType,
+            rangeId: range.id,
+            min: range.min,
+            max: range.max,
+            roleType,
+            roleName: roleNames[index],
+            commAmt: 0,
+            commType: 'com',
+            amtType: 'fix',
+            companyId: null
+          });
+        });
+      }
+    }
+
+    // Create range charges entries
+    for (const operator of operators) {
+      const ranges = await dbService.findAll(
+        model.range,
+        { operatorType: operator.operatorType },
+        { select: ['id', 'min', 'max'] }
+      );
+      for (const range of ranges) {
+        roleTypes.forEach((roleType, index) => {
+          dataToInsertRangeCharges.push({
+            slabId: createdSlab.id,
+            operatorId: operator.id,
+            operatorName: operator.operatorName,
+            operatorType: operator.operatorType,
+            rangeId: range.id,
+            min: range.min,
+            max: range.max,
+            roleType,
+            roleName: roleNames[index],
+            commAmt: 0,
+            commType: 'com',
+            amtType: 'fix',
+            companyId: null
+          });
+        });
+      }
+    }
+
+    // Create PG commercial entries
+    const payInOperators = operators.filter(
+      (op) => op.dataValues.operatorType === 'PayIn'
+    );
+
+    for (const operator of payInOperators) {
+      for (const roleType of roleTypes) {
+        const roleNameValue =
+          roleType === 1 ? 'AD'
+            : roleType === 2 ? 'AD'
+              : roleType === 3 ? 'MD'
+                : roleType === 4 ? 'DI'
+                  : roleType === 5 ? 'RE'
+                    : '';
+
+        for (const paymentInstrument of paymentInstruments) {
+          if (paymentInstrument.isCardType) {
+            for (const cardType of cardTypes) {
+              dataToInsertPgCommercials.push({
+                slabId: createdSlab.id,
+                operatorId: operator.id,
+                operatorName: operator.operatorName,
+                operatorType: operator.operatorType,
+                roleType,
+                roleName: roleNameValue,
+                commAmt: 0,
+                commType: 'com',
+                amtType: 'fix',
+                paymentInstrumentId: paymentInstrument.id,
+                paymentInstrumentName: paymentInstrument.name,
+                cardTypeId: cardType.id,
+                cardTypeName: cardType.name,
+                companyId: null
+              });
+            }
+          } else {
+            dataToInsertPgCommercials.push({
+              slabId: createdSlab.id,
+              operatorId: operator.id,
+              operatorName: operator.operatorName,
+              operatorType: operator.operatorType,
+              roleType,
+              roleName: roleNameValue,
+              commAmt: 0,
+              commType: 'com',
+              amtType: 'fix',
+              paymentInstrumentId: paymentInstrument.id,
+              paymentInstrumentName: paymentInstrument.name,
+              cardTypeId: null,
+              cardTypeName: null,
+              companyId: null
+            });
+          }
+        }
+      }
+    }
+
+    await Promise.all([
+      dbService.createMany(model.commSlab, dataToInsert),
+      dbService.createMany(model.rangeCommission, dataToInsertRangeComm),
+      dbService.createMany(model.rangeCharges, dataToInsertRangeCharges)
+    ]);
+
+    if (dataToInsertPgCommercials.length > 0) {
+      await dbService.createMany(
+        model.pgCommercials,
+        dataToInsertPgCommercials
+      );
+    }
+
+    return res.success({
+      message: 'Global slab template created successfully',
+      data: createdSlab
+    });
+  } catch (error) {
+    console.log(error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else {
+      return res.internalServerError({ message: error.message });
+    }
+  }
+};
+
+/**
+ * Get All Global Slab Templates (SuperAdmin)
+ * Returns all global slab templates that can be assigned to companies
+ */
+const getAllGlobalSlabTemplates = async (req, res) => {
+  try {
+    // Only SUPER_ADMIN can view global slab templates
+    if (req.user?.userType !== USER_TYPES.SUPER_ADMIN) {
+      return res.failure({ message: 'Only SUPER_ADMIN can view global slab templates' });
+    }
+
+    const globalSlabs = await dbService.findAll(
+      model.slab,
+      {
+        slabScope: 'global',
+        companyId: null,
+        isActive: true,
+        isDeleted: false
+      },
+      {
+        select: ['id', 'slabName', 'templateType', 'slabType', 'remark', 'createdAt', 'updatedAt'],
+        order: [['templateType', 'ASC'], ['slabName', 'ASC']]
+      }
+    );
+
+    if (!globalSlabs || globalSlabs.length === 0) {
+      return res.success({
+        message: 'No global slab templates found',
+        data: []
+      });
+    }
+
+    return res.success({
+      message: 'Global slab templates retrieved successfully',
+      data: globalSlabs
+    });
+  } catch (error) {
+    console.log(error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
+/**
+ * Assign Global Slab Template to Company (SuperAdmin)
+ * Creates a company-specific copy of a global slab template
+ */
+const assignGlobalSlabToCompany = async (req, res) => {
+  try {
+    // Only SUPER_ADMIN can assign global slabs to companies
+    if (req.user?.userType !== USER_TYPES.SUPER_ADMIN) {
+      return res.failure({ message: 'Only SUPER_ADMIN can assign global slabs to companies' });
+    }
+
+    const { globalSlabId, companyId } = req.body;
+
+    if (!globalSlabId || !companyId) {
+      return res.badRequest({ 
+        message: 'globalSlabId and companyId are required' 
+      });
+    }
+
+    // Verify global slab exists
+    const globalSlab = await dbService.findOne(model.slab, {
+      id: globalSlabId,
+      slabScope: 'global',
+      companyId: null
+    });
+
+    if (!globalSlab) {
+      return res.badRequest({ 
+        message: 'Global slab template not found' 
+      });
+    }
+
+    // Verify company exists
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) {
+      return res.badRequest({ 
+        message: 'Company not found' 
+      });
+    }
+
+    // Check if company already has this slab assigned
+    const existingCompanySlab = await dbService.findOne(model.slab, {
+      slabName: `${company.companyName}.${globalSlab.templateType}`,
+      companyId: companyId,
+      templateType: globalSlab.templateType
+    });
+
+    if (existingCompanySlab) {
+      return res.badRequest({ 
+        message: `Company already has a slab with template type "${globalSlab.templateType}"` 
+      });
+    }
+
+    // Create company-specific slab based on global template
+    const companySlabName = `${company.companyName}.${globalSlab.templateType}`;
+    const companySlabData = {
+      slabName: companySlabName,
+      templateType: globalSlab.templateType,
+      slabType: globalSlab.slabType,
+      slabScope: 'private',
+      companyId: companyId,
+      remark: `Assigned from global template: ${globalSlab.slabName}`,
+      isSignUpB2B: false,
+      users: [],
+      isActive: true,
+      addedBy: req.user.id,
+      type: req.user.userType
+    };
+
+    const createdCompanySlab = await dbService.createOne(model.slab, companySlabData);
+
+    if (!createdCompanySlab) {
+      return res.failure({ message: 'Failed to create company slab' });
+    }
+
+    // Copy commission structures from global slab
+    const globalCommSlabs = await dbService.findAll(model.commSlab, {
+      slabId: globalSlabId,
+      companyId: null
+    });
+
+    const globalRangeComms = await dbService.findAll(model.rangeCommission, {
+      slabId: globalSlabId,
+      companyId: null
+    });
+
+    const globalRangeCharges = await dbService.findAll(model.rangeCharges, {
+      slabId: globalSlabId,
+      companyId: null
+    });
+
+    const globalPgCommercials = await dbService.findAll(model.pgCommercials, {
+      slabId: globalSlabId,
+      companyId: null
+    });
+
+    // Create company-specific commission entries
+    const companyCommSlabs = globalCommSlabs.map(comm => ({
+      ...comm.dataValues,
+      id: undefined,
+      slabId: createdCompanySlab.id,
+      companyId: companyId,
+      createdAt: undefined,
+      updatedAt: undefined
+    }));
+
+    const companyRangeComms = globalRangeComms.map(range => ({
+      ...range.dataValues,
+      id: undefined,
+      slabId: createdCompanySlab.id,
+      companyId: companyId,
+      createdAt: undefined,
+      updatedAt: undefined
+    }));
+
+    const companyRangeCharges = globalRangeCharges.map(charge => ({
+      ...charge.dataValues,
+      id: undefined,
+      slabId: createdCompanySlab.id,
+      companyId: companyId,
+      createdAt: undefined,
+      updatedAt: undefined
+    }));
+
+    const companyPgCommercials = globalPgCommercials.map(pg => ({
+      ...pg.dataValues,
+      id: undefined,
+      slabId: createdCompanySlab.id,
+      companyId: companyId,
+      createdAt: undefined,
+      updatedAt: undefined
+    }));
+
+    await Promise.all([
+      dbService.createMany(model.commSlab, companyCommSlabs),
+      dbService.createMany(model.rangeCommission, companyRangeComms),
+      dbService.createMany(model.rangeCharges, companyRangeCharges),
+      dbService.createMany(model.pgCommercials, companyPgCommercials)
+    ]);
+
+    return res.success({
+      message: 'Global slab template assigned to company successfully',
+      data: createdCompanySlab
+    });
+  } catch (error) {
+    console.log(error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
+// ============================================
+// COMPANY SLAB FUNCTIONS
+// ============================================
+
+/**
+ * Create Company Slab (Company Admin only)
+ * Creates a company-specific slab (Company.Basic, Company.Gold, etc.)
+ */
+const createCompanySlab = async (req, res) => {
+  try {
+    // Only ADMIN (Company/WhiteLabel) can create company slabs
+    if (req.user?.userType !== USER_TYPES.ADMIN && req.user?.userType !== USER_TYPES.WHITELABEL_ADMIN) {
+      return res.failure({ message: 'Only Company Admin can create company slabs' });
+    }
+
+    const { slabName, templateType, slabType, remark } = req.body;
+    const companyId = req.user?.companyId;
+
+    if (!companyId) {
+      return res.badRequest({ message: 'Company ID not found' });
+    }
+
+    // Validate required fields
+    if (!slabName || !templateType) {
+      return res.badRequest({ 
+        message: 'slabName and templateType are required' 
+      });
+    }
+
+    // Validate templateType
+    if (!['Basic', 'Gold', 'Platinum', 'Custom'].includes(templateType)) {
+      return res.badRequest({ 
+        message: 'templateType must be one of: Basic, Gold, Platinum, Custom' 
+      });
+    }
+
+    // Get company name for slab naming
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) {
+      return res.badRequest({ message: 'Company not found' });
+    }
+
+    // Check if company slab with same templateType already exists
+    const existingSlab = await dbService.findOne(model.slab, {
+      companyId: companyId,
+      templateType: templateType,
+      slabScope: 'private'
+    });
+
+    if (existingSlab) {
+      return res.badRequest({ 
+        message: `Company already has a slab with template type "${templateType}"` 
+      });
+    }
+
+    // Create company slab name: CompanyName.TemplateType
+    const companySlabName = slabName || `${company.companyName}.${templateType}`;
+
+    const dataToCreate = {
+      slabName: companySlabName,
+      templateType,
+      slabType: slabType || 'level',
+      slabScope: 'private',
+      companyId: companyId,
+      remark: remark || null,
+      isSignUpB2B: false,
+      users: [],
+      isActive: true,
+      addedBy: req.user.id,
+      type: req.user.userType
+    };
+
+    // Create the company slab
+    const createdSlab = await dbService.createOne(model.slab, dataToCreate);
+
+    if (!createdSlab) {
+      return res.failure({ message: 'Failed to create company slab' });
+    }
+
+    // Initialize commission structures
+    let operators = await dbService.findAll(
+      model.operator,
+      {},
+      { select: ['id', 'operatorName', 'operatorType'] }
+    );
+
+    let cardTypes = await dbService.findAll(
+      model.cardType,
+      {},
+      { select: ['id', 'name'] }
+    );
+
+    let paymentInstruments = await dbService.findAll(
+      model.paymentInstrument,
+      {},
+      { select: ['id', 'name', 'isCardType'] }
+    );
+
+    let roleTypes = [1, 2, 3, 4, 5];
+    let roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
+
+    let dataToInsert = [];
+    let dataToInsertRangeComm = [];
+    let dataToInsertRangeCharges = [];
+    let dataToInsertPgCommercials = [];
+
+    operators.forEach((operator) => {
+      roleTypes.forEach((roleType, index) => {
+        dataToInsert.push({
+          slabId: createdSlab.id,
+          operatorId: operator.id,
+          operatorName: operator.operatorName,
+          operatorType: operator.operatorType,
+          roleType,
+          roleName: roleNames[index],
+          commAmt: 0,
+          commType: 'com',
+          amtType: 'fix',
+          companyId: companyId
+        });
+      });
+    });
+
+    for (const operator of operators) {
+      const ranges = await dbService.findAll(
+        model.range,
+        { operatorType: operator.operatorType },
+        { select: ['id', 'min', 'max'] }
+      );
+      for (const range of ranges) {
+        roleTypes.forEach((roleType, index) => {
+          dataToInsertRangeComm.push({
+            slabId: createdSlab.id,
+            operatorId: operator.id,
+            operatorName: operator.operatorName,
+            operatorType: operator.operatorType,
+            rangeId: range.id,
+            min: range.min,
+            max: range.max,
+            roleType,
+            roleName: roleNames[index],
+            commAmt: 0,
+            commType: 'com',
+            amtType: 'fix',
+            companyId: companyId
+          });
+        });
+      }
+    }
+
+    for (const operator of operators) {
+      const ranges = await dbService.findAll(
+        model.range,
+        { operatorType: operator.operatorType },
+        { select: ['id', 'min', 'max'] }
+      );
+      for (const range of ranges) {
+        roleTypes.forEach((roleType, index) => {
+          dataToInsertRangeCharges.push({
+            slabId: createdSlab.id,
+            operatorId: operator.id,
+            operatorName: operator.operatorName,
+            operatorType: operator.operatorType,
+            rangeId: range.id,
+            min: range.min,
+            max: range.max,
+            roleType,
+            roleName: roleNames[index],
+            commAmt: 0,
+            commType: 'com',
+            amtType: 'fix',
+            companyId: companyId
+          });
+        });
+      }
+    }
+
+    const payInOperators = operators.filter(
+      (op) => op.dataValues.operatorType === 'PayIn'
+    );
+
+    for (const operator of payInOperators) {
+      for (const roleType of roleTypes) {
+        const roleNameValue =
+          roleType === 1 ? 'AD'
+            : roleType === 2 ? 'AD'
+              : roleType === 3 ? 'MD'
+                : roleType === 4 ? 'DI'
+                  : roleType === 5 ? 'RE'
+                    : '';
+
+        for (const paymentInstrument of paymentInstruments) {
+          if (paymentInstrument.isCardType) {
+            for (const cardType of cardTypes) {
+              dataToInsertPgCommercials.push({
+                slabId: createdSlab.id,
+                operatorId: operator.id,
+                operatorName: operator.operatorName,
+                operatorType: operator.operatorType,
+                roleType,
+                roleName: roleNameValue,
+                commAmt: 0,
+                commType: 'com',
+                amtType: 'fix',
+                paymentInstrumentId: paymentInstrument.id,
+                paymentInstrumentName: paymentInstrument.name,
+                cardTypeId: cardType.id,
+                cardTypeName: cardType.name,
+                companyId: companyId
+              });
+            }
+          } else {
+            dataToInsertPgCommercials.push({
+              slabId: createdSlab.id,
+              operatorId: operator.id,
+              operatorName: operator.operatorName,
+              operatorType: operator.operatorType,
+              roleType,
+              roleName: roleNameValue,
+              commAmt: 0,
+              commType: 'com',
+              amtType: 'fix',
+              paymentInstrumentId: paymentInstrument.id,
+              paymentInstrumentName: paymentInstrument.name,
+              cardTypeId: null,
+              cardTypeName: null,
+              companyId: companyId
+            });
+          }
+        }
+      }
+    }
+
+    await Promise.all([
+      dbService.createMany(model.commSlab, dataToInsert),
+      dbService.createMany(model.rangeCommission, dataToInsertRangeComm),
+      dbService.createMany(model.rangeCharges, dataToInsertRangeCharges)
+    ]);
+
+    if (dataToInsertPgCommercials.length > 0) {
+      await dbService.createMany(
+        model.pgCommercials,
+        dataToInsertPgCommercials
+      );
+    }
+
+    return res.success({
+      message: 'Company slab created successfully',
+      data: createdSlab
+    });
+  } catch (error) {
+    console.log(error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else {
+      return res.internalServerError({ message: error.message });
+    }
+  }
+};
+
+/**
+ * Get All Company Slabs (Company Admin)
+ * Returns all slabs belonging to the company
+ */
+const getAllCompanySlabs = async (req, res) => {
+  try {
+    // Only ADMIN (Company/WhiteLabel) can view company slabs
+    if (req.user?.userType !== USER_TYPES.ADMIN && req.user?.userType !== USER_TYPES.WHITELABEL_ADMIN) {
+      return res.failure({ message: 'Only Company Admin can view company slabs' });
+    }
+
+    const companyId = req.user?.companyId;
+
+    if (!companyId) {
+      return res.badRequest({ message: 'Company ID not found' });
+    }
+
+    const companySlabs = await dbService.findAll(
+      model.slab,
+      {
+        companyId: companyId,
+        slabScope: 'private',
+        isActive: true,
+        isDeleted: false
+      },
+      {
+        select: ['id', 'slabName', 'templateType', 'slabType', 'remark', 'createdAt', 'updatedAt'],
+        order: [['templateType', 'ASC'], ['slabName', 'ASC']]
+      }
+    );
+
+    if (!companySlabs || companySlabs.length === 0) {
+      return res.success({
+        message: 'No company slabs found',
+        data: []
+      });
+    }
+
+    return res.success({
+      message: 'Company slabs retrieved successfully',
+      data: companySlabs
+    });
+  } catch (error) {
+    console.log(error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   registerService,
   updateService,
@@ -1545,5 +2296,12 @@ module.exports = {
   getSlabUser,
   updateSlabUser,
   getAllSlab,
-  creditCardSlabComm
+  creditCardSlabComm,
+  // SuperAdmin Global Slab Template functions
+  createGlobalSlabTemplate,
+  getAllGlobalSlabTemplates,
+  assignGlobalSlabToCompany,
+  // Company Slab functions
+  createCompanySlab,
+  getAllCompanySlabs
 };
