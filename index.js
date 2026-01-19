@@ -194,7 +194,6 @@ if (process.env.NODE_ENV !== 'test') {
     .sync({ alter: true })
     .then(() => {})
     .finally(() => {
-      
       app.use(routes);
       // seeder();
       name();
