@@ -251,7 +251,7 @@ const updateSlabComm = async (req, res) => {
     const { id, commAmt, commType } = req.body;
 
     if (!id) {
-      return res.failure({ message: 'id (slabComm id) is required' });
+      return res.failure({ message: 'slabComm id is required' });
     }
 
     if (commAmt === undefined && commType === undefined) {
@@ -291,6 +291,9 @@ const updateSlabComm = async (req, res) => {
 
     if (commType !== undefined) {
       updateData.commType = commType;
+    }
+    if(amtType !== undefined) {
+      updateData.amtType = amtType;
     }
 
     // Update the slab commission
