@@ -248,14 +248,14 @@ const updateSlabComm = async (req, res) => {
       return res.failure({ message: `User doesn't have Permission!` });
     }
 
-    const { id, commAmt, commType } = req.body;
+    const { id, commAmt, commType, amtType } = req.body;
 
     if (!id) {
       return res.failure({ message: 'slabComm id is required' });
     }
 
-    if (commAmt === undefined && commType === undefined) {
-      return res.failure({ message: 'At least one of commAmt or commType must be provided' });
+    if (commAmt === undefined && commType === undefined && amtType === undefined) {
+      return res.failure({ message: 'At least one of commAmt, commType, or amtType must be provided' });
     }
 
     // Validate commType if provided
