@@ -262,6 +262,9 @@ const updateSlabComm = async (req, res) => {
     if (commType !== undefined && !['com', 'sur'].includes(commType)) {
       return res.failure({ message: 'commType must be either "com" or "sur"' });
     }
+    if(amtType !== undefined && !['fix', 'per'].includes(amtType)) {
+      return res.failure({ message: 'amtType must be either "fix" or "per"' });
+    }
 
     // Validate commAmt if provided
     if (commAmt !== undefined && (isNaN(commAmt) || commAmt < 0)) {
