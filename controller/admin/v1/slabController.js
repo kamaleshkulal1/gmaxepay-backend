@@ -1641,16 +1641,10 @@ const createGlobalSlabTemplate = async (req, res) => {
       { select: ['id', 'name', 'isCardType'] }
     );
 
-    // If companyId is 1, only use role types 1 and 2 (AD, WU)
-    // Otherwise, use all role types
-    let roleTypes, roleNames;
-    if (companyId === 1) {
-      roleTypes = [1, 2];
-      roleNames = ['AD', 'WU'];
-    } else {
-      roleTypes = [1, 2, 3, 4, 5];
-      roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
-    }
+    // Only use role types 1 and 2 (AD, WU) for global slab templates
+    // No need for MD, DI, RE in admin controller
+    let roleTypes = [1, 2];
+    let roleNames = ['AD', 'WU'];
 
     let dataToInsert = [];
     let dataToInsertRangeComm = [];
@@ -1738,13 +1732,8 @@ const createGlobalSlabTemplate = async (req, res) => {
 
     for (const operator of payInOperators) {
       for (const roleType of roleTypes) {
-        const roleNameValue =
-          roleType === 1 ? 'AD'
-            : roleType === 2 ? 'AD'
-              : roleType === 3 ? 'MD'
-                : roleType === 4 ? 'DI'
-                  : roleType === 5 ? 'RE'
-                    : '';
+        // Only AD (roleType 1) and WU (roleType 2) are used
+        const roleNameValue = roleType === 1 ? 'AD' : roleType === 2 ? 'WU' : '';
 
         for (const paymentInstrument of paymentInstruments) {
           if (paymentInstrument.isCardType) {
