@@ -26,33 +26,7 @@ router.use('/users', require('./v1/userRoute'));
 router.use('/rolesAndPermissions', require('./v1/rolesAndPermission'));
 
 // Services routes
-router.post('/services', authentication, servicesController.registerService);
-router.get('/services', servicesController.findAllServices);
-router.post('/services/packages', authentication, servicesController.registerServicePackage);
-router.get('/services/:id', servicesController.getServices);
-router.put('/services/:id', servicesController.updateUserPackage);
-router.get('/services/:id/packages', servicesController.listUserPackage);
-router.put('/services/:id/update', servicesController.updateUserService);
-
-// Slab routes
-router.post('/slabs', authentication, slabController.registerService);
-router.put('/slabs/:id', slabController.updateService);
-router.get('/slabs', slabController.findAllService);
-router.get('/slabs/:id', slabController.getService);
-router.patch('/slabs/:id', slabController.partialUpdateService);
-router.delete('/slabs/:id', slabController.deleteService);
-router.post('/slabs/bulk-recharge', slabController.createBulkRecharge);
-router.post('/slabs/dth', slabController.createDth);
-router.post('/slabs/recharge', slabController.createRecharge);
-router.get('/slabs/commission/all', slabController.findAllslabComm);
-router.get('/slabs/commission/bbps', slabController.bbpsSlabComm);
-router.get('/slabs/commission/zaakpay', slabController.zaakpaySlabComm);
-router.get('/slabs/commission/recharge', slabController.findAllRechargeSlabComm);
-router.get('/slabs/users', slabController.getSlabUser);
-router.put('/slabs/users/:id', slabController.updateSlabUser);
-router.get('/slabs/all', slabController.getAllSlab);
-router.get('/slabs/commission/credit-card', slabController.creditCardSlabComm);
-
+router.use('/services', require('./v1/servicesRoutes'));
 // SuperAdmin Global Slab Template routes
 router.use('/slabs', require('./v1/slabRoutes'));
 // Package routes
