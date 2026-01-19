@@ -251,7 +251,7 @@ const updateSlabComm = async (req, res) => {
     const { id, commAmt, commType } = req.body;
 
     if (!id) {
-      return res.failure({ message: 'id (slabComm id) is required' });
+      return res.failure({ message: 'slabComm id is required' });
     }
 
     if (commAmt === undefined && commType === undefined) {
@@ -261,6 +261,9 @@ const updateSlabComm = async (req, res) => {
     // Validate commType if provided
     if (commType !== undefined && !['com', 'sur'].includes(commType)) {
       return res.failure({ message: 'commType must be either "com" or "sur"' });
+    }
+    if(amtType !== undefined && !['fix', 'per'].includes(amtType)) {
+      return res.failure({ message: 'amtType must be either "fix" or "per"' });
     }
 
     // Validate commAmt if provided
@@ -291,6 +294,9 @@ const updateSlabComm = async (req, res) => {
 
     if (commType !== undefined) {
       updateData.commType = commType;
+    }
+    if(amtType !== undefined) {
+      updateData.amtType = amtType;
     }
 
     // Update the slab commission
