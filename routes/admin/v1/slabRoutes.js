@@ -3,8 +3,9 @@ const router = express.Router();
 const slabController = require('../../../controller/admin/v1/slabController');
 const authentication = require('../../../middleware/authentication');
 
-router.post('/global-templates', authentication, slabController.createGlobalSlabTemplate);
-router.get('/global-templates', authentication, slabController.getAllGlobalSlabTemplates);
-router.post('/global-templates/assign', authentication, slabController.assignGlobalSlabToCompany);
+router.post('/', authentication, slabController.createGlobalSlabTemplate);
+router.post('/list', authentication, slabController.getAllGlobalSlabTemplates);
+router.post('/slabcomm', authentication, slabController.findAllslabComm);
+router.post('/assign', authentication, slabController.assignGlobalSlabToCompany);
 
 module.exports = router;
