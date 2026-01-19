@@ -417,7 +417,7 @@ const getAllGlobalSlabTemplates = async (req, res) => {
         slabScope: 'global',
         companyId: companyId,
         isActive: true,
-        isDeleted: false
+        isDelete: false
       },
       {
         select: ['id', 'slabName', 'templateType', 'slabType', 'remark', 'createdAt', 'updatedAt'],
@@ -864,8 +864,7 @@ const getAllCompanySlabs = async (req, res) => {
       {
         companyId: companyId,
         slabScope: 'private',
-        isActive: true,
-        isDeleted: false
+        isActive: true
       },
       {
         select: ['id', 'slabName', 'templateType', 'slabType', 'remark', 'createdAt', 'updatedAt'],
