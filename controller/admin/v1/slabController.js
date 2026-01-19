@@ -54,7 +54,7 @@ const findAllslabComm = async (req, res) => {
     let permissions = req.permission;
     let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 27 &&
+        permission.dataValues.permissionId === 1 &&
         permission.dataValues.read === true
     );
 
@@ -416,8 +416,7 @@ const getAllGlobalSlabTemplates = async (req, res) => {
       {
         slabScope: 'global',
         companyId: companyId,
-        isActive: true,
-        isDeleted: false
+        isActive: true
       },
       {
         select: ['id', 'slabName', 'templateType', 'slabType', 'remark', 'createdAt', 'updatedAt'],
@@ -864,8 +863,7 @@ const getAllCompanySlabs = async (req, res) => {
       {
         companyId: companyId,
         slabScope: 'private',
-        isActive: true,
-        isDeleted: false
+        isActive: true
       },
       {
         select: ['id', 'slabName', 'templateType', 'slabType', 'remark', 'createdAt', 'updatedAt'],
