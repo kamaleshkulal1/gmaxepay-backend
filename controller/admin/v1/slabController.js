@@ -1559,12 +1559,21 @@ const createGlobalSlabTemplate = async (req, res) => {
       });
     }
 
+    // Get companyId from the user creating the slab
+    const companyId = req.user?.companyId;
+    
+    if (!companyId) {
+      return res.badRequest({ 
+        message: 'Company ID is required. User must belong to a company.' 
+      });
+    }
+
     // Check if global slab template with same name and templateType already exists
     const existingSlab = await dbService.findOne(model.slab, {
       slabName,
       templateType,
       slabScope: 'global',
-      companyId: null
+      companyId: companyId
     });
 
     if (existingSlab) {
@@ -1573,15 +1582,35 @@ const createGlobalSlabTemplate = async (req, res) => {
       });
     }
 
+    // Get users for the company (whitelabel users or company users)
+    let usersArray = [];
+    if (companyId) {
+      const companyUsers = await dbService.findAll(
+        model.user,
+        { 
+          companyId: companyId,
+          isActive: true,
+          isDeleted: false
+        },
+        { select: ['id'] }
+      );
+      usersArray = companyUsers.map(user => user.id);
+    }
+    
+    // If no company users found, at least include the creator
+    if (usersArray.length === 0) {
+      usersArray = [req.user.id];
+    }
+
     const dataToCreate = {
       slabName,
       templateType,
       slabType: slabType || 'level',
       slabScope: 'global',
-      companyId: null, // Global slabs have no companyId
+      companyId: companyId, // Use the companyId of the user creating the slab
       remark: remark || null,
       isSignUpB2B: false,
-      users: [],
+      users: usersArray, // Include whitelabel user id or company user id
       isActive: true,
       addedBy: req.user.id,
       type: req.user.userType
@@ -1613,8 +1642,16 @@ const createGlobalSlabTemplate = async (req, res) => {
       { select: ['id', 'name', 'isCardType'] }
     );
 
-    let roleTypes = [1, 2, 3, 4, 5];
-    let roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
+    // If companyId is 1, only use role types 1 and 2 (AD, WU)
+    // Otherwise, use all role types
+    let roleTypes, roleNames;
+    if (companyId === 1) {
+      roleTypes = [1, 2];
+      roleNames = ['AD', 'WU'];
+    } else {
+      roleTypes = [1, 2, 3, 4, 5];
+      roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
+    }
 
     let dataToInsert = [];
     let dataToInsertRangeComm = [];
@@ -1634,7 +1671,7 @@ const createGlobalSlabTemplate = async (req, res) => {
           commAmt: 0,
           commType: 'com',
           amtType: 'fix',
-          companyId: null // Global slabs have no companyId
+          companyId: companyId // Use the companyId of the user creating the slab
         });
       });
     });
@@ -1661,7 +1698,7 @@ const createGlobalSlabTemplate = async (req, res) => {
             commAmt: 0,
             commType: 'com',
             amtType: 'fix',
-            companyId: null
+            companyId: companyId // Use the companyId of the user creating the slab
           });
         });
       }
@@ -1689,7 +1726,7 @@ const createGlobalSlabTemplate = async (req, res) => {
             commAmt: 0,
             commType: 'com',
             amtType: 'fix',
-            companyId: null
+            companyId: companyId // Use the companyId of the user creating the slab
           });
         });
       }
@@ -1727,7 +1764,7 @@ const createGlobalSlabTemplate = async (req, res) => {
                 paymentInstrumentName: paymentInstrument.name,
                 cardTypeId: cardType.id,
                 cardTypeName: cardType.name,
-                companyId: null
+                companyId: companyId // Use the companyId of the user creating the slab
               });
             }
           } else {
@@ -1745,7 +1782,7 @@ const createGlobalSlabTemplate = async (req, res) => {
               paymentInstrumentName: paymentInstrument.name,
               cardTypeId: null,
               cardTypeName: null,
-              companyId: null
+              companyId: companyId // Use the companyId of the user creating the slab
             });
           }
         }
@@ -1790,11 +1827,16 @@ const getAllGlobalSlabTemplates = async (req, res) => {
       return res.failure({ message: 'Only SUPER_ADMIN can view global slab templates' });
     }
 
+    const companyId = req.user?.companyId;
+    if (!companyId) {
+      return res.badRequest({ message: 'Company ID is required' });
+    }
+
     const globalSlabs = await dbService.findAll(
       model.slab,
       {
         slabScope: 'global',
-        companyId: null,
+        companyId: companyId, // Filter by the user's companyId
         isActive: true,
         isDeleted: false
       },
@@ -1840,11 +1882,17 @@ const assignGlobalSlabToCompany = async (req, res) => {
       });
     }
 
-    // Verify global slab exists
+    // Get the creator's companyId to verify the global slab
+    const creatorCompanyId = req.user?.companyId;
+    if (!creatorCompanyId) {
+      return res.badRequest({ message: 'Creator company ID is required' });
+    }
+
+    // Verify global slab exists (should belong to the creator's company)
     const globalSlab = await dbService.findOne(model.slab, {
       id: globalSlabId,
       slabScope: 'global',
-      companyId: null
+      companyId: creatorCompanyId
     });
 
     if (!globalSlab) {
@@ -1896,25 +1944,25 @@ const assignGlobalSlabToCompany = async (req, res) => {
       return res.failure({ message: 'Failed to create company slab' });
     }
 
-    // Copy commission structures from global slab
+    // Copy commission structures from global slab (use creator's companyId)
     const globalCommSlabs = await dbService.findAll(model.commSlab, {
       slabId: globalSlabId,
-      companyId: null
+      companyId: creatorCompanyId
     });
 
     const globalRangeComms = await dbService.findAll(model.rangeCommission, {
       slabId: globalSlabId,
-      companyId: null
+      companyId: creatorCompanyId
     });
 
     const globalRangeCharges = await dbService.findAll(model.rangeCharges, {
       slabId: globalSlabId,
-      companyId: null
+      companyId: creatorCompanyId
     });
 
     const globalPgCommercials = await dbService.findAll(model.pgCommercials, {
       slabId: globalSlabId,
-      companyId: null
+      companyId: creatorCompanyId
     });
 
     // Create company-specific commission entries

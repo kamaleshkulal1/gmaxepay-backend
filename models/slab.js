@@ -16,13 +16,13 @@ let Slab = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
-   companyId: {
+    companyId: {
       type: DataTypes.INTEGER,
+      allowNull: false,
       references: {
         model: 'company',
         key: 'id'
-      },
-      allowNull: true // Nullable for global slabs created by SuperAdmin
+      }
     },
     slabName: {
       type: DataTypes.STRING,
