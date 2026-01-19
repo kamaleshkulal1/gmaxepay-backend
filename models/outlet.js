@@ -8,6 +8,7 @@ const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
 const { reusableTransactionAttribute } = require('../utils/common');
 const User = require('./user');
+const PractomindCompanyCode = require('./practomindCompanyCode');
 const { encrypt, decrypt } = require('../utils/encryption');
 
 // Helper function to encrypt image field (handles JSON and STRING)
@@ -190,9 +191,8 @@ let Outlet = sequelize.define(
     shopCategoryId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      defaultValue: 1,
       references: {
-        model: 'practomindCompanyCode',
+        model: PractomindCompanyCode,
         key: 'id'
       }
     },
@@ -250,6 +250,10 @@ let Outlet = sequelize.define(
     hooks: {
       beforeCreate: [
         async function (outlet, options) {
+          // Set default shopCategoryId if not provided
+          if (!outlet.shopCategoryId) {
+            outlet.shopCategoryId = 1;
+          }
           // Encrypt shopImage if it exists
           if (outlet.shopImage) {
             outlet.shopImage = encryptImageField(outlet.shopImage);
@@ -260,6 +264,10 @@ let Outlet = sequelize.define(
         async function (outlets, options) {
           if (outlets !== undefined && outlets.length) {
             for (let outlet of outlets) {
+              // Set default shopCategoryId if not provided
+              if (!outlet.shopCategoryId) {
+                outlet.shopCategoryId = 1;
+              }
               if (outlet.shopImage) {
                 outlet.shopImage = encryptImageField(outlet.shopImage);
               }
