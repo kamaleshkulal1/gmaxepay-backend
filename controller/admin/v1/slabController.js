@@ -1552,10 +1552,10 @@ const createGlobalSlabTemplate = async (req, res) => {
       });
     }
 
-    // Validate templateType
-    if (!['Basic', 'Gold', 'Platinum', 'Custom'].includes(templateType)) {
+    // Validate templateType - only Free (Basic), Gold, and Platinum are allowed
+    if (!['Basic', 'Gold', 'Platinum'].includes(templateType)) {
       return res.badRequest({ 
-        message: 'templateType must be one of: Basic, Gold, Platinum, Custom' 
+        message: 'templateType must be one of: Basic, Gold, Platinum' 
       });
     }
 
@@ -1582,13 +1582,14 @@ const createGlobalSlabTemplate = async (req, res) => {
       });
     }
 
-    // Get users for the company (whitelabel users or company users)
+    // Get users for the company - only users with userRole === 2 (Admin/WhiteLabel Admin)
     let usersArray = [];
     if (companyId) {
       const companyUsers = await dbService.findAll(
         model.user,
         { 
           companyId: companyId,
+          userRole: 2, // Only Admin/WhiteLabel Admin users
           isActive: true,
           isDeleted: false
         },
@@ -1597,10 +1598,8 @@ const createGlobalSlabTemplate = async (req, res) => {
       usersArray = companyUsers.map(user => user.id);
     }
     
-    // If no company users found, at least include the creator
-    if (usersArray.length === 0) {
-      usersArray = [req.user.id];
-    }
+    // If no users with userRole === 2 found, keep users array empty
+    // usersArray will remain [] if no matching users found
 
     const dataToCreate = {
       slabName,
@@ -2048,10 +2047,10 @@ const createCompanySlab = async (req, res) => {
       });
     }
 
-    // Validate templateType
-    if (!['Basic', 'Gold', 'Platinum', 'Custom'].includes(templateType)) {
+    // Validate templateType - only Free (Basic), Gold, and Platinum are allowed
+    if (!['Basic', 'Gold', 'Platinum'].includes(templateType)) {
       return res.badRequest({ 
-        message: 'templateType must be one of: Basic, Gold, Platinum, Custom' 
+        message: 'templateType must be one of: Basic, Gold, Platinum' 
       });
     }
 
