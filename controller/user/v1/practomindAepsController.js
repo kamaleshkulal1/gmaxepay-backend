@@ -873,7 +873,7 @@ const cashWithdrawal = async (req, res) => {
             receiptUrl: response?.url || null,
             outletname: response?.outletname || null,
             outletmobile: response?.outletmobile || null,
-            ministatement: response?.ministatement || null,
+            ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
             requestPayload: {
                 mobileNumber: transactionData.mobileNumber,
                 latitude: transactionData.latitude,
@@ -1018,7 +1018,7 @@ const balanceEnquiry = async (req, res) => {
             receiptUrl: response?.url || null,
             outletname: response?.outletname || null,
             outletmobile: response?.outletmobile || null,
-            ministatement: response?.ministatement || null,
+            ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
             requestPayload: {
                 mobileNumber: enquiryData.mobileNumber,
                 latitude: enquiryData.latitude,
@@ -1162,7 +1162,7 @@ const miniStatement = async (req, res) => {
             receiptUrl: response?.url || null,
             outletname: response?.outletname || null,
             outletmobile: response?.outletmobile || null,
-            ministatement: response?.ministatement || null,
+            ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
             requestPayload: {
                 mobileNumber: statementData.mobileNumber,
                 latitude: statementData.latitude,
