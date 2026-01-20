@@ -867,7 +867,7 @@ const cashWithdrawal = async (req, res) => {
             requestTransactionTime: response?.result?.requestTransactionTime || null,
             consumerAadhaarNumber: aadhaarNumber,
             mobileNumber: existingUser.mobileNo,
-            bankIin: bankIIN || practomindBank.aeps_bank_id,
+            bankIin: practomindBank.aeps_bank_id,
             latitude: latitude || null,
             longitude: longitude || null,
             receiptUrl: response?.url || null,
@@ -992,6 +992,52 @@ const balanceEnquiry = async (req, res) => {
         // Parse response
         const isSuccess = response.status === true || response.status === 'true';
 
+        // Save transaction to practomindAepsHistory
+        const historyData = {
+            refId: existingUser.id,
+            companyId: existingUser.companyId,
+            merchantLoginId: existingOnboarding.merchantLoginId,
+            transactionType: 'BE',
+            transactionAmount: 0,
+            balanceAmount: response?.result?.balanceAmount || null,
+            transactionId: transactionId,
+            merchantTransactionId: response?.result?.merchantTransactionId || null,
+            bankRRN: response?.result?.bankRRN || null,
+            fpTransactionId: response?.result?.fpTransactionId || null,
+            partnerTxnid: response?.partnerTxnid || null,
+            transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+            status: isSuccess,
+            message: response.message || '',
+            device: response?.result?.device || null,
+            requestTransactionTime: response?.result?.requestTransactionTime || null,
+            consumerAadhaarNumber: aadhaarNumber,
+            mobileNumber: existingUser.mobileNo,
+            bankIin: practomindBank.aeps_bank_id,
+            latitude: latitude || null,
+            longitude: longitude || null,
+            receiptUrl: response?.url || null,
+            outletname: response?.outletname || null,
+            outletmobile: response?.outletmobile || null,
+            ministatement: response?.ministatement || null,
+            requestPayload: {
+                mobileNumber: enquiryData.mobileNumber,
+                latitude: enquiryData.latitude,
+                longitude: enquiryData.longitude,
+                adhaarNumber: enquiryData.aadhaarNumber || aadhaarNumber,
+                nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+                transactionId: enquiryData.transactionId
+            },
+            responsePayload: response,
+            ipAddress: req.ip || req.connection?.remoteAddress,
+            addedBy: existingUser.id
+        };
+
+        try {
+            await dbService.createOne(model.practomindAepsHistory, historyData);
+        } catch (historyError) {
+            console.error('Failed to save balance enquiry transaction history:', historyError);
+        }
+
         if (isSuccess) {
             return res.success({ 
                 message: response.message || 'Balance enquiry successful', 
@@ -1089,6 +1135,52 @@ const miniStatement = async (req, res) => {
 
         // Parse response
         const isSuccess = response.status === true || response.status === 'true';
+
+        // Save transaction to practomindAepsHistory
+        const historyData = {
+            refId: existingUser.id,
+            companyId: existingUser.companyId,
+            merchantLoginId: existingOnboarding.merchantLoginId,
+            transactionType: 'MS',
+            transactionAmount: 0,
+            balanceAmount: response?.result?.balanceAmount || null,
+            transactionId: transactionId,
+            merchantTransactionId: response?.result?.merchantTransactionId || null,
+            bankRRN: response?.result?.bankRRN || null,
+            fpTransactionId: response?.result?.fpTransactionId || null,
+            partnerTxnid: response?.partnerTxnid || null,
+            transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+            status: isSuccess,
+            message: response.message || '',
+            device: response?.result?.device || null,
+            requestTransactionTime: response?.result?.requestTransactionTime || null,
+            consumerAadhaarNumber: aadhaarNumber,
+            mobileNumber: existingUser.mobileNo,
+            bankIin: practomindBank.aeps_bank_id,
+            latitude: latitude || null,
+            longitude: longitude || null,
+            receiptUrl: response?.url || null,
+            outletname: response?.outletname || null,
+            outletmobile: response?.outletmobile || null,
+            ministatement: response?.ministatement || null,
+            requestPayload: {
+                mobileNumber: statementData.mobileNumber,
+                latitude: statementData.latitude,
+                longitude: statementData.longitude,
+                adhaarNumber: statementData.aadhaarNumber || aadhaarNumber,
+                nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+                transactionId: statementData.transactionId
+            },
+            responsePayload: response,
+            ipAddress: req.ip || req.connection?.remoteAddress,
+            addedBy: existingUser.id
+        };
+
+        try {
+            await dbService.createOne(model.practomindAepsHistory, historyData);
+        } catch (historyError) {
+            console.error('Failed to save mini statement transaction history:', historyError);
+        }
 
         if (isSuccess) {
             return res.success({ 
