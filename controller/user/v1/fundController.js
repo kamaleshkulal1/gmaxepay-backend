@@ -803,11 +803,28 @@ const allbankDetails = async (req, res) => {
         if(!existingUser){
             return res.failure({ message: 'User not found' });
         }
-        const reportingUser = await dbService.findOne(model.user, { id: existingUser.reportingTo, companyId: req.user.companyId, isActive: true });
-        if(!reportingUser){
-            return res.failure({ message: 'Reporting user not found' });
+        
+        let targetUser = null;
+        
+        // First try to get reporting user
+        if(existingUser.reportingTo) {
+            targetUser = await dbService.findOne(model.user, { id: existingUser.reportingTo, companyId: req.user.companyId, isActive: true });
         }
-        const bankDetailsList = await dbService.findAll(model.customerBank, { refId: reportingUser.id, companyId: reportingUser.companyId });
+        
+        // If reporting user not found, fallback to company admin (userRole: 2)
+        if(!targetUser){
+            targetUser = await dbService.findOne(model.user, { 
+                userRole: 2, 
+                companyId: req.user.companyId, 
+                isActive: true 
+            });
+        }
+        
+        if(!targetUser){
+            return res.failure({ message: 'Reporting user or company admin not found' });
+        }
+        
+        const bankDetailsList = await dbService.findAll(model.customerBank, { refId: targetUser.id, companyId: targetUser.companyId });
         if(!bankDetailsList || bankDetailsList.length === 0){
             return res.failure({ message: 'Bank details not found' });
         }
