@@ -295,11 +295,17 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPanImage: merchantPanImageBase64
         };
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
-        console.log("response", response);
         const isSuccess = response?.status === true || response?.status === 'true' || 
                          (response?.result && (response.result.status === true || response.result.status === 'true'));
-        console.log("isSuccess", isSuccess);
 
+        if (!isSuccess) {
+            return res.failure({ 
+                message: response?.message || 'Practomind AEPS onboarding failed', 
+                data: response 
+            });
+        }
+
+        // Only save to database on success
         const dbData = {
             userId: existingUser.id,
             companyId: existingUser.companyId,
@@ -308,12 +314,12 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPhoneNumber: onboardingData.merchantPhoneNumber,
             aadhaarNumber: onboardingData.aadhaarNumber,
             userPan: onboardingData.userPan,
-            onboardingStatus: isSuccess == true || isSuccess == 'true' ? 'COMPLETED' : 'PENDING',
-            status: isSuccess ? 'success' : 'failed',
-            message: response?.message || 'Onboarding failed',
-            errorMessage: isSuccess ? null : JSON.stringify(response),
+            onboardingStatus: 'COMPLETED',
+            status: 'success',
+            message: response?.message || 'Onboarding successful',
+            errorMessage: null,
             // Reset EKYC fields when re-onboarding (for retry scenarios)
-            isAepsOnboardingCompleted: isSuccess == true || isSuccess == 'true' ? true : false,
+            isAepsOnboardingCompleted: true,
             isOtpSent: false,
             isOtpValidated: false,
             isBioMetricValidated: false,
@@ -340,9 +346,10 @@ const createPractomindAepsOnboarding = async (req, res) => {
             throw dbError;
         }
 
-        return isSuccess 
-            ? res.success({ message: 'Practomind AEPS onboarding successful', data: response })
-            : res.failure({ message: response.message || 'Practomind AEPS onboarding failed', data: response });
+        return res.success({ 
+            message: 'Practomind AEPS onboarding successful', 
+            data: response 
+        });
 
     } catch (err) {
         console.error('Create Practomind AEPS onboarding error:', err);
