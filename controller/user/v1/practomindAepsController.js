@@ -296,21 +296,21 @@ const createPractomindAepsOnboarding = async (req, res) => {
         };
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         console.log("response", response);
-        console.log("response.result.status", response.result.status);
-        const isSuccess = response.result.status === true || response.result.status === 'true';
+        const isSuccess = response?.status === true || response?.status === 'true' || 
+                         (response?.result && (response.result.status === true || response.result.status === 'true'));
         console.log("isSuccess", isSuccess);
 
         const dbData = {
             userId: existingUser.id,
             companyId: existingUser.companyId,
-            merchantLoginId: response.merchantLoginId || merchantLoginId,
-            merchantLoginPin: response.merchantLoginPin,
+            merchantLoginId: response?.merchantLoginId || merchantLoginId,
+            merchantLoginPin: response?.merchantLoginPin || null,
             merchantPhoneNumber: onboardingData.merchantPhoneNumber,
             aadhaarNumber: onboardingData.aadhaarNumber,
             userPan: onboardingData.userPan,
             onboardingStatus: isSuccess == true || isSuccess == 'true' ? 'COMPLETED' : 'PENDING',
             status: isSuccess ? 'success' : 'failed',
-            message: response.message,
+            message: response?.message || 'Onboarding failed',
             errorMessage: isSuccess ? null : JSON.stringify(response),
             // Reset EKYC fields when re-onboarding (for retry scenarios)
             isAepsOnboardingCompleted: isSuccess == true || isSuccess == 'true' ? true : false,
