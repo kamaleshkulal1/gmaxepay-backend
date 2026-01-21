@@ -120,6 +120,8 @@ const fundTransferRequest = async (req, res) => {
             approvalRefId = companyAdmin.id;
         }
 
+        console.log('bankId', bankId);
+        console.log('existingUser.reportingTo', existingUser.reportingTo);
         // Verify bank belongs to user
         const userBank = await dbService.findOne(model.customerBank, {
             id: bankId,
