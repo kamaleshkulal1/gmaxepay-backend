@@ -121,7 +121,7 @@ const fundTransferRequest = async (req, res) => {
         
         // Verify bank belongs to user
         const userBank = await dbService.findOne(model.customerBank, {
-            id: bankId,
+            id: parseInt(bankId),
             refId: parseInt(approvalRefId),
             companyId: req.user.companyId
         });
