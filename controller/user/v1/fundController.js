@@ -109,8 +109,7 @@ const fundTransferRequest = async (req, res) => {
             const companyAdmin = await dbService.findOne(model.user, { 
                 companyId: req.user.companyId,
                 userRole: 2, // Assuming roleId 1 is admin
-                isActive: true,
-                isDeleted: false
+                isActive: true
             });
             
             if (!companyAdmin) {
@@ -119,13 +118,9 @@ const fundTransferRequest = async (req, res) => {
             
             approvalRefId = companyAdmin.id;
         }
-
-        console.log('bankId', bankId);
-        console.log('existingUser.reportingTo', existingUser.reportingTo);
         // Verify bank belongs to user
         const userBank = await dbService.findOne(model.customerBank, {
             id: bankId,
-            refId: existingUser.reportingTo,
             companyId: req.user.companyId
         });
 
