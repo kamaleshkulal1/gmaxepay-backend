@@ -120,15 +120,23 @@ const fundTransferRequest = async (req, res) => {
         }
         
         // Verify bank belongs to approval user (reporting user or company admin)
+        const parsedBankId = parseInt(bankId);
+        if (isNaN(parsedBankId)) {
+            return res.failure({ message: 'Invalid bank ID format' });
+        }
+
         const userBank = await dbService.findOne(model.customerBank, {
-            id: parseInt(bankId),
+            id: parsedBankId,
             refId: approvalRefId,
             companyId: req.user.companyId
         });
 
         if (!userBank) {
-            return res.failure({ message: 'Invalid bank not found' });
+            return res.failure({ message: 'Bank not found or does not belong to the approval user' });
         }
+
+        // Use the verified bank's ID to ensure consistency
+        const verifiedBankId = userBank.id;
 
         // Get company details for transaction ID
         const company = await dbService.findOne(model.company, { 
@@ -179,7 +187,7 @@ const fundTransferRequest = async (req, res) => {
             refId: req.user.id,
             approvalRefId: approvalRefId,
             transactionId: transactionId,
-            bankId: parseInt(bankId), // Ensure bankId is an integer
+            bankId: verifiedBankId, // Use the verified bank ID from database
             paymentMode: paymentMode,
             transactionDate: new Date(transactionDate),
             referenceNo: referenceNo || null,
