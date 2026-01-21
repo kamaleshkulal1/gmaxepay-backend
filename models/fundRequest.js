@@ -1,11 +1,9 @@
-/**
- * fundRequest.js
- * @description :: sequelize model for fund transfer requests
- */
+
 
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
+const CustomerBank = require('./customerBank');
 const sequelizeTransforms = require('sequelize-transforms');
 const { reusableSMSAttribute } = require('../utils/common');
 
@@ -50,7 +48,7 @@ let fundRequest = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'customerBank',
+        model: CustomerBank,
         key: 'id'
       }
     },
