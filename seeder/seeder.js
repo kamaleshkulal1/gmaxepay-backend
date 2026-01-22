@@ -13905,10 +13905,10 @@ async function serviceCharges() {
 
 async function seedData() {
   
-   await roles();
-   await permissions();
-   await insertPermissions();
-   await rolePermission();
+  //  await roles();
+  //  await permissions();
+  //  await insertPermissions();
+  //  await rolePermission();
   //  await rechargeStateCode();
   //  await KycDocumentSettings();
   //  await createBasicPackage();
