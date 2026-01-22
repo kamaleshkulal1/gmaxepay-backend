@@ -29,13 +29,18 @@ const login = async (req, res) => {
         if (!latitude || !longitude) {
             return res.failure({ message: 'Location coordinates are required!' });
         }
-        const existingUser = await dbService.findOne(model.user, { mobileNo ,companyId});
+        
+        // First check if user exists with this phone number and companyId
+        const existingUser = await dbService.findOne(model.user, { 
+            mobileNo,
+            companyId,
+            isActive: true
+        });
+        
         if (!existingUser) {
-            return res.failure({ message: 'Invalid credentials!' });
+            return res.failure({ message: 'Invalid phone number' });
         }
-        if(!existingUser.isActive){
-            return res.failure({ message: 'User is not active! please contact support.' });
-        }
+        
         if(existingUser.kycStatus !== 'FULL_KYC' || existingUser.kycSteps !== 7) {
             return res.failure({ message: 'KYC is not completed! Please complete your KYC to login.' });
         }

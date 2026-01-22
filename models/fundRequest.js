@@ -49,7 +49,7 @@ let fundRequest = sequelize.define(
       allowNull: false
     },
     paymentMode: {
-      type: DataTypes.ENUM('NEFT', 'RTGS', 'IMPS', 'UPI', 'CASH', 'CHEQUE'),
+      type: DataTypes.ENUM('NEFT', 'RTGS', 'IMPS', 'UPI', 'CASH', 'BANK_TRANSFER', 'CHEQUE'),
       allowNull: false
     },
     transactionDate: {
