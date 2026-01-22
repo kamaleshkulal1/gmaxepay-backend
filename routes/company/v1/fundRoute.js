@@ -12,6 +12,6 @@ router.post('/approve-fund-request', authentication, fundController.approveFundR
 
 router.post('/fund-requests', authentication, fundController.getFundRequests);
 
-router.get('/bank-details', authentication, fundController.allbankDetails);
+router.post('/all-bank-details', authentication, fundController.allbankDetails);
 
 module.exports = router;
