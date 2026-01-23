@@ -528,43 +528,62 @@ const unlockAccount = async (req, res) => {
     }
 
     const { id } = req.params;
-    // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
-    let companyId = req.companyId || req.user?.companyId;
+    const currentUser = req.user;
+    const currentUserRole = currentUser?.userRole;
 
-    // If companyId is still not available, get it from the user record
-    if (!companyId) {
-      const tempUser = await dbService.findOne(model.user, {
-        id,
-        isActive: true
-      }, {
-        attributes: ['companyId']
-      });
-      console.log("tempUser", tempUser);
+    // Build query based on user role
+    let query = { id, isActive: true };
+    let companyId = null;
+
+    // If superadmin (userRole 1), no companyId needed - can unlock any user
+    if (currentUserRole === 1) {
+      // No companyId filter needed for superadmin
+      companyId = null;
+    } 
+    // If whitelabel/company admin (userRole 2), require companyId
+    else if (currentUserRole === 2) {
+      // Get companyId from req.user.companyId
+      companyId = currentUser?.companyId;
       
-      if (tempUser) {
-        companyId = tempUser.companyId;
-      } else {
-        return res.failure({ message: 'User not found' });
+      if (!companyId) {
+        return res.failure({ message: 'Company ID is required for whitelabel users!' });
       }
+      
+      // Add companyId to query
+      query.companyId = companyId;
+    } 
+    // For other roles, require companyId
+    else {
+      companyId = currentUser?.companyId || req.companyId;
+      
+      if (!companyId) {
+        // Try to get it from the user record being unlocked
+        const tempUser = await dbService.findOne(model.user, {
+          id,
+          isActive: true
+        }, {
+          attributes: ['companyId']
+        });
+        
+        if (tempUser) {
+          companyId = tempUser.companyId;
+        } else {
+          return res.failure({ message: 'User not found or Company ID is required!' });
+        }
+      }
+      
+      query.companyId = companyId;
     }
 
     // Find user
-    let foundUser = await dbService.findOne(model.user, {
-      id,
-      companyId,
-      isDeleted: false
-    });
+    let foundUser = await dbService.findOne(model.user, query);
 
     if (!foundUser) {
       return res.failure({ message: 'User not found' });
     }
 
     // Get Sequelize instance to check lock status
-    const userInstance = await dbService.findOne(model.user, { 
-      id, 
-      companyId,
-      isActive: true 
-    });
+    const userInstance = await dbService.findOne(model.user, query);
 
     if (!userInstance) {
       return res.failure({ message: 'User not found' });
@@ -579,16 +598,26 @@ const unlockAccount = async (req, res) => {
     await userInstance.resetAllLockAttempts();
 
     // Reload user to get updated status
-    const updatedUser = await dbService.findOne(model.user, {
-      id,
-      companyId
-    });
+    const reloadQuery = { id };
+    if (companyId) {
+      reloadQuery.companyId = companyId;
+    }
+    const updatedUser = await dbService.findOne(model.user, reloadQuery);
 
-    // Get company for logo
-    const company = await dbService.findOne(model.company, {
-      id: companyId,
-      isDeleted: false
-    });
+    // Get company for logo (only if companyId exists)
+    let company = null;
+    if (companyId) {
+      company = await dbService.findOne(model.company, {
+        id: companyId,
+        isDeleted: false
+      });
+    } else if (updatedUser?.companyId) {
+      // If no companyId in query but user has companyId, use it for logo
+      company = await dbService.findOne(model.company, {
+        id: updatedUser.companyId,
+        isDeleted: false
+      });
+    }
 
     // Send unlock email if user has email
     if (updatedUser.email) {
