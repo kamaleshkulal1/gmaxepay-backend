@@ -3201,6 +3201,13 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
         logoUrl: logoUrl,
         illustrationUrl: illustrationUrl
       });
+      
+      // Update isResetPassword to true after successful email send
+      await dbService.update(
+        model.user,
+        { id: user.id },
+        { isResetPassword: true }
+      );
     } catch (emailError) {
       console.error('Error sending temporary password email:', emailError);
       // Still return success as password is generated, but log the email error
