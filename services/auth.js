@@ -14,6 +14,7 @@ const QRCode = require('qrcode');
 let random = require('random-string-alphanumeric-generator');
 const amezesmsApi = require('../services/amezesmsApi');
 const crypto = require('crypto');
+const aepsDailyLoginService = require('./aepsDailyLoginService');
 
 // Helper function to load user permissions based on role
 const loadUserPermissions = async (userRole) => {
@@ -578,7 +579,7 @@ const loginUser = async (
       key: encryptionKey.toString('hex')
     };
 
-    // In development environment, skip mobile OTP but ENFORCE 2FA
+    // In development environment, skip mobile OTP but check security method
     if (process.env.NODE_ENV === 'development') {
       // Check if password reset is required
       if (user.isResetPassword || !user.password) {
@@ -595,9 +596,9 @@ const loginUser = async (
       // Reset all lock attempts in development environment for easier testing
       await user.resetAllLockAttempts();
 
-      // 2FA is mandatory in development:
-      // If 2FA already enabled, require verification
-      if (user.is2FAenabled) {
+      // Check security method: MPIN (default) or 2FA (optional)
+      // If 2FA is explicitly enabled, use 2FA
+      if (user.is2FAenabled && user.key2Fa) {
         return {
           flag: false,
           msg: 'Please enter your 2FA code',
@@ -608,37 +609,91 @@ const loginUser = async (
         };
       }
       
-      // If 2FA not set up, require setup (generate QR)
-      if (!user.key2Fa) {
-        const qrCodeData = await generateQRCodeURL(user);
+      // Default to MPIN if secureKey exists
+      if (user.secureKey) {
         return {
           flag: false,
-          msg: 'Please set up 2FA to secure your account.',
+          msg: 'Please enter your MPIN',
           data: {
-            requiresSetup2FA: true,
-            qrCode: qrCodeData,
+            requiresMPIN: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
         };
       }
 
-      // If secret exists but 2FA not enabled, ask to complete setup
-      if (!user.is2FAenabled && user.key2Fa) {
-        const qrCodeData = await generateQRCodeURL(user);
-        return {
-          flag: false,
-          msg: 'Please set up 2FA to secure your account.',
-          data: {
-            requires2FA: true,
-            qrCode: qrCodeData,
-            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
-          }
-        };
-      }
+      // If neither MPIN nor 2FA is set, default to MPIN setup
+      // (MPIN is the default security method)
+      return {
+        flag: false,
+        msg: 'Please set up MPIN to secure your account.',
+        data: {
+          requiresSetupMPIN: true,
+          token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+        }
+      };
     }
     
 
-    // Production environment - Generate OTP for mobile verification
+    // Production environment - Check if OTP login is required (once per day)
+    // Check if user already logged in with OTP today (IST)
+    const todayIST = aepsDailyLoginService.getIndianDateOnly(); // Returns YYYY-MM-DD in IST
+    const lastOtpDate = user.lastOtpLoginDate 
+      ? moment(user.lastOtpLoginDate).utcOffset('+05:30').format('YYYY-MM-DD')
+      : null;
+    
+    const otpAlreadyDoneToday = lastOtpDate === todayIST;
+
+    // If OTP was already done today, skip OTP and go directly to security method (MPIN/2FA)
+    if (otpAlreadyDoneToday) {
+      // Check if password reset is required
+      if (user.isResetPassword || !user.password) {
+        return {
+          flag: false,
+          msg: 'Please reset your password',
+          data: {
+            requiresPasswordReset: true,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+
+      // Check security method: MPIN (default) or 2FA (optional)
+      // If 2FA is explicitly enabled, use 2FA
+      if (user.is2FAenabled && user.key2Fa) {
+        return {
+          flag: false,
+          msg: 'Please enter your 2FA code',
+          data: {
+            requires2FA: true,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+      
+      // Default to MPIN if secureKey exists
+      if (user.secureKey) {
+        return {
+          flag: false,
+          msg: 'Please enter your MPIN',
+          data: {
+            requiresMPIN: true,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+
+      // If neither MPIN nor 2FA is set, default to MPIN setup
+      return {
+        flag: false,
+        msg: 'Please set up MPIN to secure your account.',
+        data: {
+          requiresSetupMPIN: true,
+          token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+        }
+      };
+    }
+
+    // OTP not done today - Generate OTP for mobile verification
     // Reset login attempts when generating new OTP
     await user.resetLoginAttempts();
     
@@ -747,6 +802,17 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
       if (isOtpValid) {
         // Reset login attempts on successful verification
         await user.resetLoginAttempts();
+        
+        // Update lastOtpLoginDate to today (IST) - OTP done once per day
+        const todayIST = aepsDailyLoginService.getIndianDateOnly(); // Returns YYYY-MM-DD in IST
+        const todayISTMidnight = new Date(`${todayIST}T00:00:00+05:30`);
+        
+        await dbService.update(
+          model.user,
+          { id: user.id },
+          { lastOtpLoginDate: todayISTMidnight }
+        );
+        
         // Check if password reset is required
         if (user.isResetPassword || !user.password) {
           return {
@@ -797,9 +863,9 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
       };
     }
 
-        // Enforce 2FA after OTP in production
-        // If 2FA already enabled, require verification
-        if (user.is2FAenabled) {
+        // Check security method: MPIN (default) or 2FA (optional)
+        // If 2FA is explicitly enabled, use 2FA
+        if (user.is2FAenabled && user.key2Fa) {
           return {
             flag: false,
             msg: 'Please enter your 2FA code',
@@ -810,33 +876,28 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
           };
         }
         
-        // If 2FA not set up, require setup (generate QR)
-        if (!user.key2Fa) {
-          const qrCodeData = await generateQRCodeURL(user);
+        // Default to MPIN if secureKey exists
+        if (user.secureKey) {
           return {
             flag: false,
-            msg: 'Please set up 2FA to secure your account.',
+            msg: 'Please enter your MPIN',
             data: {
-              requiresSetup2FA: true,
-              qrCode: qrCodeData,
+              requiresMPIN: true,
               token: token
             }
           };
         }
 
-        // If secret exists but 2FA not enabled, ask to complete setup
-        if (!user.is2FAenabled && user.key2Fa) {
-          const qrCodeData = await generateQRCodeURL(user);
-          return {
-            flag: false,
-            msg: 'Please set up 2FA to secure your account.',
-            data: {
-              requiresSetup2FA: true,
-              qrCode: qrCodeData,
-              token: token
-            }
-          };
-        }
+        // If neither MPIN nor 2FA is set, default to MPIN setup
+        // (MPIN is the default security method)
+        return {
+          flag: false,
+          msg: 'Please set up MPIN to secure your account.',
+          data: {
+            requiresSetupMPIN: true,
+            token: token
+          }
+        };
       } else {
         // Increment OTP attempts and potentially lock OTP verification
         await user.incrementOtpAttempts();
@@ -1627,6 +1688,251 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
   }
 };
 
+const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, longitude, ipAddress) => {
+  try {
+    if (!dataToken || !newMPIN || !confirmMPIN) {
+      return {
+        flag: true,
+        msg: 'token, new MPIN, and confirm MPIN are required!'
+      };
+    }
+
+    // Validate and decrypt dataToken with expiration check
+    const tokenValidation = await validateAndDecryptDataToken(dataToken);
+    if (!tokenValidation.isValid) {
+      return {
+        flag: true,
+        msg: tokenValidation.error
+      };
+    }
+
+    const { userId } = tokenValidation;
+    const loginTimestamp = tokenValidation.userDetail?.timestamp;
+
+    // Validate MPIN format (4 digits)
+    const mpinRegex = /^\d{4}$/;
+    if (!mpinRegex.test(newMPIN)) {
+      return {
+        flag: true,
+        msg: 'New MPIN must be exactly 4 digits!'
+      };
+    }
+
+    if (!mpinRegex.test(confirmMPIN)) {
+      return {
+        flag: true,
+        msg: 'Confirm MPIN must be exactly 4 digits!'
+      };
+    }
+
+    // Check if new MPIN and confirm MPIN match
+    if (newMPIN !== confirmMPIN) {
+      return {
+        flag: true,
+        msg: 'New MPIN and Confirm MPIN do not match!'
+      };
+    }
+
+    const where = {
+      id: userId,
+      isActive: true,
+      isDeleted: false
+    };
+    
+    if (companyId !== null) {
+      where.companyId = companyId;
+    }
+    const user = await dbService.findOne(model.user, where);
+    if (!user) {
+      return {
+        flag: true,
+        msg: 'User does not exist!'
+      };
+    }
+
+    // Check if user already has an MPIN
+    if (user.secureKey) {
+      return {
+        flag: true,
+        msg: 'MPIN already set. Please use verify MPIN to login.'
+      };
+    }
+
+    // Hash new MPIN
+    const hashedMPIN = await bcrypt.hash(newMPIN, 8);
+
+    // Update user's secureKey and login status
+    const getTokenVersion = getRandomNumber();
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { 
+        secureKey: hashedMPIN,
+        tokenVersion: getTokenVersion,
+        loggedIn: true
+      }
+    );
+    
+    // Update user object with new tokenVersion
+    user.tokenVersion = getTokenVersion;
+    user.secureKey = hashedMPIN;
+    
+    // Generate final tokens after MPIN setup
+    const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+
+    // Create userLogin record for successful MPIN setup
+    const userLoginRecord = await dbService.createOne(model.userLogin, {
+      user_id: user.id,
+      user_type: user.userRole,
+      isLoggedIn: true,
+      latitude: latitude || null,
+      longitude: longitude || null,
+      ipAddress: ipAddress || null,
+      companyId: user.companyId
+    });
+
+    // Load user permissions
+    const permissions = await loadUserPermissions(user.userRole);
+
+    return {
+      flag: false,
+      msg: 'MPIN set successfully!',
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          name: user.name,
+          mobileNo: user.mobileNo,
+          userRole: user.userRole,
+          outletName: user.outletName,
+          companyId: user.companyId
+        },
+        userLogin: userLoginRecord,
+        permissions
+      }
+    };
+  } catch (error) {
+    console.error('Error setting up MPIN:', error);
+    throw new Error(error.message);
+  }
+};
+
+const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAddress) => {
+  try {
+    if (!dataToken || !mpin) {
+      return {
+        flag: true,
+        msg: 'token and MPIN are required!'
+      };
+    }
+
+    // Validate and decrypt dataToken with expiration check
+    const tokenValidation = await validateAndDecryptDataToken(dataToken);
+    if (!tokenValidation.isValid) {
+      return {
+        flag: true,
+        msg: tokenValidation.error
+      };
+    }
+
+    const { userId } = tokenValidation;
+    const loginTimestamp = tokenValidation.userDetail?.timestamp;
+
+    const where = {
+      id: userId,
+      isActive: true,
+      isDeleted: false
+    };
+    
+    if (companyId !== null) {
+      where.companyId = companyId;
+    }
+    const user = await dbService.findOne(model.user, where);
+    if (!user) {
+      return {
+        flag: true,
+        msg: 'User does not exist!'
+      };
+    }
+
+    if (!user.secureKey) {
+      return {
+        flag: true,
+        msg: 'MPIN is not set for this user!'
+      };
+    }
+
+    // Validate MPIN format (4 digits)
+    const mpinRegex = /^\d{4}$/;
+    if (!mpinRegex.test(mpin)) {
+      return {
+        flag: true,
+        msg: 'MPIN must be exactly 4 digits!'
+      };
+    }
+
+    // Verify MPIN
+    const isMPINValid = await user.isPinMatch(mpin);
+    if (!isMPINValid) {
+      return {
+        flag: true,
+        msg: 'Invalid MPIN. Please try again.'
+      };
+    }
+
+    // Update user login status
+    const getTokenVersion = getRandomNumber();
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { tokenVersion: getTokenVersion, loggedIn: true }
+    );
+    
+    // Update user object with new tokenVersion
+    user.tokenVersion = getTokenVersion;
+    
+    // Generate final tokens after MPIN verification
+    const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+
+    // Create userLogin record for successful MPIN verification
+    const userLoginRecord = await dbService.createOne(model.userLogin, {
+      user_id: user.id,
+      user_type: user.userRole,
+      isLoggedIn: true,
+      latitude: latitude || null,
+      longitude: longitude || null,
+      ipAddress: ipAddress || null,
+      companyId: user.companyId
+    });
+
+    // Load user permissions
+    const permissions = await loadUserPermissions(user.userRole);
+
+    return {
+      flag: false,
+      msg: 'MPIN verification successful!',
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          name: user.name,
+          mobileNo: user.mobileNo,
+          userRole: user.userRole,
+          outletName: user.outletName,
+          companyId: user.companyId
+        },
+        userLogin: userLoginRecord,
+        permissions
+      }
+    };
+  } catch (error) {
+    console.error('Error verifying MPIN:', error);
+    throw new Error(error.message);
+  }
+};
+
 const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
   try {
     if (!dataToken || !otp) {
@@ -1947,13 +2253,13 @@ const setup2FA = async (dataToken, otp, companyId) => {
   }
 };
 
-const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
+const handleSecurity = async (dataToken, code, companyId, latitude, longitude, ipAddress, securityType = 'auto') => {
   try {
-
-    if (!dataToken || !otp) {
+    // securityType can be 'mpin', '2fa', or 'auto' (auto-detect)
+    if (!dataToken || !code) {
       return {
         flag: true,
-        msg: 'token and 2FA code are required!'
+        msg: 'token and security code are required!'
       };
     }
 
@@ -1986,14 +2292,111 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       };
     }
 
-    // Check if 2FA should be verified or setup
-    // If key2FA is not null AND is2FAenabled is true, then verify
-    // Otherwise, setup 2FA
-    const shouldVerify = user.key2Fa && user.is2FAenabled;
+    // Auto-detect security method: prefer 2FA if enabled, otherwise use MPIN
+    let useMPIN = false;
+    let use2FA = false;
+    
+    if (securityType === 'auto') {
+      // If 2FA is explicitly enabled, use 2FA
+      if (user.is2FAenabled && user.key2Fa) {
+        use2FA = true;
+      } else if (user.secureKey) {
+        // Default to MPIN if secureKey exists
+        useMPIN = true;
+      } else {
+        // Neither is set, default to MPIN setup
+        useMPIN = true;
+      }
+    } else if (securityType === 'mpin') {
+      useMPIN = true;
+    } else if (securityType === '2fa') {
+      use2FA = true;
+    }
 
-    if (shouldVerify) {
-      // Verify existing 2FA
-      if (process.env.NODE_ENV === 'development') {
+    // Handle MPIN verification
+    if (useMPIN) {
+      if (!user.secureKey) {
+        return {
+          flag: true,
+          msg: 'MPIN is not set for this user!'
+        };
+      }
+
+      // Validate MPIN format (4 digits)
+      const mpinRegex = /^\d{4}$/;
+      if (!mpinRegex.test(code)) {
+        return {
+          flag: true,
+          msg: 'MPIN must be exactly 4 digits!'
+        };
+      }
+
+      // Verify MPIN
+      const isMPINValid = await user.isPinMatch(code);
+      if (!isMPINValid) {
+        return {
+          flag: true,
+          msg: 'Invalid MPIN. Please try again.'
+        };
+      }
+
+      // Update user login status
+      const getTokenVersion = getRandomNumber();
+      await dbService.update(
+        model.user,
+        { id: user.id },
+        { tokenVersion: getTokenVersion, loggedIn: true }
+      );
+      
+      user.tokenVersion = getTokenVersion;
+      
+      // Generate final tokens after MPIN verification
+      const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+
+      // Create userLogin record
+      const userLoginRecord = await dbService.createOne(model.userLogin, {
+        user_id: user.id,
+        user_type: user.userRole,
+        isLoggedIn: true,
+        latitude: latitude || null,
+        longitude: longitude || null,
+        ipAddress: ipAddress || null,
+        companyId: user.companyId
+      });
+
+      // Load user permissions
+      const permissions = await loadUserPermissions(user.userRole);
+
+      return {
+        flag: false,
+        msg: 'MPIN verification successful!',
+        data: {
+          accessToken,
+          refreshToken,
+          user: {
+            id: user.id,
+            name: user.name,
+            mobileNo: user.mobileNo,
+            userRole: user.userRole,
+            outletName: user.outletName,
+            companyId: user.companyId
+          },
+          userLogin: userLoginRecord,
+          permissions
+        }
+      };
+    }
+
+    // Handle 2FA verification
+    if (use2FA) {
+      // Check if 2FA should be verified or setup
+      // If key2FA is not null AND is2FAenabled is true, then verify
+      // Otherwise, setup 2FA
+      const shouldVerify = user.key2Fa && user.is2FAenabled;
+
+      if (shouldVerify) {
+        // Verify existing 2FA
+        if (process.env.NODE_ENV === 'development') {
         // Update user login status FIRST
         const getTokenVersion = getRandomNumber();
         await dbService.update(
@@ -2043,7 +2446,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       }
 
       // Production environment - Verify OTP
-      const verificationResult = verifyOTP(otp, user);
+      const verificationResult = verifyOTP(code, user);
       if (verificationResult) {
         // Update user login status FIRST
         const getTokenVersion = getRandomNumber();
@@ -2166,7 +2569,7 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       }
 
       // Production environment - Verify OTP and setup
-      const verificationResult = verifyOTP(otp, user);
+      const verificationResult = verifyOTP(code, user);
       if (verificationResult) {
         // Enable 2FA for the user
         await dbService.update(
@@ -2225,8 +2628,9 @@ const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
         };
       }
     }
+    }
   } catch (error) {
-    console.error('Error handling 2FA:', error);
+    console.error('Error handling security:', error);
     throw new Error(error.message);
   }
 };
@@ -2489,6 +2893,11 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
     };
   }
 };
+// Keep handle2FA for backward compatibility - it now uses handleSecurity internally
+const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
+  return handleSecurity(dataToken, otp, companyId, latitude, longitude, ipAddress, '2fa');
+};
+
 module.exports = {
   loginUser,
   getLoggedInUser,
@@ -2505,9 +2914,12 @@ module.exports = {
   verifyQrUser,
   getNews,
   verify2FA,
+  verifyMPIN,
+  setupMPIN,
   resetPassword,
   setup2FA,
   handle2FA,
+  handleSecurity,
   resendTemporaryPassword,
   verifyForgotPasswordOTP
 };

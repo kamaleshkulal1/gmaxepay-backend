@@ -10,6 +10,8 @@ router.post('/reset-password', userController.resetPassword);
 router.post('/forgot-password', userController.resendTemporaryPassword);
 router.post('/verify-forgot-password-otp', userController.verifyForgotPasswordOTP);
 router.post('/handle-2fa', userController.handle2FA);
+router.post('/set-mpin', userController.setMPIN);
+router.post('/verify-mpin', userController.verifyMPIN);
 router.post('/refresh-token', userController.refreshAccessToken);
 router.post('/resend-otp', userController.resendOTP);
 router.post('/logout', authentication, userController.logout);

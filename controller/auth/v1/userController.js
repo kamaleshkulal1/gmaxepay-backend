@@ -223,6 +223,103 @@ const handle2FA = async (req, res) => {
     }
 };
 
+const setMPIN = async (req, res) => {
+    try {
+        const { newMPIN, confirmMPIN, latitude, longitude, ipAddress } = req.body;
+        const companyId = req.headers['x-company-id'];
+        const dataToken = req.headers['token'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
+
+        if (!newMPIN) {
+            return res.failure({ message: 'New MPIN is required!' });
+        }
+
+        if (!confirmMPIN) {
+            return res.failure({ message: 'Confirm MPIN is required!' });
+        }
+
+        if (!dataToken) {
+            return res.failure({ message: 'Token is required!' });
+        }
+        
+        const result = await authService.setupMPIN(
+            dataToken,
+            newMPIN,
+            confirmMPIN,
+            companyId,
+            latitude,
+            longitude,
+            ipAddress
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const verifyMPIN = async (req, res) => {
+    try {
+        const { mpin, latitude, longitude, ipAddress } = req.body;
+        const companyId = req.headers['x-company-id'];
+        const dataToken = req.headers['token'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
+
+        if (!mpin) {
+            return res.failure({ message: 'MPIN is required!' });
+        }
+
+        if (!dataToken) {
+            return res.failure({ message: 'Token is required!' });
+        }
+        
+        const result = await authService.verifyMPIN(
+            dataToken,
+            mpin,
+            companyId,
+            latitude,
+            longitude,
+            ipAddress
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
 const resendOTP = async(req,res)=>{
     try{
         const companyId = req.headers['x-company-id'];
@@ -397,6 +494,8 @@ module.exports = {
     verifyOTP,
     resetPassword,
     handle2FA,
+    setMPIN,
+    verifyMPIN,
     refreshAccessToken,
     resendOTP,
     logout,
