@@ -3,7 +3,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
-const CustomerBank = require('./customerBank');
 const sequelizeTransforms = require('sequelize-transforms');
 const { reusableSMSAttribute } = require('../utils/common');
 

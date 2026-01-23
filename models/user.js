@@ -318,6 +318,15 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true
     },
+    lastOtpLoginDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Date when OTP was last used for login (resets at midnight IST)'
+    },
+    isOtpEnabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     key2Fa: {
       type: DataTypes.STRING,
       allowNull: true
