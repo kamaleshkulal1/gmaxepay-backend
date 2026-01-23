@@ -3176,7 +3176,7 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
     }
 
     // Generate temporary password
-    const tempPassword = random.randomNumber(6);
+    const tempPassword = random.randomNumber(8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
     const expireTime = moment().add(10, 'minutes').toISOString(); // 10 minutes validity
     
@@ -3191,8 +3191,8 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
     );
 
     // Send temporary password to registered email
-    const logoUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/gmaxepay.png` : '';
-    const illustrationUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/tempPassword.png` : '';
+    const logoUrl = process.env.BASE_URL ? `${process.env.BASE_URL}/gmaxepay.png` : '';
+    const illustrationUrl = process.env.BASE_URL? `${process.env.BASE_URL}/tempPassword.png` : '';
     
     try {
       await emailService.sendTempPasswordEmail({
