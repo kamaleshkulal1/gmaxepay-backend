@@ -3005,7 +3005,7 @@ const requestResendTemporaryPassword = async (phoneNumber, companyId, req) => {
     );
 
     // Send SMS
-    const msg = `Dear user, your OTP for resending temporary password is ${code}. Team Gmaxepay`;
+    const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;
     const smsResult = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
 
     console.log('smsResult', smsResult);
