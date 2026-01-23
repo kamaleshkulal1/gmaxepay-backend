@@ -672,26 +672,38 @@ const getFundRequests = async (req, res) => {
 
 const allbankDetails = async (req, res) => {
     try {
+        // Only superadmin (userRole 1) can access this
+        if(req.user.userRole !== 1){
+            return res.failure({ message: 'Access denied. You are not authorized to access ' });
+        }
+        
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId, isActive: true });
         if(!existingUser){
             return res.failure({ message: 'User not found' });
         }
         
-        let queryConditions = { companyId: req.user.companyId };
-        if ([1, 2].includes(req.user.userRole)) {            // No need to filter by refId
-        } else {
-            const reportingUser = await dbService.findOne(model.user, { id: existingUser.reportingTo, companyId: req.user.companyId, isActive: true });
-            if(!reportingUser){
-                return res.failure({ message: 'Reporting user not found' });
-            }
-            queryConditions.refId = reportingUser.id;
+        // Find superadmin where userRole = 1 and companyId = 1
+        const superAdmin = await dbService.findOne(model.user, { 
+            userRole: 1, 
+            companyId: 1, 
+            isActive: true 
+        });
+        
+        if(!superAdmin){
+            return res.failure({ message: 'Superadmin not found' });
         }
         
-        const bankDetailsList = await dbService.findAll(model.customerBank, queryConditions);
+        // Find bank details where refId matches the superadmin's userId
+        const bankDetailsList = await dbService.findAll(model.customerBank, { 
+            refId: superAdmin.id, 
+            companyId: superAdmin.companyId 
+        });
+        
         if(!bankDetailsList || bankDetailsList.length === 0){
             return res.failure({ message: 'Bank details not found' });
         }
         
+        // Process each bank detail to get bank image
         const bankDataList = await Promise.all(bankDetailsList.map(async (bankDetails) => {
             let bankImage = null;
             const bankImage1 = await dbService.findOne(model.practomindBankList, { bankName: bankDetails.bankName });
