@@ -535,10 +535,11 @@ const unlockAccount = async (req, res) => {
     if (!companyId) {
       const tempUser = await dbService.findOne(model.user, {
         id,
-        isDeleted: false
+        isActive: true
       }, {
         attributes: ['companyId']
       });
+      console.log("tempUser", tempUser);
       
       if (tempUser) {
         companyId = tempUser.companyId;
