@@ -672,10 +672,6 @@ const getFundRequests = async (req, res) => {
 
 const allbankDetails = async (req, res) => {
     try {
-        // Only superadmin (userRole 1) can access this
-        if(req.user.userRole !== 1){
-            return res.failure({ message: 'Access denied. You are not authorized to access ' });
-        }
         
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId, isActive: true });
         if(!existingUser){
