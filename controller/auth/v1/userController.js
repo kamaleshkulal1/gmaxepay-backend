@@ -501,6 +501,10 @@ const requestResendTemporaryPassword = async (req, res) => {
         if (!existingCompany) {
             return res.failure({ message: 'Company not found!' });
         }
+        const existingUser = await dbService.findOne(model.user, { mobileNo: phoneNumber, companyId: companyId, isActive: true });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found!' });
+        }
 
         if (!phoneNumber) {
             return res.failure({ message: 'Phone number is required!' });
