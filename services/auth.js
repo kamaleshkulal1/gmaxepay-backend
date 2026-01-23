@@ -3008,6 +3008,7 @@ const requestResendTemporaryPassword = async (phoneNumber, companyId, req) => {
     const msg = `Dear user, your OTP for resending temporary password is ${code}. Team Gmaxepay`;
     const smsResult = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
 
+    console.log('smsResult', smsResult);
     // Generate token for OTP verification
     const ip = req?.headers['x-forwarded-for']?.split(',')[0] ||
               req?.connection?.remoteAddress ||
