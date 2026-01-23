@@ -502,11 +502,32 @@ const getFundRequests = async (req, res) => {
             isDelete: false
         };
 
-        let shouldShowAllRequests = [1, 2].includes(req.user.userRole);
-        const baseOrCondition = shouldShowAllRequests ? [] : [
-            { refId: req.user.id },
-            { approvalRefId: req.user.id }
-        ];
+        // OPTIMIZED: Priority logic - if user is an approver, show ONLY their approval requests
+        // Check if user has any pending approval requests (single optimized query)
+        const hasApprovalRequests = await dbService.findOne(model.fundRequest, {
+            companyId: req.user.companyId,
+            approvalRefId: req.user.id,
+            isActive: true,
+            isDelete: false
+        }, {
+            attributes: ['id'], // Only fetch ID for performance
+            limit: 1 // Limit to 1 for performance
+        });
+
+        const isApprover = !!hasApprovalRequests;
+        
+        if (isApprover) {
+            // User is an approver - show ONLY requests assigned to them for approval
+            query.approvalRefId = req.user.id;
+        } else {
+            // User is not an approver - follow existing role-based logic
+            const shouldShowAllRequests = [1, 2].includes(req.user.userRole);
+            if (!shouldShowAllRequests) {
+                // For non-admin users, show requests they created
+                query.refId = req.user.id;
+            }
+            // For admin users (role 1 or 2), show all requests (no additional filter)
+        }
 
         // Build query from request body
         if (dataToFind && dataToFind.query) {
@@ -575,12 +596,21 @@ const getFundRequests = async (req, res) => {
                 const userIds = matchingUsers.map(u => u.id);
                 
                 if (userIds.length > 0) {
-                    searchOrConditions.push({
-                        [Op.or]: [
-                            { refId: { [Op.in]: userIds } },
-                            { approvalRefId: { [Op.in]: userIds } }
-                        ]
-                    });
+                    // OPTIMIZED: If user is an approver, only search in refId (requester)
+                    // since approvalRefId is already filtered to current user
+                    if (isApprover) {
+                        searchOrConditions.push({
+                            refId: { [Op.in]: userIds }
+                        });
+                    } else {
+                        // For non-approvers, search in both refId and approvalRefId
+                        searchOrConditions.push({
+                            [Op.or]: [
+                                { refId: { [Op.in]: userIds } },
+                                { approvalRefId: { [Op.in]: userIds } }
+                            ]
+                        });
+                    }
                 } else {
                     return res.success({ 
                         message: 'Fund requests retrieved successfully',
@@ -596,27 +626,23 @@ const getFundRequests = async (req, res) => {
             }
 
             if (searchOrConditions.length > 0) {
-                // For superadmin/company admin showing all requests, only apply search conditions
-                if (shouldShowAllRequests) {
+                // Apply search conditions based on user type
+                if (isApprover) {
+                    // For approvers: approvalRefId is already set, just add search conditions
                     query[Op.and] = searchOrConditions;
                 } else {
-                    // Combine base OR condition with search conditions using AND
-                    query[Op.and] = [
-                        { [Op.or]: baseOrCondition },
-                        { [Op.and]: searchOrConditions }
-                    ];
-                }
-            } else {
-                // If no search conditions and showing all requests, no need for baseOrCondition
-                if (!shouldShowAllRequests) {
-                    query[Op.or] = baseOrCondition;
+                    // For non-approvers: apply search conditions
+                    const shouldShowAllRequests = [1, 2].includes(req.user.userRole);
+                    if (shouldShowAllRequests) {
+                        // Admin users: only apply search conditions
+                        query[Op.and] = searchOrConditions;
+                    } else {
+                        // Regular users: refId is already set, just add search conditions
+                        query[Op.and] = searchOrConditions;
+                    }
                 }
             }
-        } else {
-            // If no custom search, only apply base filter if not showing all requests
-            if (!shouldShowAllRequests) {
-                query[Op.or] = baseOrCondition;
-            }
+            // If no search conditions, the base query already has the correct filters
         }
 
         // Use paginate for consistent pagination response
