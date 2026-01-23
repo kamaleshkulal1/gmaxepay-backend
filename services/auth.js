@@ -609,8 +609,20 @@ const loginUser = async (
         };
       }
       
-      // Default to MPIN if secureKey exists
-      if (user.secureKey) {
+      // Check if MPIN setup is required (isMpinSetup: true means setup needed)
+      if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+        return {
+          flag: false,
+          msg: 'Please set up MPIN to secure your account.',
+          data: {
+            requiresSetupMPIN: true,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+      
+      // If MPIN is enabled or secureKey exists, require MPIN verification
+      if (user.isMpinEnabled === true || user.secureKey) {
         return {
           flag: false,
           msg: 'Please enter your MPIN',
@@ -621,8 +633,7 @@ const loginUser = async (
         };
       }
 
-      // If neither MPIN nor 2FA is set, default to MPIN setup
-      // (MPIN is the default security method)
+      // Fallback: If neither MPIN nor 2FA is set, default to MPIN setup
       return {
         flag: false,
         msg: 'Please set up MPIN to secure your account.',
@@ -670,8 +681,20 @@ const loginUser = async (
         };
       }
       
-      // Default to MPIN if secureKey exists
-      if (user.secureKey) {
+      // Check if MPIN setup is required (isMpinSetup: true means setup needed)
+      if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+        return {
+          flag: false,
+          msg: 'Please set up MPIN to secure your account.',
+          data: {
+            requiresSetupMPIN: true,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+      
+      // If MPIN is enabled or secureKey exists, require MPIN verification
+      if (user.isMpinEnabled === true || user.secureKey) {
         return {
           flag: false,
           msg: 'Please enter your MPIN',
@@ -682,7 +705,7 @@ const loginUser = async (
         };
       }
 
-      // If neither MPIN nor 2FA is set, default to MPIN setup
+      // Fallback: If neither MPIN nor 2FA is set, default to MPIN setup
       return {
         flag: false,
         msg: 'Please set up MPIN to secure your account.',
@@ -876,8 +899,20 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
           };
         }
         
-        // Default to MPIN if secureKey exists
-        if (user.secureKey) {
+        // Check if MPIN setup is required (isMpinSetup: true means setup needed)
+        if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+          return {
+            flag: false,
+            msg: 'Please set up MPIN to secure your account.',
+            data: {
+              requiresSetupMPIN: true,
+              token: token
+            }
+          };
+        }
+        
+        // If MPIN is enabled or secureKey exists, require MPIN verification
+        if (user.isMpinEnabled === true || user.secureKey) {
           return {
             flag: false,
             msg: 'Please enter your MPIN',
@@ -888,8 +923,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
           };
         }
 
-        // If neither MPIN nor 2FA is set, default to MPIN setup
-        // (MPIN is the default security method)
+        // Fallback: If neither MPIN nor 2FA is set, default to MPIN setup
         return {
           flag: false,
           msg: 'Please set up MPIN to secure your account.',
@@ -1707,7 +1741,8 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
     }
 
     const { userId } = tokenValidation;
-    const loginTimestamp = tokenValidation.userDetail?.timestamp;
+    const userDetail = tokenValidation.userDetail;
+    const loginTimestamp = userDetail?.timestamp;
 
     // Validate MPIN format (4 digits)
     const mpinRegex = /^\d{4}$/;
@@ -1750,8 +1785,8 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
       };
     }
 
-    // Check if user already has an MPIN
-    if (user.secureKey) {
+    // Check if user already has an MPIN set up
+    if (user.secureKey && user.isMpinEnabled === true) {
       return {
         flag: true,
         msg: 'MPIN already set. Please use verify MPIN to login.'
@@ -1761,55 +1796,49 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
     // Hash new MPIN
     const hashedMPIN = await bcrypt.hash(newMPIN, 8);
 
-    // Update user's secureKey and login status
-    const getTokenVersion = getRandomNumber();
+    // Update user's secureKey and MPIN flags (but don't complete login yet)
     await dbService.update(
       model.user,
       { id: user.id },
       { 
         secureKey: hashedMPIN,
-        tokenVersion: getTokenVersion,
-        loggedIn: true
+        isMpinSetup: false,  // MPIN is now set up
+        isMpinEnabled: true  // MPIN is now enabled
       }
     );
     
-    // Update user object with new tokenVersion
-    user.tokenVersion = getTokenVersion;
+    // Update user object
     user.secureKey = hashedMPIN;
+    user.isMpinSetup = false;
+    user.isMpinEnabled = true;
     
-    // Generate final tokens after MPIN setup
-    const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-
-    // Create userLogin record for successful MPIN setup
-    const userLoginRecord = await dbService.createOne(model.userLogin, {
-      user_id: user.id,
-      user_type: user.userRole,
-      isLoggedIn: true,
-      latitude: latitude || null,
-      longitude: longitude || null,
-      ipAddress: ipAddress || null,
-      companyId: user.companyId
-    });
-
-    // Load user permissions
-    const permissions = await loadUserPermissions(user.userRole);
+    // Generate new dataToken for MPIN verification step
+    const ip = userDetail?.ip || '';
+    const userAgent = userDetail?.userAgent || '';
+    const sensitiveData = {
+      mobileNo: user.mobileNo,
+      email: user.email,
+      userRole: user.userRole,
+      userType: user.userType,
+      userId: user.id,
+      companyId: user.companyId,
+      ip: ip,
+      timestamp: loginTimestamp || Date.now()
+    };
+    
+    const encryptionKey = crypto.randomBytes(32);
+    const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
+    const newDataToken = Buffer.from(JSON.stringify({
+      data: encryptedData,
+      key: encryptionKey.toString('hex')
+    })).toString('base64');
 
     return {
       flag: false,
-      msg: 'MPIN set successfully!',
+      msg: 'MPIN set successfully! Please verify your MPIN to complete login.',
       data: {
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          name: user.name,
-          mobileNo: user.mobileNo,
-          userRole: user.userRole,
-          outletName: user.outletName,
-          companyId: user.companyId
-        },
-        userLogin: userLoginRecord,
-        permissions
+        requiresMPIN: true,
+        token: newDataToken
       }
     };
   } catch (error) {
@@ -2300,12 +2329,24 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
       // If 2FA is explicitly enabled, use 2FA
       if (user.is2FAenabled && user.key2Fa) {
         use2FA = true;
+      } else if (user.isMpinEnabled === true && user.secureKey) {
+        // Use MPIN if it's enabled and secureKey exists
+        useMPIN = true;
+      } else if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+        // If MPIN setup is required, return setup requirement
+        return {
+          flag: true,
+          msg: 'MPIN is not set up. Please set up MPIN first.'
+        };
       } else if (user.secureKey) {
-        // Default to MPIN if secureKey exists
+        // Fallback: Default to MPIN if secureKey exists
         useMPIN = true;
       } else {
         // Neither is set, default to MPIN setup
-        useMPIN = true;
+        return {
+          flag: true,
+          msg: 'MPIN is not set up. Please set up MPIN first.'
+        };
       }
     } else if (securityType === 'mpin') {
       useMPIN = true;
@@ -2315,7 +2356,15 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
 
     // Handle MPIN verification
     if (useMPIN) {
-      if (!user.secureKey) {
+      // Check if MPIN setup is required first
+      if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+        return {
+          flag: true,
+          msg: 'MPIN is not set up. Please set up MPIN first.'
+        };
+      }
+      
+      if (!user.secureKey || !user.isMpinEnabled) {
         return {
           flag: true,
           msg: 'MPIN is not set for this user!'

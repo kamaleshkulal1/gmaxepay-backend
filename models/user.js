@@ -327,6 +327,14 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    isMpinSetup:{
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+    isMpinEnabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     key2Fa: {
       type: DataTypes.STRING,
       allowNull: true
