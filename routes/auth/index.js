@@ -9,6 +9,8 @@ router.post('/verify-mobile-otp', userController.verifyOTP);
 router.post('/reset-password', userController.resetPassword);
 router.post('/forgot-password', userController.resendTemporaryPassword);
 router.post('/verify-forgot-password-otp', userController.verifyForgotPasswordOTP);
+router.post('/send-otp-temp', userController.requestResendTemporaryPassword);
+router.post('/verify-otp-temp', userController.verifyResendTemporaryPasswordOTP);
 router.post('/handle-2fa', userController.handle2FA);
 router.post('/set-mpin', userController.setMPIN);
 router.post('/verify-mpin', userController.verifyMPIN);

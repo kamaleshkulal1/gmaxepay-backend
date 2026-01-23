@@ -489,6 +489,87 @@ const verifyForgotPasswordOTP = async (req, res) => {
     }
 };
 
+const requestResendTemporaryPassword = async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+        const companyId = req.headers['x-company-id'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
+
+        if (!phoneNumber) {
+            return res.failure({ message: 'Phone number is required!' });
+        }
+        
+        const result = await authService.requestResendTemporaryPassword(
+            phoneNumber,
+            companyId,
+            req
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const verifyResendTemporaryPasswordOTP = async (req, res) => {
+    try {
+        const { otp } = req.body;
+        const companyId = req.headers['x-company-id'];
+        const token = req.headers['token'];
+
+        if (!companyId) {
+            return res.failure({ message: 'Company ID is required!' });
+        }
+        const existingCompany = await dbService.findOne(model.company, { id: companyId });
+        if (!existingCompany) {
+            return res.failure({ message: 'Company not found!' });
+        }
+
+        if (!otp) {
+            return res.failure({ message: 'OTP is required!' });
+        }
+
+        if (!token) {
+            return res.failure({ message: 'Token is required!' });
+        }
+        
+        const result = await authService.verifyResendTemporaryPasswordOTP(
+            token,
+            otp,
+            companyId
+        );
+
+        if (result.flag) {
+            return res.failure({ message: result.msg });
+        }
+
+        return res.success({ 
+            message: result.msg,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
 module.exports = {
     login,
     verifyOTP,
@@ -500,5 +581,7 @@ module.exports = {
     resendOTP,
     logout,
     resendTemporaryPassword,
-    verifyForgotPasswordOTP
+    verifyForgotPasswordOTP,
+    requestResendTemporaryPassword,
+    verifyResendTemporaryPasswordOTP
 };

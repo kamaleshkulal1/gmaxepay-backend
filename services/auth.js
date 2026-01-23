@@ -11,6 +11,7 @@ const { JWT, MAX_LOGIN_RETRY_LIMIT } = require('../constants/authConstant');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
+const emailService = require('./emailService');
 let random = require('random-string-alphanumeric-generator');
 const amezesmsApi = require('../services/amezesmsApi');
 const crypto = require('crypto');
@@ -2942,6 +2943,292 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
     };
   }
 };
+
+const requestResendTemporaryPassword = async (phoneNumber, companyId, req) => {
+  try {
+    if (!phoneNumber) {
+      return {
+        flag: true,
+        msg: 'Phone number is required!'
+      };
+    }
+    if (!companyId) {
+      return {
+        flag: true,
+        msg: 'Company ID is required!'
+      };
+    }
+    const existingCompany = await dbService.findOne(model.company, { id: companyId });
+    if (!existingCompany) {
+      return {
+        flag: true,
+        msg: 'Company not found!'
+      };
+    }
+    const user = await dbService.findOne(model.user, { mobileNo: phoneNumber, companyId: companyId, isActive: true });
+    if (!user) {
+      return {
+        flag: true,
+        msg: 'User not found!'
+      };
+    }
+
+    if (!user.email) {
+      return {
+        flag: true,
+        msg: 'User email not found. Cannot send temporary password!'
+      };
+    }
+
+    // Check if OTP attempts are locked
+    if (user.isOtpLocked && user.isOtpLocked()) {
+      return {
+        flag: true,
+        msg: 'Cannot send OTP. Account is locked due to multiple failed attempts. Please contact admin for assistance.'
+      };
+    }
+
+    // Reset OTP attempts when generating new OTP
+    if (user.resetOtpAttempts) {
+      await user.resetOtpAttempts();
+    }
+
+    // Generate OTP
+    const code = random.randomNumber(6);
+    const hashedCode = await bcrypt.hash(code, 10);
+    const expireOTP = moment().add(120, 'seconds').toISOString(); // 2 minutes
+    
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { otpMobile: hashedCode + '~' + expireOTP }
+    );
+
+    // Send SMS
+    const msg = `Dear user, your OTP for resending temporary password is ${code}. Team Gmaxepay`;
+    const smsResult = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
+
+    // Generate token for OTP verification
+    const ip = req?.headers['x-forwarded-for']?.split(',')[0] ||
+              req?.connection?.remoteAddress ||
+              req?.socket?.remoteAddress ||
+              req?.ip || '';
+    const userAgent = req?.headers['user-agent'] || '';
+
+    const sensitiveData = {
+      mobileNo: user.mobileNo,
+      email: user.email,
+      userRole: user.userRole,
+      userType: user.userType,
+      userId: user.id,
+      companyId: user.companyId,
+      ip: ip,
+      timestamp: Date.now(),
+      purpose: 'resend_temp_password_otp'
+    };
+    
+    const encryptionKey = crypto.randomBytes(32);
+    const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
+
+    const dataToken = {
+      data: encryptedData,
+      key: encryptionKey.toString('hex')
+    };
+
+    if (smsResult) {
+      return {
+        flag: false,
+        msg: 'OTP sent successfully!',
+        data: {
+          requiresOtpVerify: true,
+          token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+        }
+      };
+    } else {
+      return {
+        flag: true,
+        msg: 'Error sending OTP!'
+      };
+    }
+  } catch (error) {
+    console.error('Error requesting resend temporary password:', error);
+    return {
+      flag: true,
+      msg: error.message || 'Unable to request temporary password'
+    };
+  }
+};
+
+const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
+  try {
+    if (!token || !otp) {
+      return {
+        flag: true,
+        msg: 'Token and OTP are required!'
+      };
+    }
+
+    // Validate and decrypt dataToken with expiration check
+    const tokenValidation = await validateAndDecryptDataToken(token);
+    if (!tokenValidation.isValid) {
+      return {
+        flag: true,
+        msg: tokenValidation.error
+      };
+    }
+
+    const userDetail = tokenValidation.userDetail;
+    const { mobileNo, userId, companyId: tokenCompanyId, purpose } = userDetail;
+
+    // Verify this token is for resend temporary password
+    if (purpose !== 'resend_temp_password_otp') {
+      return {
+        flag: true,
+        msg: 'Invalid token purpose!'
+      };
+    }
+
+    const where = {
+      id: userId,
+      isActive: true,
+      isDeleted: false,
+      mobileNo
+    };
+    
+    if (companyId !== null) {
+      where.companyId = companyId;
+    }
+    
+    const user = await dbService.findOne(model.user, where);
+    if (!user) {
+      return {
+        flag: true,
+        msg: 'User does not exist!'
+      };
+    }
+
+    if (!user.email) {
+      return {
+        flag: true,
+        msg: 'User email not found. Cannot send temporary password!'
+      };
+    }
+    
+    // Check if account is locked
+    if (user.isAccountLocked && user.isAccountLocked()) {
+      return {
+        flag: true,
+        msg: 'Account is locked due to multiple failed attempts. Please contact admin for assistance.'
+      };
+    }
+
+    // Verify OTP
+    if (!user.otpMobile) {
+      return {
+        flag: true,
+        msg: 'OTP is not set. Please request a new OTP.'
+      };
+    }
+
+    const [hashedOtp, expireOTP] = user.otpMobile.split('~');
+    const currentTime = moment().toISOString();
+    
+    if (moment(currentTime).isAfter(expireOTP)) {
+      return {
+        flag: true,
+        msg: 'OTP has expired. Please request a new OTP.'
+      };
+    }
+    
+    if (otp.length !== 6) {
+      return {
+        flag: true,
+        msg: 'Please provide a valid OTP!'
+      };
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, hashedOtp);
+    if (!isOtpValid) {
+      // Increment OTP attempts
+      if (user.incrementOtpAttempts) {
+        await user.incrementOtpAttempts();
+      }
+      
+      const updatedUser = await dbService.findOne(model.user, { id: user.id });
+      if (updatedUser.isOtpLocked && updatedUser.isOtpLocked()) {
+        return {
+          flag: true,
+          msg: 'OTP verification locked due to multiple failed attempts. Please contact admin for assistance.'
+        };
+      }
+      
+      const remainingAttempts = 3 - (updatedUser.loginAttempts || 0);
+      return {
+        flag: true,
+        msg: `OTP is incorrect. ${remainingAttempts} attempts remaining before OTP lock.`
+      };
+    }
+
+    // Reset OTP attempts on successful verification
+    if (user.resetOtpAttempts) {
+      await user.resetOtpAttempts();
+    }
+
+    // Generate temporary password
+    const tempPassword = random.randomNumber(6);
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    const expireTime = moment().add(10, 'minutes').toISOString(); // 10 minutes validity
+    
+    // Store temporary password with expiry time
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { 
+        password: hashedPassword + '~' + expireTime,
+        tokenVersion: getRandomNumber()
+      }
+    );
+
+    // Send temporary password to registered email
+    const logoUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/gmaxepay.png` : '';
+    const illustrationUrl = process.env.AWS_CDN_URL ? `${process.env.AWS_CDN_URL}/tempPassword.png` : '';
+    
+    try {
+      await emailService.sendTempPasswordEmail({
+        to: user.email,
+        userName: user.name || 'User',
+        tempPassword: tempPassword,
+        logoUrl: logoUrl,
+        illustrationUrl: illustrationUrl
+      });
+      
+      // Update isResetPassword to true after successful email send
+      await dbService.update(
+        model.user,
+        { id: user.id },
+        { isResetPassword: true }
+      );
+    } catch (emailError) {
+      console.error('Error sending temporary password email:', emailError);
+      // Still return success as password is generated, but log the email error
+    }
+
+    return {
+      flag: false,
+      msg: 'Temporary password generated and sent to your registered email successfully! It is valid for 10 minutes.',
+      data: {
+        email: user.email
+      }
+    };
+  } catch (error) {
+    console.error('Error verifying resend temporary password OTP:', error);
+    return {
+      flag: true,
+      msg: error.message || 'Unable to verify OTP and generate temporary password'
+    };
+  }
+};
+
 // Keep handle2FA for backward compatibility - it now uses handleSecurity internally
 const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
   return handleSecurity(dataToken, otp, companyId, latitude, longitude, ipAddress, '2fa');
@@ -2970,5 +3257,7 @@ module.exports = {
   handle2FA,
   handleSecurity,
   resendTemporaryPassword,
-  verifyForgotPasswordOTP
+  verifyForgotPasswordOTP,
+  requestResendTemporaryPassword,
+  verifyResendTemporaryPasswordOTP
 };
