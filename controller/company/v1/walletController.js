@@ -7,7 +7,7 @@ const walletBalance = async(req, res)=>{
             id: req.user.id,
             companyId: req.user.companyId,
             isActive: true,
-            isDelete: false
+            isDeleted: false
         });
         if(existingUser.userRole !== 2){
             return res.failure({ message: 'Unauthorized access' });
