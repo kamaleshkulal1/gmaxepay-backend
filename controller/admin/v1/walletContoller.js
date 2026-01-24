@@ -4,22 +4,10 @@ const asl = require('../../../services/asl')
 
 const alsWallet = async(req, res)=>{
     try{
-        // Check user existence and role in parallel with API call for optimization
-        const [existingUser, response] = await Promise.all([
-            dbService.findOne(model.user, {
-                id: req.user.id,
-                isActive: true
-            }),
-            asl.alsWallet()
-        ]);
-
-        if(!existingUser){
-            return res.failure({ message: 'User not found' });
-        }
-        
-        if(existingUser.userRole !== 1){
+        if(req.user.userRole !== 1){
             return res.failure({ message: 'Unauthorized access' });
         }
+        const response = await asl.alsWallet();
 
         if(response?.status === 'true' || response?.status === true){
             return res.success({ message: 'Wallet fetched successfully', data: response });
