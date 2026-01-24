@@ -1299,13 +1299,13 @@ const getBillerIds = async (req, res) => {
       { name: operatorService, isDeleted: false }
     );
     if (!operatorCategories) {
-      // Return success with null data when category not found
+      // Return success with empty array when category not found
       const defaultPage = dataToFind?.options?.page || 1;
       const defaultPaginate = dataToFind?.options?.paginate || 25;
       return res.status(200).send({
         status: 'SUCCESS',
         message: 'Biller IDs fetched successfully',
-        data: null,
+        data: [],
         total: 0,
         paginator: {
           itemCount: 0,
