@@ -486,6 +486,11 @@ const getFundRequests = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
         
+        if (req.user.userRole !== 2) {
+            return res.failure({ 
+                message: 'Authorized access only for company admin' 
+            });
+        }
 
         const dataToFind = req.body || {};
         let options = {};
