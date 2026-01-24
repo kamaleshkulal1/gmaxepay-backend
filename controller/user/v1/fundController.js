@@ -558,7 +558,7 @@ const getFundRequests = async (req, res) => {
         ];
 
         // Handle customSearch (iLike search on multiple fields)
-        // Only support: name, transactionId
+        // Support: name, transactionId, referenceNo
         if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
             const keys = Object.keys(dataToFind.customSearch);
             const searchOrConditions = [];
@@ -571,7 +571,7 @@ const getFundRequests = async (req, res) => {
                 // Handle name search separately
                 if (key === 'userName' || key === 'name') {
                     nameSearchValue = String(value).trim();
-                } else if (key === 'transactionId') {
+                } else if (key === 'transactionId' || key === 'referenceNo') {
                     // Direct field search in fundRequest table
                     searchOrConditions.push({
                         [key]: {
@@ -617,11 +617,16 @@ const getFundRequests = async (req, res) => {
             }
 
             if (searchOrConditions.length > 0) {
-                // Combine approvalRefId filter with search conditions using AND
-                query[Op.and] = [
-                    { approvalRefId: req.user.id },
-                    { [Op.and]: searchOrConditions }
-                ];
+                // Combine all search conditions with OR (if multiple) and then AND with base query
+                if (searchOrConditions.length === 1) {
+                    // Single condition - add directly to query (will be ANDed with base conditions)
+                    Object.assign(query, searchOrConditions[0]);
+                } else {
+                    // Multiple conditions - combine with OR, then AND with base query
+                    query[Op.and] = [
+                        { [Op.or]: searchOrConditions }
+                    ];
+                }
             }
         }
 

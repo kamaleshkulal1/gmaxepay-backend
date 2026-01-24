@@ -525,7 +525,39 @@ const getFundRequests = async (req, res) => {
 
         // Build query from request body
         if (dataToFind && dataToFind.query) {
-            query = { ...query, ...dataToFind.query };
+            // Extract startDate and endDate before merging query to handle them separately
+            const { startDate, endDate, ...restQuery } = dataToFind.query;
+            query = { ...query, ...restQuery };
+
+            // Handle date filtering (startDate/endDate)
+            // Filter by transactionDate for fund requests
+            if (startDate || endDate) {
+                if (startDate && endDate) {
+                    // Both dates provided - filter by range
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    
+                    query.transactionDate = {
+                        [Op.between]: [start, end]
+                    };
+                } else if (startDate) {
+                    // Only start date - filter from date onwards
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    query.transactionDate = {
+                        [Op.gte]: start
+                    };
+                } else if (endDate) {
+                    // Only end date - filter up to date
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    query.transactionDate = {
+                        [Op.lte]: end
+                    };
+                }
+            }
         }
 
         // Handle options (pagination, sorting)
@@ -566,7 +598,8 @@ const getFundRequests = async (req, res) => {
 
                 if (key === 'userName' || key === 'name') {
                     nameSearchValue = String(value).trim();
-                } else if (key === 'transactionId') {
+                } else if (key === 'transactionId' || key === 'referenceNo') {
+                    // Direct field search in fundRequest table
                     searchOrConditions.push({
                         [key]: {
                             [Op.iLike]: `%${String(value).trim()}%`
@@ -627,8 +660,16 @@ const getFundRequests = async (req, res) => {
             }
 
             if (searchOrConditions.length > 0) {
-                // Apply search conditions - both approvers and non-approvers use the same logic
-                query[Op.and] = searchOrConditions;
+                // Combine all search conditions with OR (if multiple) and then AND with base query
+                if (searchOrConditions.length === 1) {
+                    // Single condition - add directly to query (will be ANDed with base conditions)
+                    Object.assign(query, searchOrConditions[0]);
+                } else {
+                    // Multiple conditions - combine with OR, then AND with base query
+                    query[Op.and] = [
+                        { [Op.or]: searchOrConditions }
+                    ];
+                }
             }
             // If no search conditions, the base query already has the correct filters
         }
