@@ -4,26 +4,31 @@ const asl = require('../../../services/asl')
 
 const alsWallet = async(req, res)=>{
     try{
-        const existingUser = await dbService.findOne(model.user, {
-            id: req.user.id,
-            isActive: true
-        });
-        if(existingUser.userRole !== 1){
-            return res.failure({ message: 'Unauthorized access' });
-        }
+        // Check user existence and role in parallel with API call for optimization
+        const [existingUser, response] = await Promise.all([
+            dbService.findOne(model.user, {
+                id: req.user.id,
+                isActive: true
+            }),
+            asl.alsWallet()
+        ]);
+
         if(!existingUser){
             return res.failure({ message: 'User not found' });
         }
-        const response = await asl.alsWallet();
-        console.log("response",response);
-        if(response.status === 'true' || response.status === true){
-            return res.success({ message: 'Wallet fetched successfully', data: response });
-        }else{
-            return res.failure({ message: response.message });
+        
+        if(existingUser.userRole !== 1){
+            return res.failure({ message: 'Unauthorized access' });
         }
+
+        if(response?.status === 'true' || response?.status === true){
+            return res.success({ message: 'Wallet fetched successfully', data: response });
+        }
+        
+        return res.failure({ message: response?.message || 'Unable to fetch wallet balance' });
     }catch(error){
         console.error('Error in alsWallet', error);
-        return res.failure({ message: error.message });
+        return res.failure({ message: error.message || 'Unable to fetch wallet balance' });
     }
 }
 

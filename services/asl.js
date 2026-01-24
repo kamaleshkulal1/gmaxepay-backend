@@ -581,20 +581,33 @@ const aslDmtMoneyTransfer = async (data) => {
 
 const alsWallet = async()=>{
     try{
+        // Use https agent for connection reuse (faster subsequent requests)
+        const isHttps = aslUrl?.startsWith('https');
         const response = await axios.post(`${aslUrl}/check/walletBalance`, {
             associateId: aslAssociateId,
             apiToken: aslApiToken,   
         }, {
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 3000, // 3 second timeout to fail fast if API is slow
+            httpAgent: !isHttps ? httpAgent : undefined,
+            httpsAgent: isHttps ? httpsAgent : undefined
         });  
         return response.data;
     }catch(error){
-        console.log("error",error);
-        return error.response.data;
+        // Handle timeout and network errors
+        if(error.code === 'ECONNABORTED'){
+            throw new Error('Request timeout: ASL API did not respond in time');
+        }
+        // Return error response data if available, otherwise throw
+        if(error.response?.data){
+            return error.response.data;
+        }
+        throw error;
     }
 }
+
 module.exports = {
     aslAepsOnboarding,
     aslAepsValidateAgentOtp,
