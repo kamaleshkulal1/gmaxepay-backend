@@ -521,14 +521,9 @@ const getFundRequests = async (req, res) => {
         let options = {};
         let query = { 
             companyId: req.user.companyId,
+            approvalRefId: req.user.id,
             isActive: true
         };
-
-        // Base filter: by refId (requests made by user) or approvalRefId (requests to approve)
-        const baseOrCondition = [
-            { refId: req.user.id },
-            { approvalRefId: req.user.id }
-        ];
 
         // Build query from request body
         if (dataToFind && dataToFind.query) {
@@ -602,12 +597,9 @@ const getFundRequests = async (req, res) => {
                 const userIds = matchingUsers.map(u => u.id);
                 
                 if (userIds.length > 0) {
-                    // Add condition to filter by these user IDs (either as requester or approver)
+                    // Add condition to filter by requester user IDs only
                     searchOrConditions.push({
-                        [Op.or]: [
-                            { refId: { [Op.in]: userIds } },
-                            { approvalRefId: { [Op.in]: userIds } }
-                        ]
+                        refId: { [Op.in]: userIds }
                     });
                 } else {
                     // No users found with that name, return empty results
@@ -625,16 +617,12 @@ const getFundRequests = async (req, res) => {
             }
 
             if (searchOrConditions.length > 0) {
-                // Combine base OR condition with search conditions using AND
+                // Combine approvalRefId filter with search conditions using AND
                 query[Op.and] = [
-                    { [Op.or]: baseOrCondition },
+                    { approvalRefId: req.user.id },
                     { [Op.and]: searchOrConditions }
                 ];
-            } else {
-                query[Op.or] = baseOrCondition;
             }
-        } else {
-            query[Op.or] = baseOrCondition;
         }
 
         // Use paginate for consistent pagination response
