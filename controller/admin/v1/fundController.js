@@ -338,11 +338,23 @@ const getFundRequests = async (req, res) => {
             isDelete: false
         };
 
-        // Base filter: by refId (requests made by user) or approvalRefId (requests to approve)
-        const baseOrCondition = [
-            { refId: req.user.id },
-            { approvalRefId: req.user.id }
-        ];
+        const hasApprovalRequests = await dbService.findOne(model.fundRequest, {
+            approvalRefId: req.user.id,
+            isActive: true,
+            isDelete: false
+        }, {
+            attributes: ['id']
+        });
+
+        const isApprover = !!hasApprovalRequests;
+        
+        if (isApprover) {
+            // User is an approver - show ONLY requests assigned to them for approval
+            query.approvalRefId = req.user.id;
+        } else {
+            // User is not an approver - show requests they created
+            query.refId = req.user.id;
+        }
 
         // Build query from request body
         if (dataToFind && dataToFind.query) {
@@ -402,8 +414,8 @@ const getFundRequests = async (req, res) => {
 
             // If searching by name, find matching user IDs first
             if (nameSearchValue) {
+                // For superadmin, search across all companies
                 const matchingUsers = await dbService.findAll(model.user, {
-                    companyId: req.user.companyId,
                     name: {
                         [Op.iLike]: `%${nameSearchValue}%`
                     },
@@ -416,13 +428,18 @@ const getFundRequests = async (req, res) => {
                 const userIds = matchingUsers.map(u => u.id);
                 
                 if (userIds.length > 0) {
-                    // Add condition to filter by these user IDs (either as requester or approver)
-                    searchOrConditions.push({
-                        [Op.or]: [
-                            { refId: { [Op.in]: userIds } },
-                            { approvalRefId: { [Op.in]: userIds } }
-                        ]
-                    });
+                    // OPTIMIZED: If user is an approver, only search in refId (requester)
+                    // since approvalRefId is already filtered to current user
+                    if (isApprover) {
+                        searchOrConditions.push({
+                            refId: { [Op.in]: userIds }
+                        });
+                    } else {
+                        // For non-approvers, search in refId (requests they created)
+                        searchOrConditions.push({
+                            refId: { [Op.in]: userIds }
+                        });
+                    }
                 } else {
                     // No users found with that name, return empty results
                     return res.success({ 
@@ -439,16 +456,16 @@ const getFundRequests = async (req, res) => {
             }
 
             if (searchOrConditions.length > 0) {
-                // Combine base OR condition with search conditions using AND
-                query[Op.and] = [
-                    { [Op.or]: baseOrCondition },
-                    { [Op.and]: searchOrConditions }
-                ];
-            } else {
-                query[Op.or] = baseOrCondition;
+                // Apply search conditions based on user type
+                if (isApprover) {
+                    // For approvers: approvalRefId is already set, just add search conditions
+                    query[Op.and] = searchOrConditions;
+                } else {
+                    // For non-approvers: refId is already set, just add search conditions
+                    query[Op.and] = searchOrConditions;
+                }
             }
-        } else {
-            query[Op.or] = baseOrCondition;
+            // If no search conditions, the base query already has the correct filters
         }
 
         // Use paginate for consistent pagination response
