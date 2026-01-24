@@ -1,7 +1,7 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
-const { aslAepsPayOut } = require('../../../services/asl');
+const asl = require('../../../services/asl');
 
 const payout = async (req, res) => {
     try {
@@ -230,15 +230,15 @@ const payout = async (req, res) => {
                 paymentMode: paymentMode,
                 latitude: latitude,
                 longitude: longitude,
-                agentTransactionID: transactionID
+                agentTransactionId: transactionID
             };
             console.log("aslPayload",aslPayload);
             
-            const aslResponse = await aslAepsPayOut(aslPayload);
+            const aslResponse = await asl.aslAepsPayOut(aslPayload);
             
             // Store API response
             payoutHistoryData.apiResponse = aslResponse;
-            payoutHistoryData.agentTransactionID = transactionID;
+            payoutHistoryData.agentTransactionId = transactionID;
             
             // Update status based on ASL response
             if (aslResponse && aslResponse.status) {
