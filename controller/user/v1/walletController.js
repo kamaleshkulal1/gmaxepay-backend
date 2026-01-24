@@ -7,7 +7,7 @@ const walletBalance = async(req, res)=>{
             id: req.user.id,
             companyId: req.user.companyId,
             isActive: true,
-            isDelete: false
+            isDeleted: false
         });
         if(!existingUser){
             return res.failure({ message: 'User not found' });
