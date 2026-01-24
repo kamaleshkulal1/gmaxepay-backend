@@ -486,22 +486,23 @@ const getFundRequests = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
         
-        // Allow only superadmin (userRole 1) to access this endpoint
-        if (req.user.userRole !== 1) {
+        if (req.user.userRole !== 2) {
             return res.failure({ 
-                message: 'Access denied. Only superadmin can access this endpoint' 
+                message: 'Authorized access only for company admin' 
             });
         }
 
         const dataToFind = req.body || {};
         let options = {};
         let query = { 
+            companyId: req.user.companyId,
             isActive: true,
             isDelete: false
         };
 
         const hasApprovalRequests = await dbService.findOne(model.fundRequest, {
             approvalRefId: req.user.id,
+            companyId: req.user.companyId,
             isActive: true,
             isDelete: false
         }, {
@@ -512,6 +513,7 @@ const getFundRequests = async (req, res) => {
         const isApprover = !!hasApprovalRequests;
         
         if (isApprover) {
+            query.companyId = req.user.companyId;
             // User is an approver - show ONLY requests assigned to them for approval (across all companies)
             query.approvalRefId = req.user.id;
         } else {
