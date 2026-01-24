@@ -359,7 +359,39 @@ const getFundRequests = async (req, res) => {
 
         // Build query from request body
         if (dataToFind && dataToFind.query) {
-            query = { ...query, ...dataToFind.query };
+            // Extract startDate and endDate before merging query to handle them separately
+            const { startDate, endDate, ...restQuery } = dataToFind.query;
+            query = { ...query, ...restQuery };
+
+            // Handle date filtering (startDate/endDate)
+            // Filter by transactionDate for fund requests
+            if (startDate || endDate) {
+                if (startDate && endDate) {
+                    // Both dates provided - filter by range
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    
+                    query.transactionDate = {
+                        [Op.between]: [start, end]
+                    };
+                } else if (startDate) {
+                    // Only start date - filter from date onwards
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    query.transactionDate = {
+                        [Op.gte]: start
+                    };
+                } else if (endDate) {
+                    // Only end date - filter up to date
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    query.transactionDate = {
+                        [Op.lte]: end
+                    };
+                }
+            }
         }
 
         // Handle options (pagination, sorting)
