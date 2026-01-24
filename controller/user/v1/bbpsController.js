@@ -1299,7 +1299,21 @@ const getBillerIds = async (req, res) => {
       { name: operatorService, isDeleted: false }
     );
     if (!operatorCategories) {
-      return res.failure({ message: 'Operator category not found' });
+      // Return success with null data when category not found
+      const defaultPage = dataToFind?.options?.page || 1;
+      const defaultPaginate = dataToFind?.options?.paginate || 25;
+      return res.status(200).send({
+        status: 'SUCCESS',
+        message: 'Biller IDs fetched successfully',
+        data: null,
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: defaultPaginate,
+          pageCount: 0,
+          currentPage: defaultPage
+        }
+      });
     }
 
     // Build base query with categoryId and isDeleted filter
