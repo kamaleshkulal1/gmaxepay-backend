@@ -496,7 +496,6 @@ const getFundRequests = async (req, res) => {
         const dataToFind = req.body || {};
         let options = {};
         let query = { 
-            companyId: req.user.companyId,
             isActive: true,
             isDelete: false
         };
