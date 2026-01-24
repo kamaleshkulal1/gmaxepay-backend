@@ -50,13 +50,19 @@ const walletBalance = async(req, res)=>{
         }
 
         // Sum all aepsWallet amounts from all users in the company
-        const totalAepsWallet = await model.wallet.sum('apesWallet', {
-            where: {
-                companyId: existingUser.companyId,
-                isActive: true,
-                isDelete: false
-            }
+        // Use findAll to get all wallets and sum manually
+        const allWallets = await dbService.findAll(model.wallet, {
+            companyId: existingUser.companyId,
+            isDelete: false
+        }, {
+            attributes: ['apesWallet']
         });
+
+        // Calculate sum of all aepsWallet amounts
+        const totalAepsWallet = allWallets.reduce((sum, wallet) => {
+            const aepsWallet = parseFloat(wallet.apesWallet || 0);
+            return sum + aepsWallet;
+        }, 0);
 
         const response = {
             mainWallet: wallet?.mainWallet ? parseFloat(wallet.mainWallet).toFixed(2) : '0.00',
