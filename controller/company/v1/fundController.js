@@ -495,12 +495,14 @@ const getFundRequests = async (req, res) => {
         const dataToFind = req.body || {};
         let options = {};
         let query = { 
+            companyId: req.user.companyId,
             isActive: true,
             isDelete: false
         };
 
         const hasApprovalRequests = await dbService.findOne(model.fundRequest, {
             approvalRefId: req.user.id,
+            companyId: req.user.companyId,
             isActive: true,
             isDelete: false
         }, {
@@ -511,6 +513,7 @@ const getFundRequests = async (req, res) => {
         const isApprover = !!hasApprovalRequests;
         
         if (isApprover) {
+            query.companyId = req.user.companyId;
             // User is an approver - show ONLY requests assigned to them for approval (across all companies)
             query.approvalRefId = req.user.id;
         } else {
