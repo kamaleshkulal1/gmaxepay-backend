@@ -486,12 +486,6 @@ const getFundRequests = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
         
-        // Allow only superadmin (userRole 1) to access this endpoint
-        if (req.user.userRole !== 1) {
-            return res.failure({ 
-                message: 'Access denied. Only superadmin can access this endpoint' 
-            });
-        }
 
         const dataToFind = req.body || {};
         let options = {};
