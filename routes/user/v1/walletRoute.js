@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const walletController = require('../../../controller/admin/v1/walletContoller');
+const walletController = require('../../../controller/user/v1/walletController');
 const authentication = require('../../../middleware/authentication');
 
-router.post('/alsWallet', authentication, walletController.alsWallet);
 router.post('/balance', authentication, walletController.walletBalance);
 
 module.exports = router;

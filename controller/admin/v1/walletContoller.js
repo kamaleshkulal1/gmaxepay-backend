@@ -27,6 +27,50 @@ const alsWallet = async(req, res)=>{
     }
 }
 
+const walletBalance = async(req, res)=>{
+    try{
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if(!existingUser){
+            return res.failure({ message: 'User not found' });
+        }
+        if(existingUser.userRole !== 1){
+            return res.failure({ message: 'Unauthorized access' });
+        }
+        
+        const wallet = await dbService.findOne(model.wallet, {
+            refId: existingUser.id,
+            companyId: existingUser.companyId
+        });
+        if(!wallet){
+            return res.failure({ message: 'Wallet not found' });
+        }
+
+        // Sum all aepsWallet amounts from all users in the company
+        const totalAepsWallet = await model.wallet.sum('apesWallet', {
+            where: {
+                companyId: existingUser.companyId,
+                isActive: true,
+                isDelete: false
+            }
+        });
+
+        const response = {
+            mainWallet: wallet?.mainWallet ? parseFloat(wallet.mainWallet).toFixed(2) : '0.00',
+            apesWallet: totalAepsWallet ? parseFloat(totalAepsWallet).toFixed(2) : '0.00'
+        }
+
+        return res.success({ message: 'Wallet balance fetched successfully', data: response });
+    }catch(error){
+        console.error('Error in walletBalance', error);
+        return res.failure({ message: error.message });
+    }
+}
+
 module.exports = {
-    alsWallet
+    alsWallet,
+    walletBalance
 }
