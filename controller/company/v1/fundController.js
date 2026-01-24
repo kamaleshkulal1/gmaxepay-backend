@@ -501,16 +501,13 @@ const getFundRequests = async (req, res) => {
             isDelete: false
         };
 
-        // OPTIMIZED: Priority logic - if user is an approver, show ONLY their approval requests
-        // Check if user has any pending approval requests (single optimized query)
         const hasApprovalRequests = await dbService.findOne(model.fundRequest, {
-            companyId: req.user.companyId,
             approvalRefId: req.user.id,
             isActive: true,
             isDelete: false
         }, {
-            attributes: ['id'], // Only fetch ID for performance
-            limit: 1 // Limit to 1 for performance
+            attributes: ['id'], 
+            limit: 1 
         });
 
         const isApprover = !!hasApprovalRequests;
