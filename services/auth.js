@@ -1861,8 +1861,8 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
       { id: user.id },
       { 
         secureKey: hashedMPIN,
-        isMpinSetup: false,  // MPIN is now set up
-        isMpinEnabled: true  // MPIN is now enabled
+        isMpinSetup: false,  
+        isMpinEnabled: true 
       }
     );
     

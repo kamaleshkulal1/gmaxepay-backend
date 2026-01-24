@@ -1281,6 +1281,107 @@ const getBillerInfo = async (req, res) => {
   }
 };
 
+const getBillerIds = async (req, res) => {
+  try{
+    let dataToFind = req.body;
+    let options = {};
+    let query = {};
+
+    // Get operatorService from query or body (for backward compatibility)
+    const operatorService = dataToFind?.query?.operatorService || dataToFind?.operatorService;
+    if (!operatorService) {
+      return res.failure({ message: 'operatorService is required in query' });
+    }
+
+    const operatorCategories = await dbService.findOne(model.bbpsOperatorCategory, { name: operatorService });
+    if (!operatorCategories) {
+      return res.failure({ message: 'Operator category not found' });
+    }
+
+    // Build base query with categoryId
+    query = { categoryId: operatorCategories.id };
+
+    // Merge with query from body
+    if (dataToFind && dataToFind.query) {
+      // Remove operatorService from query to avoid conflicts
+      const { operatorService: _, ...restQuery } = dataToFind.query;
+      query = {
+        ...query,
+        ...restQuery
+      };
+    }
+
+    // Handle options
+    if (dataToFind && dataToFind.options !== undefined) {
+      options = dataToFind.options;
+    }
+
+    // Handle customSearch
+    if (dataToFind && dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            sequelize.where(sequelize.cast(sequelize.col(key), 'varchar'), {
+              [sequelize.Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [sequelize.Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        query = {
+          ...query,
+          [sequelize.Op.or]: orConditions
+        };
+      }
+    }
+
+    // Set default attributes if not specified in options
+    if (!options.attributes) {
+      options.attributes = ['id', 'name', 'billerId'];
+    }
+
+    // Use paginate for pagination support
+    const billerIds = await dbService.paginate(
+      model.bbpsOperator,
+      query,
+      options
+    );
+
+    if (!billerIds || !billerIds.data || billerIds.data.length === 0) {
+      return res.recordNotFound({ message: 'Biller IDs not found' });
+    }
+
+    const billerIdsData = billerIds.data.map((biller) => ({
+      id: biller.id,
+      name: biller.name,
+      billerId: biller.billerId
+    }));
+
+    return res.status(200).send({
+      status: 'SUCCESS',
+      message: 'Biller IDs fetched successfully',
+      data: billerIdsData,
+      total: billerIds.total,
+      paginator: billerIds.paginator
+    });
+  } catch (error) {
+    console.error('BBPS getBillerId error:', error);
+    return res.internalServerError({
+      message: error.message || 'Internal server error'
+    });
+  }
+}
+
 const getTransactionStatus = async (req, res) => {
   try {
     const { trackingType, trackingValue, fromDate, toDate } = req.body;
@@ -1733,5 +1834,6 @@ module.exports = {
   pullPlan,
   checkBalance,
   bbpsReportHistory,
-  getRetailerAllTransaction
+  getRetailerAllTransaction,
+  getBillerIds
 };
