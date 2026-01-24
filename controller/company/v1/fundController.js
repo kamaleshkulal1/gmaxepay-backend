@@ -486,10 +486,10 @@ const getFundRequests = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
         
-        // Allow superadmin (userRole 1) and company admin (userRole 2) to access this endpoint
-        if (![2].includes(req.user.userRole)) {
+        // Allow only superadmin (userRole 1) to access this endpoint
+        if (req.user.userRole !== 1) {
             return res.failure({ 
-                message: 'Access denied. You are not authorized to access this endpoint' 
+                message: 'Access denied. Only superadmin can access this endpoint' 
             });
         }
 
@@ -512,16 +512,13 @@ const getFundRequests = async (req, res) => {
         const isApprover = !!hasApprovalRequests;
         
         if (isApprover) {
-            // User is an approver - show ONLY requests assigned to them for approval
+            // User is an approver - show ONLY requests assigned to them for approval (across all companies)
             query.approvalRefId = req.user.id;
         } else {
-            // User is not an approver - follow existing role-based logic
-            const shouldShowAllRequests = [1, 2].includes(req.user.userRole);
-            if (!shouldShowAllRequests) {
-                // For non-admin users, show requests they created
-                query.refId = req.user.id;
-            }
-            // For admin users (role 1 or 2), show all requests (no additional filter)
+            // User is not an approver - show requests they created
+            query.refId = req.user.id;
+            // For non-approvers, also filter by companyId
+            query.companyId = req.user.companyId;
         }
 
         // Build query from request body
@@ -577,14 +574,24 @@ const getFundRequests = async (req, res) => {
             }
 
             if (nameSearchValue) {
-                const matchingUsers = await dbService.findAll(model.user, {
+                // For superadmin approvers, search across all companies
+                // For non-approvers, search within their company
+                const userSearchQuery = isApprover ? {
+                    name: {
+                        [Op.iLike]: `%${nameSearchValue}%`
+                    },
+                    isActive: true,
+                    isDeleted: false
+                } : {
                     companyId: req.user.companyId,
                     name: {
                         [Op.iLike]: `%${nameSearchValue}%`
                     },
                     isActive: true,
                     isDeleted: false
-                }, {
+                };
+
+                const matchingUsers = await dbService.findAll(model.user, userSearchQuery, {
                     attributes: ['id']
                 });
 
@@ -598,12 +605,9 @@ const getFundRequests = async (req, res) => {
                             refId: { [Op.in]: userIds }
                         });
                     } else {
-                        // For non-approvers, search in both refId and approvalRefId
+                        // For non-approvers, search in refId (requests they created)
                         searchOrConditions.push({
-                            [Op.or]: [
-                                { refId: { [Op.in]: userIds } },
-                                { approvalRefId: { [Op.in]: userIds } }
-                            ]
+                            refId: { [Op.in]: userIds }
                         });
                     }
                 } else {
@@ -621,21 +625,8 @@ const getFundRequests = async (req, res) => {
             }
 
             if (searchOrConditions.length > 0) {
-                // Apply search conditions based on user type
-                if (isApprover) {
-                    // For approvers: approvalRefId is already set, just add search conditions
-                    query[Op.and] = searchOrConditions;
-                } else {
-                    // For non-approvers: apply search conditions
-                    const shouldShowAllRequests = [1, 2].includes(req.user.userRole);
-                    if (shouldShowAllRequests) {
-                        // Admin users: only apply search conditions
-                        query[Op.and] = searchOrConditions;
-                    } else {
-                        // Regular users: refId is already set, just add search conditions
-                        query[Op.and] = searchOrConditions;
-                    }
-                }
+                // Apply search conditions - both approvers and non-approvers use the same logic
+                query[Op.and] = searchOrConditions;
             }
             // If no search conditions, the base query already has the correct filters
         }

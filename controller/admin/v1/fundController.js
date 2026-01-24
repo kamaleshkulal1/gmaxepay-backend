@@ -333,7 +333,6 @@ const getFundRequests = async (req, res) => {
         const dataToFind = req.body || {};
         let options = {};
         let query = { 
-            companyId: req.user.companyId,
             isActive: true,
             isDelete: false
         };
@@ -349,11 +348,13 @@ const getFundRequests = async (req, res) => {
         const isApprover = !!hasApprovalRequests;
         
         if (isApprover) {
-            // User is an approver - show ONLY requests assigned to them for approval
+            // User is an approver - show ONLY requests assigned to them for approval (across all companies)
             query.approvalRefId = req.user.id;
         } else {
             // User is not an approver - show requests they created
             query.refId = req.user.id;
+            // For non-approvers, also filter by companyId
+            query.companyId = req.user.companyId;
         }
 
         // Build query from request body
