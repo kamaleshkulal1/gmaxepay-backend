@@ -1293,13 +1293,20 @@ const getBillerIds = async (req, res) => {
       return res.failure({ message: 'operatorService is required in query' });
     }
 
-    const operatorCategories = await dbService.findOne(model.bbpsOperatorCategory, { name: operatorService });
+    // Find operator category - also check if it's not deleted
+    const operatorCategories = await dbService.findOne(
+      model.bbpsOperatorCategory, 
+      { name: operatorService, isDeleted: false }
+    );
     if (!operatorCategories) {
       return res.failure({ message: 'Operator category not found' });
     }
 
-    // Build base query with categoryId
-    query = { categoryId: operatorCategories.id };
+    // Build base query with categoryId and isDeleted filter
+    query = { 
+      categoryId: operatorCategories.id,
+      isDeleted: false
+    };
 
     // Merge with query from body
     if (dataToFind && dataToFind.query) {
@@ -1357,8 +1364,20 @@ const getBillerIds = async (req, res) => {
       options
     );
 
+    // Return empty array if no results found (instead of error)
     if (!billerIds || !billerIds.data || billerIds.data.length === 0) {
-      return res.recordNotFound({ message: 'Biller IDs not found' });
+      return res.status(200).send({
+        status: 'SUCCESS',
+        message: 'Biller IDs fetched successfully',
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
+      });
     }
 
     const billerIdsData = billerIds.data.map((biller) => ({
