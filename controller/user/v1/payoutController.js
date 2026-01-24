@@ -249,9 +249,8 @@ const payout = async (req, res) => {
             }
         }
         
-        // Prepare response data
+        // Prepare response data (without payoutHistory object)
         const responseData = {
-            payoutHistory: payoutHistory,
             transactionID: transactionID,
             status: payoutHistoryData.status,
             aepsWallet: {
@@ -260,7 +259,7 @@ const payout = async (req, res) => {
             }
         };
         
-        // Add main wallet info for internal transfers (already calculated above)
+        // Add main wallet info for internal transfers
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {
             responseData.mainWallet = {
                 openingBalance: mainWalletOpeningBalance,
