@@ -105,6 +105,69 @@ const loadUserPermissions = async (userRole) => {
   }
 };
 
+// Helper function to determine security method based on user flags
+// Returns security method and required action
+const determineSecurityMethod = async (user) => {
+  // If 2FA is disabled (both flags false), use MPIN as default
+  if (user.is2FAenabled === false && user.is2faEnabledActive === false) {
+    // Check MPIN status
+    if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+      return {
+        method: 'setupMPIN',
+        requiresSetupMPIN: true
+      };
+    }
+    if (user.isMpinEnabled === true || user.secureKey) {
+      return {
+        method: 'verifyMPIN',
+        requiresMPIN: true
+      };
+    }
+    // Default to MPIN setup
+    return {
+      method: 'setupMPIN',
+      requiresSetupMPIN: true
+    };
+  }
+  
+  // If 2FA is enabled (both flags true)
+  if (user.is2FAenabled === true && user.is2faEnabledActive === true) {
+    // If key2Fa is null, need to setup 2FA
+    if (!user.key2Fa) {
+      // Generate QR code for 2FA setup
+      const qrCodeData = await generateQRCodeURL(user);
+      return {
+        method: 'setup2FA',
+        requiresSetup2FA: true,
+        qrCode: qrCodeData
+      };
+    }
+    // If key2Fa exists, verify 2FA
+    return {
+      method: 'verify2FA',
+      requires2FA: true
+    };
+  }
+  
+  // Default fallback to MPIN
+  if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+    return {
+      method: 'setupMPIN',
+      requiresSetupMPIN: true
+    };
+  }
+  if (user.isMpinEnabled === true || user.secureKey) {
+    return {
+      method: 'verifyMPIN',
+      requiresMPIN: true
+    };
+  }
+  return {
+    method: 'setupMPIN',
+    requiresSetupMPIN: true
+  };
+};
+
 // Helper function to validate and decrypt dataToken with expiration check
 const validateAndDecryptDataToken = async (dataToken) => {
   try {
@@ -597,9 +660,22 @@ const loginUser = async (
       // Reset all lock attempts in development environment for easier testing
       await user.resetAllLockAttempts();
 
-      // Check security method: MPIN (default) or 2FA (optional)
-      // If 2FA is explicitly enabled, use 2FA
-      if (user.is2FAenabled && user.key2Fa) {
+      // Determine security method based on user settings
+      const securityMethod = await determineSecurityMethod(user);
+      
+      if (securityMethod.requiresSetup2FA) {
+        return {
+          flag: false,
+          msg: 'Please scan QR code and enter the 2FA code to complete setup.',
+          data: {
+            requiresSetup2FA: true,
+            qrCode: securityMethod.qrCode,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+      
+      if (securityMethod.requires2FA) {
         return {
           flag: false,
           msg: 'Please enter your 2FA code',
@@ -610,8 +686,7 @@ const loginUser = async (
         };
       }
       
-      // Check if MPIN setup is required (isMpinSetup: true means setup needed)
-      if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+      if (securityMethod.requiresSetupMPIN) {
         return {
           flag: false,
           msg: 'Please set up MPIN to secure your account.',
@@ -622,8 +697,7 @@ const loginUser = async (
         };
       }
       
-      // If MPIN is enabled or secureKey exists, require MPIN verification
-      if (user.isMpinEnabled === true || user.secureKey) {
+      if (securityMethod.requiresMPIN) {
         return {
           flag: false,
           msg: 'Please enter your MPIN',
@@ -669,9 +743,22 @@ const loginUser = async (
         };
       }
 
-      // Check security method: MPIN (default) or 2FA (optional)
-      // If 2FA is explicitly enabled, use 2FA
-      if (user.is2FAenabled && user.key2Fa) {
+      // Determine security method based on user settings
+      const securityMethod = await determineSecurityMethod(user);
+      
+      if (securityMethod.requiresSetup2FA) {
+        return {
+          flag: false,
+          msg: 'Please scan QR code and enter the 2FA code to complete setup.',
+          data: {
+            requiresSetup2FA: true,
+            qrCode: securityMethod.qrCode,
+            token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
+          }
+        };
+      }
+      
+      if (securityMethod.requires2FA) {
         return {
           flag: false,
           msg: 'Please enter your 2FA code',
@@ -682,8 +769,7 @@ const loginUser = async (
         };
       }
       
-      // Check if MPIN setup is required (isMpinSetup: true means setup needed)
-      if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+      if (securityMethod.requiresSetupMPIN) {
         return {
           flag: false,
           msg: 'Please set up MPIN to secure your account.',
@@ -694,8 +780,7 @@ const loginUser = async (
         };
       }
       
-      // If MPIN is enabled or secureKey exists, require MPIN verification
-      if (user.isMpinEnabled === true || user.secureKey) {
+      if (securityMethod.requiresMPIN) {
         return {
           flag: false,
           msg: 'Please enter your MPIN',
@@ -849,47 +934,22 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
           };
         }
 
-            // Check if password reset is required
-    if (user.isResetPassword) {
-      const ip = req.headers['x-forwarded-for']?.split(',')[0] ||
-                req.connection?.remoteAddress ||
-                req.socket?.remoteAddress ||
-                req.ip;
-      const userAgent = req.headers['user-agent'];
-
-      // Create sensitive data for encryption
-      const sensitiveData = {
-        mobileNo: user.mobileNo,
-        email: user.email,
-        userRole: user.userRole,
-        userType: user.userType,
-        userId: user.id,
-        companyId: user.companyId,
-        ip: ip,
-        timestamp: Date.now()
-      };
-      
-      const encryptionKey = crypto.randomBytes(32);
-      const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
-
-      const dataToken = {
-        data: encryptedData,
-        key: encryptionKey.toString('hex')
-      };
-
-      return {
-        flag: false,
-        msg: 'Please Reset Password',
-        data: {
-          requiresPasswordReset: true,
-          token: token  
+        // Determine security method based on user settings
+        const securityMethod = await determineSecurityMethod(user);
+        
+        if (securityMethod.requiresSetup2FA) {
+          return {
+            flag: false,
+            msg: 'Please scan QR code and enter the 2FA code to complete setup.',
+            data: {
+              requiresSetup2FA: true,
+              qrCode: securityMethod.qrCode,
+              token: token
+            }
+          };
         }
-      };
-    }
-
-        // Check security method: MPIN (default) or 2FA (optional)
-        // If 2FA is explicitly enabled, use 2FA
-        if (user.is2FAenabled && user.key2Fa) {
+        
+        if (securityMethod.requires2FA) {
           return {
             flag: false,
             msg: 'Please enter your 2FA code',
@@ -900,8 +960,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
           };
         }
         
-        // Check if MPIN setup is required (isMpinSetup: true means setup needed)
-        if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
+        if (securityMethod.requiresSetupMPIN) {
           return {
             flag: false,
             msg: 'Please set up MPIN to secure your account.',
@@ -912,8 +971,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
           };
         }
         
-        // If MPIN is enabled or secureKey exists, require MPIN verification
-        if (user.isMpinEnabled === true || user.secureKey) {
+        if (securityMethod.requiresMPIN) {
           return {
             flag: false,
             msg: 'Please enter your MPIN',
@@ -1886,6 +1944,14 @@ const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAdd
       };
     }
 
+    // Check if account is locked due to failed login attempts
+    if (user.isAccountLocked()) {
+      return {
+        flag: true,
+        msg: `Account is locked due to multiple failed login attempts. Please contact admin for assistance.`
+      };
+    }
+
     if (!user.secureKey) {
       return {
         flag: true,
@@ -1905,11 +1971,42 @@ const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAdd
     // Verify MPIN
     const isMPINValid = await user.isPinMatch(mpin);
     if (!isMPINValid) {
+      // Increment login attempts and potentially lock account
+      await user.incrementLoginAttempts();
+      
+      // Reload user to get updated loginAttempts and lock status
+      const updatedUser = await dbService.findOne(model.user, { id: user.id });
+      
+      // Check if account is now locked after this attempt
+      if (updatedUser.isAccountLocked() || updatedUser.loginAttempts >= MAX_LOGIN_RETRY_LIMIT) {
+        return {
+          flag: true,
+          msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
+        };
+      }
+      
+      // Calculate remaining attempts (MAX_LOGIN_RETRY_LIMIT = 3)
+      // After 1st wrong: loginAttempts = 1, remaining = 2
+      // After 2nd wrong: loginAttempts = 2, remaining = 1
+      // After 3rd wrong: account is locked (handled above)
+      const remainingAttempts = MAX_LOGIN_RETRY_LIMIT - updatedUser.loginAttempts;
+      
+      // Ensure remaining attempts is never negative
+      if (remainingAttempts <= 0) {
+        return {
+          flag: true,
+          msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
+        };
+      }
+      
       return {
         flag: true,
-        msg: 'Invalid MPIN. Please try again.'
+        msg: `Invalid MPIN. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before account lock.`
       };
     }
+    
+    // Reset login attempts on successful MPIN verification
+    await user.resetLoginAttempts();
 
     // Update user login status
     const getTokenVersion = getRandomNumber();
@@ -2357,6 +2454,14 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
 
     // Handle MPIN verification
     if (useMPIN) {
+      // Check if account is locked due to failed login attempts
+      if (user.isAccountLocked()) {
+        return {
+          flag: true,
+          msg: `Account is locked due to multiple failed login attempts. Please contact admin for assistance.`
+        };
+      }
+      
       // Check if MPIN setup is required first
       if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
         return {
@@ -2384,11 +2489,42 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
       // Verify MPIN
       const isMPINValid = await user.isPinMatch(code);
       if (!isMPINValid) {
+        // Increment login attempts and potentially lock account
+        await user.incrementLoginAttempts();
+        
+        // Reload user to get updated loginAttempts and lock status
+        const updatedUser = await dbService.findOne(model.user, { id: user.id });
+        
+        // Check if account is now locked after this attempt
+        if (updatedUser.isAccountLocked() || updatedUser.loginAttempts >= MAX_LOGIN_RETRY_LIMIT) {
+          return {
+            flag: true,
+            msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
+          };
+        }
+        
+        // Calculate remaining attempts (MAX_LOGIN_RETRY_LIMIT = 3)
+        // After 1st wrong: loginAttempts = 1, remaining = 2
+        // After 2nd wrong: loginAttempts = 2, remaining = 1
+        // After 3rd wrong: account is locked (handled above)
+        const remainingAttempts = MAX_LOGIN_RETRY_LIMIT - updatedUser.loginAttempts;
+        
+        // Ensure remaining attempts is never negative
+        if (remainingAttempts <= 0) {
+          return {
+            flag: true,
+            msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
+          };
+        }
+        
         return {
           flag: true,
-          msg: 'Invalid MPIN. Please try again.'
+          msg: `Invalid MPIN. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before account lock.`
         };
       }
+      
+      // Reset login attempts on successful MPIN verification
+      await user.resetLoginAttempts();
 
       // Update user login status
       const getTokenVersion = getRandomNumber();
