@@ -48,9 +48,19 @@ const walletBalance = async(req, res)=>{
         if(!wallet){
             return res.failure({ message: 'Wallet not found' });
         }
-        const response ={
-            mainWallet: wallet?.mainWallet.toFixed(2)||0,
-            apesWallet: wallet?.apesWallet.toFixed(2)||0
+
+        // Sum all aepsWallet amounts from all users in the company
+        const totalAepsWallet = await model.wallet.sum('apesWallet', {
+            where: {
+                companyId: existingUser.companyId,
+                isActive: true,
+                isDelete: false
+            }
+        });
+
+        const response = {
+            mainWallet: wallet?.mainWallet ? parseFloat(wallet.mainWallet).toFixed(2) : '0.00',
+            apesWallet: totalAepsWallet ? parseFloat(totalAepsWallet).toFixed(2) : '0.00'
         }
 
         return res.success({ message: 'Wallet balance fetched successfully', data: response });
