@@ -199,7 +199,7 @@ const findMobileNumberOperator = async (req, res) => {
         }
         
         // Use 'company' field from response (API returns 'company' not 'operatorName')
-        const operatorName = response.operatorName || response.company_code;
+        const operatorName = response?.company || response?.operatorName;
         if (!operatorName) {
             return res.failure({ message: response.message || 'Operator name not found in response' });
         }
