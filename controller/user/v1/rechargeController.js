@@ -205,7 +205,7 @@ const findMobileNumberOperator = async (req, res) => {
             return res.failure({ message: 'Operator not found' });
         }
         response.operatorCode = operator.operatorCode;
-        if (response.status === 'Success' || response.status === 'SUCCESS') {
+        if (response.status === 'Success' || response.status.toUpperCase() === 'SUCCESS') {
             return res.success({ message: 'Operator retrieved successfully', data: response });
         } else {
             return res.failure({ message: response.message || 'Failed to fetch operator' });
