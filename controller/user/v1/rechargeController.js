@@ -78,8 +78,7 @@ const recharge = async (req, res) => {
                 where: { refId: req.user.id, companyId: req.user.companyId }
             })
         ]);
-        console.log('response', response);
-
+        response.operatorCode = operator?.operatorCode;
 
         // Extract response data
         const orderid = response.orderid;
