@@ -828,7 +828,7 @@ const getAllPaymentInfo = async (req, res) => {
   try {
     const { query: queryParams = {}, options: optionsParams = {}, customSearch, isCountOnly } = req.body;
     let options = { ...optionsParams };
-    let query = { isDeleted: false, ...queryParams };
+    let query = { ...queryParams };
 
     // Handle customSearch
     if (customSearch) {
@@ -863,7 +863,8 @@ const getAllPaymentInfo = async (req, res) => {
     }
 
     if (isCountOnly) {
-      const count = await dbService.count(model.bbpsPaymentInfo, query);
+      // Use model directly since bbpsPaymentInfo doesn't have isDeleted column
+      const count = await model.bbpsPaymentInfo.count({ where: query });
       return res.success({ data: { totalRecords: count } });
     }
 
