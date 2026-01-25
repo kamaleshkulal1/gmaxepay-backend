@@ -47,8 +47,7 @@ let Recharge = sequelize.define(
     },
     orderid: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
+      allowNull: false
     },
     txid: {
       type: DataTypes.STRING,
