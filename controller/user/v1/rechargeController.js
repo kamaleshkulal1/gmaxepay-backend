@@ -187,6 +187,11 @@ const findMobileNumberOperator = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
         const response = await inspayService.operatorFetch(mobileNumber);
+        const operator = await dbService.findOne(model.operator,{operatorName: response.operatorName.toUpperCase()});
+        if (!operator) {
+            return res.failure({ message: 'Operator not found' });
+        }
+        response.operatorCode = operator.operatorCode;
         if (response.status === 'Success') {
             return res.success({ message: 'Operator retrieved successfully', data: response });
         } else {
