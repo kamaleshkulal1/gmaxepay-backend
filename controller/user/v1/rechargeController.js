@@ -199,16 +199,20 @@ const findMobileNumberOperator = async (req, res) => {
         }
         
         // Use 'company' field from response (API returns 'company' not 'operatorName')
-        const operatorName = response.company || response.operatorName;
+        const operatorName = response.operatorName || response.company_code;
         if (!operatorName) {
             return res.failure({ message: response.message || 'Operator name not found in response' });
         }
         
-        const operator = await dbService.findOne(model.operator, { operatorName: operatorName.toUpperCase() });
-        if (!operator) {
-            return res.failure({ message: 'Operator not found' });
+        const operatorNameUpper = operatorName.toUpperCase();
+        if (operatorNameUpper !== 'BSNL') {
+            const operator = await dbService.findOne(model.operator, { operatorName: operatorNameUpper });
+            if (!operator) {
+                return res.failure({ message: 'Operator not found' });
+            }
+            response.operatorCode = operator.operatorCode;
         }
-        response.operatorCode = operator.operatorCode;
+        
         if (response.status === 'Success' || response.status.toUpperCase() === 'SUCCESS') {
             return res.success({ message: 'Operator retrieved successfully', data: response });
         } else {
