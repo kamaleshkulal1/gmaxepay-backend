@@ -674,7 +674,7 @@ const getOperatorById = async (req, res) => {
 const updateOperator = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, billerId, categoryId, isActive, initiatingChannel } =
+    const { name, billerId, categoryId, isActive, isDeleted, initiatingChannel } =
       req.body;
 
     if (!req.user || req.user.userRole !== 1) {
@@ -701,6 +701,7 @@ const updateOperator = async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (billerId !== undefined) updateData.billerId = billerId;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (isDeleted !== undefined) updateData.isDeleted = isDeleted;
     if (initiatingChannel !== undefined)
       updateData.initChannel = initiatingChannel;
 
