@@ -566,13 +566,18 @@ const getOperators = async (req, res) => {
 
       keys.forEach((key) => {
         const value = customSearch[key];
+        // Skip empty strings, null, or undefined values
+        if (value === null || value === undefined || value === '') {
+          return;
+        }
+        
         if (typeof value === 'number') {
           orConditions.push(
             sequelize.where(sequelize.cast(sequelize.col(key), 'varchar'), {
               [Op.iLike]: `%${value}%`
             })
           );
-        } else {
+        } else if (typeof value === 'string' && value.trim() !== '') {
           orConditions.push({
             [key]: {
               [Op.iLike]: `%${value}%`
@@ -611,6 +616,7 @@ const getOperators = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in getOperators:', error);
+    console.error('Error stack:', error.stack);
     return res.failure({
       message: 'Failed to fetch operators',
       error: error.message
