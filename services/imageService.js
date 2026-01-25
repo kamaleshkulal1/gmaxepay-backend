@@ -91,13 +91,17 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
     
     // For profile images, always use simple CDN URL (no secure proxy)
     const isProfileImage = s3Key.includes('/profile/');
-    // For company images (signature/logo, signature/favicon, loginSlider), use CDN URL
+    // For company images (signature/logo, signature/favicon, loginSlider), use proxy endpoint to avoid CORS issues
     const isCompanyImage = s3Key.includes('/signature/') || s3Key.includes('/loginSlider/');
     
-    if (isProfileImage || isCompanyImage || !useSecureProxy) {
-      // Use simple CDN URL for profile images and company images
+    if (isProfileImage || !useSecureProxy) {
+      // Use simple CDN URL for profile images (if useSecureProxy is false)
       const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
       return `${cdnUrl}/${s3Key}`;
+    } else if (isCompanyImage) {
+      // Use proxy endpoint for company images to avoid CORS issues
+      // The route /api/images/* expects the full S3 key path
+      return `${BASE_URL}/api/images/${s3Key}`;
     } else {
       // Use secure proxy for other images
       // Encrypt the S3 key for secure URL
@@ -109,12 +113,19 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
     }
   } catch (error) {
     console.error('Error generating image URL:', error);
-    // Fallback to direct CDN URL
+    // Fallback: use proxy endpoint for company images, CDN for others
     try {
       const s3Key = extractS3Key(encryptedKey);
       if (s3Key && s3Key.startsWith('images/')) {
-        const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
-        return `${cdnUrl}/${s3Key}`;
+        const isCompanyImage = s3Key.includes('/signature/') || s3Key.includes('/loginSlider/');
+        if (isCompanyImage) {
+          // Use proxy endpoint for company images to avoid CORS
+          return `${BASE_URL}/api/images/${s3Key}`;
+        } else {
+          // Use CDN for other images
+          const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
+          return `${cdnUrl}/${s3Key}`;
+        }
       }
     } catch (e) {
       // Ignore errors
