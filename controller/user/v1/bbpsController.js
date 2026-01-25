@@ -1414,6 +1414,20 @@ const getBillerIds = async (req, res) => {
     });
   }
 }
+const getAllCategories = async (req, res) => {
+  try{
+    const categories = await dbService.findAll(model.bbpsOperatorCategory, { isActive: true, isDeleted: false }, { attributes: ['id', 'name'] });
+    return res.success({
+      message: 'Categories fetched successfully',
+      data: categories
+    });
+  }catch(error){
+    console.error('BBPS getCategories error:', error);
+    return res.internalServerError({
+      message: error.message || 'Internal server error'
+    });
+  }
+}
 
 const getTransactionStatus = async (req, res) => {
   try {
@@ -1868,5 +1882,6 @@ module.exports = {
   checkBalance,
   bbpsReportHistory,
   getRetailerAllTransaction,
-  getBillerIds
+  getBillerIds,
+  getAllCategories
 };
