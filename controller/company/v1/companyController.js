@@ -21,7 +21,7 @@ const getCompanyDettails = async (req, res) => {
         const company = await dbService.findOne(model.company, { customDomain: companyDomain });
         if(!company) return res.failure({ message: 'Company not found' });
         
-        // Fetch slider images for the company
+        // Fetch slider images for the company with limit to prevent memory issues
         const sliderImages = await dbService.findAll(
             model.companyImage, 
             { 
@@ -30,49 +30,60 @@ const getCompanyDettails = async (req, res) => {
                 isActive: true 
             },
             {
-                order: [['createdAt', 'ASC']]
+                order: [['createdAt', 'ASC']],
+                limit: 50 // Limit to 50 slider images to prevent memory issues
             }
         );
         
-        const logoImage = await dbService.findOne(model.companyImage, {
-            companyId: company.id,
-            type: 'signature',
-            subtype: 'logo',
-            isActive: true
-        }, {
-            order: [['createdAt', 'DESC']]
-        });
-        const faviconImage = await dbService.findOne(model.companyImage, {
-            companyId: company.id,
-            type: 'signature',
-            subtype: 'favicon',
-            isActive: true
-        }, {
-            order: [['createdAt', 'DESC']]
-        });
+        // Fetch logo and favicon in parallel for better performance
+        const [logoImage, faviconImage] = await Promise.all([
+            dbService.findOne(model.companyImage, {
+                companyId: company.id,
+                type: 'signature',
+                subtype: 'logo',
+                isActive: true
+            }, {
+                order: [['createdAt', 'DESC']]
+            }),
+            dbService.findOne(model.companyImage, {
+                companyId: company.id,
+                type: 'signature',
+                subtype: 'favicon',
+                isActive: true
+            }, {
+                order: [['createdAt', 'DESC']]
+            })
+        ]);
         
         // Format slider images with backend API URL (proxy endpoint with CORS)
-        const formattedSliderImages = sliderImages.map(img => ({
-            id: img.id,
-            name: img.name,
-            type: img.type,
-            image: getImageUrl(img.s3Key)
-        }));
+        // Use toJSON() to convert Sequelize instances to plain objects and reduce memory
+        const formattedSliderImages = sliderImages.map(img => {
+            const imgData = img.toJSON ? img.toJSON() : img;
+            return {
+                id: imgData.id,
+                name: imgData.name,
+                type: imgData.type,
+                image: getImageUrl(imgData.s3Key || imgData.image)
+            };
+        });
 
         
+        // Convert company to JSON to reduce memory footprint
+        const companyData = company.toJSON ? company.toJSON() : company;
+        
         const data = {
-            companyId: company.id,
-            companyDomain: company.customDomain,
-            companyName: company.companyName,
+            companyId: companyData.id,
+            companyDomain: companyData.customDomain,
+            companyName: companyData.companyName,
             logo: logoImage ? getImageUrl(logoImage.s3Key || logoImage.image) : null,
             favicon: faviconImage ? getImageUrl(faviconImage.s3Key || faviconImage.image) : null,
-            primaryColor: company.primaryColor,
-            secondaryColor: company.secondaryColor,
-            singupPageDesign: company.singupPageDesign,
-            navigationBar: company.navigationBar,
-            supportPhoneNumbers: company.supportPhoneNumbers,
-            customerSupportEmail: company.customerSupportEmail,
-            isActive: company.isActive,
+            primaryColor: companyData.primaryColor,
+            secondaryColor: companyData.secondaryColor,
+            singupPageDesign: companyData.singupPageDesign,
+            navigationBar: companyData.navigationBar,
+            supportPhoneNumbers: companyData.supportPhoneNumbers,
+            customerSupportEmail: companyData.customerSupportEmail,
+            isActive: companyData.isActive,
             sliderImages: formattedSliderImages,
         }
         return res.success({ message: 'Company details fetched successfully', data });

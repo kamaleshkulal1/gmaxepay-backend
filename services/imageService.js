@@ -25,13 +25,27 @@ const BASE_URL = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
 const extractS3Key = (imageData) => {
   if (!imageData) return null;
   
+  // Fast path: if it's already a plain S3 key string, return immediately
+  if (typeof imageData === 'string' && imageData.startsWith('images/')) {
+    return imageData;
+  }
+  
   // If it's an object, extract key
   if (typeof imageData === 'object') {
     const key = imageData.key || imageData;
+    // If key is already a plain S3 key, return it
+    if (typeof key === 'string' && key.startsWith('images/')) {
+      return key;
+    }
     // If key doesn't start with 'images/', try to decrypt it
-    if (typeof key === 'string' && !key.startsWith('images/')) {
+    if (typeof key === 'string') {
       try {
-        return decrypt(key);
+        const decrypted = decrypt(key);
+        // Only return decrypted if it's a valid S3 key
+        if (decrypted && decrypted.startsWith('images/')) {
+          return decrypted;
+        }
+        return key;
       } catch (e) {
         // If decryption fails, return as is (might be invalid)
         return key;
@@ -42,29 +56,47 @@ const extractS3Key = (imageData) => {
   
   // If it's a string
   if (typeof imageData === 'string') {
-    // Check if it's JSON
-    try {
-      const parsed = JSON.parse(imageData);
-      const key = parsed.key || imageData;
-      // If key doesn't start with 'images/', try to decrypt it
-      if (typeof key === 'string' && !key.startsWith('images/')) {
-        try {
-          return decrypt(key);
-        } catch (e) {
+    // Fast check: if it starts with 'images/', it's already a plain key
+    if (imageData.startsWith('images/')) {
+      return imageData;
+    }
+    
+    // Check if it's JSON (only if it looks like JSON)
+    if (imageData.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(imageData);
+        const key = parsed.key || imageData;
+        // If key is already a plain S3 key, return it
+        if (typeof key === 'string' && key.startsWith('images/')) {
           return key;
         }
-      }
-      return key;
-    } catch {
-      // Not JSON, check if it needs decryption
-      if (!imageData.startsWith('images/')) {
-        try {
-          return decrypt(imageData);
-        } catch (e) {
-          // If decryption fails, return as is (might be already decrypted or invalid)
-          return imageData;
+        // Try to decrypt if needed
+        if (typeof key === 'string') {
+          try {
+            const decrypted = decrypt(key);
+            if (decrypted && decrypted.startsWith('images/')) {
+              return decrypted;
+            }
+            return key;
+          } catch (e) {
+            return key;
+          }
         }
+        return key;
+      } catch {
+        // Not valid JSON, fall through to decryption attempt
       }
+    }
+    
+    // Try to decrypt if it doesn't start with 'images/'
+    try {
+      const decrypted = decrypt(imageData);
+      if (decrypted && decrypted.startsWith('images/')) {
+        return decrypted;
+      }
+      return imageData;
+    } catch (e) {
+      // If decryption fails, return as is (might be already decrypted or invalid)
       return imageData;
     }
   }

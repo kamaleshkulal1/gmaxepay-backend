@@ -241,24 +241,39 @@ const responseInterceptor = (req, res, next) => {
   let responseBody = '';
   
   res.send = function(data) {
-    responseBody = data;
+    // Limit response body size to prevent memory issues (max 50KB)
+    const MAX_RESPONSE_BODY_SIZE = 50 * 1024; // 50KB
+    let dataToLog = data;
+    
+    if (typeof data === 'string' && data.length > MAX_RESPONSE_BODY_SIZE) {
+      dataToLog = data.substring(0, MAX_RESPONSE_BODY_SIZE) + '...[TRUNCATED]';
+    } else if (typeof data !== 'string') {
+      const stringified = JSON.stringify(data);
+      if (stringified.length > MAX_RESPONSE_BODY_SIZE) {
+        dataToLog = stringified.substring(0, MAX_RESPONSE_BODY_SIZE) + '...[TRUNCATED]';
+      } else {
+        dataToLog = stringified;
+      }
+    }
+    
+    responseBody = dataToLog;
     
     // Calculate response time
     const responseTime = req.startTime ? Date.now() - req.startTime : 0;
     
     // Log response with enhanced IP tracking
     let redactedResponseBody;
-    if (typeof data === 'string') {
+    if (typeof dataToLog === 'string') {
       try {
         // Try to parse as JSON and redact, then stringify again
-        const parsedData = JSON.parse(data);
+        const parsedData = JSON.parse(dataToLog);
         redactedResponseBody = JSON.stringify(redactSensitiveData(parsedData));
       } catch (e) {
         // If not JSON, just redact the string
-        redactedResponseBody = redactSensitiveData(data);
+        redactedResponseBody = redactSensitiveData(dataToLog);
       }
     } else {
-      redactedResponseBody = JSON.stringify(redactSensitiveData(data));
+      redactedResponseBody = JSON.stringify(redactSensitiveData(dataToLog));
     }
     
     // Get full URL path (use originalUrl if available, otherwise url)
