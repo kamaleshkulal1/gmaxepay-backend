@@ -77,10 +77,7 @@ const recharge = async (req, res) => {
             model.wallet.findOne({
                 where: { refId: req.user.id, companyId: req.user.companyId }
             })
-        ]);
-        response.operatorCode = operator?.operatorCode;
-
-        // Extract response data
+        ]);        // Extract response data
         const orderid = response.orderid;
         const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
         const isPending = response.status === 'Pending' || response.status === 'PENDING';
@@ -103,7 +100,7 @@ const recharge = async (req, res) => {
         const openingMainWallet = round2(currentWallet.mainWallet || 0);
         const creditToApply = isSuccess ? retailerNetCredit : 0;
         const closingMainWallet = isSuccess ? round2(openingMainWallet + creditToApply) : openingMainWallet;
-
+         if(isSuccess) response.operatorName = operator?.operatorName;
         // Prepare recharge data
         const rechargeData = {
             refId: req.user.id,
