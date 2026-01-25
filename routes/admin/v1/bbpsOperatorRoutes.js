@@ -25,7 +25,7 @@ router.put('/users/:id/agent-id', authentication, bbpsOperatorController.updateA
 
 // Payment Info Routes
 router.post('/payment-info', authentication, bbpsOperatorController.createPaymentInfo);
-router.get('/payment-info', authentication, bbpsOperatorController.getAllPaymentInfo);
+router.post('/payment-info/all', authentication, bbpsOperatorController.getAllPaymentInfo);
 router.get('/payment-info/:id', authentication, bbpsOperatorController.getPaymentInfoById);
 router.put('/payment-info/:id', authentication, bbpsOperatorController.updatePaymentInfo);
 router.delete('/payment-info/:id', authentication, bbpsOperatorController.deletePaymentInfo);

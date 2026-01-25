@@ -826,17 +826,63 @@ const createPaymentInfo = async (req, res) => {
 
 const getAllPaymentInfo = async (req, res) => {
   try {
-    const records = await dbService.findAll(
-      model.bbpsPaymentInfo,
-      {},
-      { select: ['id', 'initiatingChannel', 'paymentMethod', 'paymentInfo'] }
-    );
+    const { query: queryParams = {}, options: optionsParams = {}, customSearch, isCountOnly } = req.body;
+    let options = { ...optionsParams };
+    let query = { isDeleted: false, ...queryParams };
 
-    return res.success({
+    // Handle customSearch
+    if (customSearch) {
+      const keys = Object.keys(customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        const value = customSearch[key];
+        // Skip empty strings, null, or undefined values
+        if (value === null || value === undefined || value === '') {
+          return;
+        }
+        
+        if (typeof value === 'number') {
+          orConditions.push(
+            sequelize.where(sequelize.cast(sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${value}%`
+            })
+          );
+        } else if (typeof value === 'string' && value.trim() !== '') {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${value}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        query[Op.or] = orConditions;
+      }
+    }
+
+    if (isCountOnly) {
+      const count = await dbService.count(model.bbpsPaymentInfo, query);
+      return res.success({ data: { totalRecords: count } });
+    }
+
+    const records = await dbService.paginate(model.bbpsPaymentInfo, query, options);
+
+    return res.status(200).send({
+      status: 'SUCCESS',
       message: 'Payment info list fetched successfully.',
-      data: records
+      data: records?.data || [],
+      total: records?.total || 0,
+      paginator: records?.paginator || {
+        itemCount: records?.total || 0,
+        perPage: options.paginate || 25,
+        pageCount: records?.pages || 0,
+        currentPage: options.page || 1
+      }
     });
   } catch (error) {
+    console.error('Error in getAllPaymentInfo:', error);
     return res.failure({
       message: 'Failed to fetch payment info list.',
       error: error.message
