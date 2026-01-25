@@ -868,7 +868,39 @@ const getAllPaymentInfo = async (req, res) => {
       return res.success({ data: { totalRecords: count } });
     }
 
-    const records = await dbService.paginate(model.bbpsPaymentInfo, query, options);
+    // Use model directly for pagination since bbpsPaymentInfo doesn't have isDeleted column
+    // Parse sort options
+    let order = [];
+    if (options.sort) {
+      const sortKeys = Object.keys(options.sort);
+      sortKeys.forEach(key => {
+        order.push([key, options.sort[key] === -1 ? 'DESC' : 'ASC']);
+      });
+    }
+    if (order.length === 0) {
+      order = [['createdAt', 'DESC']]; // Default sort
+    }
+
+    const paginateOptions = {
+      where: query,
+      page: options.page || 1,
+      paginate: options.paginate || 25,
+      order: order,
+      ...options
+    };
+    delete paginateOptions.sort; // Remove sort as we've converted it to order
+
+    const result = await model.bbpsPaymentInfo.paginate(paginateOptions);
+    const records = {
+      total: result.total,
+      data: result.docs,
+      paginator: {
+        itemCount: result.total,
+        perPage: paginateOptions.paginate || 25,
+        pageCount: result.pages,
+        currentPage: paginateOptions.page || 1
+      }
+    };
 
     return res.status(200).send({
       status: 'SUCCESS',
