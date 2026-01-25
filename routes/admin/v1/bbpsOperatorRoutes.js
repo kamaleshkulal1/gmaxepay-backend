@@ -7,7 +7,7 @@ const { upload, multer } = require('../../../middleware/multerConfig');
 // Operator Category Routes
 router.post('/categories', authentication, bbpsOperatorController.createOperatorCategory);
 router.get('/categories', authentication, bbpsOperatorController.getOperatorCategories);
-router.get('/categories/all', authentication, bbpsOperatorController.getOperatorAllCategories);
+router.post('/categories/all', authentication, bbpsOperatorController.getOperatorAllCategories);
 router.get('/categories/:id', authentication, bbpsOperatorController.getOperatorCategoryById);
 router.put('/categories/:id', authentication, bbpsOperatorController.updateOperatorCategory);
 router.delete('/categories/:id', authentication, bbpsOperatorController.deleteOperatorCategory);

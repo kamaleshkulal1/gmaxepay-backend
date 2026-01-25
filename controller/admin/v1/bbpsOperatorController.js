@@ -1,5 +1,6 @@
 const model = require('../../../models');
 const { Op } = require('sequelize');
+const sequelize = require('sequelize');
 const dbService = require('../../../utils/dbService');
 
 const createOperatorCategory = async (req, res) => {
@@ -80,6 +81,9 @@ const getOperatorCategories = async (req, res) => {
 const getOperatorAllCategories = async (req, res) => {
   try {
     const refId = req.user.id;
+    let dataToFind = req.body;
+    let options = {};
+    let query = { isDeleted: false };
 
     const user = await dbService.findOne(
       model.user,
@@ -91,13 +95,80 @@ const getOperatorAllCategories = async (req, res) => {
       return res.failure({ message: 'User Not Found' });
     }
 
-    const categories = await model.bbpsOperatorCategory.findAll();
+    // Merge with query from body
+    if (dataToFind && dataToFind.query) {
+      query = {
+        ...query,
+        ...dataToFind.query
+      };
+    }
 
-    return res.success({
+    // Handle options
+    if (dataToFind && dataToFind.options !== undefined) {
+      options = dataToFind.options;
+    }
+
+    // Handle customSearch
+    if (dataToFind && dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        const value = dataToFind.customSearch[key];
+        if (typeof value === 'number') {
+          orConditions.push(
+            sequelize.where(sequelize.cast(sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${value}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${value}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        query = {
+          ...query,
+          [Op.or]: orConditions
+        };
+      }
+    }
+
+    // Use paginate for pagination support
+    const categories = await dbService.paginate(
+      model.bbpsOperatorCategory,
+      query,
+      options
+    );
+
+    if (!categories || !categories.data || categories.data.length === 0) {
+      return res.status(200).send({
+        status: 'SUCCESS',
+        message: 'Fetched all categories successfully',
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
+      });
+    }
+
+    return res.status(200).send({
+      status: 'SUCCESS',
       message: 'Fetched all categories successfully',
-      data: categories
+      data: categories.data,
+      total: categories.total,
+      paginator: categories.paginator
     });
   } catch (error) {
+    console.error('BBPS getOperatorAllCategories error:', error);
     return res.failure({
       message: 'Failed to get categories',
       error: error.message
