@@ -509,7 +509,7 @@ const uploadOperatorImage = async (req, res) => {
 const getOperators = async (req, res) => {
   try {
     const { query = {}, options = {}, customSearch, isCountOnly } = req.body;
-    const companyId = req.companyId;
+    const companyId = req.user?.companyId;
     const userId = req.user?.id;
 
     // Extract operatorService from query if provided
