@@ -182,13 +182,17 @@ const findMobileNumberOperator = async (req, res) => {
         if(!mobileNumber){
             return res.failure({ message: 'Mobile number is required' });
         }
-        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        const [existingUser, response] = await Promise.all([
+            dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId }),
+            inspayService.operatorFetch(mobileNumber)
+        ]);
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        const response = await inspayService.operatorFetch(mobileNumber);
+
         console.log('response', response);
-        
+
         // Check if response exists
         if (!response) {
             return res.failure({ message: 'Failed to fetch operator information' });
