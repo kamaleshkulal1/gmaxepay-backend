@@ -512,7 +512,45 @@ const getOperators = async (req, res) => {
     const companyId = req.companyId;
     const userId = req.user?.id;
 
-    let whereClause = { isDeleted: false, ...query };
+    // Extract operatorService from query if provided
+    const operatorService = query.operatorService;
+    let whereClause = { isDeleted: false };
+
+    // If operatorService is provided, find the category and filter by categoryId
+    if (operatorService) {
+      const operatorCategory = await dbService.findOne(
+        model.bbpsOperatorCategory,
+        { name: operatorService, isDeleted: false }
+      );
+      
+      if (!operatorCategory) {
+        // Return empty result if category not found
+        if (isCountOnly) {
+          return res.success({ data: { totalRecords: 0 } });
+        }
+        return res.status(200).send({
+          status: 'SUCCESS',
+          message: 'Operators fetched successfully',
+          data: [],
+          total: 0,
+          paginator: {
+            itemCount: 0,
+            perPage: options.paginate || 25,
+            pageCount: 0,
+            currentPage: options.page || 1
+          }
+        });
+      }
+
+      whereClause.categoryId = operatorCategory.id;
+    }
+
+    // Merge with remaining query parameters (excluding operatorService)
+    const { operatorService: _, ...restQuery } = query;
+    whereClause = {
+      ...whereClause,
+      ...restQuery
+    };
 
     const userRecord = await model.user.findOne({
       where: { id: userId, companyId }
@@ -559,10 +597,17 @@ const getOperators = async (req, res) => {
       options
     );
 
-    return res.success({
+    return res.status(200).send({
+      status: 'SUCCESS',
       message: 'Operators fetched successfully',
       data: foundOperators?.data || [],
-      total: foundOperators?.total || 0
+      total: foundOperators?.total || 0,
+      paginator: foundOperators?.paginator || {
+        itemCount: foundOperators?.total || 0,
+        perPage: options.paginate || 25,
+        pageCount: foundOperators?.pages || 0,
+        currentPage: options.page || 1
+      }
     });
   } catch (error) {
     console.error('Error in getOperators:', error);
