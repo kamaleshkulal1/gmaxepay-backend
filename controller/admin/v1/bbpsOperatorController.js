@@ -552,8 +552,14 @@ const getOperators = async (req, res) => {
       ...restQuery
     };
 
+    // Build user query conditionally to handle undefined companyId
+    const userWhere = { id: userId };
+    if (companyId !== undefined && companyId !== null) {
+      userWhere.companyId = companyId;
+    }
+
     const userRecord = await model.user.findOne({
-      where: { id: userId, companyId }
+      where: userWhere
     });
 
     if (!userRecord) {
