@@ -341,6 +341,7 @@ const getImagesByCategory = async (req, res) => {
 /**
  * Serve image from S3 (direct path - for backward compatibility)
  * @description Proxy endpoint to serve images from S3 bucket with CORS support
+ * Uses streaming to avoid loading entire image into memory
  */
 const serveImage = async (req, res) => {
   try {
@@ -352,85 +353,15 @@ const serveImage = async (req, res) => {
       return res.status(404).send('Image not found');
     }
 
-    // Get image from S3 (s3Key is already decrypted/plain)
-    const imageBuffer = await imageService.getImageFromS3(s3Key);
+    // Get image stream from S3 (memory efficient)
+    const { stream, contentType: s3ContentType, contentLength } = await imageService.getImageStreamFromS3(s3Key);
     
-    // Detect content type based on file extension
+    // Detect content type based on file extension (fallback if S3 doesn't provide it)
     const path = require('path');
     const ext = path.extname(s3Key).toLowerCase();
-    let contentType = 'image/jpeg'; // default
+    let contentType = s3ContentType || 'image/jpeg'; // Use S3 content type or default
     
-    switch (ext) {
-      case '.ico':
-        contentType = 'image/x-icon';
-        break;
-      case '.png':
-        contentType = 'image/png';
-        break;
-      case '.jpg':
-      case '.jpeg':
-        contentType = 'image/jpeg';
-        break;
-      case '.gif':
-        contentType = 'image/gif';
-        break;
-      case '.webp':
-        contentType = 'image/webp';
-        break;
-      case '.svg':
-        contentType = 'image/svg+xml';
-        break;
-      default:
-        contentType = 'image/jpeg';
-    }
-    
-    // Set headers - CORS is handled by global middleware, but we set content type explicitly
-    const headers = {
-      'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=31536000' // Cache for 1 year
-    };
-    
-    res.set(headers);
-    res.send(imageBuffer);
-  } catch (error) {
-    console.error('Error serving image:', error);
-    res.status(404).send('Image not found');
-  }
-};
-
-/**
- * Serve secure image from S3 (encrypted key)
- * @description Secure proxy endpoint to serve images from S3 bucket using encrypted keys
- */
-const serveSecureImage = async (req, res) => {
-  try {
-    // Extract encrypted key from the path
-    // The route is /images/secure/:encryptedKey
-    const encryptedKey = req.params.encryptedKey;
-    
-    if (!encryptedKey) {
-      return res.status(404).send('Image not found');
-    }
-
-    try {
-      // Decrypt the key
-      const { decrypt } = require('../../utils/encryption');
-      const decodedKey = decodeURIComponent(encryptedKey);
-      const s3Key = decrypt(decodedKey);
-      
-      if (!s3Key || !s3Key.startsWith('images/')) {
-        return res.status(404).send('Invalid image key');
-      }
-
-      // Get image from S3 (s3Key is already decrypted, so pass it directly)
-      // getImageFromS3 will handle it correctly (extractS3Key returns plain keys as-is)
-      const imageBuffer = await imageService.getImageFromS3(s3Key);
-      
-      // Detect content type based on file extension
-      const path = require('path');
-      const ext = path.extname(s3Key).toLowerCase();
-      let contentType = 'image/jpeg'; // default
-      
+    if (!s3ContentType) {
       switch (ext) {
         case '.ico':
           contentType = 'image/x-icon';
@@ -454,6 +385,97 @@ const serveSecureImage = async (req, res) => {
         default:
           contentType = 'image/jpeg';
       }
+    }
+    
+    // Set headers - CORS is handled by global middleware, but we set content type explicitly
+    const headers = {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=31536000' // Cache for 1 year
+    };
+    
+    // Set content length if available
+    if (contentLength) {
+      headers['Content-Length'] = contentLength;
+    }
+    
+    res.set(headers);
+    
+    // Stream the image directly to response (memory efficient)
+    stream.pipe(res);
+    
+    // Handle stream errors
+    stream.on('error', (error) => {
+      console.error('Error streaming image:', error);
+      if (!res.headersSent) {
+        res.status(500).send('Error loading image');
+      }
+    });
+  } catch (error) {
+    console.error('Error serving image:', error);
+    if (!res.headersSent) {
+      res.status(404).send('Image not found');
+    }
+  }
+};
+
+/**
+ * Serve secure image from S3 (encrypted key)
+ * @description Secure proxy endpoint to serve images from S3 bucket using encrypted keys
+ * Uses streaming to avoid loading entire image into memory
+ */
+const serveSecureImage = async (req, res) => {
+  try {
+    // Extract encrypted key from the path
+    // The route is /images/secure/:encryptedKey
+    const encryptedKey = req.params.encryptedKey;
+    
+    if (!encryptedKey) {
+      return res.status(404).send('Image not found');
+    }
+
+    try {
+      // Decrypt the key
+      const { decrypt } = require('../../utils/encryption');
+      const decodedKey = decodeURIComponent(encryptedKey);
+      const s3Key = decrypt(decodedKey);
+      
+      if (!s3Key || !s3Key.startsWith('images/')) {
+        return res.status(404).send('Invalid image key');
+      }
+
+      // Get image stream from S3 (memory efficient)
+      const { stream, contentType: s3ContentType, contentLength } = await imageService.getImageStreamFromS3(s3Key);
+      
+      // Detect content type based on file extension (fallback if S3 doesn't provide it)
+      const path = require('path');
+      const ext = path.extname(s3Key).toLowerCase();
+      let contentType = s3ContentType || 'image/jpeg'; // Use S3 content type or default
+      
+      if (!s3ContentType) {
+        switch (ext) {
+          case '.ico':
+            contentType = 'image/x-icon';
+            break;
+          case '.png':
+            contentType = 'image/png';
+            break;
+          case '.jpg':
+          case '.jpeg':
+            contentType = 'image/jpeg';
+            break;
+          case '.gif':
+            contentType = 'image/gif';
+            break;
+          case '.webp':
+            contentType = 'image/webp';
+            break;
+          case '.svg':
+            contentType = 'image/svg+xml';
+            break;
+          default:
+            contentType = 'image/jpeg';
+        }
+      }
       
       // Set headers with CORS support
       const headers = {
@@ -464,15 +486,34 @@ const serveSecureImage = async (req, res) => {
         'Access-Control-Allow-Headers': 'Content-Type'
       };
       
+      // Set content length if available
+      if (contentLength) {
+        headers['Content-Length'] = contentLength;
+      }
+      
       res.set(headers);
-      res.send(imageBuffer);
+      
+      // Stream the image directly to response (memory efficient)
+      stream.pipe(res);
+      
+      // Handle stream errors
+      stream.on('error', (error) => {
+        console.error('Error streaming secure image:', error);
+        if (!res.headersSent) {
+          res.status(500).send('Error loading image');
+        }
+      });
     } catch (decryptError) {
       console.error('Error decrypting image key:', decryptError);
-      return res.status(404).send('Invalid image key');
+      if (!res.headersSent) {
+        return res.status(404).send('Invalid image key');
+      }
     }
   } catch (error) {
     console.error('Error serving secure image:', error);
-    res.status(404).send('Image not found');
+    if (!res.headersSent) {
+      res.status(404).send('Image not found');
+    }
   }
 };
 

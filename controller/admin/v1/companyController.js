@@ -652,6 +652,11 @@ const getAllCompanies = async (req, res) => {
       options = dataToFind.options;
     }
 
+    // Add default limit to prevent loading too many records into memory
+    if (!options.limit && !options.paginate) {
+      options.limit = 1000; // Default limit of 1000 records
+    }
+
     if (dataToFind?.customSearch) {
       const keys = Object.keys(dataToFind.customSearch);
       const orConditions = [];

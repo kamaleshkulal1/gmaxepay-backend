@@ -248,7 +248,44 @@ const deleteImageFromS3 = async (encryptedKey) => {
 };
 
 /**
- * Get image from S3
+ * Get image stream from S3 (memory efficient - for streaming)
+ * @param {String|Object} encryptedKey - Encrypted S3 key from database (or plain key)
+ * @returns {Promise<Object>} - Returns { stream, contentType, contentLength }
+ */
+const getImageStreamFromS3 = async (encryptedKey) => {
+  try {
+    if (!encryptedKey) {
+      throw new Error('S3 key is required');
+    }
+    
+    // Extract and decrypt S3 key if needed
+    const s3Key = extractS3Key(encryptedKey);
+    
+    if (!s3Key || !s3Key.startsWith('images/')) {
+      throw new Error('Invalid S3 key');
+    }
+    
+    const params = {
+      Bucket: BUCKET_NAME,
+      Key: s3Key
+    };
+    
+    const response = await s3Client.send(new GetObjectCommand(params));
+    
+    return {
+      stream: response.Body,
+      contentType: response.ContentType || 'image/jpeg',
+      contentLength: response.ContentLength,
+      lastModified: response.LastModified
+    };
+  } catch (error) {
+    console.error('Error getting image stream from S3:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get image from S3 (legacy - loads into memory, use getImageStreamFromS3 for better memory efficiency)
  * @param {String|Object} encryptedKey - Encrypted S3 key from database (or plain key)
  * @returns {Promise<Buffer>}
  */
@@ -304,6 +341,7 @@ module.exports = {
   uploadImageToS3,
   deleteImageFromS3,
   getImageFromS3,
+  getImageStreamFromS3,
   getImageUrl,
   extractS3Key,
   encryptS3Key,
