@@ -189,17 +189,23 @@ const findMobileNumberOperator = async (req, res) => {
         const response = await inspayService.operatorFetch(mobileNumber);
         console.log('response', response);
         
-        // Check if response and operatorName exist
-        if (!response || !response.operatorName) {
-            return res.failure({ message: response?.message || 'Failed to fetch operator information' });
+        // Check if response exists
+        if (!response) {
+            return res.failure({ message: 'Failed to fetch operator information' });
         }
         
-        const operator = await dbService.findOne(model.operator, { operatorName: response.operatorName.toUpperCase() });
+        // Use 'company' field from response (API returns 'company' not 'operatorName')
+        const operatorName = response.company || response.operatorName;
+        if (!operatorName) {
+            return res.failure({ message: response.message || 'Operator name not found in response' });
+        }
+        
+        const operator = await dbService.findOne(model.operator, { operatorName: operatorName.toUpperCase() });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
         response.operatorCode = operator.operatorCode;
-        if (response.status === 'Success') {
+        if (response.status === 'Success' || response.status === 'SUCCESS') {
             return res.success({ message: 'Operator retrieved successfully', data: response });
         } else {
             return res.failure({ message: response.message || 'Failed to fetch operator' });
