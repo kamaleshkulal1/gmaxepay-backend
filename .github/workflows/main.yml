@@ -117,7 +117,7 @@ jobs:
           
           echo "🔄 Restarting application..."
           pm2 delete gmaxepay-backend 2>/dev/null || true
-          pm2 start index.js --name gmaxepay-backend --silent
+          pm2 start index.js --name gmaxepay-backend --node-args="--max-old-space-size=4096" --silent
           pm2 save --silent
           
           echo "⏳ Waiting for startup..."
