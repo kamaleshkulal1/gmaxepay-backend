@@ -4,7 +4,6 @@
  */
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
-const model = require('./index');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
 const { reusableModelAttribute } = require('../utils/common');
@@ -20,7 +19,7 @@ const DmtRegistration = sequelize.define(
     refId: {
       type: DataTypes.INTEGER,
       references: {
-        model: model.user,
+        model: 'user',
         key: 'id'
       },
       allowNull: false
@@ -28,7 +27,7 @@ const DmtRegistration = sequelize.define(
     companyId: {
       type: DataTypes.INTEGER,
       references: {
-        model: model.company,
+        model: 'company',
         key: 'id'
       },
       allowNull: false

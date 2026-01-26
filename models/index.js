@@ -28,6 +28,7 @@ db.bioMetric = require('./bioMetric');
 db.aepsDailyLogin = require('./aepsDailyLogin');
 db.practomindAepsOnboarding = require('./practomindAepsOnbarding');
 db.practomindAepsDailyLogin = require('./practomindAepsDailyLogin');
+db.dmtRegistration = require('./dmtRegistration');
 
 // Role & Permission Models
 db.permission = require('./permissions');
@@ -378,6 +379,29 @@ db.practomindAepsDailyLogin.belongsTo(db.company, {
 db.company.hasMany(db.practomindAepsDailyLogin, {
   foreignKey: 'companyId',
   as: 'practomindAepsDailyLogins',
+  sourceKey: 'id'
+});
+
+// DMT Registration Relationships
+db.dmtRegistration.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.dmtRegistration, {
+  foreignKey: 'refId',
+  as: 'dmtRegistrations',
+  sourceKey: 'id'
+});
+
+db.dmtRegistration.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.dmtRegistration, {
+  foreignKey: 'companyId',
+  as: 'dmtRegistrations',
   sourceKey: 'id'
 });
 
