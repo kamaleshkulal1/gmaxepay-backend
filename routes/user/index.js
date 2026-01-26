@@ -15,5 +15,6 @@ router.use('/callback', require('./v1/callbackRoute'));
 router.use('/aeps2', require('./v1/practomindAepsRoute'));
 router.use('/fund', require('./v1/fundRoute'));
 router.use('/wallet', require('./v1/walletRoute'));
+router.use('/dmt', require('./v1/dmtRoute'));
 
 module.exports = router;

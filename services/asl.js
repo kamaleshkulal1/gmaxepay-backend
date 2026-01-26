@@ -406,14 +406,21 @@ const aslAepsPayOut = async (data) => {
 // ASL DMT Sender Registration
 const aslDmtSenderRegistration = async (data) => {
     try{
-        const response = await axios.post(`${aslUrl}/dmt/senderregistration`,
+        const formData = new FormData();
+        formData.append('apiToken', aslApiToken);
+        formData.append('apiUserId', aslApiUserId);
+        
+        Object.entries(data).forEach(([key, value]) => {
+            if(value !== undefined && value !== null && value !== '') {
+                formData.append(key, value);
+            }
+        });
+
+        const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/senderregistration`,
+            formData,
             {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
                 headers: {
-                    'Content-Type': 'application/json'
+                    ...formData.getHeaders()
                 }
             });
         console.log("response",response);
@@ -421,21 +428,28 @@ const aslDmtSenderRegistration = async (data) => {
         return response.data;
     } catch (error) {
         console.log("error",error);
-        return error.response.data;
+        return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
     }
 }
 
 // ASL DMT Receive OTP
 const aslDmtReceiveOtp = async (data) => {
     try{
-        const response = await axios.post(`${aslUrl}/dmt/receiveotp`,
+        const formData = new FormData();
+        formData.append('apiToken', aslApiToken);
+        formData.append('apiUserId', aslApiUserId);
+        
+        Object.entries(data).forEach(([key, value]) => {
+            if(value !== undefined && value !== null && value !== '') {
+                formData.append(key, value);
+            }
+        });
+
+        const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/receiveotp`,
+            formData,
             {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
                 headers: {
-                    'Content-Type': 'application/json'
+                    ...formData.getHeaders()
                 }
             });
         console.log("response",response);
@@ -443,21 +457,28 @@ const aslDmtReceiveOtp = async (data) => {
         return response.data;
     } catch (error) {
         console.log("error",error);
-        return error.response.data;
+        return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
     }
 }
 
 // ASL DMT Verify OTP
 const aslDmtVerifyOtp = async (data) => {
     try{
-        const response = await axios.post(`${aslUrl}/dmt/verifyotp`,
+        const formData = new FormData();
+        formData.append('apiToken', aslApiToken);
+        formData.append('apiUserId', aslApiUserId);
+        
+        Object.entries(data).forEach(([key, value]) => {
+            if(value !== undefined && value !== null && value !== '') {
+                formData.append(key, value);
+            }
+        });
+
+        const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/verifyotp`,
+            formData,
             {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
                 headers: {
-                    'Content-Type': 'application/json'
+                    ...formData.getHeaders()
                 }
             });
         console.log("response",response);
@@ -465,7 +486,7 @@ const aslDmtVerifyOtp = async (data) => {
         return response.data;
     } catch (error) {
         console.log("error",error);
-        return error.response.data;
+        return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
     }
 }
 
