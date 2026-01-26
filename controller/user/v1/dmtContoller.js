@@ -10,7 +10,6 @@ const getDmtOnboardingStatus = async (req, res) => {
             return res.failure({ message: 'senderMobileNo is required' });
         }
 
-        // Check if DMT registration exists for this mobile number
         const dmtRegistration = await dbService.findOne(model.dmtRegistration, {
             senderMobileNo: senderMobileNo
         });
