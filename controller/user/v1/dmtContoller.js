@@ -108,7 +108,7 @@ const createRegistration = async (req, res) => {
                 );
             } else {
                 // Create new record
-                await dbService.create(model.dmtRegistration, registrationData);
+                await dbService.createOne(model.dmtRegistration, registrationData);
             }
 
             return res.success({ 
