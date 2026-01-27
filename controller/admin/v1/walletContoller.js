@@ -1,6 +1,7 @@
 const model = require('../../../models')
 const dbService = require('../../../utils/dbService')
 const asl = require('../../../services/asl')
+const inspayService = require('../../../services/inspayService')
 
 const alsWallet = async(req, res)=>{
     try{
