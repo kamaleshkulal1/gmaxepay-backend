@@ -86,7 +86,7 @@ const panCardActions = async (req, res) => {
       mobile_number: mobileNumber,
       redirect_url: response.redirect_url || null,
       status: response.status || 'Failed',
-      type: action,
+      action: action,
       request: JSON.stringify({
         mobile_number: mobileNumber,
         orderid: orderid
