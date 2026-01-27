@@ -63,7 +63,29 @@ const walletBalance = async(req, res)=>{
     }
 }
 
+const inspayWallet = async(req, res)=>{
+    try{
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if(!existingUser){
+            return res.failure({ message: 'User not found' });
+        }
+        if(existingUser.userRole !== 1){
+            return res.failure({ message: 'Unauthorized access' });
+        }
+        const response = await inspayService.checkBalance();
+        return res.success({ message: 'Balance fetched successfully', data: response });
+    } catch (error) {
+        console.error('Error in inspayWallet', error);
+        return res.failure({ message: error.message });
+    }
+};
+
 module.exports = {
     alsWallet,
-    walletBalance
-}
+    walletBalance,
+    inspayWallet
+};

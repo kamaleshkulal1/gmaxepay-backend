@@ -227,6 +227,31 @@ const checkStatus = async (orderid) => {
     });
 };
 
+const checkBalance = async () => {
+  let config = {
+    method: 'get',
+    url: `${rechargeUrl}/recharge/balance?`,
+    params: {
+      username: inspayUsername,
+      token: inspayToken,
+      format: 'json'
+    },
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  };
+  return axios
+    .request(config)
+    .then((response) => {
+      console.log('response', response);
+      console.log(response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      console.log(error.response);
+      return error.response ? error.response.data : error.message;
+    });
+};
 module.exports = {
   operatorFetch,
   rechargePlanFetch,
@@ -234,6 +259,7 @@ module.exports = {
   Recharge,
   DTHPlanFetch,
   DTHCustomerInfo,
-  checkStatus
+  checkStatus,
+  checkBalance
 };
 

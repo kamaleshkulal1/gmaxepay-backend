@@ -5,5 +5,6 @@ const authentication = require('../../../middleware/authentication');
 
 router.post('/alsWallet', authentication, walletController.alsWallet);
 router.post('/balance', authentication, walletController.walletBalance);
+router.post('/inspayWallet', authentication, walletController.inspayWallet);
 
 module.exports = router;
