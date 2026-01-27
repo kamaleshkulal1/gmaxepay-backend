@@ -30,7 +30,7 @@ const panCardActions = async (req, res) => {
     }
 
     // Get mobile number from request body or user
-    const mobileNumber = mobile_number || user.mobileNo;
+    const mobileNumber = mobile_number;
     if (!mobileNumber) {
       return res.failure({ message: 'Mobile number is required' });
     }
