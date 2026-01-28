@@ -74,7 +74,6 @@ const findAllslabComm = async (req, res) => {
       model.slab,
       {
         addedBy: 1,
-        updatedBy: 1,
         isActive: true
       },
       {
