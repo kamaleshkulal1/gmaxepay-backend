@@ -1539,6 +1539,9 @@ const uploadBankDetailsForUser = async (req, res) => {
 const getCompanyAdminById = async (req, res) => {
   try {
     const { id } = req.params;
+    if(req.user.userRole !== 1 && req.user.companyId !== 1){
+      return res.failure({ message: 'Access Denied due to insufficient permissions' });
+    }
     const existingUser = await dbService.findOne(model.user, { id });
     if (!existingUser) {
       return res.failure({ message: 'Company admin not found' });
