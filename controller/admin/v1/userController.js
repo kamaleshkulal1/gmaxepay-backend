@@ -77,52 +77,39 @@ const findAllUsers = async (req, res) => {
     }
 
     // Filter by userRole (2=white label, 3=master distributor, 4=distributor, 5=retailer)
-    // Only filter if userRole is explicitly provided in query
-    if (query.userRole) {
-      // userRole is already in query from dataToFind.query
-    } else {
-      // If no userRole specified, filter by allowed roles
+    if (!query.userRole) {
       query.userRole = { [Op.in]: [2, 3, 4, 5] };
     }
 
     // Apply company filter
     const userRole = req.user.userRole;
     const userCompanyId = req.user.companyId;
-    if (userRole === 1 && userCompanyId === 1) {
-      // Don't filter by companyId - show all users
-    } else {
-      // Filter by companyId for userRole = 2 or other cases
+    if (!(userRole === 1 && userCompanyId === 1)) {
       const companyId = req.companyId || userCompanyId;
-      // Only add companyId to query if it's defined
       if (companyId !== undefined && companyId !== null) {
         query.companyId = companyId;
       }
     }
 
-    // Handle kycStatus filter - map "pending" and "completed" to actual status values
+    // Handle kycStatus filter
     if (query.kycStatus) {
       const kycStatusValue = query.kycStatus;
-      
-      // Map "pending" to HALF_KYC and NO_KYC
+
       if (kycStatusValue === 'pending') {
         query.kycStatus = { [Op.in]: ['HALF_KYC', 'NO_KYC'] };
-      }
-      // Map "completed" to FULL_KYC
-      else if (kycStatusValue === 'completed') {
+      } else if (kycStatusValue === 'completed') {
         query.kycStatus = 'FULL_KYC';
-      }
-      // Handle string with || separator (e.g., "HALF_KYC || NO_KYC")
-      else if (typeof kycStatusValue === 'string' && kycStatusValue.includes('||')) {
-        const statuses = kycStatusValue.split('||').map(s => s.trim()).filter(s => s);
+      } else if (typeof kycStatusValue === 'string' && kycStatusValue.includes('||')) {
+        const statuses = kycStatusValue
+          .split('||')
+          .map((s) => s.trim())
+          .filter((s) => s);
         if (statuses.length > 0) {
           query.kycStatus = { [Op.in]: statuses };
         }
-      }
-      // If it's already an array, use it directly
-      else if (Array.isArray(kycStatusValue)) {
+      } else if (Array.isArray(kycStatusValue)) {
         query.kycStatus = { [Op.in]: kycStatusValue };
       }
-      // Otherwise, use the value as is (e.g., "FULL_KYC", "HALF_KYC", "NO_KYC", "REJECTED")
     }
 
     // Handle options
@@ -136,16 +123,17 @@ const findAllUsers = async (req, res) => {
       const orConditions = [];
 
       keys.forEach((key) => {
-        if (typeof dataToFind.customSearch[key] === 'number') {
+        const value = dataToFind.customSearch[key];
+        if (typeof value === 'number') {
           orConditions.push(
             Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
-              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+              [Op.iLike]: `%${value}%`
             })
           );
         } else {
           orConditions.push({
             [key]: {
-              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+              [Op.iLike]: `%${value}%`
             }
           });
         }
@@ -213,29 +201,61 @@ const findAllUsers = async (req, res) => {
       5: 'RE'
     };
 
+    // Normalize users and collect slabIds
+    const usersArray = foundUsers.data.map((user) =>
+      user.toJSON ? user.toJSON() : user
+    );
+
+    const slabIds = [
+      ...new Set(
+        usersArray
+          .map((u) => u.slabId)
+          .filter((id) => id !== null && id !== undefined)
+      )
+    ];
+
+    let slabsById = {};
+    if (slabIds.length > 0) {
+      const slabs = await dbService.findAll(
+        model.slab,
+        { id: { [Op.in]: slabIds } },
+        { attributes: ['id', 'slabName'] }
+      );
+
+      if (slabs && slabs.length > 0) {
+        slabsById = slabs.reduce((acc, slab) => {
+          const slabData = slab.toJSON ? slab.toJSON() : slab;
+          acc[slabData.id] = slabData;
+          return acc;
+        }, {});
+      }
+    }
+
     // Transform the response
-    const transformedData = foundUsers.data.map((user, index) => {
-      const userData = user.toJSON ? user.toJSON() : user;
+    const transformedData = usersArray.map((userData) => {
       const companyData = userData.company || {};
       const walletData = userData.wallet || {};
       const onboardingTokens = userData.onboardingTokens || [];
 
-      // Determine KYC Status
-      const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
+      const kycStatus =
+        userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
 
-      // Determine if account is locked
-      const isLockedByStatus = !!(userData.isLocked && userData.lockUntil && new Date(userData.lockUntil) > new Date());
+      const isLockedByStatus =
+        !!userData.isLocked &&
+        !!userData.lockUntil &&
+        new Date(userData.lockUntil) > new Date();
       const isLockedByAttempts = (userData.loginAttempts || 0) >= 3;
       const isLocked = isLockedByStatus || isLockedByAttempts;
 
-      // Get the latest active onboarding token's expiresAt
-      // onboardingTokens is already filtered and limited to 1, so get the first one
-      const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0 
-        ? onboardingTokens[0] 
-        : null;
-      const onboardingTokenExpiresAt = latestOnboardingToken?.expiresAt || null;
+      const latestOnboardingToken =
+        Array.isArray(onboardingTokens) && onboardingTokens.length > 0
+          ? onboardingTokens[0]
+          : null;
+      const onboardingTokenExpiresAt =
+        latestOnboardingToken?.expiresAt || null;
 
-      // Format userAgentCode with correct prefix based on role
+      const slab = userData.slabId ? slabsById[userData.slabId] : null;
+
       return {
         id: userData.id,
         date: userData.createdAt || null,
@@ -245,17 +265,18 @@ const findAllUsers = async (req, res) => {
         mobileNo: userData.mobileNo || null,
         email: userData.email || null,
         parentName: companyData.companyName || null,
-        parentRole: 'Enterprise',
+        parentRole: 'Whitelabel',
         company: companyData.companyName || null,
-        kycStatus: kycStatus,
+        kycStatus,
         kycSteps: userData.kycSteps || 0,
         status: userData.isActive ? 'Active' : 'Inactive',
         lock: isLocked,
-        onboardingTokenExpiresAt: onboardingTokenExpiresAt,
+        onboardingTokenExpiresAt,
         wallet: {
           mainWallet: walletData.mainWallet || 0,
           apesWallet: walletData.apesWallet || 0
-        }
+        },
+        slab: slab ? slab.slabName : null
       };
     });
 
