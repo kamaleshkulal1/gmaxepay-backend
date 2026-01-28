@@ -12,7 +12,7 @@ router.post('/:id/unlock', authentication, userController.unlockAccount);
 router.post('/:id/kyc/status', authentication, userController.getKycVerificationStatus);
 router.post('/:id/kyc/complete', authentication, userController.getCompleteKycData);
 router.post('/:id/kyc/revert', authentication, userController.revertKycData);
-
+router.post('/:id', authentication, userController.getCompanyAdminById);
 // Super Admin Bank Details Upload API
 router.post('/bank-details/upload', authentication, userController.uploadBankDetailsForUser);
 
