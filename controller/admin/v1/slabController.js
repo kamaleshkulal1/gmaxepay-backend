@@ -70,9 +70,29 @@ const findAllslabComm = async (req, res) => {
     if (dataToFind && dataToFind.query) {
       query = dataToFind.query;
     }
-    if (companyId !== null && companyId !== undefined) {
-      query = { ...query, companyId };
+    const filteredSlabs = await dbService.findAll(
+      model.slab,
+      {
+        addedBy: 1,
+        updatedBy: 1,
+        isActive: true
+      },
+      {
+        attributes: ['id']
+      }
+    );
+
+    if (!filteredSlabs || filteredSlabs.length === 0) {
+      return res.recordNotFound();
     }
+
+    const slabIds = filteredSlabs.map((s) => s.id || s.dataValues?.id).filter(Boolean);
+
+    if (!slabIds.length) {
+      return res.recordNotFound();
+    }
+
+    query.slabId = { [Op.in]: slabIds };
 
     if (dataToFind && dataToFind.isCountOnly) {
       foundUser = await dbService.count(model.pgCommercials, query);
@@ -589,6 +609,45 @@ const assignSlabToCompany = async (req, res) => {
         { id: slabId },
         { users: updatedUsers }
       );
+    }
+
+    const originalCompanyId = slab.companyId;
+    
+    if (originalCompanyId !== companyId) {
+      const existingCommissions = await dbService.findAll(model.commSlab, {
+        slabId: slabId,
+        companyId: originalCompanyId
+      });
+
+      if (existingCommissions && existingCommissions.length > 0) {
+        const existingForNewCompany = await dbService.findAll(model.commSlab, {
+          slabId: slabId,
+          companyId: companyId
+        });
+
+        if (!existingForNewCompany || existingForNewCompany.length === 0) {
+          const commissionsToCreate = existingCommissions.map(comm => {
+            const commData = comm.toJSON ? comm.toJSON() : comm;
+            return {
+              slabId: slabId,
+              companyId: companyId,
+              operatorId: commData.operatorId,
+              operatorName: commData.operatorName,
+              operatorType: commData.operatorType,
+              roleType: commData.roleType,
+              roleName: commData.roleName,
+              commAmt: commData.commAmt || 0,
+              commType: commData.commType || 'com',
+              amtType: commData.amtType || 'fix',
+              paymentMode: commData.paymentMode || null,
+              addedBy: req.user.id,
+              updatedBy: req.user.id
+            };
+          });
+
+          await dbService.createMany(model.commSlab, commissionsToCreate);
+        }
+      }
     }
 
     return res.status(200).send({
