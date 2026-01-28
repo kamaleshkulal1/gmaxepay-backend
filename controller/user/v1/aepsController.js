@@ -588,6 +588,7 @@ const bankKycSendOtp = async (req, res) => {
         const payload = {
             latitude: latitude,
             longitude: longitude,
+            uniqueID: existingAepsOnboarding.uniqueID,
             mobileNumber: existingUser.mobileNo,
             aadharNumber:  existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             panNumber: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
