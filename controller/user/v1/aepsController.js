@@ -588,7 +588,7 @@ const bankKycSendOtp = async (req, res) => {
         const payload = {
             latitude: latitude,
             longitude: longitude,
-            mobileNo: existingUser.mobileNo,
+            mobileNumber: existingUser.mobileNo,
             aadhaarNumber:  existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             panNumber: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
@@ -939,7 +939,6 @@ const aeps2FaAuthentication = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process AEPS 2FA authentication' });
     }
 }
-
 
 const aepsTransaction = async (req, res) => {
     try{
