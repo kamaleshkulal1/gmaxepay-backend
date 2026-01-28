@@ -589,7 +589,7 @@ const bankKycSendOtp = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             mobileNumber: existingUser.mobileNo,
-            aadhaarNumber:  existingUser.aadharDetails?.aadhaarNumber || '829763289274',
+            aadharNumber:  existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             panNumber: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
         }
