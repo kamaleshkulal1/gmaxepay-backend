@@ -532,152 +532,81 @@ const getAllSlabs = async (req, res) => {
 
 const assignSlabToCompany = async (req, res) => {
   try {
-    // Only SUPER_ADMIN can assign global slabs to companies
-    if (req.user?.userType !== USER_TYPES.SUPER_ADMIN) {
-      return res.failure({ message: 'Only SUPER_ADMIN can assign global slabs to companies' });
+    const { slabId, companyId } = req.body;
+    
+    if (req.user.companyId !== companyId && req.user.userRole !== 1) {
+      return res.failure({ message: 'You are not authorized to assign this slab to this company' });
+    }
+    
+    if (!slabId) {
+      return res.failure({ message: 'slabId is required' });
+    }
+    
+    if (!companyId) {
+      return res.failure({ message: 'companyId is required' });
     }
 
-    const { globalSlabId, companyId } = req.body;
-
-    if (!globalSlabId || !companyId) {
-      return res.badRequest({ 
-        message: 'globalSlabId and companyId are required' 
-      });
-    }
-
-    // Get the creator's companyId to verify the global slab
-    const creatorCompanyId = req.user?.companyId;
-    if (!creatorCompanyId) {
-      return res.badRequest({ message: 'Creator company ID is required' });
-    }
-
-    // Verify global slab exists (should belong to the creator's company)
-    const globalSlab = await dbService.findOne(model.slab, {
-      id: globalSlabId,
-      schemaMode: 'global',
-      companyId: creatorCompanyId
+    const slab = await dbService.findOne(model.slab, {
+      id: slabId,
+      isActive: true
     });
 
-    if (!globalSlab) {
-      return res.badRequest({ 
-        message: 'Global slab template not found' 
-      });
+    if (!slab) {
+      return res.failure({ message: 'Slab not found' });
     }
 
-    // Verify company exists
     const company = await dbService.findOne(model.company, { id: companyId });
     if (!company) {
-      return res.badRequest({ 
-        message: 'Company not found' 
-      });
+      return res.failure({ message: 'Company not found' });
     }
 
-    // Check if company already has this slab assigned
-    const existingCompanySlab = await dbService.findOne(model.slab, {
-      slabName: `${company.companyName}.${globalSlab.templateType}`,
+    const companyAdmin = await dbService.findOne(model.user, {
       companyId: companyId,
-      templateType: globalSlab.templateType
+      userRole: 2,
+      isActive: true
     });
 
-    if (existingCompanySlab) {
-      return res.badRequest({ 
-        message: `Company already has a slab with template type "${globalSlab.templateType}"` 
-      });
+    if (!companyAdmin) {
+      return res.failure({ message: 'Company admin not found' });
     }
 
-    // Create company-specific slab based on global template
-    const companySlabName = `${company.companyName}.${globalSlab.templateType}`;
-    const companySlabData = {
-      slabName: companySlabName,
-      templateType: globalSlab.templateType,
-      schemaMode: 'private',
-      companyId: companyId,
-      remark: `Assigned from global template: ${globalSlab.slabName}`,
-      isSignUpB2B: false,
-      users: null,
-      isActive: true,
-      addedBy: req.user.id,
-      type: req.user.userType
-    };
+    const isSlabAssigned = companyAdmin.slab === String(slabId);
+    const slabUsers = slab.users || [];
+    const isUserInSlab = Array.isArray(slabUsers) && slabUsers.includes(companyAdmin.id);
 
-    const createdCompanySlab = await dbService.createOne(model.slab, companySlabData);
-
-    if (!createdCompanySlab) {
-      return res.failure({ message: 'Failed to create company slab' });
+    if (!isSlabAssigned) {
+      await dbService.update(
+        model.user,
+        { id: companyAdmin.id },
+        { slabId: slabId }
+      );
     }
 
-    // Copy commission structures from global slab (use creator's companyId)
-    const globalCommSlabs = await dbService.findAll(model.commSlab, {
-      slabId: globalSlabId,
-      companyId: creatorCompanyId
-    });
+    if (!isUserInSlab) {
+      const updatedUsers = Array.isArray(slabUsers) ? [...slabUsers, companyAdmin.id] : [companyAdmin.id];
+      await dbService.update(
+        model.slab,
+        { id: slabId },
+        { users: updatedUsers }
+      );
+    }
 
-    const globalRangeComms = await dbService.findAll(model.rangeCommission, {
-      slabId: globalSlabId,
-      companyId: creatorCompanyId
-    });
-
-    const globalRangeCharges = await dbService.findAll(model.rangeCharges, {
-      slabId: globalSlabId,
-      companyId: creatorCompanyId
-    });
-
-    const globalPgCommercials = await dbService.findAll(model.pgCommercials, {
-      slabId: globalSlabId,
-      companyId: creatorCompanyId
-    });
-
-    // Create company-specific commission entries
-    const companyCommSlabs = globalCommSlabs.map(comm => ({
-      ...comm.dataValues,
-      id: undefined,
-      slabId: createdCompanySlab.id,
-      companyId: companyId,
-      createdAt: undefined,
-      updatedAt: undefined
-    }));
-
-    const companyRangeComms = globalRangeComms.map(range => ({
-      ...range.dataValues,
-      id: undefined,
-      slabId: createdCompanySlab.id,
-      companyId: companyId,
-      createdAt: undefined,
-      updatedAt: undefined
-    }));
-
-    const companyRangeCharges = globalRangeCharges.map(charge => ({
-      ...charge.dataValues,
-      id: undefined,
-      slabId: createdCompanySlab.id,
-      companyId: companyId,
-      createdAt: undefined,
-      updatedAt: undefined
-    }));
-
-    const companyPgCommercials = globalPgCommercials.map(pg => ({
-      ...pg.dataValues,
-      id: undefined,
-      slabId: createdCompanySlab.id,
-      companyId: companyId,
-      createdAt: undefined,
-      updatedAt: undefined
-    }));
-
-    await Promise.all([
-      dbService.createMany(model.commSlab, companyCommSlabs),
-      dbService.createMany(model.rangeCommission, companyRangeComms),
-      dbService.createMany(model.rangeCharges, companyRangeCharges),
-      dbService.createMany(model.pgCommercials, companyPgCommercials)
-    ]);
-
-    return res.success({
-      message: 'Global slab template assigned to company successfully',
-      data: createdCompanySlab
+    return res.status(200).send({
+      status: 'SUCCESS',
+      message: 'Slab assigned to company admin successfully',
+      data: {
+        slabId: slabId,
+        companyId: companyId,
+        adminId: companyAdmin.id,
+        wasAlreadyAssigned: isSlabAssigned && isUserInSlab
+      }
     });
   } catch (error) {
     console.log(error);
-    return res.internalServerError({ message: error.message });
+    return res.status(500).send({
+      status: 'FAILURE',
+      message: error.message || 'Internal server error'
+    });
   }
 };
 
