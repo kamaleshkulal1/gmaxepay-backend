@@ -279,6 +279,9 @@ const logFormat = winston.format.combine(
 );
 
 // Create transports array
+// NOTE: File-based transports (writing to logs/server.log and logs/error.log)
+// have been commented out to temporarily DISABLE appending to log files.
+// To re-enable file logging later, uncomment the relevant transports below.
 const transports = [
   // Console transport for development with prominent IP and API info
   new winston.transports.Console({
@@ -307,7 +310,8 @@ const transports = [
       })
     )
   }),
-  // Custom file transport for terminal-style format
+  /*
+  // Custom file transport for terminal-style format (DISABLED)
   new (class extends winston.Transport {
     constructor(options) {
       super(options);
@@ -316,12 +320,12 @@ const transports = [
       this.bufferSize = 1; // Write every log immediately for live debugging
       this.writeTimer = null;
     }
-
+  
     log(info, callback) {
       setImmediate(() => {
         this.emit('logged', info);
       });
-
+  
       // Format log entry in terminal style with prominent IP and API info
       let logLine;
       if (info.meta && info.meta.type) {
@@ -358,21 +362,21 @@ const transports = [
       } else {
         logLine = `${info.level}: ${redactSensitiveData(info.message)}`;
       }
-
+  
       // Add to buffer
       this.logBuffer.push(logLine);
-
+  
       // Write immediately for live debugging
       if (this.logBuffer.length >= this.bufferSize) {
         this.writeLogs();
       }
-
+  
       callback(null, true);
     }
-
+  
     async writeLogs() {
       if (this.logBuffer.length === 0) return;
-
+  
       try {
         // Append logs to file (one line per log)
         const logContent = this.logBuffer.join('\n') + '\n';
@@ -391,7 +395,7 @@ const transports = [
   })({
     filename: path.join(logsDir, 'server.log')
   }),
-  // Separate file for errors
+  // Separate file for errors (DISABLED)
   new winston.transports.File({
     filename: path.join(logsDir, 'error.log'),
     level: 'error',
@@ -399,6 +403,7 @@ const transports = [
     maxFiles: 5,
     tailable: true
   })
+  */
 ];
 
 // Add S3 transport if credentials are available
