@@ -596,12 +596,33 @@ const bankKycSendOtp = async (req, res) => {
         }
         const bankKycSendOtpResponse = await asl.aslAepsBankKycSendOtp(payload);
         
-        // Store OTP reference if present in response
-        if (bankKycSendOtpResponse?.otpReferenceId || bankKycSendOtpResponse?.data?.otpReferenceId) {
+        // Store Bank KYC OTP reference & hash from latest response
+        // ASL sometimes returns key as `otpReferneceId` (note the spelling) inside `data`
+        const bankKycOtpRef =
+            bankKycSendOtpResponse?.otpReferneceId ||
+            bankKycSendOtpResponse?.data?.otpReferneceId ||
+            bankKycSendOtpResponse?.otpReferenceId ||
+            bankKycSendOtpResponse?.data?.otpReferenceId;
+        const bankKycHash =
+            bankKycSendOtpResponse?.hash ||
+            bankKycSendOtpResponse?.data?.hash;
+
+        if (bankKycOtpRef || bankKycHash) {
+            const updateData = {};
+            if (bankKycOtpRef) {
+                // Save specifically for Bank KYC and also as generic otpReferenceId fallback
+                updateData.bankKycOtpReferenceId = bankKycOtpRef;
+                updateData.otpReferenceId = bankKycOtpRef;
+            }
+            if (bankKycHash) {
+                // Overwrite hash with latest Bank KYC hash so subsequent calls use correct value
+                updateData.hash = bankKycHash;
+            }
+
             await dbService.update(
                 model.aepsOnboarding,
                 { id: existingAepsOnboarding.id },
-                { bankKycOtpReferenceId: bankKycSendOtpResponse.otpReferenceId || bankKycSendOtpResponse.data.otpReferenceId }
+                updateData
             );
         }
         
