@@ -612,6 +612,7 @@ const assignSlabToCompany = async (req, res) => {
 
     const originalCompanyId = slab.companyId;
     
+    // 1) Try to copy existing commissions from the slab's original company
     if (originalCompanyId !== companyId) {
       const existingCommissions = await dbService.findAll(model.commSlab, {
         slabId: slabId,
@@ -625,7 +626,7 @@ const assignSlabToCompany = async (req, res) => {
         });
 
         if (!existingForNewCompany || existingForNewCompany.length === 0) {
-          const commissionsToCreate = existingCommissions.map(comm => {
+          const commissionsToCreate = existingCommissions.map((comm) => {
             const commData = comm.toJSON ? comm.toJSON() : comm;
             return {
               slabId: slabId,
@@ -645,6 +646,47 @@ const assignSlabToCompany = async (req, res) => {
           });
 
           await dbService.createMany(model.commSlab, commissionsToCreate);
+        }
+      }
+    }
+
+    // 2) If still no commissions for this slab + company, create default ones
+    const companyCommissions = await dbService.findAll(model.commSlab, {
+      slabId: slabId,
+      companyId: companyId
+    });
+
+    if (!companyCommissions || companyCommissions.length === 0) {
+      const operators = await dbService.findAll(
+        model.operator,
+        { inSlab: true },
+        { select: ['id', 'operatorName', 'operatorType'] }
+      );
+
+      if (operators && operators.length > 0) {
+        const roleTypes = [1, 2];
+        const roleNames = ['AD', 'WU'];
+
+        const defaultCommissions = operators.flatMap((op) =>
+          roleTypes.map((roleType, index) => ({
+            slabId: slabId,
+            companyId: companyId,
+            operatorId: op.id,
+            operatorName: op.operatorName,
+            operatorType: op.operatorType,
+            roleType,
+            roleName: roleNames[index] || 'RE',
+            commAmt: 0,
+            commType: 'com',
+            amtType: 'fix',
+            paymentMode: null,
+            addedBy: req.user.id,
+            updatedBy: req.user.id
+          }))
+        );
+
+        if (defaultCommissions.length > 0) {
+          await dbService.createMany(model.commSlab, defaultCommissions);
         }
       }
     }
