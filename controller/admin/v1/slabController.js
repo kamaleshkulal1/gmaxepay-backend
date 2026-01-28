@@ -603,9 +603,25 @@ const assignSlabToCompany = async (req, res) => {
       return res.failure({ message: 'Company admin not found' });
     }
 
-    const isSlabAssigned = companyAdmin.slab === String(slabId);
+    const previousSlabId = companyAdmin.slabId;
+    const isSlabAssigned = Number(previousSlabId) === Number(slabId);
     const slabUsers = slab.users || [];
     const isUserInSlab = Array.isArray(slabUsers) && slabUsers.includes(companyAdmin.id);
+
+    // If admin was already assigned to some other slab, remove them from that slab's users array
+    if (!isSlabAssigned && previousSlabId) {
+      const previousSlab = await dbService.findOne(model.slab, { id: previousSlabId });
+      if (previousSlab && Array.isArray(previousSlab.users) && previousSlab.users.length > 0) {
+        const filteredUsers = previousSlab.users.filter((userId) => userId !== companyAdmin.id);
+        if (filteredUsers.length !== previousSlab.users.length) {
+          await dbService.update(
+            model.slab,
+            { id: previousSlabId },
+            { users: filteredUsers }
+          );
+        }
+      }
+    }
 
     if (!isSlabAssigned) {
       await dbService.update(
@@ -615,6 +631,7 @@ const assignSlabToCompany = async (req, res) => {
       );
     }
 
+    // Ensure admin is present in the new slab's users array
     if (!isUserInSlab) {
       const updatedUsers = Array.isArray(slabUsers) ? [...slabUsers, companyAdmin.id] : [companyAdmin.id];
       await dbService.update(
