@@ -494,7 +494,7 @@ const getAllSlabs = async (req, res) => {
 
     const result = await dbService.paginate(model.slab, query, {
       ...options,
-      select: ['id', 'slabName', 'schemaMode', 'schemaType', 'remark', 'users', 'createdAt', 'updatedAt']
+      select: ['id', 'slabName', 'schemaMode', 'schemaType','isActive', 'remark', 'users', 'createdAt', 'updatedAt']
     });
 
     const processedData = (result?.data || []).map(slab => {
