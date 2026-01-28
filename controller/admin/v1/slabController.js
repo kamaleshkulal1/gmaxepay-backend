@@ -82,13 +82,13 @@ const findAllslabComm = async (req, res) => {
     );
 
     if (!filteredSlabs || filteredSlabs.length === 0) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No slabs found' });
     }
 
     const slabIds = filteredSlabs.map((s) => s.id || s.dataValues?.id).filter(Boolean);
 
     if (!slabIds.length) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No slabs found' });
     }
 
     query.slabId = { [Op.in]: slabIds };
@@ -140,7 +140,7 @@ const findAllslabComm = async (req, res) => {
     foundUser = await dbService.findAll(model.commSlab, query, options);
 
     if (!foundUser || foundUser.length === 0) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No slabs Commissions found' });
     }
 
     const formattedResponse = processData(foundUser);
