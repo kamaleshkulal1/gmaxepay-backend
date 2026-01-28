@@ -5,7 +5,7 @@ const authentication = require('../../../middleware/authentication');
 
 router.post('/', authentication, slabController.createSlab);
 router.post('/list', authentication, slabController.getAllSlabs);
-router.post('/slabcomm', authentication, slabController.findAllslabComm);
+router.post('/slabcomm/:id', authentication, slabController.findAllslabComm);
 router.post('/assign', authentication, slabController.assignSlabToCompany);
 router.put('/update', authentication, slabController.updateSlabName);
 router.put('/updateSlabComm', authentication, slabController.updateSlabComm);
