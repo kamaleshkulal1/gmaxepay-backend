@@ -1542,11 +1542,11 @@ const getCompanyAdminById = async (req, res) => {
     if(req.user.userRole !== 1 && req.user.companyId !== 1){
       return res.failure({ message: 'Access Denied due to insufficient permissions' });
     }
-    const existingUser = await dbService.findOne(model.user, { id });
+    const existingUser = await dbService.findOne(model.user, { id,  userRole: 2 });
     if (!existingUser) {
       return res.failure({ message: 'Company admin not found' });
     }
-    const companyDetails = await dbService.findOne(model.company, { id: existingUser.companyId, userRole: 2 });
+    const companyDetails = await dbService.findOne(model.company, { id: existingUser.companyId });
     if (!companyDetails) {
       return res.failure({ message: 'Company not found' });
     }
