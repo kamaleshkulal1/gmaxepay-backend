@@ -643,7 +643,6 @@ const bankKycValidateOtp = async (req, res) => {
         if (existingAepsOnboarding.isBankKycOtpValidated) {
             return res.failure({ message: 'Bank eKYC OTP already validated' });
         }
-        
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
             aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
@@ -652,6 +651,7 @@ const bankKycValidateOtp = async (req, res) => {
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
             otp: otp
         }
+        console.log('payload', payload);
         const bankKycValidateOtpResponse = await asl.aslAepsBankKycValidateOtp(payload);
         
         const status = bankKycValidateOtpResponse?.status ? String(bankKycValidateOtpResponse.status).toUpperCase() : null;
