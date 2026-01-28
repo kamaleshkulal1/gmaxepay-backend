@@ -33,23 +33,24 @@ let Slab = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
       validate: {
-        isIn: [['Basic', 'Gold', 'Platinum', null]]
+        isIn: [['Basic', 'Gold', 'Platinum']]
       }
     },
-    slabType: {
+    schemaMode: {
       type: DataTypes.STRING,
-      allowNull: false,
-      validate: {
-        isIn: [['level', 'channel']]
-      }
-    },
-    slabScope: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      defaultValue: 'private',
+      allowNull: true,
       validate: {
         isIn: [['global', 'private']]
-      }
+      },
+      comment: 'Schema mode: global or private (customization)'
+    },
+    schemaType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isIn: [['free', 'premium']]
+      },
+      comment: 'Schema type: free or premium'
     },
     remark: {
       type: DataTypes.TEXT,
