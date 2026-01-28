@@ -593,7 +593,7 @@ const bankKycSendOtp = async (req, res) => {
             panNumber: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
         }
-        const bankKycSendOtpResponse = await asl.aslBankKycSendOtp(payload);
+        const bankKycSendOtpResponse = await asl.aslAepsBankKycSendOtp(payload);
         
         // Store OTP reference if present in response
         if (bankKycSendOtpResponse?.otpReferenceId || bankKycSendOtpResponse?.data?.otpReferenceId) {
