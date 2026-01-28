@@ -1567,7 +1567,7 @@ const getCompanyAdminById = async (req, res) => {
       }
       return imageData;
     };
-    
+
     const response = {
       id: existingUser.id,
       name: existingUser.name,
@@ -1595,6 +1595,7 @@ const getCompanyAdminById = async (req, res) => {
       kycStatus: existingUser.kycStatus,
       companyDetails: companyDetails
         ? {
+          companyId: companyDetails.id,
           companyName: companyDetails.companyName,
           compnyPan: companyDetails.companyPan,
           companyDomain: `https://${companyDetails.customDomain}`,
