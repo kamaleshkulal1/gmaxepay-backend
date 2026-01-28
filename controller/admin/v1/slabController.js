@@ -276,8 +276,8 @@ const updateSlabName = async (req, res) => {
 
 const updateSlabComm = async (req, res) => {
   try {
-    let permissions = req.permission;
-    let hasPermission = permissions.some(
+    const permissions = req.permission || [];
+    const hasPermission = permissions.some(
       (permission) =>
         permission.dataValues.permissionId === 1 &&
         permission.dataValues.write === true
@@ -287,12 +287,13 @@ const updateSlabComm = async (req, res) => {
       return res.failure({ message: `User doesn't have Permission!` });
     }
 
-    const { id, commAmt, commType, amtType } = req.body;
+    const { commAmt, commType, amtType } = req.body;
+    const id = req.params.id;
+    const companyId =  req.user.companyId;
 
-    if (!id) {
-      return res.failure({ message: 'slabComm id is required' });
+    if(req.user.userRole!==1 && req.user.companyId!==companyId){
+      return res.failure({ message: 'You are not authorized to update slab commission' });
     }
-
     if (commAmt === undefined && commType === undefined && amtType === undefined) {
       return res.failure({ message: 'At least one of commAmt, commType, or amtType must be provided' });
     }
@@ -309,13 +310,11 @@ const updateSlabComm = async (req, res) => {
     if (commAmt !== undefined && (isNaN(commAmt) || commAmt < 0)) {
       return res.failure({ message: 'commAmt must be a valid non-negative number' });
     }
-
-    const companyId = req.companyId ?? req.user?.companyId ?? null;
+;
 
     // Find the slab commission entry
     const slabComm = await dbService.findOne(model.commSlab, {
-      id,
-      ...(companyId !== null && companyId !== undefined ? { companyId } : {})
+      id
     });
 
     if (!slabComm) {
