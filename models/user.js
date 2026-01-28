@@ -536,11 +536,7 @@ const User = sequelize.define(
     },
     slabId: {
       type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'slab',
-        key: 'id'
-      }
+      allowNull: true
     },
     ...reusableModelAttribute
   },

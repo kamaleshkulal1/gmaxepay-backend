@@ -451,17 +451,6 @@ db.company.hasMany(db.user, {
   sourceKey: 'id'
 });
 
-// User Slab Relationships
-db.user.belongsTo(db.slab, {
-  foreignKey: 'slabId',
-  as: 'slab',
-  targetKey: 'id'
-});
-db.slab.hasMany(db.user, {
-  foreignKey: 'slabId',
-  as: 'users',
-  sourceKey: 'id'
-});
 
 // User Wallet Relationships
 db.user.hasOne(db.wallet, {
