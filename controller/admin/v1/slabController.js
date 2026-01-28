@@ -10,12 +10,17 @@ const processData = (data) => {
   data.forEach((item) => {
     const key = `${item.slabId}-${item.operatorId}`;
 
+    const operatorMargin = item.operator || {};
+
     if (!groupedData[key]) {
       groupedData[key] = {
         slabId: item.slabId,
         operatorId: item.operatorId,
         operatorName: item.operatorName,
         operatorType: item.operatorType,
+        marginCommAmt: operatorMargin.comm,
+        marginCommType: operatorMargin.commType,
+        marginAmtType: operatorMargin.amtType,
         instruments: []
       };
     }
@@ -137,7 +142,16 @@ const findAllslabComm = async (req, res) => {
     // Filter to only include roleType 1 (AD) and 2 (WU)
     query.roleType = { [Op.in]: [1, 2] };
 
-    foundUser = await dbService.findAll(model.commSlab, query, options);
+    foundUser = await dbService.findAll(model.commSlab, query, {
+      ...options,
+      include: [
+        {
+          model: model.operator,
+          as: 'operator',
+          attributes: ['comm', 'commType', 'amtType']
+        }
+      ]
+    });
 
     if (!foundUser || foundUser.length === 0) {
       return res.failure({ message: 'No slabs Commissions found' });
