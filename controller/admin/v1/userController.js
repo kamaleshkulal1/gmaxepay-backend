@@ -1567,7 +1567,7 @@ const getCompanyAdminById = async (req, res) => {
       }
       return imageData;
     };
-
+    
     const response = {
       id: existingUser.id,
       name: existingUser.name,
@@ -1577,9 +1577,10 @@ const getCompanyAdminById = async (req, res) => {
       aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
       pancardNumber: existingUser.panDetails?.pancardNumber,
       aadhaarFrontImage: getCdnImageUrl(existingUser.aadharFrontImage),
-      aadhaarBackImage: getCdnImageUrl(existingUser.aadhaarBackImage),
-      pancardFrontImage: getCdnImageUrl(existingUser.pancardFrontImage),
-      pancardBackImage: getCdnImageUrl(existingUser.pancardBackImage),
+      aadhaarBackImage: getCdnImageUrl(existingUser.aadharBackImage),
+      pancardFrontImage: getCdnImageUrl(existingUser.panCardFrontImage),
+      pancardBackImage: getCdnImageUrl(existingUser.panCardBackImage),
+      profileImage: getCdnImageUrl(existingUser.profileImage),
       agentCode: existingUser.userId,
       status: existingUser.isActive ? 'Active' : 'Inactive',
       createdAt: existingUser.createdAt,
