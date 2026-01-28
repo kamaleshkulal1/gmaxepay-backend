@@ -1556,6 +1556,18 @@ const getCompanyAdminById = async (req, res) => {
       dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: companyDetails.id })
     ]);
 
+    const getCdnImageUrl = (imageData) => {
+      if (!imageData) return null;
+      const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+      if (typeof imageData === 'object' && imageData.key) {
+        return `${cdnUrl}/${imageData.key}`;
+      }
+      if (typeof imageData === 'string' && imageData.startsWith('images/')) {
+        return `${cdnUrl}/${imageData}`;
+      }
+      return imageData;
+    };
+
     const response = {
       id: existingUser.id,
       name: existingUser.name,
@@ -1564,10 +1576,10 @@ const getCompanyAdminById = async (req, res) => {
       slabId: existingUser.slabId,
       aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
       pancardNumber: existingUser.panDetails?.pancardNumber,
-      aadhaarFrontImage: existingUser.aadharFrontImage,
-      aadhaarBackImage: existingUser.aadhaarBackImage,
-      pancardFrontImage: existingUser.pancardFrontImage,
-      pancardBackImage: existingUser.pancardBackImage,
+      aadhaarFrontImage: getCdnImageUrl(existingUser.aadharFrontImage),
+      aadhaarBackImage: getCdnImageUrl(existingUser.aadhaarBackImage),
+      pancardFrontImage: getCdnImageUrl(existingUser.pancardFrontImage),
+      pancardBackImage: getCdnImageUrl(existingUser.pancardBackImage),
       agentCode: existingUser.userId,
       status: existingUser.isActive ? 'Active' : 'Inactive',
       createdAt: existingUser.createdAt,
@@ -1584,14 +1596,15 @@ const getCompanyAdminById = async (req, res) => {
         ? {
           companyName: companyDetails.companyName,
           compnyPan: companyDetails.companyPan,
+          companyDomain: `https://${companyDetails.customDomain}`,
           compnyGst: companyDetails.companyGst,
-          compnyLogo: companyDetails.logo
+          compnyLogo: getCdnImageUrl(companyDetails.logo)
         }
         : null,
       outletDetails: outletDetails
         ? {
           shopName: outletDetails.shopName,
-          shopImage: outletDetails.shopImage,
+          shopImage: getCdnImageUrl(outletDetails.shopImage),
           shopAddress: outletDetails.shopAddress,
           googleMapsLink: outletDetails.outletGoogleMapsLink
         }
