@@ -494,15 +494,27 @@ const getAllSlabs = async (req, res) => {
 
     const result = await dbService.paginate(model.slab, query, {
       ...options,
-      select: ['id', 'slabName', 'schemaMode', 'schemaType', 'remark', 'createdAt', 'updatedAt']
+      select: ['id', 'slabName', 'schemaMode', 'schemaType', 'remark', 'users', 'createdAt', 'updatedAt']
+    });
+
+    const processedData = (result?.data || []).map(slab => {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const users = slabData.users || [];
+      const totalUsersInSlab = Array.isArray(users) ? users.filter(id => id).length : 0;
+      
+      const { users: _, ...rest } = slabData;
+      
+      return {
+        ...rest,
+        totalUsers: totalUsersInSlab
+      };
     });
 
     return res.status(200).send({
       status: 'SUCCESS',
       message: 'Slabs retrieved successfully',
-      data: result?.data || [],
+      data: processedData,
       total: result?.total || 0,
-      totalUsers: totalUsers,
       paginator: result?.paginator || {
         page: options.page || 1,
         paginate: options.paginate || 10,
