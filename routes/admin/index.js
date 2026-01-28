@@ -8,15 +8,9 @@ const router = express.Router();
 const authentication = require('../../middleware/authentication');
 // Apply authentication middleware to all admin routes
 
-// Import admin controllers
-const userController = require('../../controller/admin/v1/userController');
-const rolePermissionController = require('../../controller/admin/v1/rolePermissionController');
-const servicesController = require('../../controller/admin/v1/servicesController');
-const slabController = require('../../controller/admin/v1/slabController');
 const packageController = require('../../controller/admin/v1/packageController');
 const operatorController = require('../../controller/admin/v1/operatorController');
 const subscriptionController = require('../../controller/admin/v1/subscriptionController');
-const ekycHubController = require('../../controller/admin/v1/eKycHubContoller');
 
 
 // User management routes

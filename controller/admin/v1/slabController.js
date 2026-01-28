@@ -424,49 +424,97 @@ const createSlab = async (req, res) => {
 
 const getAllSlabs = async (req, res) => {
   try {
-    const companyId = req.companyId ?? req.user?.companyId ?? null;
-
+    const companyId = req.user.companyId;
     if (!companyId) {
-      return res.badRequest({ message: 'Company ID is required' });
+      return res.failure({ message: 'Company ID is required' });
     }
-
+    
+    const dataToFind = req.body || {};
+    let options = {};
     let query = {
-        companyId: companyId,
-        isActive: true
+      companyId: companyId,
+      isActive: true
     };
 
-    // Optional filters from request body
-    if (req.body && req.body.schemaMode) {
-      query.schemaMode = req.body.schemaMode;
+    if (dataToFind && dataToFind.query) {
+      query = { ...query, ...dataToFind.query };
     }
 
-    if (req.body && req.body.schemaType) {
-      query.schemaType = req.body.schemaType;
+    if (dataToFind && dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
     }
 
-    const slabs = await dbService.findAll(
-      model.slab,
-      query,
-      {
-        select: ['id', 'slabName', 'schemaMode', 'schemaType', 'remark', 'createdAt', 'updatedAt'],
-        order: [['createdAt', 'DESC']]
+    if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+      const keys = Object.keys(dataToFind.customSearch);
+      const searchOrConditions = [];
+
+      for (const key of keys) {
+        const value = dataToFind.customSearch[key];
+        if (value === undefined || value === null || String(value).trim() === '') continue;
+
+        if (key === 'slabName') {
+          searchOrConditions.push({
+            slabName: {
+              [Op.iLike]: `%${String(value).trim()}%`
+            }
+          });
+        }
       }
-    );
 
-    if (!slabs || slabs.length === 0) {
-      return res.success({
-        message: 'No slabs found',
-        data: []
+      if (searchOrConditions.length > 0) {
+        if (searchOrConditions.length === 1) {
+          Object.assign(query, searchOrConditions[0]);
+        } else {
+          query[Op.and] = [
+            { [Op.or]: searchOrConditions }
+          ];
+        }
+      }
+    }
+
+    const allSlabs = await dbService.findAll(model.slab, query, {
+      attributes: ['users']
+    });
+
+    const allUserIds = new Set();
+    if (allSlabs && allSlabs.length > 0) {
+      allSlabs.forEach(slab => {
+        const users = slab.users || [];
+        if (Array.isArray(users) && users.length > 0) {
+          users.forEach(userId => {
+            if (userId) {
+              allUserIds.add(userId);
+            }
+          });
+        }
       });
     }
 
-    return res.success({
+    const totalUsers = allUserIds.size;
+
+    const result = await dbService.paginate(model.slab, query, {
+      ...options,
+      select: ['id', 'slabName', 'schemaMode', 'schemaType', 'remark', 'createdAt', 'updatedAt']
+    });
+
+    return res.status(200).send({
+      status: 'SUCCESS',
       message: 'Slabs retrieved successfully',
-      data: slabs
+      data: result?.data || [],
+      total: result?.total || 0,
+      totalUsers: totalUsers,
+      paginator: result?.paginator || {
+        page: options.page || 1,
+        paginate: options.paginate || 10,
+        totalPages: 0
+      }
     });
   } catch (error) {
     console.log(error);
-    return res.internalServerError({ message: error.message });
+    return res.status(500).send({
+      status: 'FAILURE',
+      message: error.message || 'Internal server error'
+    });
   }
 };
 
