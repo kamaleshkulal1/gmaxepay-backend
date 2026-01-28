@@ -1536,6 +1536,79 @@ const uploadBankDetailsForUser = async (req, res) => {
   }
 };
 
+const getCompanyAdminById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existingUser = await dbService.findOne(model.user, { id });
+    if (!existingUser) {
+      return res.failure({ message: 'Company admin not found' });
+    }
+    const companyDetails = await dbService.findOne(model.company, { id: existingUser.companyId, userRole: 2 });
+    if (!companyDetails) {
+      return res.failure({ message: 'Company not found' });
+    }
+
+    const [outletDetails, companyBankDetails] = await Promise.all([
+      dbService.findOne(model.outlet, { refId: existingUser.id, companyId: companyDetails.id }),
+      dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: companyDetails.id })
+    ]);
+
+    const response = {
+      id: existingUser.id,
+      name: existingUser.name,
+      email: existingUser.email,
+      mobileNo: existingUser.mobileNo,
+      slabId: existingUser.slabId,
+      aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
+      pancardNumber: existingUser.panDetails?.pancardNumber,
+      aadhaarFrontImage: existingUser.aadharFrontImage,
+      aadhaarBackImage: existingUser.aadhaarBackImage,
+      pancardFrontImage: existingUser.pancardFrontImage,
+      pancardBackImage: existingUser.pancardBackImage,
+      agentCode: existingUser.userId,
+      status: existingUser.isActive ? 'Active' : 'Inactive',
+      createdAt: existingUser.createdAt,
+      address: existingUser.fullAddress,
+      pinCode: existingUser.zipcode,
+      state: existingUser.state,
+      district: existingUser.district,
+      country: existingUser.country,
+      city: existingUser.city,
+      longitude: existingUser.longitude,
+      latitude: existingUser.latitude,
+      kycStatus: existingUser.kycStatus,
+      companyDetails: companyDetails
+        ? {
+          companyName: companyDetails.companyName,
+          compnyPan: companyDetails.companyPan,
+          compnyGst: companyDetails.companyGst,
+          compnyLogo: companyDetails.logo
+        }
+        : null,
+      outletDetails: outletDetails
+        ? {
+          shopName: outletDetails.shopName,
+          shopImage: outletDetails.shopImage,
+          shopAddress: outletDetails.shopAddress,
+          googleMapsLink: outletDetails.outletGoogleMapsLink
+        }
+        : null,
+      bankDetails: (companyBankDetails || []).map(bank => ({
+        id: bank.id,
+        bankName: bank.bankName,
+        accountNumber: bank.accountNumber,
+        ifsc: bank.ifsc,
+        city: bank.city,
+        branch: bank.branch
+      }))
+    }
+    return res.success({ message: 'Company admin fetched successfully', data: response });
+  } catch (error) {
+    console.error('Error fetching company admin:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   createUser,
   findAllUsers,
@@ -1546,5 +1619,6 @@ module.exports = {
   getKycVerificationStatus,
   getCompleteKycData,
   revertKycData,
-  uploadBankDetailsForUser
+  uploadBankDetailsForUser,
+  getCompanyAdminById
 };
