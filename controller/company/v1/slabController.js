@@ -420,7 +420,7 @@ const findAllslabComm = async (req, res) => {
     }
 
     // Get user's slabId to find their margin (WU commission)
-    const userSlabId = req.user?.slabId;
+    const userSlabId = req.params.id;
     const userMarginMap = {};
 
     if (userSlabId) {
