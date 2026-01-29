@@ -852,7 +852,7 @@ const allbankDetails = async (req, res) => {
             return {
                 bankId: bankDetails.id,
                 bankName: bankDetails.bankName,
-                ifscCode: bankDetails.ifscCode,
+                ifscCode: bankDetails.ifsc,
                 accountNumber: bankDetails.accountNumber,
                 isPrimary: bankDetails.isPrimary || false,
                 bankImage: bankImage ? `${process.env.AWS_CDN_URL}/${bankImage}` : null
