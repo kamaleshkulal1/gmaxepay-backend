@@ -1051,9 +1051,7 @@ const aepsTransaction = async (req, res) => {
         if(!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if(!existingUser.aadharDetails?.aadhaarNumber) {
-            return res.failure({ message: 'Aadhaar number not found for this user' });
-        }
+
         if(!existingUser.latitude || !existingUser.longitude) {
             return res.failure({ message: 'User latitude/longitude is required' });
         }
