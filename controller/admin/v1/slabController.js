@@ -64,6 +64,11 @@ const findAllslabComm = async (req, res) => {
     if (!hasPermission) {
       return res.failure({ message: `User doesn't have Permission!` });
     }
+
+    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+      return res.failure({ message: 'You are not authorized to create slab' });
+    }
+
     let dataToFind = req.body;
     const companyId = req.companyId ?? req.user?.companyId ?? null;
     let options = { order: [['id', 'ASC']] };
@@ -285,6 +290,11 @@ const updateSlabComm = async (req, res) => {
       return res.failure({ message: `User doesn't have Permission!` });
     }
 
+
+    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+      return res.failure({ message: 'You are not authorized to create slab' });
+    }
+
     const { commAmt, commType, amtType } = req.body;
     const id = req.params.id;
     const companyId =  req.user.companyId;
@@ -365,6 +375,9 @@ const createSlab = async (req, res) => {
   try {
     const { slabName, schemaMode, schemaType } = req.body;
 
+    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+      return res.failure({ message: 'You are not authorized to create slab' });
+    }
     // Validate required fields
     if (!slabName) {
       return res.failure({ 
@@ -460,6 +473,10 @@ const getAllSlabs = async (req, res) => {
       return res.failure({ message: 'Company ID is required' });
     }
     
+    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+      return res.failure({ message: 'You are not authorized to get all slabs' });
+    }
+
     const dataToFind = req.body || {};
     let options = {};
     let query = {

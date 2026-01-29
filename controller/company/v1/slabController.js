@@ -150,12 +150,14 @@ const createSlab = async (req, res) => {
   }
 };
 
-const processData = (data) => {
+const processData = (data, userMarginMap = {}) => {
   const groupedData = {};
 
   data.forEach((item) => {
     const key = `${item.slabId}-${item.operatorId}`;
 
+    // Get user's margin (WU commission) for this operator, fallback to operator margin
+    const userMargin = userMarginMap[item.operatorId] || {};
     const operatorMargin = item.operator || {};
 
     if (!groupedData[key]) {
@@ -164,9 +166,9 @@ const processData = (data) => {
         operatorId: item.operatorId,
         operatorName: item.operatorName,
         operatorType: item.operatorType,
-        marginCommAmt: operatorMargin.comm,
-        marginCommType: operatorMargin.commType,
-        marginAmtType: operatorMargin.amtType,
+        marginCommAmt: userMargin.commAmt !== undefined ? userMargin.commAmt : operatorMargin.comm,
+        marginCommType: userMargin.commType || operatorMargin.commType,
+        marginAmtType: userMargin.amtType || operatorMargin.amtType,
         instruments: []
       };
     }
@@ -417,7 +419,50 @@ const findAllslabComm = async (req, res) => {
       return res.failure({ message: 'No slabs Commissions found' });
     }
 
-    const formattedResponse = processData(foundUser);
+    // Get user's slabId to find their margin (WU commission)
+    const userSlabId = req.user?.slabId;
+    const userMarginMap = {};
+
+    if (userSlabId) {
+      // Get all unique operator IDs from the found commissions
+      const operatorIds = [...new Set(foundUser.map(item => {
+        const opId = item.operatorId || item.dataValues?.operatorId;
+        return opId;
+      }).filter(Boolean))];
+
+      if (operatorIds.length > 0) {
+        // Fetch WU (roleType = 2) commissions for user's slab and all operators
+        const userWUCommissions = await dbService.findAll(
+          model.commSlab,
+          {
+            slabId: userSlabId,
+            operatorId: { [Op.in]: operatorIds },
+            roleType: 2, // WU role
+            companyId: companyId
+          },
+          {
+            attributes: ['operatorId', 'commAmt', 'commType', 'amtType']
+          }
+        );
+
+        // Create a map of operatorId -> WU commission
+        if (userWUCommissions && userWUCommissions.length > 0) {
+          userWUCommissions.forEach((wuComm) => {
+            const commData = wuComm.toJSON ? wuComm.toJSON() : (wuComm.dataValues || wuComm);
+            const opId = commData.operatorId;
+            if (opId) {
+              userMarginMap[opId] = {
+                commAmt: commData.commAmt,
+                commType: commData.commType,
+                amtType: commData.amtType
+              };
+            }
+          });
+        }
+      }
+    }
+
+    const formattedResponse = processData(foundUser, userMarginMap);
 
     return res.status(200).send({
       status: 'SUCCESS',
