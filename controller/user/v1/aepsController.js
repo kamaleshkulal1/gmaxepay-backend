@@ -1557,24 +1557,35 @@ const aepsTransaction = async (req, res) => {
         const clientTransactionId = normalizedGatewayResponse?.client_transaction_id || 
                                     payload.transactionId;
 
+        // Extract mini statement data for MS transactions
+        const miniStatement = innerData?.miniStatementStructureModel || 
+                             normalizedGatewayResponse?.data?.miniStatementStructureModel ||
+                             null;
+
         // Format response with all required fields
+        const responseData = {
+            status: paymentStatus,
+            service: 'AEPS',
+            transactionId: clientTransactionId,
+            referenceId: merchantTransactionId,
+            transactionDate: transactionDateTime,
+            transactionTime: transactionTime,
+            amount: amountNumber,
+            remainingBalance: remainingBalance,
+            bankName: bankName,
+            bankLogo: bankLogo,
+            companyName: existingCompany?.companyName || null,
+            companyLogo: companyLogo,
+        };
+
+        // Add mini statement data for MS transactions
+        if (normalizedTxnType === 'MS' && miniStatement && Array.isArray(miniStatement)) {
+            responseData.miniStatement = miniStatement;
+        }
+
         return res.success({
             message: 'AEPS transaction successful',
-            data: {
-                status: paymentStatus,
-                service: 'AEPS',
-                transactionId: clientTransactionId,
-                referenceId: merchantTransactionId,
-                transactionDate: transactionDateTime,
-                transactionTime: transactionTime,
-                amount: amountNumber,
-                remainingBalance: remainingBalance,
-                bankName: bankName,
-                bankLogo: bankLogo,
-                companyName: existingCompany?.companyName || null,
-                companyLogo: companyLogo,
-
-            }
+            data: responseData
         });
     }
     catch (error) {
