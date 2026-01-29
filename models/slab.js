@@ -27,7 +27,6 @@ let Slab = sequelize.define(
     slabName: {
       type: DataTypes.STRING,
       allowNull: false
-      // Unique constraint will be handled at application level (companyId + slabName)
     },
     templateType: {
       type: DataTypes.STRING,
@@ -65,6 +64,11 @@ let Slab = sequelize.define(
       type: DataTypes.ARRAY(DataTypes.INTEGER),
       allowNull: true,
       defaultValue: []
+    },
+    subscriptionAmount: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0
     },
 
     ...reusableSMSAttribute

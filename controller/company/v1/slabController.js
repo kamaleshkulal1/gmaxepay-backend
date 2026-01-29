@@ -1,446 +1,621 @@
+const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
-const model = require('../../../models/index');
-const { Op } = require('sequelize');
+const { Op, Sequelize } = require('sequelize');
 
-const getSlab = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const companyId = req.companyId ?? req.user?.companyId ?? null;
-        
-        if (!companyId) {
-            return res.failure({ message: 'Company ID is required' });
-        }
+const createSlab = async (req, res) => {
+  try {
+    const { slabName, schemaMode, schemaType, subscriptionAmount } = req.body;
 
-        const slab = await dbService.findOne(model.slab, { 
-            id,
-            companyId,
-            slabScope: 'private'
-        });
-        
-        if(!slab) return res.failure({ message: 'Slab not found' });
-        return res.success({ message: 'Slab fetched successfully', data: slab });
-    } catch (error) {
-        console.error(error);
-        return res.failure({ message: error.message });
+     if(req.user.userRole !== 2 ) {
+        return res.failure({ message: 'You are not authorized to create slab' });
     }
+    if (!slabName) {
+      return res.failure({ 
+        message: 'slabName is required' 
+      });
+    }
+
+    if (!schemaMode) {
+      return res.failure({ 
+        message: 'schemaMode is required' 
+      });
+    }
+
+    if (!schemaType) {
+      return res.failure({ 
+        message: 'schemaType is required' 
+      });
+    }
+
+    if (subscriptionAmount === undefined || subscriptionAmount === null) {
+      return res.failure({ 
+        message: 'subscriptionAmount is required' 
+      });
+    }
+
+    // Validate schemaMode
+    if (!['global', 'private'].includes(schemaMode)) {
+      return res.failure({ 
+        message: 'schemaMode must be either "global" or "private"' 
+      });
+    }
+
+    // Validate schemaType
+    if (!['free', 'premium'].includes(schemaType)) {
+      return res.failure({ 
+        message: 'schemaType must be either "free" or "premium"' 
+      });
+    }
+
+    // Validate subscriptionAmount
+    if (isNaN(subscriptionAmount) || subscriptionAmount < 0) {
+      return res.failure({ 
+        message: 'subscriptionAmount must be a valid non-negative number' 
+      });
+    }
+
+    const companyId = req.user.companyId || null;
+    
+    if (!companyId) {
+      return res.failure({ 
+        message: 'Company ID is required. User must belong to a company.' 
+      });
+    }
+
+    // Check if slab with same name already exists for this company
+    const existingSlab = await dbService.findOne(model.slab, {
+      slabName: slabName,
+      addedBy: req.user.id,
+      companyId: companyId
+    });
+
+    if (existingSlab) {
+      return res.failure({ 
+        message: `Slab with name "${slabName.trim()}" already exists for this company` 
+      });
+    }
+
+    const dataToCreate = {
+      slabName: slabName.trim(),
+      schemaMode,
+      schemaType,
+      subscriptionAmount: parseFloat(subscriptionAmount),
+      companyId: companyId, 
+      remark: null,
+      isSignUpB2B: false,
+      users: [],
+      isActive: true,
+      addedBy: req.user.id,
+      type: req.user.userType
+    };
+
+    // Create the slab
+    const createdSlab = await dbService.createOne(model.slab, dataToCreate);
+
+    if (!createdSlab) {
+      return res.failure({ message: 'Failed to create slab' });
+    }
+
+    const slabId = createdSlab.id || createdSlab.dataValues?.id;
+
+    // Get all operators that are in slab
+    const operators = await dbService.findAll(
+      model.operator,
+      { inSlab: true },
+      { select: ['id', 'operatorName', 'operatorType'] }
+    );
+
+    // Create commission entries for downline roles (WU, MD, DI, RE)
+    // Role types: 2=WU, 3=MD, 4=DI, 5=RE
+    if (operators && operators.length > 0) {
+      const roleTypes = [2, 3, 4, 5];
+      const roleNames = ['WU', 'MD', 'DI', 'RE'];
+
+      const defaultCommissions = operators.flatMap((op) =>
+        roleTypes.map((roleType, index) => ({
+          slabId: slabId,
+          companyId: companyId,
+          operatorId: op.id,
+          operatorName: op.operatorName,
+          operatorType: op.operatorType,
+          roleType,
+          roleName: roleNames[index],
+          commAmt: 0,
+          commType: 'com',
+          amtType: 'fix',
+          paymentMode: null,
+          addedBy: req.user.id,
+          updatedBy: req.user.id
+        }))
+      );
+
+      if (defaultCommissions.length > 0) {
+        await dbService.createMany(model.commSlab, defaultCommissions);
+      }
+    }
+
+    return res.success({
+      message: 'Slab created successfully for downline roles',
+      data: createdSlab
+    });
+  } catch (error) {
+    console.error('Create slab error', error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else {
+      return res.internalServerError({ message: error.message });
+    }
+  }
 };
 
-const createSubSlab = async (req, res) => {
-    try {
-        const { templateType, slabName, slabType, remark } = req.body;
-        const companyId = req.companyId ?? req.user?.companyId ?? null;
+const processData = (data) => {
+  const groupedData = {};
 
-        if (!companyId) {
-            return res.badRequest({ message: 'Company ID is required' });
+  data.forEach((item) => {
+    const key = `${item.slabId}-${item.operatorId}`;
+
+    const operatorMargin = item.operator || {};
+
+    if (!groupedData[key]) {
+      groupedData[key] = {
+        slabId: item.slabId,
+        operatorId: item.operatorId,
+        operatorName: item.operatorName,
+        operatorType: item.operatorType,
+        marginCommAmt: operatorMargin.comm,
+        marginCommType: operatorMargin.commType,
+        marginAmtType: operatorMargin.amtType,
+        instruments: []
+      };
+    }
+
+    let instrument = groupedData[key].instruments.find(
+      (inst) =>
+        inst.paymentInstrument === item.paymentInstrumentName &&
+        inst.cardType === item.cardTypeName
+    );
+
+    if (!instrument) {
+      instrument = {
+        paymentInstrument: item.paymentInstrumentName,
+        cardType: item.cardTypeName,
+        roles: []
+      };
+      groupedData[key].instruments.push(instrument);
+    }
+
+    instrument.roles.push({
+      id: item.id,
+      roleType: item.roleType,
+      roleName: item.roleName,
+      commType: item.commType,
+      commAmt: item.commAmt,
+      amtType: item.amtType,
+      updatedAt: item.updatedAt
+    });
+  });
+
+  return Object.values(groupedData);
+};
+
+const getAllSlabs = async (req, res) => {
+  try {
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: 'You are not authorized to access this resource' });
+    }
+
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+    
+    const dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      companyId: companyId,
+      isActive: true
+    };
+
+    if (dataToFind && dataToFind.query) {
+      query = { ...query, ...dataToFind.query };
+    }
+
+    if (dataToFind && dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+    }
+
+    if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+      const keys = Object.keys(dataToFind.customSearch);
+      const searchOrConditions = [];
+
+      for (const key of keys) {
+        const value = dataToFind.customSearch[key];
+        if (value === undefined || value === null || String(value).trim() === '') continue;
+
+        if (key === 'slabName') {
+          searchOrConditions.push({
+            slabName: {
+              [Op.iLike]: `%${String(value).trim()}%`
+            }
+          });
         }
+      }
 
-        // Validate required fields
-        if (!templateType) {
-            return res.badRequest({ 
-                message: 'templateType is required' 
-            });
+      if (searchOrConditions.length > 0) {
+        if (searchOrConditions.length === 1) {
+          Object.assign(query, searchOrConditions[0]);
+        } else {
+          query[Op.and] = [
+            { [Op.or]: searchOrConditions }
+          ];
         }
+      }
+    }
 
-        // Validate templateType
-        if (!['Basic', 'Gold', 'Platinum'].includes(templateType)) {
-            return res.badRequest({ 
-                message: 'templateType must be one of: Basic, Gold, Platinum' 
-            });
+    const allSlabs = await dbService.findAll(model.slab, query, {
+      attributes: ['users']
+    });
+
+    const allUserIds = new Set();
+    if (allSlabs && allSlabs.length > 0) {
+      allSlabs.forEach(slab => {
+        const users = slab.users || [];
+        if (Array.isArray(users) && users.length > 0) {
+          users.forEach(userId => {
+            if (userId) {
+              allUserIds.add(userId);
+            }
+          });
         }
+      });
+    }
 
-        // Get company details
-        const company = await dbService.findOne(model.company, { id: companyId });
-        if (!company) {
-            return res.badRequest({ message: 'Company not found' });
+    const totalUsers = allUserIds.size;
+
+    const result = await dbService.paginate(model.slab, query, {
+      ...options,
+      select: ['id', 'slabName', 'schemaMode', 'schemaType', 'subscriptionAmount', 'isActive', 'remark', 'users', 'createdAt', 'updatedAt']
+    });
+
+    const processedData = (result?.data || []).map(slab => {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const users = slabData.users || [];
+      const totalUsersInSlab = Array.isArray(users) ? users.filter(id => id).length : 0;
+      
+      const { users: _, ...rest } = slabData;
+      
+      return {
+        ...rest,
+        totalUsers: totalUsersInSlab
+      };
+    });
+
+    return res.status(200).send({
+      status: 'SUCCESS',
+      message: 'Slabs retrieved successfully',
+      data: processedData,
+      total: result?.total || 0,
+      paginator: result?.paginator || {
+        page: options.page || 1,
+        paginate: options.paginate || 10,
+        totalPages: 0
+      }
+    });
+  } catch (error) {
+    console.error('Get all slabs error', error);
+    return res.status(500).send({
+      status: 'FAILURE',
+      message: error.message || 'Internal server error'
+    });
+  }
+};
+
+const findAllslabComm = async (req, res) => {
+  try {
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: 'You are not authorized to access this resource' });
+    }
+
+    let dataToFind = req.body;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+    
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    let options = { order: [['id', 'ASC']] };
+    let query = {};
+    let foundUser;
+
+    if (dataToFind && dataToFind.query) {
+      query = dataToFind.query;
+    }
+
+    const filteredSlabs = await dbService.findAll(
+      model.slab,
+      {
+        companyId: companyId,
+        id: req.params.id,
+        isActive: true
+      },
+      {
+        attributes: ['id']
+      }
+    );
+
+    if (!filteredSlabs || filteredSlabs.length === 0) {
+      return res.failure({ message: 'No slabs found' });
+    }
+
+    const slabIds = filteredSlabs.map((s) => s.id || s.dataValues?.id).filter(Boolean);
+
+    if (!slabIds.length) {
+      return res.failure({ message: 'No slabs found' });
+    }
+
+    query.slabId = { [Op.in]: slabIds };
+    query.companyId = companyId;
+
+    if (dataToFind && dataToFind.isCountOnly) {
+      foundUser = await dbService.count(model.commSlab, query);
+      if (!foundUser) {
+        return res.recordNotFound();
+      }
+      foundUser = { totalRecords: foundUser };
+      return res.success({ data: foundUser });
+    }
+
+    if (dataToFind && dataToFind.options !== undefined) {
+      options = dataToFind.options;
+    }
+
+    if (dataToFind && dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
         }
+      });
 
-        // Check if subslab with same templateType already exists for this company
-        const existingSlab = await dbService.findOne(model.slab, {
-            companyId: companyId,
-            templateType: templateType,
-            slabScope: 'private'
-        });
-
-        if (existingSlab) {
-            return res.badRequest({ 
-                message: `Subslab with template type "${templateType}" already exists for this company` 
-            });
-        }
-
-        // Create subslab name: CompanyName.TemplateType or use provided name
-        const subSlabName = slabName || `${company.companyName}.${templateType}`;
-
-        const dataToCreate = {
-            slabName: subSlabName,
-            templateType,
-            slabType: slabType || 'level',
-            slabScope: 'private',
-            companyId: companyId,
-            remark: remark || null,
-            isSignUpB2B: false,
-            users: [],
-            isActive: true,
-            addedBy: req.user.id,
-            type: req.user.userType
+      if (orConditions.length > 0) {
+        query = {
+          ...query,
+          [Op.or]: orConditions
         };
-
-        // Create the subslab
-        const createdSlab = await dbService.createOne(model.slab, dataToCreate);
-
-        if (!createdSlab) {
-            return res.failure({ message: 'Failed to create subslab' });
-        }
-
-        // Get current user to check reportingTo
-        const currentUser = await dbService.findOne(model.user, { 
-            id: req.user.id 
-        });
-
-        if (!currentUser) {
-            return res.failure({ message: 'User not found' });
-        }
-
-        // Determine role types based on reportingTo
-        let roleTypes = [];
-        let roleNames = [];
-
-        if (currentUser.reportingTo !== null && currentUser.reportingTo !== undefined) {
-            // Check if reportingTo belongs to the same companyId
-            const reportingToUser = await dbService.findOne(model.user, {
-                id: currentUser.reportingTo,
-                companyId: companyId
-            });
-
-            if (reportingToUser) {
-                // If reportingTo belongs to companyId: use roles 1, 3, 4, 5 (AD, MD, DI, RE)
-                roleTypes = [1, 3, 4, 5];
-                roleNames = ['AD', 'MD', 'DI', 'RE'];
-            } else {
-                // If reportingTo doesn't belong to companyId: use role 5 (RE - Retailer)
-                roleTypes = [5];
-                roleNames = ['RE'];
-            }
-        } else {
-            // If reportingTo is null: they are retailer, can set commission (role 5)
-            roleTypes = [5];
-            roleNames = ['RE'];
-        }
-
-        // Initialize commission structures
-        let operators = await dbService.findAll(
-            model.operator,
-            {},
-            { select: ['id', 'operatorName', 'operatorType'] }
-        );
-
-        let cardTypes = await dbService.findAll(
-            model.cardType,
-            {},
-            { select: ['id', 'name'] }
-        );
-
-        let paymentInstruments = await dbService.findAll(
-            model.paymentInstrument,
-            {},
-            { select: ['id', 'name', 'isCardType'] }
-        );
-
-        let dataToInsert = [];
-        let dataToInsertRangeComm = [];
-        let dataToInsertRangeCharges = [];
-        let dataToInsertPgCommercials = [];
-
-        // Create commission entries for all operators and roles
-        operators.forEach((operator) => {
-            roleTypes.forEach((roleType, index) => {
-                dataToInsert.push({
-                    slabId: createdSlab.id,
-                    operatorId: operator.id,
-                    operatorName: operator.operatorName,
-                    operatorType: operator.operatorType,
-                    roleType,
-                    roleName: roleNames[index],
-                    commAmt: 0,
-                    commType: 'com',
-                    amtType: 'fix',
-                    companyId: companyId
-                });
-            });
-        });
-
-        // Create range commission entries
-        for (const operator of operators) {
-            const ranges = await dbService.findAll(
-                model.range,
-                { operatorType: operator.operatorType },
-                { select: ['id', 'min', 'max'] }
-            );
-            for (const range of ranges) {
-                roleTypes.forEach((roleType, index) => {
-                    dataToInsertRangeComm.push({
-                        slabId: createdSlab.id,
-                        operatorId: operator.id,
-                        operatorName: operator.operatorName,
-                        operatorType: operator.operatorType,
-                        rangeId: range.id,
-                        min: range.min,
-                        max: range.max,
-                        roleType,
-                        roleName: roleNames[index],
-                        commAmt: 0,
-                        commType: 'com',
-                        amtType: 'fix',
-                        companyId: companyId
-                    });
-                });
-            }
-        }
-
-        // Create range charges entries
-        for (const operator of operators) {
-            const ranges = await dbService.findAll(
-                model.range,
-                { operatorType: operator.operatorType },
-                { select: ['id', 'min', 'max'] }
-            );
-            for (const range of ranges) {
-                roleTypes.forEach((roleType, index) => {
-                    dataToInsertRangeCharges.push({
-                        slabId: createdSlab.id,
-                        operatorId: operator.id,
-                        operatorName: operator.operatorName,
-                        operatorType: operator.operatorType,
-                        rangeId: range.id,
-                        min: range.min,
-                        max: range.max,
-                        roleType,
-                        roleName: roleNames[index],
-                        commAmt: 0,
-                        commType: 'com',
-                        amtType: 'fix',
-                        companyId: companyId
-                    });
-                });
-            }
-        }
-
-        // Create PG commercial entries
-        const payInOperators = operators.filter(
-            (op) => op.operatorType === 'PayIn'
-        );
-
-        for (const operator of payInOperators) {
-            for (const roleType of roleTypes) {
-                const roleIndex = roleTypes.indexOf(roleType);
-                const roleNameValue = roleNames[roleIndex] || 'RE';
-
-                for (const paymentInstrument of paymentInstruments) {
-                    if (paymentInstrument.isCardType) {
-                        for (const cardType of cardTypes) {
-                            dataToInsertPgCommercials.push({
-                                slabId: createdSlab.id,
-                                operatorId: operator.id,
-                                operatorName: operator.operatorName,
-                                operatorType: operator.operatorType,
-                                roleType,
-                                roleName: roleNameValue,
-                                commAmt: 0,
-                                commType: 'com',
-                                amtType: 'fix',
-                                paymentInstrumentId: paymentInstrument.id,
-                                paymentInstrumentName: paymentInstrument.name,
-                                cardTypeId: cardType.id,
-                                cardTypeName: cardType.name,
-                                companyId: companyId
-                            });
-                        }
-                    } else {
-                        dataToInsertPgCommercials.push({
-                            slabId: createdSlab.id,
-                            operatorId: operator.id,
-                            operatorName: operator.operatorName,
-                            operatorType: operator.operatorType,
-                            roleType,
-                            roleName: roleNameValue,
-                            commAmt: 0,
-                            commType: 'com',
-                            amtType: 'fix',
-                            paymentInstrumentId: paymentInstrument.id,
-                            paymentInstrumentName: paymentInstrument.name,
-                            cardTypeId: null,
-                            cardTypeName: null,
-                            companyId: companyId
-                        });
-                    }
-                }
-            }
-        }
-
-        // Insert all commission data
-        await Promise.all([
-            dbService.createMany(model.commSlab, dataToInsert),
-            dbService.createMany(model.rangeCommission, dataToInsertRangeComm),
-            dbService.createMany(model.rangeCharges, dataToInsertRangeCharges)
-        ]);
-
-        if (dataToInsertPgCommercials.length > 0) {
-            await dbService.createMany(
-                model.pgCommercials,
-                dataToInsertPgCommercials
-            );
-        }
-
-        return res.success({
-            message: 'Subslab created successfully',
-            data: createdSlab
-        });
-    } catch (error) {
-        console.error(error);
-        if (error.name === 'SequelizeUniqueConstraintError') {
-            return res.validationError({ message: error.errors[0].message });
-        } else {
-            return res.internalServerError({ message: error.message });
-        }
+      }
     }
+
+    // Filter to only include downline roles (WU, MD, DI, RE) - Role types: 2, 3, 4, 5
+    query.roleType = { [Op.in]: [2, 3, 4, 5] };
+
+    foundUser = await dbService.findAll(model.commSlab, query, {
+      ...options,
+      include: [
+        {
+          model: model.operator,
+          as: 'operator',
+          attributes: ['comm', 'commType', 'amtType']
+        }
+      ]
+    });
+
+    if (!foundUser || foundUser.length === 0) {
+      return res.failure({ message: 'No slabs Commissions found' });
+    }
+
+    const formattedResponse = processData(foundUser);
+
+    return res.status(200).send({
+      status: 'SUCCESS',
+      message: 'Your request is successfully executed',
+      data: formattedResponse,
+      total: formattedResponse.length
+    });
+  } catch (error) {
+    console.error('Find all slab comm error', error);
+    return res.internalServerError({ data: error.message });
+  }
 };
 
-const getAllSubSlabs = async (req, res) => {
-    try {
-        const companyId = req.companyId ?? req.user?.companyId ?? null;
-
-        if (!companyId) {
-            return res.badRequest({ message: 'Company ID is required' });
-        }
-
-        const subSlabs = await dbService.findAll(
-            model.slab,
-            {
-                companyId: companyId,
-                slabScope: 'private',
-                isActive: true
-            },
-            {
-                select: ['id', 'slabName', 'templateType', 'slabType', 'remark', 'createdAt', 'updatedAt'],
-                order: [['templateType', 'ASC'], ['slabName', 'ASC']]
-            }
-        );
-
-        if (!subSlabs || subSlabs.length === 0) {
-            return res.success({
-                message: 'No subslabs found',
-                data: []
-            });
-        }
-
-        return res.success({
-            message: 'Subslabs retrieved successfully',
-            data: subSlabs
-        });
-    } catch (error) {
-        console.error(error);
-        return res.internalServerError({ message: error.message });
+const updateSlabComm = async (req, res) => {
+  try {
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: 'You are not authorized to update slab commission' });
     }
+
+    const { commAmt, commType, amtType } = req.body;
+    const id = req.params.id;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    if (commAmt === undefined && commType === undefined && amtType === undefined) {
+      return res.failure({ message: 'At least one of commAmt, commType, or amtType must be provided' });
+    }
+
+    // Validate commType if provided
+    if (commType !== undefined && !['com', 'sur'].includes(commType)) {
+      return res.failure({ message: 'commType must be either "com" or "sur"' });
+    }
+    if (amtType !== undefined && !['fix', 'per'].includes(amtType)) {
+      return res.failure({ message: 'amtType must be either "fix" or "per"' });
+    }
+
+    // Validate commAmt if provided
+    if (commAmt !== undefined && (isNaN(commAmt) || commAmt < 0)) {
+      return res.failure({ message: 'commAmt must be a valid non-negative number' });
+    }
+
+    // Find the slab commission entry
+    const slabComm = await dbService.findOne(model.commSlab, {
+      id,
+      companyId: companyId
+    });
+
+    if (!slabComm) {
+      return res.failure({ message: 'Slab commission entry not found' });
+    }
+
+    // Build update data
+    const updateData = {
+      updatedBy: req.user.id
+    };
+
+    if (commAmt !== undefined) {
+      updateData.commAmt = parseFloat(commAmt);
+    }
+
+    if (commType !== undefined) {
+      updateData.commType = commType;
+    }
+    if (amtType !== undefined) {
+      updateData.amtType = amtType;
+    }
+
+    // Update the slab commission
+    const updatedSlabComm = await dbService.update(
+      model.commSlab,
+      { id, companyId: companyId },
+      updateData
+    );
+
+    if (!updatedSlabComm || updatedSlabComm.length === 0) {
+      return res.failure({ message: 'Failed to update slab commission' });
+    }
+
+    return res.success({
+      message: 'Slab commission updated successfully',
+      data: updatedSlabComm[0]
+    });
+  } catch (error) {
+    console.error('Update slab comm error', error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.failure({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.failure({ message: error.errors[0].message });
+    } else {
+      return res.failure({ message: error.message });
+    }
+  }
 };
 
-const updateSubSlab = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { slabName, templateType, slabType, slabScope, remark } = req.body;
-        const companyId = req.companyId ?? req.user?.companyId ?? null;
-
-        if (!companyId) {
-            return res.badRequest({ message: 'Company ID is required' });
-        }
-
-        if (!id) {
-            return res.failure({ message: 'Subslab id is required' });
-        }
-
-        // At least one field must be provided for update
-        if (!slabName && !templateType && !slabType && !slabScope && !remark) {
-            return res.failure({ 
-                message: 'At least one field (slabName, templateType, slabType, slabScope, remark) must be provided' 
-            });
-        }
-
-        // Find the subslab
-        const slab = await dbService.findOne(model.slab, {
-            id,
-            companyId,
-            slabScope: 'private'
-        });
-
-        if (!slab) {
-            return res.failure({ message: 'Subslab not found' });
-        }
-
-        // Build update data
-        const updateData = {
-            updatedBy: req.user.id
-        };
-
-        if (slabName !== undefined) {
-            if (!slabName || slabName.trim() === '') {
-                return res.failure({ message: 'slabName cannot be empty' });
-            }
-            updateData.slabName = slabName.trim();
-        }
-
-        if (templateType !== undefined) {
-            if (!['Basic', 'Gold', 'Platinum'].includes(templateType)) {
-                return res.failure({ message: 'templateType must be one of: Basic, Gold, Platinum' });
-            }
-            updateData.templateType = templateType;
-        }
-
-        if (slabType !== undefined) {
-            if (!['level', 'channel'].includes(slabType)) {
-                return res.failure({ message: 'slabType must be either "level" or "channel"' });
-            }
-            updateData.slabType = slabType;
-        }
-
-        if (slabScope !== undefined) {
-            if (!['global', 'private'].includes(slabScope)) {
-                return res.failure({ message: 'slabScope must be either "global" or "private"' });
-            }
-            updateData.slabScope = slabScope;
-        }
-
-        if (remark !== undefined) {
-            updateData.remark = remark;
-        }
-
-        // Update the subslab
-        const updatedSlab = await dbService.update(
-            model.slab,
-            { id },
-            updateData
-        );
-
-        if (!updatedSlab || updatedSlab.length === 0) {
-            return res.failure({ message: 'Failed to update subslab' });
-        }
-
-        return res.success({
-            message: 'Subslab updated successfully',
-            data: updatedSlab[0]
-        });
-    } catch (error) {
-        console.log(error);
-        if (error.name === 'SequelizeUniqueConstraintError') {
-            return res.failure({ message: error.errors[0].message });
-        } else if (error.name === 'SequelizeValidationError') {
-            return res.failure({ message: error.errors[0].message });
-        } else {
-            return res.failure({ message: error.message });
-        }
+const updateSlabDetails = async (req, res) => {
+  try {
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: 'You are not authorized to update slab details' });
     }
+
+    const { slabName, subscriptionAmount } = req.body;
+    const id = req.params.id;
+
+    if (!id) {
+      return res.failure({ message: 'Slab ID is required' });
+    }
+
+    // At least one field must be provided for update
+    if (!slabName && subscriptionAmount === undefined) {
+      return res.failure({ message: 'At least one field (slabName, subscriptionAmount) must be provided' });
+    }
+
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    // Find the slab
+    const slab = await dbService.findOne(model.slab, {
+      id: id,
+      companyId: companyId
+    });
+
+    if (!slab) {
+      return res.failure({ message: 'Slab not found' });
+    }
+
+    // Build update data
+    const updateData = {
+      updatedBy: req.user.id
+    };
+
+    if (slabName !== undefined) {
+      if (!slabName || slabName.trim() === '') {
+        return res.failure({ message: 'slabName cannot be empty' });
+      }
+      updateData.slabName = slabName.trim();
+      
+      // Check if new slabName already exists for this company (excluding current slab)
+      const existingSlab = await dbService.findOne(model.slab, {
+        slabName: slabName,
+        addedBy: req.user.id,
+        companyId: companyId,
+        id: { [Op.ne]: id }
+      });
+
+      if (existingSlab) {
+        return res.failure({ 
+          message: `Slab with name "${slabName.trim()}" already exists for this company` 
+        });
+      }
+    }
+
+    if (subscriptionAmount !== undefined) {
+      if (subscriptionAmount === null) {
+        return res.failure({ message: 'subscriptionAmount cannot be null' });
+      }
+      if (isNaN(subscriptionAmount) || subscriptionAmount < 0) {
+        return res.failure({ message: 'subscriptionAmount must be a valid non-negative number' });
+      }
+      updateData.subscriptionAmount = parseFloat(subscriptionAmount);
+    }
+
+    // Update the slab
+    const updatedSlab = await dbService.update(
+      model.slab,
+      { id: id, companyId: companyId },
+      updateData
+    );
+
+    if (!updatedSlab || updatedSlab.length === 0) {
+      return res.failure({ message: 'Failed to update slab' });
+    }
+
+    return res.success({
+      message: 'Slab updated successfully',
+      data: updatedSlab[0]
+    });
+  } catch (error) {
+    console.error('Update slab details error', error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.failure({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.failure({ message: error.errors[0].message });
+    } else {
+      return res.failure({ message: error.message });
+    }
+  }
 };
 
 module.exports = {
-    getSlab,
-    createSubSlab,
-    getAllSubSlabs,
-    updateSubSlab
-};
+  createSlab,
+  getAllSlabs,
+  findAllslabComm,
+  updateSlabComm,
+  updateSlabDetails
+};  

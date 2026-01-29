@@ -1,8 +1,6 @@
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op, Sequelize } = require('sequelize');
-const { USER_TYPES } = require('../../../constants/authConstant');
-
 
 const processData = (data) => {
   const groupedData = {};

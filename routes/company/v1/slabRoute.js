@@ -3,16 +3,10 @@ const router = express.Router();
 const authentication = require('../../../middleware/authentication');
 const slabController = require('../../../controller/company/v1/slabController');
 
-// Create a new subslab (Basic, Gold, Platinum)
-router.post('/create', authentication, slabController.createSubSlab);
-
-// Get all subslabs for the company
-router.get('/', authentication, slabController.getAllSubSlabs);
-
-// Get a specific slab by ID
-router.get('/:id', authentication, slabController.getSlab);
-
-// Update a subslab
-router.put('/:id', authentication, slabController.updateSubSlab);
+router.post('/create-slab', authentication, slabController.createSlab);
+router.post('/list', authentication, slabController.getAllSlabs);
+router.post('/slabcomm/:id', authentication, slabController.findAllslabComm);
+router.put('/update/:id', authentication, slabController.updateSlabDetails);
+router.put('/updateSlabComm/:id', authentication, slabController.updateSlabComm);
 
 module.exports = router;
