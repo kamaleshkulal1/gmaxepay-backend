@@ -154,13 +154,9 @@ const processData = (data, myDealsMap = {}) => {
   const groupedData = {};
 
   data.forEach((item) => {
-    // Handle both Sequelize model instances and plain objects
     const itemData = item.toJSON ? item.toJSON() : item;
     const operatorData = itemData.operator || {};
-    
     const key = `${itemData.slabId}-${itemData.operatorId}`;
-
-    // Get margin from myDeals (WU commission) if available, otherwise fallback to operator margin
     const myDeal = myDealsMap[itemData.operatorId] || {};
 
     if (!groupedData[key]) {
