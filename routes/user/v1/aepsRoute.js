@@ -14,6 +14,7 @@ router.post('/bank-kyc-biometric-validate', authentication, aepsController.bankK
 router.post('/2fa-authentication', authentication, aepsController.aeps2FaAuthentication);
 router.post('/transaction', authentication, aepsController.aepsTransaction);
 router.post('/check-status', authentication, aepsController.checkStatus);
+router.post('/get-all-banks', authentication, aepsController.getAllBankDetails);
 router.post('/recent-banks', authentication, aepsController.recentBanks);
 router.post('/transaction-history', authentication, aepsController.aepsTransactionHistory);
 

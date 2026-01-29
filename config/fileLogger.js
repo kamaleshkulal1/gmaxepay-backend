@@ -407,6 +407,8 @@ const transports = [
 ];
 
 // Add S3 transport if credentials are available
+// S3 bucket logging disabled - commented out to prevent S3 uploads
+/*
 if (s3Client) {
   const bucketName = process.env.AWS_BUCKET || 'gmaxepaybucket';
   transports.push(new S3Transport({
@@ -417,6 +419,7 @@ if (s3Client) {
   console.warn('S3 logging disabled: AWS credentials not configured or invalid. Only file logging will be available.');
   console.warn('To enable S3 logging, set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION environment variables.');
 }
+*/
 
 // Create logger instance
 const logger = winston.createLogger({

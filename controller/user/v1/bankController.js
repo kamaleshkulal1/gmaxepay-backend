@@ -1,10 +1,6 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 
-/**
- * Get all customer banks for the authenticated user
- * Returns list of all banks with primary account marked
- */
 const getAllCustomerBanks = async (req, res) => {
     try {
         const user = req.user;
@@ -37,9 +33,6 @@ const getAllCustomerBanks = async (req, res) => {
     }
 };
 
-/**
- * Get primary customer bank for the authenticated user
- */
 const getPrimaryCustomerBank = async (req, res) => {
     try {
         const user = req.user;
@@ -70,9 +63,6 @@ const getPrimaryCustomerBank = async (req, res) => {
     }
 };
 
-/**
- * Get customer bank by ID
- */
 const getCustomerBankById = async (req, res) => {
     try {
         const { id } = req.params;

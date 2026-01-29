@@ -1702,6 +1702,106 @@ const recentBanks = async (req, res) => {
     }
 };
 
+const processBankData = (data) => {
+    if (!data) return data;
+    if (Array.isArray(data)) {
+        return data.map(record => processBankData(record));
+    }
+    const processed = { ...data.dataValues || data };
+    if (processed.bankLogo) {
+        try {
+            processed.bankLogo = imageService.getImageUrl(processed.bankLogo, false);
+        } catch (e) {
+            processed.bankLogo = null;
+        }
+    }
+    return processed;
+};
+
+const getAllBankDetails = async (req, res) => {
+    try {
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { 
+            isActive: true,
+            isDeleted: false
+        };
+
+        // Build query from request body
+        if (dataToFind && dataToFind.query) {
+            query = { ...query, ...dataToFind.query };
+        }
+
+        // Handle options (pagination, sorting)
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+        }
+
+        // Set default pagination if not provided
+        if (!options.paginate) {
+            options.paginate = 10;
+        }
+        if (!options.page) {
+            options.page = 1;
+        }
+
+        // Handle customSearch (iLike search on multiple fields)
+        // Support: bankName, bankIIN
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const keys = Object.keys(dataToFind.customSearch);
+            const searchOrConditions = [];
+
+            for (const key of keys) {
+                const value = dataToFind.customSearch[key];
+                if (value === undefined || value === null || String(value).trim() === '') continue;
+
+                if (key === 'bankName' || key === 'bankIIN') {
+                    // Direct field search in aslBankList table
+                    searchOrConditions.push({
+                        [key]: {
+                            [Op.iLike]: `%${String(value).trim()}%`
+                        }
+                    });
+                }
+            }
+
+            if (searchOrConditions.length > 0) {
+                // Combine all search conditions with OR (if multiple) and then AND with base query
+                if (searchOrConditions.length === 1) {
+                    // Single condition - add directly to query (will be ANDed with base conditions)
+                    Object.assign(query, searchOrConditions[0]);
+                } else {
+                    // Multiple conditions - combine with OR, then AND with base query
+                    query[Op.and] = [
+                        { [Op.or]: searchOrConditions }
+                    ];
+                }
+            }
+        }
+
+        // Use paginate for consistent pagination response
+        const result = await dbService.paginate(model.aslBankList, query, options);
+
+        // Process data to add CDN URLs for bank logos
+        const processedData = processBankData(result?.data || []);
+
+        return res.status(200).json({ 
+            message: 'All bank details retrieved successfully',
+            data: processedData,
+            total: result?.total || 0,
+            paginator: result?.paginator || {
+                page: options.page || 1,
+                paginate: options.paginate || 10,
+                totalPages: 0
+            }
+        });
+
+    } catch (error) {
+        console.error('Get all bank details error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve all bank details' });
+    }
+}
+
 const aepsTransactionHistory = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, {
@@ -1807,5 +1907,6 @@ module.exports = {
     aepsTransaction,
     checkStatus,
     recentBanks,
+    getAllBankDetails,
     aepsTransactionHistory
 };
