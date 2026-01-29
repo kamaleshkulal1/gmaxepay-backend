@@ -473,7 +473,7 @@ const getAllSlabs = async (req, res) => {
       return res.failure({ message: 'Company ID is required' });
     }
     
-    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+    if(req.user.userRole!==1 && req.user.companyId!==1) {
       return res.failure({ message: 'You are not authorized to get all slabs' });
     }
 

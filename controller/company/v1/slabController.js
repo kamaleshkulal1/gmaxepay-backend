@@ -560,16 +560,15 @@ const updateSlabDetails = async (req, res) => {
       return res.failure({ message: 'You are not authorized to update slab details' });
     }
 
-    const { slabName, subscriptionAmount } = req.body;
+    const { slabName, subscriptionAmount, schemaMode, schemaType } = req.body;
     const id = req.params.id;
 
     if (!id) {
       return res.failure({ message: 'Slab ID is required' });
     }
 
-    // At least one field must be provided for update
-    if (!slabName && subscriptionAmount === undefined) {
-      return res.failure({ message: 'At least one field (slabName, subscriptionAmount) must be provided' });
+    if (!slabName && subscriptionAmount === undefined && schemaMode === undefined && schemaType === undefined) {
+      return res.failure({ message: 'Please provide at least one field to update' });
     }
 
     const companyId = req.companyId ?? req.user?.companyId ?? null;
@@ -622,6 +621,26 @@ const updateSlabDetails = async (req, res) => {
         return res.failure({ message: 'subscriptionAmount must be a valid non-negative number' });
       }
       updateData.subscriptionAmount = parseFloat(subscriptionAmount);
+    }
+
+    if (schemaMode !== undefined) {
+      // Validate schemaMode
+      if (!['global', 'private'].includes(schemaMode)) {
+        return res.failure({ 
+          message: 'schemaMode must be either "global" or "private"' 
+        });
+      }
+      updateData.schemaMode = schemaMode;
+    }
+
+    if (schemaType !== undefined) {
+      // Validate schemaType
+      if (!['free', 'premium'].includes(schemaType)) {
+        return res.failure({ 
+          message: 'schemaType must be either "free" or "premium"' 
+        });
+      }
+      updateData.schemaType = schemaType;
     }
 
     // Update the slab
