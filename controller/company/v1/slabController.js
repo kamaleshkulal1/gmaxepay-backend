@@ -150,52 +150,55 @@ const createSlab = async (req, res) => {
   }
 };
 
-const processData = (data, userMarginMap = {}) => {
+const processData = (data, myDealsMap = {}) => {
   const groupedData = {};
 
   data.forEach((item) => {
-    const key = `${item.slabId}-${item.operatorId}`;
+    // Handle both Sequelize model instances and plain objects
+    const itemData = item.toJSON ? item.toJSON() : item;
+    const operatorData = itemData.operator || {};
+    
+    const key = `${itemData.slabId}-${itemData.operatorId}`;
 
-    // Get user's margin (WU commission) for this operator, fallback to operator margin
-    const userMargin = userMarginMap[item.operatorId] || {};
-    const operatorMargin = item.operator || {};
+    // Get margin from myDeals (WU commission) if available, otherwise fallback to operator margin
+    const myDeal = myDealsMap[itemData.operatorId] || {};
 
     if (!groupedData[key]) {
       groupedData[key] = {
-        slabId: item.slabId,
-        operatorId: item.operatorId,
-        operatorName: item.operatorName,
-        operatorType: item.operatorType,
-        marginCommAmt: userMargin.commAmt !== undefined ? userMargin.commAmt : operatorMargin.comm,
-        marginCommType: userMargin.commType || operatorMargin.commType,
-        marginAmtType: userMargin.amtType || operatorMargin.amtType,
+        slabId: itemData.slabId,
+        operatorId: itemData.operatorId,
+        operatorName: itemData.operatorName,
+        operatorType: itemData.operatorType,
+        marginCommAmt: myDeal.commAmt !== undefined ? myDeal.commAmt : (operatorData.comm || 0),
+        marginCommType: myDeal.commType || operatorData.commType || 'com',
+        marginAmtType: myDeal.amtType || operatorData.amtType || 'fix',
         instruments: []
       };
     }
 
     let instrument = groupedData[key].instruments.find(
       (inst) =>
-        inst.paymentInstrument === item.paymentInstrumentName &&
-        inst.cardType === item.cardTypeName
+        inst.paymentInstrument === itemData.paymentInstrumentName &&
+        inst.cardType === itemData.cardTypeName
     );
 
     if (!instrument) {
       instrument = {
-        paymentInstrument: item.paymentInstrumentName,
-        cardType: item.cardTypeName,
+        paymentInstrument: itemData.paymentInstrumentName,
+        cardType: itemData.cardTypeName,
         roles: []
       };
       groupedData[key].instruments.push(instrument);
     }
 
     instrument.roles.push({
-      id: item.id,
-      roleType: item.roleType,
-      roleName: item.roleName,
-      commType: item.commType,
-      commAmt: item.commAmt,
-      amtType: item.amtType,
-      updatedAt: item.updatedAt
+      id: itemData.id,
+      roleType: itemData.roleType,
+      roleName: itemData.roleName,
+      commType: itemData.commType,
+      commAmt: itemData.commAmt,
+      amtType: itemData.amtType,
+      updatedAt: itemData.updatedAt
     });
   });
 
@@ -357,6 +360,43 @@ const findAllslabComm = async (req, res) => {
       return res.failure({ message: 'No slabs found' });
     }
 
+    // Get user's slabId to find their WU commissions (myDeals)
+    const existingUser = await dbService.findOne(model.user, {
+      id: req.user.id,
+      companyId: companyId
+    });
+
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    // Fetch all WU commissions for the user's slab, grouped by operatorId
+    let myDeals = [];
+    if (existingUser.slabId) {
+      myDeals = await dbService.findAll(model.commSlab, {
+        slabId: existingUser.slabId,
+        roleType: 2,
+        roleName: 'WU'
+      });
+    }
+
+    // Create a map of operatorId -> WU commission data for quick lookup
+    const myDealsMap = {};
+    if (myDeals && myDeals.length > 0) {
+      myDeals.forEach((deal) => {
+        // Handle both Sequelize model instances and plain objects
+        const dealData = deal.toJSON ? deal.toJSON() : deal;
+        const operatorId = dealData.operatorId;
+        if (operatorId) {
+          myDealsMap[operatorId] = {
+            commAmt: dealData.commAmt,
+            commType: dealData.commType,
+            amtType: dealData.amtType
+          };
+        }
+      });
+    }
+
     query.slabId = { [Op.in]: slabIds };
     query.companyId = companyId;
 
@@ -419,50 +459,8 @@ const findAllslabComm = async (req, res) => {
       return res.failure({ message: 'No slabs Commissions found' });
     }
 
-    // Get user's slabId to find their margin (WU commission)
-    const userSlabId = req.params.id;
-    const userMarginMap = {};
-
-    if (userSlabId) {
-      // Get all unique operator IDs from the found commissions
-      const operatorIds = [...new Set(foundUser.map(item => {
-        const opId = item.operatorId || item.dataValues?.operatorId;
-        return opId;
-      }).filter(Boolean))];
-
-      if (operatorIds.length > 0) {
-        // Fetch WU (roleType = 2) commissions for user's slab and all operators
-        const userWUCommissions = await dbService.findAll(
-          model.commSlab,
-          {
-            slabId: userSlabId,
-            operatorId: { [Op.in]: operatorIds },
-            roleType: 2, // WU role
-            companyId: companyId
-          },
-          {
-            attributes: ['operatorId', 'commAmt', 'commType', 'amtType']
-          }
-        );
-
-        // Create a map of operatorId -> WU commission
-        if (userWUCommissions && userWUCommissions.length > 0) {
-          userWUCommissions.forEach((wuComm) => {
-            const commData = wuComm.toJSON ? wuComm.toJSON() : (wuComm.dataValues || wuComm);
-            const opId = commData.operatorId;
-            if (opId) {
-              userMarginMap[opId] = {
-                commAmt: commData.commAmt,
-                commType: commData.commType,
-                amtType: commData.amtType
-              };
-            }
-          });
-        }
-      }
-    }
-
-    const formattedResponse = processData(foundUser, userMarginMap);
+    // Pass myDealsMap to processData to use WU commissions as margin
+    const formattedResponse = processData(foundUser, myDealsMap);
 
     return res.status(200).send({
       status: 'SUCCESS',
