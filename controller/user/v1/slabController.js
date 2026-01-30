@@ -366,10 +366,14 @@ const findAllslabComm = async (req, res) => {
       id: req.user.id,
       companyId: companyId
     });
-
     if (!existingUser) {
-      return res.failure({ message: 'User not found' });
+        return res.failure({ message: 'User not found' });
+      }
+
+    if(existingUser.slabId === null || existingUser.slabId === undefined) {
+      return res.failure({ message: 'Pls Subscribe to a slab or contact your Admin' });
     }
+
 
     // Fetch all WU commissions for the user's slab, grouped by operatorId
     let myDeals = [];
