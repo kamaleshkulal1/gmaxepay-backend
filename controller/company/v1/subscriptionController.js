@@ -67,6 +67,9 @@ const getAllSubscriptions = async (req, res) => {
       });
     }
 
+    // Get current user's slab ID
+    const currentSlabId = existingUser.slabId || null;
+
     const subscriptions = allSlabs.map(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       return {
@@ -77,14 +80,16 @@ const getAllSubscriptions = async (req, res) => {
         schemaType: slabData.schemaType,
         roleType: roleConfig.roleType,
         roleName: roleConfig.roleName,
-        commissions: commissionsBySlab.get(slabData.id) || []
+        commissions: commissionsBySlab.get(slabData.id) || [],
+        isCurrentSlab: slabData.id === currentSlabId
       };
     });
 
     return res.success({ 
       message: 'Subscriptions retrieved successfully', 
       data: subscriptions,
-      total: subscriptions.length
+      total: subscriptions.length,
+      currentSlabId: currentSlabId
     });
   } catch (error) {
     console.error('Get all subscriptions error', error);
