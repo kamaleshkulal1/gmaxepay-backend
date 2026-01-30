@@ -208,7 +208,7 @@ const processData = (data, myDealsMap = {}) => {
 
 const getAllSlabs = async (req, res) => {
   try {
-    if (req.user.userRole !== 2) {
+    if (req.user.userRole !== 3 && req.user.userRole !== 4 && req.user.userRole !== 5) {
       return res.failure({ message: 'You are not authorized to access this resource' });
     }
 

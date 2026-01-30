@@ -102,7 +102,7 @@ const createSlab = async (req, res) => {
     const operators = await dbService.findAll(
       model.operator,
       { inSlab: true },
-      { select: ['id', 'operatorName', 'operatorType'] }
+      { select: ['id', 'operatorName', 'operatorType', 'commType', 'amtType'] }
     );
 
     // Create commission entries for downline roles (WU, MD, DI, RE)
@@ -121,8 +121,8 @@ const createSlab = async (req, res) => {
           roleType,
           roleName: roleNames[index],
           commAmt: 0,
-          commType: 'com',
-          amtType: 'fix',
+          commType: op.commType || 'com',
+          amtType: op.amtType || 'fix',
           paymentMode: null,
           addedBy: req.user.id,
           updatedBy: req.user.id
