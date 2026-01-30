@@ -376,8 +376,8 @@ const findAllslabComm = async (req, res) => {
     if (existingUser.slabId) {
       myDeals = await dbService.findAll(model.commSlab, {
         slabId: existingUser.slabId,
-        roleType: 2,
-        roleName: 'WU'
+        roleType: 3,
+        roleName: 'MD'
       });
     }
 
