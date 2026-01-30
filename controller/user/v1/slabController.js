@@ -6,7 +6,7 @@ const createSlab = async (req, res) => {
   try {
     const { slabName, schemaMode, schemaType, subscriptionAmount } = req.body;
 
-    if( req.user.userRole !== 3 && req.user.userRole !== 4 ) {
+    if(![3,4].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to access this resource' });
     }
 
@@ -208,10 +208,9 @@ const processData = (data, myDealsMap = {}) => {
 
 const getAllSlabs = async (req, res) => {
   try {
-    if (req.user.userRole !== 3 && req.user.userRole !== 4 && req.user.userRole !== 5) {
+    if(![3,4].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to access this resource' });
     }
-
     const companyId = req.companyId ?? req.user?.companyId ?? null;
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
@@ -221,6 +220,7 @@ const getAllSlabs = async (req, res) => {
     let options = {};
     let query = {
       companyId: companyId,
+      addedBy: req.user.id,
       isActive: true
     };
 

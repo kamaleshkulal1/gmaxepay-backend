@@ -216,6 +216,7 @@ const getAllSlabs = async (req, res) => {
     let options = {};
     let query = {
       companyId: companyId,
+      addedBy: req.user.id,
       isActive: true
     };
 
