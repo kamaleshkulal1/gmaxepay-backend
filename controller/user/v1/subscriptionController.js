@@ -45,59 +45,42 @@ const getAllSubscriptions = async (req, res) => {
       return res.failure({ message: 'Invalid user role' });
     }
 
-    // Fetch commissions for all slabs based on user's role
+    // Fetch commissions for all slabs based on user's role (no operator include needed)
     const allSlabCommissions = await dbService.findAll(model.commSlab, {
       slabId: { [Op.in]: slabIds },
       roleType: roleConfig.roleType,
       roleName: roleConfig.roleName,
       companyId: companyId
     }, {
-      include: [
-        {
-          model: model.operator,
-          as: 'operator',
-          attributes: ['comm', 'commType', 'amtType']
-        }
-      ]
+      attributes: ['id', 'slabId', 'operatorId', 'operatorName', 'operatorType', 'commAmt', 'commType', 'amtType']
     });
 
-    // Debug: Check if any commissions exist for these slabs (regardless of role)
-    const allCommissionsCheck = await dbService.findAll(model.commSlab, {
-      slabId: { [Op.in]: slabIds },
-      companyId: companyId
-    }, {
-      attributes: ['id', 'slabId', 'roleType', 'roleName', 'operatorId']
-    });
-
-    console.log('Commission query debug:', {
-      slabIds,
-      roleType: roleConfig.roleType,
-      roleName: roleConfig.roleName,
-      companyId,
-      foundCommissionsForRole: allSlabCommissions?.length || 0,
-      totalCommissionsForSlabs: allCommissionsCheck?.length || 0,
-      availableRoles: allCommissionsCheck?.map(c => ({ roleType: c.roleType, roleName: c.roleName })) || []
-    });
-
-    // Group commissions by slabId
-    const commissionsBySlab = {};
+    // Group commissions by slabId using Map for O(1) lookup performance
+    const commissionsBySlab = new Map();
     if (allSlabCommissions && allSlabCommissions.length > 0) {
       allSlabCommissions.forEach((commission) => {
         const commData = commission.toJSON ? commission.toJSON() : commission;
         const slabId = commData.slabId;
-        if (!commissionsBySlab[slabId]) {
-          commissionsBySlab[slabId] = [];
+        
+        if (!commissionsBySlab.has(slabId)) {
+          commissionsBySlab.set(slabId, []);
         }
-        commissionsBySlab[slabId].push(commData);
+        
+        commissionsBySlab.get(slabId).push({
+          id: commData.id,
+          operatorId: commData.operatorId,
+          operatorName: commData.operatorName,
+          operatorType: commData.operatorType,
+          commAmt: commData.commAmt,
+          commType: commData.commType,
+          amtType: commData.amtType
+        });
       });
     }
 
-    // Format subscriptions with slab details and commission summary
+    // Format subscriptions - iterate through slabs in original order
     const subscriptions = allSlabs.map(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
-      const slabCommissions = commissionsBySlab[slabData.id] || [];
-      
-      
       return {
         id: slabData.id,
         slabName: slabData.slabName,
@@ -106,18 +89,7 @@ const getAllSubscriptions = async (req, res) => {
         schemaType: slabData.schemaType,
         roleType: roleConfig.roleType,
         roleName: roleConfig.roleName,
-        commissions: slabCommissions.map(comm => ({
-          id: comm.id,
-          operatorId: comm.operatorId,
-          operatorName: comm.operatorName,
-          operatorType: comm.operatorType,
-          commAmt: comm.commAmt,
-          commType: comm.commType,
-          amtType: comm.amtType,
-          operatorComm: comm.operator?.comm || 0,
-          operatorCommType: comm.operator?.commType || 'com',
-          operatorAmtType: comm.operator?.amtType || 'fix'
-        }))
+        commissions: commissionsBySlab.get(slabData.id) || []
       };
     });
 
