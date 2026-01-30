@@ -18,10 +18,26 @@ const getAllSubscriptions = async (req, res) => {
         return res.failure({ message: 'User not found' });
     }
     
+    let addedByUserId = existingUser.reportingTo;
+    if (!addedByUserId) {
+      const companyAdmin = await dbService.findOne(model.user, {
+        companyId: companyId,
+        userRole: 2, 
+        isActive: true,
+        isDeleted: false
+      });
+      
+      if (!companyAdmin) {
+        return res.failure({ message: 'Company admin not found' });
+      }
+      
+      addedByUserId = companyAdmin.id;
+    }
+    
     const allSlabs = await dbService.findAll(model.slab, { 
       companyId: companyId, 
       isActive: true, 
-      addedBy: existingUser.reportingTo 
+      addedBy: addedByUserId 
     });
     
     if(!allSlabs || allSlabs.length === 0) {
