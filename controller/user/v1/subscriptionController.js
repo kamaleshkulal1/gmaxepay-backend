@@ -50,8 +50,7 @@ const getAllSubscriptions = async (req, res) => {
       slabId: { [Op.in]: slabIds },
       roleType: roleConfig.roleType,
       roleName: roleConfig.roleName,
-      companyId: companyId,
-      isActive: true
+      companyId: companyId
     }, {
       include: [
         {
@@ -60,6 +59,24 @@ const getAllSubscriptions = async (req, res) => {
           attributes: ['comm', 'commType', 'amtType']
         }
       ]
+    });
+
+    // Debug: Check if any commissions exist for these slabs (regardless of role)
+    const allCommissionsCheck = await dbService.findAll(model.commSlab, {
+      slabId: { [Op.in]: slabIds },
+      companyId: companyId
+    }, {
+      attributes: ['id', 'slabId', 'roleType', 'roleName', 'operatorId']
+    });
+
+    console.log('Commission query debug:', {
+      slabIds,
+      roleType: roleConfig.roleType,
+      roleName: roleConfig.roleName,
+      companyId,
+      foundCommissionsForRole: allSlabCommissions?.length || 0,
+      totalCommissionsForSlabs: allCommissionsCheck?.length || 0,
+      availableRoles: allCommissionsCheck?.map(c => ({ roleType: c.roleType, roleName: c.roleName })) || []
     });
 
     // Group commissions by slabId
