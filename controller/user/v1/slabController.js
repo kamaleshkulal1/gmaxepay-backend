@@ -320,7 +320,7 @@ const getAllSlabs = async (req, res) => {
 
 const findAllslabComm = async (req, res) => {
   try {
-    if (req.user.userRole !== 2) {
+    if(![3,4].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to access this resource' });
     }
 
