@@ -10,5 +10,6 @@ router.use('/reports', authentication, require('./v1/reportsRoutes'));
 router.use('/fund', authentication, require('./v1/fundRoute'));
 router.use('/slabs', authentication, require('./v1/slabRoute'));
 router.use('/wallet', authentication, require('./v1/walletRoutes.js'));
+router.use('/subscription', authentication, require('./v1/subscriptionRoutes'));
 
 module.exports = router;
