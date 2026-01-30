@@ -374,19 +374,25 @@ const findAllslabComm = async (req, res) => {
       return res.failure({ message: 'Pls Subscribe to a slab or contact your Admin' });
     }
 
+    // Map userRole to roleType and roleName for fetching commercials
+    const roleMapping = {
+      3: { roleType: 3, roleName: 'MD' },
+      4: { roleType: 4, roleName: 'DI' }
+    };
 
-    // Fetch all WU commissions for the user's slab, grouped by operatorId
+    // Fetch commissions for the user's slab based on their role
     let myDeals = [];
-    if (existingUser.slabId) {
+    const roleConfig = roleMapping[req.user.userRole];
+    if (roleConfig && existingUser.slabId) {
       myDeals = await dbService.findAll(model.commSlab, {
         slabId: existingUser.slabId,
-        roleType: 3,
-        roleName: 'MD',
+        roleType: roleConfig.roleType,
+        roleName: roleConfig.roleName,
         companyId: companyId
       });
     }
 
-    // Create a map of operatorId -> WU commission data for quick lookup
+    // Create a map of operatorId -> commission data for quick lookup
     const myDealsMap = {};
     if (myDeals && myDeals.length > 0) {
       myDeals.forEach((deal) => {
