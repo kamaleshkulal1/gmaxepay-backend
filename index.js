@@ -1,10 +1,3 @@
-/**
- * app.js
- * Use `app.js` to run your app.
- * To start the server, run: `node app.js`.
- */
-
-// Load environment variables FIRST before any other imports
 const dotenv = require('dotenv');
 dotenv.config({ path: '.env' });
 
@@ -99,7 +92,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // Use custom logging middleware instead of default morgan
-app.use(morganMiddleware);
+// app.use(morganMiddleware);
 // SECURITY: Limit request body size (increased for file uploads, multer handles individual file limits)
 app.use(express.json({ limit: '10mb' }));
 
@@ -107,8 +100,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(sanitizeInput);
 app.use(preventNoSqlInjection);
 
-app.use(requestLogger);
-app.use(responseInterceptor);
+// app.use(requestLogger);
+// app.use(responseInterceptor);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static('uploads'));
 
@@ -176,7 +169,7 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS
   });
 }
 // Error handling middleware
-app.use(errorLogger);
+// app.use(errorLogger);
 
 // SECURITY: Secure error handler (must be last error handler)
 app.use(secureErrorHandler);

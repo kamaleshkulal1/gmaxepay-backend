@@ -686,6 +686,7 @@ const updateSlabDetails = async (req, res) => {
   }
 };
 
+
 module.exports = {
   createSlab,
   getAllSlabs,

@@ -1,7 +1,4 @@
-/**
- * user.js
- * @description :: sequelize model of database table user
- */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');

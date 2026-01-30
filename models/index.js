@@ -1,7 +1,3 @@
-/**
- * index.js
- * @description :: exports all the models and its relationships among other models
- */
 
 const dbConnection = require('../config/dbConnection');
 const db = {};
@@ -40,7 +36,6 @@ db.services = require('./service');
 db.packages = require('./packages');
 db.packageService = require('./packageService');
 db.activeServices = require('./activeServices');
-db.subscription = require('./subscription');
 db.serviceCharge = require('./serviceCharge');
 
 // Operator & Category Models
