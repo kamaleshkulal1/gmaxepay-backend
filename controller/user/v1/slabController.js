@@ -482,10 +482,10 @@ const findAllslabComm = async (req, res) => {
 
 const updateSlabComm = async (req, res) => {
   try {
-    if (req.user.userRole !== 2) {
+    if(![3,4].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to update slab commission' });
     }
-
+    
     const { commAmt, commType, amtType } = req.body;
     const id = req.params.id;
     const companyId = req.companyId ?? req.user?.companyId ?? null;
