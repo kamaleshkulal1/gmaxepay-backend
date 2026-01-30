@@ -8,6 +8,7 @@ router.use('/aeps', require('./v1/aepsRoute'));
 router.use('/bank', require('./v1/bankRoutes'));
 router.use('/bbps', require('./v1/bbpsRoute'));
 router.use('/pan', require('./v1/panRoute'));
+router.use('/slab', require('./v1/slabRoute'));
 router.use('/payout', require('./v1/payoutRoute'));
 router.use('/recharge', require('./v1/rechargeRoute'));
 router.use('/dth', require('./v1/dthRoute'));
