@@ -373,7 +373,7 @@ const updateSlabComm = async (req, res) => {
 
 const createSlab = async (req, res) => {
   try {
-    const { slabName, schemaMode, schemaType } = req.body;
+    const { slabName, schemaMode, schemaType, subscriptionAmount } = req.body;
 
     if(req.user.userRole!==1 && req.user.companyId!==companyId) {
       return res.failure({ message: 'You are not authorized to create slab' });
@@ -397,6 +397,12 @@ const createSlab = async (req, res) => {
       });
     }
 
+    if (subscriptionAmount === undefined || subscriptionAmount === null) {
+      return res.failure({ 
+        message: 'subscriptionAmount is required' 
+      });
+    }
+
     // Validate schemaMode
     if (!['global', 'private'].includes(schemaMode)) {
       return res.failure({ 
@@ -411,6 +417,13 @@ const createSlab = async (req, res) => {
       });
     }
 
+    // Validate subscriptionAmount
+    if (isNaN(subscriptionAmount) || subscriptionAmount < 0) {
+      return res.failure({ 
+        message: 'subscriptionAmount must be a valid non-negative number' 
+      });
+    }
+
     // Get companyId from the user creating the slab
     const companyId = req.companyId ?? req.user?.companyId ?? null;
     
@@ -422,13 +435,13 @@ const createSlab = async (req, res) => {
 
     // Check if slab with same name already exists for this company
     const existingSlab = await dbService.findOne(model.slab, {
-      slabName,
+      slabName: slabName,
       companyId: companyId
     });
 
     if (existingSlab) {
       return res.failure({ 
-        message: `Slab with name "${slabName}" already exists for this company` 
+        message: `Slab with name "${slabName.trim()}" already exists for this company` 
       });
     }
 
@@ -436,6 +449,7 @@ const createSlab = async (req, res) => {
       slabName: slabName,
       schemaMode,
       schemaType,
+      subscriptionAmount: subscriptionAmount,
       companyId: companyId, 
       remark: null,
       isSignUpB2B: false,
@@ -452,13 +466,53 @@ const createSlab = async (req, res) => {
       return res.failure({ message: 'Failed to create slab' });
     }
 
+    const slabId = createdSlab.id || createdSlab.dataValues?.id;
+
+    // Get all operators that are in slab
+    const operators = await dbService.findAll(
+      model.operator,
+      { inSlab: true },
+      { select: ['id', 'operatorName', 'operatorType', 'commType', 'amtType'] }
+    );
+
+    // Create commission entries for downline roles (WU, MD, DI, RE)
+    // Role types: 2=WU, 3=MD, 4=DI, 5=RE
+    if (operators && operators.length > 0) {
+      const roleTypes = [1,2, 3, 4, 5];
+      const roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
+
+      const defaultCommissions = operators.flatMap((op) =>
+        roleTypes.map((roleType, index) => ({
+          slabId: slabId,
+          companyId: companyId,
+          operatorId: op.id,
+          operatorName: op.operatorName,
+          operatorType: op.operatorType,
+          roleType,
+          roleName: roleNames[index],
+          commAmt: 0,
+          commType: op.commType || 'com',
+          amtType: op.amtType || 'fix',
+          paymentMode: null,
+          addedBy: req.user.id,
+          updatedBy: req.user.id
+        }))
+      );
+
+      if (defaultCommissions.length > 0) {
+        await dbService.createMany(model.commSlab, defaultCommissions);
+      }
+    }
+
     return res.success({
-      message: 'Slab created successfully',
+      message: 'Slab created successfully for downline roles',
       data: createdSlab
     });
   } catch (error) {
-    console.log(error);
+    console.error('Create slab error', error);
     if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
       return res.validationError({ message: error.errors[0].message });
     } else {
       return res.internalServerError({ message: error.message });
