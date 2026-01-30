@@ -677,7 +677,6 @@ const assignSlabToCompany = async (req, res) => {
     const slabUsers = slab.users || [];
     const isUserInSlab = Array.isArray(slabUsers) && slabUsers.includes(companyAdmin.id);
 
-    // If admin was already assigned to some other slab, remove them from that slab's users array
     if (!isSlabAssigned && previousSlabId) {
       const previousSlab = await dbService.findOne(model.slab, { id: previousSlabId });
       if (previousSlab && Array.isArray(previousSlab.users) && previousSlab.users.length > 0) {
