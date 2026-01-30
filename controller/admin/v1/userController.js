@@ -1567,7 +1567,10 @@ const getCompanyAdminById = async (req, res) => {
       }
       return imageData;
     };
-
+    console.log("AadhaarDetails", existingUser?.aadharDetails);
+    console.log("PanDetails", existingUser?.panDetails);
+    console.log("AadhaarDetails", JSON.stringify(existingUser?.aadharDetail,null,2));
+    console.log("PanDetails", JSON.stringify(existingUser?.panDetails,null,2));
     const response = {
       id: existingUser.id,
       name: existingUser.name,
