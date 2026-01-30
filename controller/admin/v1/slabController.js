@@ -397,12 +397,6 @@ const createSlab = async (req, res) => {
       });
     }
 
-    if (subscriptionAmount === undefined || subscriptionAmount === null) {
-      return res.failure({ 
-        message: 'subscriptionAmount is required' 
-      });
-    }
-
     // Validate schemaMode
     if (!['global', 'private'].includes(schemaMode)) {
       return res.failure({ 
@@ -414,13 +408,6 @@ const createSlab = async (req, res) => {
     if (!['free', 'premium'].includes(schemaType)) {
       return res.failure({ 
         message: 'schemaType must be either "free" or "premium"' 
-      });
-    }
-
-    // Validate subscriptionAmount
-    if (isNaN(subscriptionAmount) || subscriptionAmount < 0) {
-      return res.failure({ 
-        message: 'subscriptionAmount must be a valid non-negative number' 
       });
     }
 
@@ -449,9 +436,9 @@ const createSlab = async (req, res) => {
       slabName: slabName,
       schemaMode,
       schemaType,
-      subscriptionAmount: subscriptionAmount,
+      subscriptionAmount: isNaN(subscriptionAmount) ? 0 : subscriptionAmount,
       companyId: companyId, 
-      remark: null,
+      remark: 'Created by Admin',
       isSignUpB2B: false,
       users: [],
       isActive: true,
