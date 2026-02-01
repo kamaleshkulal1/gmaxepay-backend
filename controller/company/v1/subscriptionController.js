@@ -18,18 +18,52 @@ const getAllSubscriptions = async (req, res) => {
         return res.failure({ message: 'User not found' });
     }
     
+    const userId = req.user.id;
+    
+    // Fetch all slabs with views field
     const allSlabs = await dbService.findAll(model.slab, { 
       isActive: true, 
       addedBy: 1
+    }, {
+      attributes: ['id', 'slabName', 'subscriptionAmount', 'schemaMode', 'schemaType', 'views']
     });
     
     if(!allSlabs || allSlabs.length === 0) {
         return res.failure({ message: 'No slabs found' });
     }
 
-    const slabIds = allSlabs.map((s) => s.id || s.dataValues?.id).filter(Boolean);
+    // Filter slabs based on visibility:
+    // 1. If schemaMode is 'global' - show it
+    // 2. If schemaMode is 'private' and user ID is in views array - show it
+    const visibleSlabs = allSlabs.filter(slab => {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      
+      // Global slabs are visible to everyone
+      if (slabData.schemaMode === 'global') {
+        return true;
+      }
+      
+      // Private slabs are only visible if user is in views array
+      if (slabData.schemaMode === 'private') {
+        const views = slabData.views || [];
+        return Array.isArray(views) && views.includes(userId);
+      }
+      
+      // Default: not visible
+      return false;
+    });
+
+    if (!visibleSlabs || visibleSlabs.length === 0) {
+      return res.failure({ message: 'No visible slabs found' });
+    }
+
+    const slabIds = visibleSlabs.map((s) => {
+      const slabData = s.toJSON ? s.toJSON() : s;
+      return slabData.id;
+    }).filter(Boolean);
+    
     if (!slabIds.length) {
-      return res.failure({ message: 'No slabs found' });
+      return res.failure({ message: 'No visible slabs found' });
     }
 
     const roleConfig = { roleType: 2, roleName: 'WU' };
@@ -70,7 +104,7 @@ const getAllSubscriptions = async (req, res) => {
     // Get current user's slab ID
     const currentSlabId = existingUser.slabId || null;
 
-    const subscriptions = allSlabs.map(slab => {
+    const subscriptions = visibleSlabs.map(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       return {
         id: slabData.id,
