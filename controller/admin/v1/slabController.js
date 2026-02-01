@@ -826,7 +826,6 @@ const getAllCompanySlabList = async (req, res) => {
       return res.failure({ message: 'User ID is required' });
     }
 
-    // Find the user
     const user = await dbService.findOne(model.user, {
       id: userId,
       isActive: true
@@ -841,12 +840,11 @@ const getAllCompanySlabList = async (req, res) => {
       return res.failure({ message: 'User does not belong to a company' });
     }
 
-    // Fetch all slabs with views field
     const allSlabs = await dbService.findAll(model.slab, {
       isActive: true,
       addedBy: 1
     }, {
-      attributes: ['id', 'slabName', 'schemaMode', 'views']
+      attributes: ['id', 'slabName', 'schemaMode', 'views', 'subscriptionAmount']
     });
 
     if (!allSlabs || allSlabs.length === 0) {
@@ -857,33 +855,28 @@ const getAllCompanySlabList = async (req, res) => {
       });
     }
 
-    // Filter slabs based on visibility:
-    // 1. If schemaMode is 'global' - show it
-    // 2. If schemaMode is 'private' and user ID is in views array - show it
     const visibleSlabs = allSlabs.filter(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
 
-      // Global slabs are visible to everyone
       if (slabData.schemaMode === 'global') {
         return true;
       }
 
-      // Private slabs are only visible if user is in views array
       if (slabData.schemaMode === 'private') {
         const views = slabData.views || [];
         return Array.isArray(views) && views.includes(Number(userId));
       }
 
-      // Default: not visible
       return false;
     });
 
-    // Return only slab names (optimized for admin)
     const slabNames = visibleSlabs.map(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const subscriptionAmount = slabData.subscriptionAmount || 0;
       return {
         id: slabData.id,
-        slabName: slabData.slabName
+        slabName: slabData.slabName,
+        slabAmount: subscriptionAmount === 0 ? 'free' : subscriptionAmount
       };
     });
 
