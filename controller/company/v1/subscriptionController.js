@@ -104,18 +104,44 @@ const getAllSubscriptions = async (req, res) => {
     // Get current user's slab ID
     const currentSlabId = existingUser.slabId || null;
 
+    // Fetch successful subscriptions for this user
+    const userSubscriptions = await dbService.findAll(model.subscription, {
+      userId: userId,
+      companyId: companyId,
+      status: 'SUCCESS',
+      isActive: true
+    }, {
+      attributes: ['slabId', 'status']
+    });
+
+    // Create a map of slabId -> has successful subscription
+    const subscribedSlabs = new Set();
+    if (userSubscriptions && userSubscriptions.length > 0) {
+      userSubscriptions.forEach(sub => {
+        const subData = sub.toJSON ? sub.toJSON() : sub;
+        if (subData.slabId) {
+          subscribedSlabs.add(subData.slabId);
+        }
+      });
+    }
+
     const subscriptions = visibleSlabs.map(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const subscriptionAmount = slabData.subscriptionAmount || 0;
+      const isFree = subscriptionAmount === 0;
+      const hasSubscription = subscribedSlabs.has(slabData.id);
+      
       return {
         id: slabData.id,
         slabName: slabData.slabName,
-        subscriptionAmount: slabData.subscriptionAmount,
+        subscriptionAmount: subscriptionAmount,
         schemaMode: slabData.schemaMode,
         schemaType: slabData.schemaType,
         roleType: roleConfig.roleType,
         roleName: roleConfig.roleName,
         commissions: commissionsBySlab.get(slabData.id) || [],
-        isCurrentSlab: slabData.id === currentSlabId
+        isCurrentSlab: slabData.id === currentSlabId,
+        alreadySubscribed: isFree && hasSubscription
       };
     });
 
