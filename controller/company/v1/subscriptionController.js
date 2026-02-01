@@ -130,6 +130,8 @@ const getAllSubscriptions = async (req, res) => {
       const subscriptionAmount = slabData.subscriptionAmount || 0;
       const isFree = subscriptionAmount === 0;
       const hasSubscription = subscribedSlabs.has(slabData.id);
+      const isCurrentSlab = slabData.id === currentSlabId;
+      const alreadySubscribed = (isFree && hasSubscription) || isCurrentSlab;
       
       return {
         id: slabData.id,
@@ -140,8 +142,8 @@ const getAllSubscriptions = async (req, res) => {
         roleType: roleConfig.roleType,
         roleName: roleConfig.roleName,
         commissions: commissionsBySlab.get(slabData.id) || [],
-        isCurrentSlab: slabData.id === currentSlabId,
-        alreadySubscribed: isFree && hasSubscription
+        isCurrentSlab: isCurrentSlab,
+        alreadySubscribed: alreadySubscribed
       };
     });
 
