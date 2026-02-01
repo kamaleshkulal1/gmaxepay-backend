@@ -175,7 +175,7 @@ const findAllslabComm = async (req, res) => {
   }
 };
 
-const updateSlabName = async (req, res) => {
+const updateSlab = async (req, res) => {
   try {
     let permissions = req.permission;
     let hasPermission = permissions.some(
@@ -187,8 +187,8 @@ const updateSlabName = async (req, res) => {
     if (!hasPermission) {
       return res.failure({ message: `User doesn't have Permission!` });
     }
-
-    const { slabId, slabName, schemaMode, schemaType, views, subscriptionAmount } = req.body;
+    const slabId = req.params.id;
+    const { slabName, schemaMode, schemaType, views, subscriptionAmount } = req.body;
 
     if (!slabId) {
       return res.failure({ message: 'slabId is required' });
@@ -1022,7 +1022,7 @@ const assignSlabToCompany = async (req, res) => {
 
 module.exports = {
   findAllslabComm,
-  updateSlabName,
+  updateSlab,
   updateSlabComm,
   createSlab,
   getAllSlabs,

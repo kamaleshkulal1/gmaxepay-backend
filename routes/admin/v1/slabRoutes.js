@@ -7,7 +7,7 @@ router.post('/', authentication, slabController.createSlab);
 router.post('/list', authentication, slabController.getAllSlabs);
 router.post('/slabcomm/:id', authentication, slabController.findAllslabComm);
 router.post('/assign', authentication, slabController.assignSlabToCompany);
-router.put('/update', authentication, slabController.updateSlabName);
+router.put('/update/:id', authentication, slabController.updateSlab);
 router.put('/updateSlabComm/:id', authentication, slabController.updateSlabComm);
 
 module.exports = router;
