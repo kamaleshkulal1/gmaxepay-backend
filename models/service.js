@@ -1,13 +1,9 @@
-/**
- * service.js
- * @description :: sequelize model of database table service
- */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
 const { reusableSMSAttribute } = require('../utils/common');
-const models = require('./index');
 
 let Services = sequelize.define(
   'services',

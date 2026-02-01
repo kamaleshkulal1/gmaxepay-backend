@@ -77,87 +77,6 @@ const findAllServices = async (req, res) => {
   }
 };
 
-const registerServicePackage = async (req, res) => {
-  try {
-    let permissions = req.permission;
-    let hasPermission = permissions.some(
-      (permission) =>
-        permission.dataValues.permissionId === 9 &&
-        permission.dataValues.write === true
-    );
-
-    if (!hasPermission) {
-      return res.failure({ message: "User doesn't have Permission!" });
-    }
-
-    let dataToCreate = { ...(req.body || {}) };
-
-    const packages = await dbService.findOne(model.packages, {
-      id: dataToCreate.packageId
-    });
-    if (!packages) {
-      return res.badRequest({ message: 'Package not found' });
-    }
-
-    const service = await dbService.findOne(model.services, {
-      id: dataToCreate.serviceId
-    });
-    if (!service) {
-      return res.badRequest({ message: 'Service not found' });
-    }
-
-    let where = {
-      packageId: dataToCreate.packageId,
-      serviceId: dataToCreate.serviceId
-    };
-
-    const api = await dbService.findOne(model.packageService, where);
-
-    if (api) {
-      if (dataToCreate.isActive == false) {
-        await dbService.destroy(model.packageService, where);
-        return res.success({ message: 'Data Deleted Successully' });
-      }
-      dataToCreate = {
-        ...dataToCreate,
-        companyId: req.user?.companyId,
-        updatedBy: req.user.id,
-        isActive: true,
-        isDelete: false
-      };
-
-      const apiCommsion = await dbService.update(
-        model.packageService,
-        { id: api.id },
-        dataToCreate
-      );
-      return res.success({ data: apiCommsion });
-    } else {
-      dataToCreate = {
-        ...dataToCreate,
-        addedBy: req.user.id,
-        isActive: true
-      };
-
-      const apiCommsion = await dbService.createOne(
-        model.packageService,
-        dataToCreate
-      );
-
-      res.success({ data: apiCommsion });
-    }
-  } catch (error) {
-    console.log(error);
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else if (error.name === 'SequelizeValidationError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else {
-      return res.internalServerError({ message: error });
-    }
-  }
-};
-
 const getServices = async (req, res) => {
   try {
     let permissions = req.permission;
@@ -184,12 +103,12 @@ const getServices = async (req, res) => {
   }
 };
 
-const updateUserPackage = async (req, res) => {
+const updateService = async (req, res) => {
   try {
-    const permissions = req.permission;
-    const hasPermission = permissions.some(
+    let permissions = req.permission;
+    let hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.permissionId === 9 &&
         permission.dataValues.write === true
     );
 
@@ -198,73 +117,41 @@ const updateUserPackage = async (req, res) => {
     }
 
     let dataToUpdate = { ...req.body };
-    const packageId = dataToUpdate.packageId;
-    const userId = req.params.id;
+    const serviceId = req.params.id;
 
-    const [packages, userData] = await Promise.all([
-      dbService.findOne(model.packages, { id: packageId }),
-      dbService.findOne(model.user, { id: userId })
-    ]);
-
-    if (!packages) {
-      return res.failure({ message: 'Package not found' });
-    }
-
-    if (!userData) {
-      return res.badRequest({ data: 'User not found!' });
-    }
-
-    const packageService = await dbService.findAll(
-      model.packageService,
-      { packageId },
-      { select: ['serviceId'] }
-    );
-
-    if (!packageService || packageService.length === 0) {
-      return res.failure({
-        message: 'No services found for the given package'
-      });
-    }
-
-    const serviceIds = packageService.map((ps) => ps.dataValues.serviceId);
-
-    const Services = await dbService.findAll(model.services, {
-      id: serviceIds
+    // Check if service exists
+    const existingService = await dbService.findOne(model.services, {
+      id: serviceId,
+      isDelete: false
     });
 
-    if (!Services || Services.length === 0) {
-      return res.failure({
-        message: 'No services found for the given service IDs'
-      });
+    if (!existingService) {
+      return res.recordNotFound({ message: 'Service not found' });
     }
 
-    await dbService.destroy(model.userPackage, { userId });
+    // Add updatedBy field
+    dataToUpdate = {
+      ...dataToUpdate,
+      updatedBy: req.user.id
+    };
 
-    const cost = packages.cost;
-    const dataToInsert = Services.map((service) => ({
-      userId,
-      packageId,
-      packageName: packages.packageName,
-      cost: dataToUpdate.cost || cost,
-      serviceId: service.id,
-      serviceName: service.serviceName,
-      isActive: true
-    }));
-
-    const createdPackage = await dbService.createMany(
-      model.userPackage,
-      dataToInsert
+    const service = await dbService.update(
+      model.services,
+      { id: serviceId },
+      dataToUpdate
     );
-    return res.success({ data: createdPackage });
-  } catch (error) {
-    console.error(error);
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else if (error.name === 'SequelizeValidationError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else {
-      return res.internalServerError({ message: error });
+
+    if (!service || service.length === 0) {
+      return res.failure({ message: 'Failed to update Service' });
     }
+
+    return res.success({
+      message: 'Service Updated Successfully',
+      data: service
+    });
+  } catch (error) {
+    console.log(error);
+    return res.internalServerError({ message: error.message });
   }
 };
 
@@ -388,11 +275,177 @@ const updateUserService = async (req, res) => {
   }
 };
 
+const updateUserPackage = async (req, res) => {
+  try {
+    const permissions = req.permission;
+    const hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 28 &&
+        permission.dataValues.write === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: "User doesn't have Permission!" });
+    }
+
+    let dataToUpdate = { ...req.body };
+    const packageId = dataToUpdate.packageId;
+    const userId = req.params.id;
+
+    const [packages, userData] = await Promise.all([
+      dbService.findOne(model.packages, { id: packageId }),
+      dbService.findOne(model.user, { id: userId })
+    ]);
+
+    if (!packages) {
+      return res.failure({ message: 'Package not found' });
+    }
+
+    if (!userData) {
+      return res.badRequest({ data: 'User not found!' });
+    }
+
+    const packageService = await dbService.findAll(
+      model.packageService,
+      { packageId },
+      { select: ['serviceId'] }
+    );
+
+    if (!packageService || packageService.length === 0) {
+      return res.failure({
+        message: 'No services found for the given package'
+      });
+    }
+
+    const serviceIds = packageService.map((ps) => ps.dataValues.serviceId);
+
+    const Services = await dbService.findAll(model.services, {
+      id: serviceIds
+    });
+
+    if (!Services || Services.length === 0) {
+      return res.failure({
+        message: 'No services found for the given service IDs'
+      });
+    }
+
+    await dbService.destroy(model.userPackage, { userId });
+
+    const cost = packages.cost;
+    const dataToInsert = Services.map((service) => ({
+      userId,
+      packageId,
+      packageName: packages.packageName,
+      cost: dataToUpdate.cost || cost,
+      serviceId: service.id,
+      serviceName: service.serviceName,
+      isActive: true
+    }));
+
+    const createdPackage = await dbService.createMany(
+      model.userPackage,
+      dataToInsert
+    );
+    return res.success({ data: createdPackage });
+  } catch (error) {
+    console.error(error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else {
+      return res.internalServerError({ message: error });
+    }
+  }
+};
+
+const registerServicePackage = async (req, res) => {
+  try {
+    let permissions = req.permission;
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 9 &&
+        permission.dataValues.write === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: "User doesn't have Permission!" });
+    }
+
+    let dataToCreate = { ...(req.body || {}) };
+
+    const packages = await dbService.findOne(model.packages, {
+      id: dataToCreate.packageId
+    });
+    if (!packages) {
+      return res.badRequest({ message: 'Package not found' });
+    }
+
+    const service = await dbService.findOne(model.services, {
+      id: dataToCreate.serviceId
+    });
+    if (!service) {
+      return res.badRequest({ message: 'Service not found' });
+    }
+
+    let where = {
+      packageId: dataToCreate.packageId,
+      serviceId: dataToCreate.serviceId
+    };
+
+    const api = await dbService.findOne(model.packageService, where);
+
+    if (api) {
+      if (dataToCreate.isActive == false) {
+        await dbService.destroy(model.packageService, where);
+        return res.success({ message: 'Data Deleted Successully' });
+      }
+      dataToCreate = {
+        ...dataToCreate,
+        companyId: req.user?.companyId,
+        updatedBy: req.user.id,
+        isActive: true,
+        isDelete: false
+      };
+
+      const apiCommsion = await dbService.update(
+        model.packageService,
+        { id: api.id },
+        dataToCreate
+      );
+      return res.success({ data: apiCommsion });
+    } else {
+      dataToCreate = {
+        ...dataToCreate,
+        addedBy: req.user.id,
+        isActive: true
+      };
+
+      const apiCommsion = await dbService.createOne(
+        model.packageService,
+        dataToCreate
+      );
+
+      res.success({ data: apiCommsion });
+    }
+  } catch (error) {
+    console.log(error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.validationError({ message: error.errors[0].message });
+    } else {
+      return res.internalServerError({ message: error });
+    }
+  }
+};
+
 module.exports = {
   registerService,
   findAllServices,
   registerServicePackage,
   getServices,
+  updateService,
   updateUserPackage,
   listUserPackage,
   updateUserService

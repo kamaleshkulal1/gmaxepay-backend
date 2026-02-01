@@ -4,7 +4,7 @@ const { Op, Sequelize } = require('sequelize');
 
 const createSlab = async (req, res) => {
   try {
-    const { slabName, schemaMode, schemaType, subscriptionAmount } = req.body;
+    const { slabName, schemaMode, schemaType, subscriptionAmount, views } = req.body;
 
     if(![3,4].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to access this resource' });
@@ -28,12 +28,6 @@ const createSlab = async (req, res) => {
       });
     }
 
-    if (subscriptionAmount === undefined || subscriptionAmount === null) {
-      return res.failure({ 
-        message: 'subscriptionAmount is required' 
-      });
-    }
-
     // Validate schemaMode
     if (!['global', 'private'].includes(schemaMode)) {
       return res.failure({ 
@@ -48,11 +42,74 @@ const createSlab = async (req, res) => {
       });
     }
 
-    // Validate subscriptionAmount
-    if (isNaN(subscriptionAmount) || subscriptionAmount < 0) {
-      return res.failure({ 
-        message: 'subscriptionAmount must be a valid non-negative number' 
-      });
+    // Validate views based on schemaMode
+    let validatedViews = [];
+    if (schemaMode === 'private') {
+      // If schemaMode is private, views is required
+      if (views === undefined || views === null) {
+        return res.failure({ 
+          message: 'views is required when schemaMode is "private". Please specify which users can view this slab.' 
+        });
+      }
+      if (!Array.isArray(views)) {
+        return res.failure({ 
+          message: 'views must be an array of user IDs' 
+        });
+      }
+      // Ensure all items in views array are valid integers
+      validatedViews = views.filter((userId) => {
+        const id = Number(userId);
+        return !isNaN(id) && id > 0;
+      }).map((userId) => Number(userId));
+      
+      if (validatedViews.length === 0) {
+        return res.failure({ 
+          message: 'views array must contain at least one valid user ID when schemaMode is "private"' 
+        });
+      }
+    } else {
+      // If schemaMode is global, views is optional (anyone can view)
+      if (views !== undefined && views !== null) {
+        if (!Array.isArray(views)) {
+          return res.failure({ 
+            message: 'views must be an array of user IDs' 
+          });
+        }
+        // Ensure all items in views array are valid integers
+        validatedViews = views.filter((userId) => {
+          const id = Number(userId);
+          return !isNaN(id) && id > 0;
+        }).map((userId) => Number(userId));
+      }
+    }
+
+    // Validate subscriptionAmount based on schemaType
+    let validatedSubscriptionAmount = 0;
+    if (schemaType === 'premium') {
+      // If schemaType is premium, subscriptionAmount is required
+      if (subscriptionAmount === undefined || subscriptionAmount === null) {
+        return res.failure({ 
+          message: 'subscriptionAmount is required when schemaType is "premium"' 
+        });
+      }
+      const amount = Number(subscriptionAmount);
+      if (isNaN(amount) || amount < 0) {
+        return res.failure({ 
+          message: 'subscriptionAmount must be a valid non-negative number when schemaType is "premium"' 
+        });
+      }
+      validatedSubscriptionAmount = amount;
+    } else {
+      // If schemaType is free, subscriptionAmount is optional (defaults to 0)
+      if (subscriptionAmount !== undefined && subscriptionAmount !== null) {
+        const amount = Number(subscriptionAmount);
+        if (isNaN(amount) || amount < 0) {
+          return res.failure({ 
+            message: 'subscriptionAmount must be a valid non-negative number' 
+          });
+        }
+        validatedSubscriptionAmount = amount;
+      }
     }
 
     const companyId = req.user.companyId || null;
@@ -79,7 +136,8 @@ const createSlab = async (req, res) => {
       slabName: slabName.trim(),
       schemaMode,
       schemaType,
-      subscriptionAmount: subscriptionAmount,
+      subscriptionAmount: validatedSubscriptionAmount,
+      views: validatedViews,
       companyId: companyId, 
       remark: null,
       isSignUpB2B: false,
@@ -576,14 +634,14 @@ const updateSlabDetails = async (req, res) => {
       return res.failure({ message: 'You are not authorized to update slab details' });
     }
 
-    const { slabName, subscriptionAmount, schemaMode, schemaType } = req.body;
+    const { slabName, subscriptionAmount, schemaMode, schemaType, views } = req.body;
     const id = req.params.id;
 
     if (!id) {
       return res.failure({ message: 'Slab ID is required' });
     }
 
-    if (!slabName && subscriptionAmount === undefined && schemaMode === undefined && schemaType === undefined) {
+    if (!slabName && subscriptionAmount === undefined && schemaMode === undefined && schemaType === undefined && views === undefined) {
       return res.failure({ message: 'Please provide at least one field to update' });
     }
 
@@ -602,6 +660,10 @@ const updateSlabDetails = async (req, res) => {
     if (!slab) {
       return res.failure({ message: 'Slab not found' });
     }
+
+    // Determine the final schemaMode and schemaType (use new value if provided, otherwise existing)
+    const finalSchemaMode = schemaMode !== undefined ? schemaMode : slab.schemaMode;
+    const finalSchemaType = schemaType !== undefined ? schemaType : slab.schemaType;
 
     // Build update data
     const updateData = {
@@ -629,16 +691,6 @@ const updateSlabDetails = async (req, res) => {
       }
     }
 
-    if (subscriptionAmount !== undefined) {
-      if (subscriptionAmount === null) {
-        return res.failure({ message: 'subscriptionAmount cannot be null' });
-      }
-      if (isNaN(subscriptionAmount) || subscriptionAmount < 0) {
-        return res.failure({ message: 'subscriptionAmount must be a valid non-negative number' });
-      }
-      updateData.subscriptionAmount = parseFloat(subscriptionAmount);
-    }
-
     if (schemaMode !== undefined) {
       // Validate schemaMode
       if (!['global', 'private'].includes(schemaMode)) {
@@ -657,6 +709,80 @@ const updateSlabDetails = async (req, res) => {
         });
       }
       updateData.schemaType = schemaType;
+    }
+
+    // Handle views update - validate based on final schemaMode
+    if (views !== undefined) {
+      if (views === null) {
+        // If setting to null, check if schemaMode is private
+        if (finalSchemaMode === 'private') {
+          return res.failure({ 
+            message: 'views cannot be empty when schemaMode is "private". Please provide at least one user ID.' 
+          });
+        }
+        updateData.views = [];
+      } else if (!Array.isArray(views)) {
+        return res.failure({ 
+          message: 'views must be an array of user IDs' 
+        });
+      } else {
+        // Validate and sanitize views array - ensure all items are valid integers
+        const validatedViews = views.filter((userId) => {
+          const id = Number(userId);
+          return !isNaN(id) && id > 0;
+        }).map((userId) => Number(userId));
+        
+        // If schemaMode is private, views must have at least one user
+        if (finalSchemaMode === 'private' && validatedViews.length === 0) {
+          return res.failure({ 
+            message: 'views array must contain at least one valid user ID when schemaMode is "private"' 
+          });
+        }
+        updateData.views = validatedViews;
+      }
+    } else if (schemaMode !== undefined && finalSchemaMode === 'private') {
+      // If schemaMode is being changed to private but views is not provided, check existing views
+      const currentViews = slab.views || [];
+      if (!Array.isArray(currentViews) || currentViews.length === 0) {
+        return res.failure({ 
+          message: 'views is required when schemaMode is "private". Please provide at least one user ID in the views array.' 
+        });
+      }
+    }
+
+    // Handle subscriptionAmount update - validate based on final schemaType
+    if (subscriptionAmount !== undefined) {
+      if (subscriptionAmount === null) {
+        // If setting to null, check if schemaType is premium
+        if (finalSchemaType === 'premium') {
+          return res.failure({ 
+            message: 'subscriptionAmount is required when schemaType is "premium". Please provide a valid amount.' 
+          });
+        }
+        updateData.subscriptionAmount = 0;
+      } else {
+        const amount = Number(subscriptionAmount);
+        if (isNaN(amount) || amount < 0) {
+          return res.failure({ 
+            message: 'subscriptionAmount must be a valid non-negative number' 
+          });
+        }
+        // If schemaType is premium, subscriptionAmount must be greater than 0
+        if (finalSchemaType === 'premium' && amount <= 0) {
+          return res.failure({ 
+            message: 'subscriptionAmount must be greater than 0 when schemaType is "premium"' 
+          });
+        }
+        updateData.subscriptionAmount = amount;
+      }
+    } else if (schemaType !== undefined && finalSchemaType === 'premium') {
+      // If schemaType is being changed to premium but subscriptionAmount is not provided, check existing amount
+      const currentAmount = slab.subscriptionAmount || 0;
+      if (currentAmount <= 0) {
+        return res.failure({ 
+          message: 'subscriptionAmount is required when schemaType is "premium". Please provide a valid amount greater than 0.' 
+        });
+      }
     }
 
     // Update the slab

@@ -1,7 +1,4 @@
-/**
- * packages.js
- * @description :: sequelize model of database table packages
- */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
@@ -61,6 +58,11 @@ let Slab = sequelize.define(
       defaultValue: false
     },
     users: {
+      type: DataTypes.ARRAY(DataTypes.INTEGER),
+      allowNull: true,
+      defaultValue: []
+    },
+    views: {
       type: DataTypes.ARRAY(DataTypes.INTEGER),
       allowNull: true,
       defaultValue: []
