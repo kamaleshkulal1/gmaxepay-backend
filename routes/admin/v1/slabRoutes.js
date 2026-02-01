@@ -8,6 +8,7 @@ router.post('/list', authentication, slabController.getAllSlabs);
 router.post('/slabcomm/:id', authentication, slabController.findAllslabComm);
 router.post('/assign', authentication, slabController.assignSlabToCompany);
 router.put('/update/:id', authentication, slabController.updateSlab);
+router.post('/visiblity/:id',authentication,  slabController.getAllCompanySlabList);
 router.put('/updateSlabComm/:id', authentication, slabController.updateSlabComm);
 
 module.exports = router;

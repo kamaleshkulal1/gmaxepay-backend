@@ -818,6 +818,86 @@ const getAllSlabs = async (req, res) => {
   }
 };
 
+const getAllCompanySlabList = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    
+    if (!userId) {
+      return res.failure({ message: 'User ID is required' });
+    }
+
+    // Find the user
+    const user = await dbService.findOne(model.user, {
+      id: userId,
+      isActive: true
+    });
+
+    if (!user) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    const companyId = user.companyId;
+    if (!companyId) {
+      return res.failure({ message: 'User does not belong to a company' });
+    }
+
+    // Fetch all slabs with views field
+    const allSlabs = await dbService.findAll(model.slab, {
+      isActive: true,
+      addedBy: 1
+    }, {
+      attributes: ['id', 'slabName', 'schemaMode', 'views']
+    });
+
+    if (!allSlabs || allSlabs.length === 0) {
+      return res.success({
+        message: 'No slabs found',
+        data: [],
+        total: 0
+      });
+    }
+
+    // Filter slabs based on visibility:
+    // 1. If schemaMode is 'global' - show it
+    // 2. If schemaMode is 'private' and user ID is in views array - show it
+    const visibleSlabs = allSlabs.filter(slab => {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+
+      // Global slabs are visible to everyone
+      if (slabData.schemaMode === 'global') {
+        return true;
+      }
+
+      // Private slabs are only visible if user is in views array
+      if (slabData.schemaMode === 'private') {
+        const views = slabData.views || [];
+        return Array.isArray(views) && views.includes(Number(userId));
+      }
+
+      // Default: not visible
+      return false;
+    });
+
+    // Return only slab names (optimized for admin)
+    const slabNames = visibleSlabs.map(slab => {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      return {
+        id: slabData.id,
+        slabName: slabData.slabName
+      };
+    });
+
+    return res.success({
+      message: 'Company slab list retrieved successfully',
+      data: slabNames,
+      total: slabNames.length
+    });
+  } catch (error) {
+    console.error('Get all company slab list error', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 const assignSlabToCompany = async (req, res) => {
   try {
     const { slabId, companyId } = req.body;
@@ -1000,6 +1080,42 @@ const assignSlabToCompany = async (req, res) => {
       }
     }
 
+    // Create subscription record when slab is assigned
+    if (!isSlabAssigned) {
+      // Check if subscription already exists
+      const existingSubscription = await dbService.findOne(model.subscription, {
+        slabId: slabId,
+        userId: companyAdmin.id,
+        companyId: companyId
+      });
+
+      if (!existingSubscription) {
+        await dbService.createOne(model.subscription, {
+          slabId: slabId,
+          userId: companyAdmin.id,
+          companyId: companyId,
+          status: 'SUCCESS',
+          addedBy: req.user.id,
+          isActive: true
+        });
+      } else {
+        // Update existing subscription status to SUCCESS
+        await dbService.update(
+          model.subscription,
+          {
+            slabId: slabId,
+            userId: companyAdmin.id,
+            companyId: companyId
+          },
+          {
+            status: 'SUCCESS',
+            updatedBy: req.user.id,
+            isActive: true
+          }
+        );
+      }
+    }
+
     return res.status(200).send({
       status: 'SUCCESS',
       message: 'Slab assigned to company admin successfully',
@@ -1026,5 +1142,6 @@ module.exports = {
   updateSlabComm,
   createSlab,
   getAllSlabs,
-  assignSlabToCompany
+  assignSlabToCompany,
+  getAllCompanySlabList,
 };

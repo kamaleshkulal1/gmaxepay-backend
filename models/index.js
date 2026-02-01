@@ -78,6 +78,7 @@ db.distributorSlabCom = require('./distributorSlabCom');
 db.range = require('./range');
 db.rangeCharges = require('./rangeCharges');
 db.rangeCommission = require('./rangeCommission');
+db.subscription = require('./subscription');
 
 // IP & Network Models
 db.ipInfo = require('./ipInfo');
@@ -710,6 +711,40 @@ db.fundHistory.belongsTo(db.fundRequest, {
 db.fundRequest.hasOne(db.fundHistory, {
   foreignKey: 'fundRequestId',
   as: 'fundHistory',
+  sourceKey: 'id'
+});
+
+// Subscription Relationships
+db.subscription.belongsTo(db.slab, {
+  foreignKey: 'slabId',
+  as: 'slab',
+  targetKey: 'id'
+});
+db.slab.hasMany(db.subscription, {
+  foreignKey: 'slabId',
+  as: 'subscriptions',
+  sourceKey: 'id'
+});
+
+db.subscription.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.subscription, {
+  foreignKey: 'userId',
+  as: 'subscriptions',
+  sourceKey: 'id'
+});
+
+db.subscription.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.subscription, {
+  foreignKey: 'companyId',
+  as: 'subscriptions',
   sourceKey: 'id'
 });
 
