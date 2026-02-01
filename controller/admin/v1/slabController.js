@@ -870,13 +870,37 @@ const getAllCompanySlabList = async (req, res) => {
       return false;
     });
 
+    const userIdNum = Number(userId);
+    
+    const userSubscriptions = await dbService.findAll(model.subscription, {
+      userId: userIdNum,
+      companyId: companyId,
+      status: 'SUCCESS',
+      isActive: true
+    }, {
+      attributes: ['slabId']
+    });
+
+    const subscribedSlabIds = new Set();
+    if (userSubscriptions && userSubscriptions.length > 0) {
+      userSubscriptions.forEach(sub => {
+        const subData = sub.toJSON ? sub.toJSON() : sub;
+        if (subData.slabId) {
+          subscribedSlabIds.add(subData.slabId);
+        }
+      });
+    }
+
     const slabNames = visibleSlabs.map(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       const subscriptionAmount = slabData.subscriptionAmount || 0;
+      const isSubscribed = subscribedSlabIds.has(slabData.id);
+      
       return {
         id: slabData.id,
         slabName: slabData.slabName,
-        slabAmount: subscriptionAmount === 0 ? 'free' : subscriptionAmount
+        slabAmount: subscriptionAmount === 0 ? 'free' : subscriptionAmount,
+        isSubscribed: isSubscribed
       };
     });
 
