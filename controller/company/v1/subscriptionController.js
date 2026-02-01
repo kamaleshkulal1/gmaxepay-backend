@@ -143,7 +143,8 @@ const getAllSubscriptions = async (req, res) => {
         roleName: roleConfig.roleName,
         commissions: commissionsBySlab.get(slabData.id) || [],
         isCurrentSlab: isCurrentSlab,
-        alreadySubscribed: alreadySubscribed
+        alreadySubscribed: alreadySubscribed,
+        isSubscribed: hasSubscription
       };
     });
 
