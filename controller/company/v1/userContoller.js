@@ -770,7 +770,8 @@ const findAllCompanyReportToUser = async (req, res) => {
       return {
         id: userData.id,
         name: userData.name || null,
-        userId: userData.userId || null
+        userId: userData.userId || null,
+        mobileNo: userData.mobileNo || null,
       };
     });
 
