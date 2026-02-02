@@ -17,7 +17,7 @@ const uploadImage = async (req, res) => {
       return res.failure({ message: 'Name and type are required' });
     }
 
-    // Validate type
+
     const validTypes = ['loginSlider', 'signature'];
     if (!validTypes.includes(type)) {
       return res.failure({ message: 'Invalid type. Must be loginSlider or signature' });
