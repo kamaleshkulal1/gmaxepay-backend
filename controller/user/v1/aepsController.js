@@ -1342,20 +1342,21 @@ const aepsTransaction = async (req, res) => {
                 companyId: req.user.companyId,
                 roleType: req.user.userType,
                 mainWallet: 0,
-                apesWallet: 0,
+                apes1Wallet: 0,
+                apes2Wallet: 0,
                 addedBy: req.user.id,
                 updatedBy: req.user.id
             });
         }
 
-        const openingAepsWallet = round2(wallet.apesWallet || 0);
+        const openingAepsWallet = round2(wallet.apes1Wallet || 0);
         const creditToApply = isSuccess ? retailerNetCredit : 0;
         const closingAepsWallet = isSuccess ? round2(openingAepsWallet + creditToApply) : openingAepsWallet;
 
         // Only credit AEPS wallet on SUCCESS
         if (isSuccess && creditToApply) {
             await wallet.update({
-                apesWallet: closingAepsWallet,
+                apes1Wallet: closingAepsWallet,
                 updatedBy: req.user.id
             });
         }

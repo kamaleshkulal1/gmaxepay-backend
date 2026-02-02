@@ -35,13 +35,18 @@ const walletBalance = async(req, res)=>{
             return res.failure({ message: 'Unauthorized access' });
         }
         
-        // Fetch admin wallet and sum all aepsWallet amounts in parallel for better performance
-        const [wallet, totalAepsWallet] = await Promise.all([
+        // Fetch admin wallet and sum all aeps1Wallet and aeps2Wallet amounts in parallel for better performance
+        const [wallet, totalAeps1Wallet, totalAeps2Wallet] = await Promise.all([
             dbService.findOne(model.wallet, {
                 refId: existingUser.id,
                 companyId: existingUser.companyId
             }),
-            model.wallet.sum('apesWallet', {
+            model.wallet.sum('apes1Wallet', {
+                where: {
+                    isDelete: false
+                }
+            }),
+            model.wallet.sum('apes2Wallet', {
                 where: {
                     isDelete: false
                 }
@@ -54,7 +59,8 @@ const walletBalance = async(req, res)=>{
 
         const response = {
             mainWallet: wallet?.mainWallet ? parseFloat(wallet.mainWallet).toFixed(2) : '0.00',
-            apesWallet: (totalAepsWallet || 0).toFixed(2)
+            apes1Wallet: (totalAeps1Wallet || 0).toFixed(2),
+            apes2Wallet: (totalAeps2Wallet || 0).toFixed(2)
         }
 
         return res.success({ message: 'Wallet balance fetched successfully', data: response });

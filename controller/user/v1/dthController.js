@@ -137,7 +137,8 @@ const dthRecharge = async (req, res) => {
                 companyId: req.user.companyId,
                 roleType: req.user.userType,
                 mainWallet: 0,
-                apesWallet: 0,
+                apes1Wallet: 0,
+                apes2Wallet: 0,
                 addedBy: req.user.id,
                 updatedBy: req.user.id
             });

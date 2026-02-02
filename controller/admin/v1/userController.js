@@ -158,7 +158,7 @@ const findAllUsers = async (req, res) => {
       {
         model: model.wallet,
         as: 'wallet',
-        attributes: ['id', 'mainWallet', 'apesWallet'],
+        attributes: ['id', 'mainWallet', 'apes1Wallet', 'apes2Wallet'],
         required: false
       },
       {
@@ -274,7 +274,8 @@ const findAllUsers = async (req, res) => {
         onboardingTokenExpiresAt,
         wallet: {
           mainWallet: walletData.mainWallet || 0,
-          apesWallet: walletData.apesWallet || 0
+          apes1Wallet: walletData.apes1Wallet || 0,
+          apes2Wallet: walletData.apes2Wallet || 0
         },
         slab: slab ? slab.slabName : null
       };

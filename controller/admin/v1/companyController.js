@@ -466,7 +466,8 @@ const createCompany = async (req, res) => {
       refId: user.id,
       companyId: company.id,
       mainWallet: 0,
-      apesWallet: 0,
+      apes1Wallet: 0,
+      apes2Wallet: 0,
       roleType: 2
     };
 

@@ -948,7 +948,8 @@ const sendSmsMobile = async (req, res) => {
         companyId: companyId,
         roleType: userRole,
         mainWallet: 0,
-        apesWallet: 0,
+        apes1Wallet: 0,
+        apes2Wallet: 0,
         isActive: true,
         isDelete: false
       };

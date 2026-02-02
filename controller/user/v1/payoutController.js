@@ -43,7 +43,7 @@ const payout = async (req, res) => {
         if (!wallet) return res.failure({ message: 'Wallet not found' });
         
         // Check AEPS wallet balance
-        const currentAepsBalance = parseFloat(wallet.apesWallet || 0);
+        const currentAepsBalance = parseFloat(wallet.apes1Wallet || 0);
         if (currentAepsBalance < payoutAmount) {
             return res.failure({ message: 'Insufficient AEPS wallet balance' });
         }
@@ -62,7 +62,7 @@ const payout = async (req, res) => {
             type: mode === 'wallet' ? 'internal' : 'external',
             transactionID: transactionID,
             amount: payoutAmount,
-            walletType: 'apesWallet',
+            walletType: 'apes1Wallet',
             openingBalance: aepsOpeningBalance,
             closingBalance: aepsClosingBalance,
             status: mode === 'wallet' ? 'SUCCESS' : 'PENDING',
@@ -162,9 +162,9 @@ const payout = async (req, res) => {
         // Update wallet balance only if payout is successful
         if (payoutHistoryData.status === 'SUCCESS') {
             if (mode === 'wallet') {
-                // Internal transfer: Debit from apesWallet, Credit to mainWallet
+                // Internal transfer: Debit from apes1Wallet, Credit to mainWallet
                 const walletUpdate = {
-                    apesWallet: aepsClosingBalance,
+                    apes1Wallet: aepsClosingBalance,
                     mainWallet: mainWalletClosingBalance,
                     updatedBy: user.id
                 };
@@ -173,7 +173,7 @@ const payout = async (req, res) => {
                     {
                         refId: user.id,
                         companyId: user.companyId,
-                        walletType: 'apesWallet',
+                        walletType: 'apes1Wallet',
                         amount: payoutAmount,
                         debit: payoutAmount,
                         credit: 0,
@@ -210,11 +210,11 @@ const payout = async (req, res) => {
                 ]);
                 
             } else {
-                // External bank transfer: Only debit from apesWallet
+                // External bank transfer: Only debit from apes1Wallet
                 const walletHistoryData = {
                     refId: user.id,
                     companyId: user.companyId,
-                    walletType: 'apesWallet',
+                    walletType: 'apes1Wallet',
                     amount: payoutAmount,
                     debit: payoutAmount,
                     credit: 0,
@@ -242,7 +242,7 @@ const payout = async (req, res) => {
                     dbService.update(
                         model.wallet,
                         { refId: user.id, companyId: user.companyId },
-                        { apesWallet: aepsClosingBalance, updatedBy: user.id }
+                        { apes1Wallet: aepsClosingBalance, updatedBy: user.id }
                     ),
                     dbService.createOne(model.walletHistory, walletHistoryData)
                 ]);

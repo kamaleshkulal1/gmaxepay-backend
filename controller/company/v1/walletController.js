@@ -24,7 +24,8 @@ const walletBalance = async(req, res)=>{
         }
         const response ={
             mainWallet: wallet?.mainWallet.toFixed(2)||0,
-            apesWallet: wallet?.apesWallet.toFixed(2)||0
+            apes1Wallet: wallet?.apes1Wallet.toFixed(2)||0,
+            apes2Wallet: wallet?.apes2Wallet.toFixed(2)||0
         }
         return res.success({ message: 'Wallet balance fetched successfully', data: response });
     }
