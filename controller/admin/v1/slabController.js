@@ -1,6 +1,7 @@
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op, Sequelize } = require('sequelize');
+const { generateTransactionID } = require('../../../utils/transactionID');
 
 const processData = (data) => {
   const groupedData = {};
@@ -1107,6 +1108,69 @@ const assignSlabToCompany = async (req, res) => {
       });
 
       if (!existingSubscription) {
+        // New subscription - deduct subscriptionAmount from req.user.id's mainWallet
+        const subscriptionAmount = parseFloat(slab.subscriptionAmount || 0);
+        
+        if (subscriptionAmount > 0) {
+          // Get or create wallet for req.user.id
+          let requesterWallet = await dbService.findOne(model.wallet, {
+            refId: req.user.id,
+            companyId: req.user.companyId
+          });
+
+          if (!requesterWallet) {
+            requesterWallet = await dbService.createOne(model.wallet, {
+              refId: req.user.id,
+              companyId: req.user.companyId,
+              roleType: req.user.userType,
+              mainWallet: 0,
+              apes1Wallet: 0,
+              apes2Wallet: 0,
+              addedBy: req.user.id,
+              updatedBy: req.user.id
+            });
+          }
+
+          const openingBalance = parseFloat(requesterWallet.mainWallet || 0);
+          
+          if (openingBalance < subscriptionAmount) {
+            return res.failure({ 
+              message: `Insufficient wallet balance. Required: ${subscriptionAmount}, Available: ${openingBalance}` 
+            });
+          }
+
+          const closingBalance = parseFloat((openingBalance - subscriptionAmount).toFixed(2));
+          
+          // Generate transaction ID
+          const requesterCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+          const transactionID = generateTransactionID(requesterCompany?.companyName || 'SYSTEM');
+
+          // Update wallet
+          await dbService.update(
+            model.wallet,
+            { refId: req.user.id, companyId: req.user.companyId },
+            { mainWallet: closingBalance, updatedBy: req.user.id }
+          );
+
+          // Create wallet history entry
+          await dbService.createOne(model.walletHistory, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            walletType: 'mainWallet',
+            amount: subscriptionAmount,
+            debit: subscriptionAmount,
+            credit: 0,
+            openingAmt: openingBalance,
+            closingAmt: closingBalance,
+            transactionId: transactionID,
+            paymentStatus: 'SUCCESS',
+            remark: `Slab subscription payment - ${slab.slabName || `Slab ID: ${slabId}`}`,
+            addedBy: req.user.id,
+            updatedBy: req.user.id
+          });
+        }
+
+        // Create subscription record
         await dbService.createOne(model.subscription, {
           slabId: slabId,
           userId: companyAdmin.id,
@@ -1116,6 +1180,7 @@ const assignSlabToCompany = async (req, res) => {
           isActive: true
         });
       } else {
+        // Subscription already exists - no deduction needed
         // Update existing subscription status to SUCCESS
         await dbService.update(
           model.subscription,

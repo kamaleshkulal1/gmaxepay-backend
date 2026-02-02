@@ -233,8 +233,6 @@ const deleteServiceCharge = async (req, res) => {
   }
 };
 
-// ==================== SUBSCRIPTION FUNCTIONS ====================
-
 const createSubscription = async (req, res) => {
   try {
     let permissions = req.permission || [];
