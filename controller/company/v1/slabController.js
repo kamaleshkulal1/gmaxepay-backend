@@ -713,6 +713,49 @@ const upradeORChangeSlab = async (req, res) => {
     const slabViews = slab.views || [];
     const isUserInViews = Array.isArray(slabViews) && slabViews.includes(companyAdmin.id);
 
+    // Check wallet balance early before any database operations
+    if (!isSlabAssigned) {
+      // Check if subscription already exists
+      const existingSubscription = await dbService.findOne(model.subscription, {
+        slabId: slabId,
+        userId: companyAdmin.id,
+        companyId: companyId
+      });
+
+      if (!existingSubscription) {
+        const subscriptionAmount = parseFloat(slab.subscriptionAmount || 0);
+
+        if (subscriptionAmount > 0) {
+          // Get or create wallet for req.user.id
+          let requesterWallet = await dbService.findOne(model.wallet, {
+            refId: req.user.id,
+            companyId: req.user.companyId
+          });
+
+          if (!requesterWallet) {
+            requesterWallet = await dbService.createOne(model.wallet, {
+              refId: req.user.id,
+              companyId: req.user.companyId,
+              roleType: req.user.userType,
+              mainWallet: 0,
+              apes1Wallet: 0,
+              apes2Wallet: 0,
+              addedBy: req.user.id,
+              updatedBy: req.user.id
+            });
+          }
+
+          const openingBalance = parseFloat(requesterWallet.mainWallet || 0);
+
+          if (openingBalance < subscriptionAmount) {
+            return res.failure({
+              message: `Insufficient wallet balance. Required: ${subscriptionAmount}, Available: ${openingBalance}`
+            });
+          }
+        }
+      }
+    }
+
     // If admin was already assigned to some other slab, remove them from that slab's users array
     if (!isSlabAssigned && previousSlabId) {
       const previousSlab = await dbService.findOne(model.slab, { id: previousSlabId });
@@ -862,33 +905,13 @@ const upradeORChangeSlab = async (req, res) => {
         const subscriptionAmount = parseFloat(slab.subscriptionAmount || 0);
 
         if (subscriptionAmount > 0) {
-          // Get or create wallet for req.user.id
-          let requesterWallet = await dbService.findOne(model.wallet, {
+          // Get wallet (already checked balance above, wallet exists or was created)
+          const requesterWallet = await dbService.findOne(model.wallet, {
             refId: req.user.id,
             companyId: req.user.companyId
           });
 
-          if (!requesterWallet) {
-            requesterWallet = await dbService.createOne(model.wallet, {
-              refId: req.user.id,
-              companyId: req.user.companyId,
-              roleType: req.user.userType,
-              mainWallet: 0,
-              apes1Wallet: 0,
-              apes2Wallet: 0,
-              addedBy: req.user.id,
-              updatedBy: req.user.id
-            });
-          }
-
           const openingBalance = parseFloat(requesterWallet.mainWallet || 0);
-
-          if (openingBalance < subscriptionAmount) {
-            return res.failure({
-              message: `Insufficient wallet balance. Required: ${subscriptionAmount}, Available: ${openingBalance}`
-            });
-          }
-
           const closingBalance = parseFloat((openingBalance - subscriptionAmount).toFixed(2));
 
           // Generate transaction ID
