@@ -9,4 +9,6 @@ router.post('/slabcomm/:id', authentication, slabController.findAllslabComm);
 router.put('/update/:id', authentication, slabController.updateSlabDetails);
 router.put('/updateSlabComm/:id', authentication, slabController.updateSlabComm);
 router.post('/upradeORChangeSlab/:id', authentication, slabController.upradeORChangeSlab);
+router.post('/visibilityList', authentication, slabController.getAllCompanySlabList);
+
 module.exports = router;
