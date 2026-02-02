@@ -314,6 +314,7 @@ const getAllSlabs = async (req, res) => {
     });
   }
 };
+
 const findAllslabComm = async (req, res) => {
   try {
     if (req.user.userRole !== 2) {
