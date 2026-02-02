@@ -603,6 +603,42 @@ const createSlab = async (req, res) => {
       return res.failure({ message: 'Failed to create slab' });
     }
 
+    const slabId = createdSlab.id;
+
+    // Create default commissions for this slab + company
+    const operators = await dbService.findAll(
+      model.operator,
+      { inSlab: true },
+      { select: ['id', 'operatorName', 'operatorType'] }
+    );
+
+    if (operators && operators.length > 0) {
+      const roleTypes = [1, 2];
+      const roleNames = ['AD', 'WU'];
+
+      const defaultCommissions = operators.flatMap((op) =>
+        roleTypes.map((roleType, index) => ({
+          slabId: slabId,
+          companyId: companyId,
+          operatorId: op.id,
+          operatorName: op.operatorName,
+          operatorType: op.operatorType,
+          roleType,
+          roleName: roleNames[index] || 'RE',
+          commAmt: 0,
+          commType: 'com',
+          amtType: 'fix',
+          paymentMode: null,
+          addedBy: req.user.id,
+          updatedBy: req.user.id
+        }))
+      );
+
+      if (defaultCommissions.length > 0) {
+        await dbService.createMany(model.commSlab, defaultCommissions);
+      }
+    }
+
     return res.success({
       message: 'Slab created successfully',
       data: createdSlab
