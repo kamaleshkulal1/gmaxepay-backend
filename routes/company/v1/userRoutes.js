@@ -11,7 +11,7 @@ router.post('/degradeUser', authentication, whitelabelController.degradeUserRole
 // MPIN endpoints
 router.post('/setMPIN', authentication, userController.setMPIN);
 router.post('/resetMPIN', authentication, userController.resetMPIN);
-
 router.post('/getProfile', authentication, userController.getUserProfile);
+router.post('/reportToUser', authentication, userController.reportToUser);
 
 module.exports = router;

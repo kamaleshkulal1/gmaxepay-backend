@@ -318,7 +318,7 @@ const findAllUsers = async (req, res) => {
       console.log(error);
       return res.internalServerError({ message: error.message });
     }
-  };
+};
 
 // Set MPIN - Company admin can set their own MPIN (first time only, no old MPIN needed)
 const setMPIN = async (req, res) => {
@@ -644,9 +644,151 @@ const getUserProfile = async (req, res) => {
   }
 };
 
+const findAllCompanyReportToUser = async (req, res) => {
+  try {
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: 'You are not authorized to access this resource' });
+    }
+
+    const companyId = req.user.companyId;
+    
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    // Get request body for filtering, pagination, and search
+    let dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      companyId: companyId,
+      userRole: { [Op.in]: [3, 4, 5] },
+      [Op.or]: [
+        { reportingTo: 1 },
+        { reportingTo: null }
+      ],
+      isDeleted: false
+    };
+
+    // Build query from request body
+    if (dataToFind.query) {
+      // Apply userRole filter if provided (3=MD, 4=DI, 5=RE)
+      if (dataToFind.query.userRole !== undefined) {
+        const requestedRole = dataToFind.query.userRole;
+        
+        // Access denied for userRole 1 (Admin) and 2 (Whitelabel)
+        if (requestedRole === 1 || requestedRole === 2) {
+          return res.failure({ message: "Access denied! You cannot filter by this user role." });
+        }
+        
+        // Ensure it's one of the allowed roles (3, 4, 5)
+        if ([3, 4, 5].includes(requestedRole)) {
+          query.userRole = requestedRole;
+        }
+      }
+
+      // Apply other query filters
+      Object.keys(dataToFind.query).forEach(key => {
+        if (key !== 'userRole' && key !== 'reportingTo') {
+          query[key] = dataToFind.query[key];
+        }
+      });
+    }
+
+    // Handle options (pagination, sorting)
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+    }
+
+    // Handle customSearch
+    if (dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        // Combine customSearch with existing query conditions
+        const reportingToCondition = {
+          [Op.or]: [
+            { reportingTo: 1 },
+            { reportingTo: null }
+          ]
+        };
+        
+        query = {
+          companyId: query.companyId,
+          userRole: query.userRole,
+          isDeleted: query.isDeleted,
+          [Op.and]: [
+            reportingToCondition,
+            {
+              [Op.or]: orConditions
+            }
+          ]
+        };
+      }
+    }
+
+    // Use pagination
+    let foundUsers = await dbService.paginate(model.user, query, {
+      ...options,
+      attributes: ['id', 'name', 'userId', 'userRole', 'mobileNo', 'email', 'isActive', 'createdAt']
+    });
+
+    if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
+      return res.success({
+        message: 'Users Retrieved Successfully',
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
+      });
+    }
+
+    // Transform users data - only return id, name, userId
+    const transformedUsers = foundUsers.data.map((user) => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      
+      return {
+        id: userData.id,
+        name: userData.name || null,
+        userId: userData.userId || null
+      };
+    });
+
+    return res.success({
+      message: 'Users Retrieved Successfully',
+      data: transformedUsers,
+      total: foundUsers.total,
+      paginator: foundUsers.paginator
+    });
+  } catch (error) {
+    console.error('Error retrieving users reporting to company admin:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
 module.exports = {
   findAllUsers,
   setMPIN,
   resetMPIN,
-  getUserProfile
+  getUserProfile,
+  findAllCompanyReportToUser
 };
