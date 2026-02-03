@@ -344,6 +344,7 @@ const extractAadhaarData = async (imageBuffer) => {
           // Explicitly filter out "Government of India" and variations
           if (text.includes('government') && text.includes('india')) return false;
           if (text.includes('भारत') && text.includes('सरकार')) return false;
+
           if (originalText === originalText.toUpperCase() && originalText.length > 15) return false;
           
           // Filter out text that contains only common words (likely not a name)
@@ -357,18 +358,13 @@ const extractAadhaarData = async (imageBuffer) => {
           
           return true;
         })
-        .sort((a, b) => b.confidence - a.confidence); // Sort by confidence
-      
-      // Try to find name that appears near Aadhaar number or DOB
+        .sort((a, b) => b.confidence - a.confidence); 
       if (lines.length > 0) {
         // Look for lines that contain letters and spaces (likely names)
         const nameCandidates = lines.filter(block => {
           const text = block.text;
-          // Should start with uppercase letter, contain letters, may contain spaces, dots, and be reasonable length
-          // Exclude if it's all uppercase and too long (likely header)
           if (text === text.toUpperCase() && text.length > 20) return false;
           
-          // Match pattern: starts with letter, contains letters/spaces/dots, reasonable length
           return /^[A-Z][A-Za-z\s\.]{2,}$/.test(text) && text.length >= 3 && text.length <= 50;
         });
         
