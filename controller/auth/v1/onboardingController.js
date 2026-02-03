@@ -856,10 +856,10 @@ const connectAadhaarVerification = async (req, res) => {
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
     
     // Append isRedirect=true to redirect_url
-    const modifiedRedirectUrl = redirect_url.includes('?') 
-      ? `${redirect_url}&isRedirect=true` 
-      : `${redirect_url}?isRedirect=true`;
-    
+    // const modifiedRedirectUrl = redirect_url.includes('?') 
+    //   ? `${redirect_url}&isRedirect=true` 
+    //   : `${redirect_url}?isRedirect=true`;
+    const modifiedRedirectUrl = redirect_url
     const existingUser = await dbService.findOne(model.user, { 
       id: ctx.tokenData.userId, 
       companyId: ctx.tokenData.companyId, 
