@@ -1178,11 +1178,131 @@ const upradeORChangeSlab = async (req, res) => {
   }
 };
 
+const getAllUserSlabVisibilityList = async (req, res) => {
+  try {
+    if (![3, 4, 5].includes(req.user.userRole)) {
+      return res.failure({ message: 'You are not authorized to access this resource' });
+    }
+
+    const userId = req.user.id;
+    const companyId = req.user.companyId;
+    
+    if (!userId) {
+      return res.failure({ message: 'User ID is required' });
+    }
+
+    if (!companyId) {
+      return res.failure({ message: 'User does not belong to a company' });
+    }
+
+    const user = await dbService.findOne(model.user, {
+      id: userId,
+      companyId: companyId,
+      isActive: true
+    });
+
+    if (!user) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    // Determine which user's slabs to show: use reportingTo if available, otherwise company admin
+    let addedByUserId = user.reportingTo;
+    if (!addedByUserId) {
+      const companyAdmin = await dbService.findOne(model.user, {
+        companyId: companyId,
+        userRole: 2,
+        isActive: true
+      });
+
+      if (!companyAdmin) {
+        return res.failure({ message: 'Company admin not found' });
+      }
+
+      addedByUserId = companyAdmin.id;
+    }
+
+    const allSlabs = await dbService.findAll(model.slab, {
+      isActive: true,
+      companyId: companyId,
+      addedBy: addedByUserId
+    }, {
+      attributes: ['id', 'slabName', 'schemaMode', 'views', 'subscriptionAmount']
+    });
+
+    if (!allSlabs || allSlabs.length === 0) {
+      return res.success({
+        message: 'No slabs found',
+        data: [],
+        total: 0
+      });
+    }
+
+    const visibleSlabs = allSlabs.filter(slab => {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+
+      if (slabData.schemaMode === 'global') {
+        return true;
+      }
+
+      if (slabData.schemaMode === 'private') {
+        const views = slabData.views || [];
+        return Array.isArray(views) && views.includes(Number(userId));
+      }
+
+      return false;
+    });
+
+    const userIdNum = Number(userId);
+    
+    const userSubscriptions = await dbService.findAll(model.subscription, {
+      userId: userIdNum,
+      companyId: companyId,
+      status: 'SUCCESS',
+      isActive: true
+    }, {
+      attributes: ['slabId']
+    });
+
+    const subscribedSlabIds = new Set();
+    if (userSubscriptions && userSubscriptions.length > 0) {
+      userSubscriptions.forEach(sub => {
+        const subData = sub.toJSON ? sub.toJSON() : sub;
+        if (subData.slabId) {
+          subscribedSlabIds.add(subData.slabId);
+        }
+      });
+    }
+
+    const slabNames = visibleSlabs.map(slab => {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const subscriptionAmount = slabData.subscriptionAmount || 0;
+      const isSubscribed = subscribedSlabIds.has(slabData.id);
+      
+      return {
+        id: slabData.id,
+        slabName: slabData.slabName,
+        slabAmount: subscriptionAmount === 0 ? 'free' : subscriptionAmount,
+        isSubscribed: isSubscribed
+      };
+    });
+
+    return res.success({
+      message: 'Company slab list retrieved successfully',
+      data: slabNames,
+      total: slabNames.length
+    });
+  } catch (error) {
+    console.error('Get all company slab list error', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   createSlab,
   getAllSlabs,
   findAllslabComm,
   updateSlabComm,
   updateSlabDetails,
-  upradeORChangeSlab
+  upradeORChangeSlab,
+  getAllUserSlabVisibilityList
 };
