@@ -895,9 +895,9 @@ const connectAadhaarVerification = async (req, res) => {
         }
       });
     }
-    
+    console.log('modifiedRedirectUrl', modifiedRedirectUrl);
     const response = await ekycHub.createAadharVerificationUrl(modifiedRedirectUrl);
-    
+    console.log('response', response);
     if (response && response.status === 'Success') {
       const { verification_id, reference_id } = response;
       if (verification_id) {
