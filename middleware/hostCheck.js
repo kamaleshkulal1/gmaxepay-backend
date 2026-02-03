@@ -17,7 +17,6 @@ const hostCheck = async (req, res, next) => {
   let hostname = rawOrigin.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   hostname = hostname.split(':')[0];
   
-  // Map localhost to app.gmaxepay.in for development (similar to companyController.js)
   // This allows localhost to work with the default company domain
   if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
     hostname = 'app.gmaxepay.in';
