@@ -1031,30 +1031,46 @@ const upradeORChangeSlab = async (req, res) => {
       );
 
       if (operators && operators.length > 0) {
-        // Map userRole to roleType and roleName for creating commissions
-        const roleMapping = {
-          3: { roleType: 3, roleName: 'MD' },
-          4: { roleType: 4, roleName: 'DI' },
-          5: { roleType: 5, roleName: 'RE' }
-        };
+        let rolesToCreate = [];
+        
+        if (existingUser.userRole === 3) {
+          // MD can create commissions for MD, DI, and RE
+          rolesToCreate = [
+            { roleType: 3, roleName: 'MD' },
+            { roleType: 4, roleName: 'DI' },
+            { roleType: 5, roleName: 'RE' }
+          ];
+        } else if (existingUser.userRole === 4) {
+          // DI can create commissions for DI and RE
+          rolesToCreate = [
+            { roleType: 4, roleName: 'DI' },
+            { roleType: 5, roleName: 'RE' }
+          ];
+        } else if (existingUser.userRole === 5) {
+          // RE can create commissions for RE only
+          rolesToCreate = [
+            { roleType: 5, roleName: 'RE' }
+          ];
+        }
 
-        const roleConfig = roleMapping[existingUser.userRole];
-        if (roleConfig) {
-          const defaultCommissions = operators.map((op) => ({
-            slabId: slabId,
-            companyId: companyId,
-            operatorId: op.id,
-            operatorName: op.operatorName,
-            operatorType: op.operatorType,
-            roleType: roleConfig.roleType,
-            roleName: roleConfig.roleName,
-            commAmt: 0,
-            commType: 'com',
-            amtType: 'fix',
-            paymentMode: null,
-            addedBy: existingUser.id,
-            updatedBy: existingUser.id
-          }));
+        if (rolesToCreate.length > 0) {
+          const defaultCommissions = operators.flatMap((op) =>
+            rolesToCreate.map((roleConfig) => ({
+              slabId: slabId,
+              companyId: companyId,
+              operatorId: op.id,
+              operatorName: op.operatorName,
+              operatorType: op.operatorType,
+              roleType: roleConfig.roleType,
+              roleName: roleConfig.roleName,
+              commAmt: 0,
+              commType: 'com',
+              amtType: 'fix',
+              paymentMode: null,
+              addedBy: existingUser.id,
+              updatedBy: existingUser.id
+            }))
+          );
 
           if (defaultCommissions.length > 0) {
             await dbService.createMany(model.commSlab, defaultCommissions);
