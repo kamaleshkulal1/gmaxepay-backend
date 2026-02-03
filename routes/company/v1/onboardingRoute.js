@@ -24,7 +24,7 @@ router.post('/:token/getDigilockerDocuments', onboardingCors, onboardingControll
 router.post('/:token/uploadAadharDocuments', uploadFields([
   { name: 'front_photo', maxCount: 1 },
   { name: 'back_photo', maxCount: 1 }
-]), multer, onboardingController.uploadAadharDocuments);
+]), multer, onboardingController.uploadFrontBackAadharDocuments);
 
 router.post('/:token/uploadPanDocuments', uploadFields([
   { name: 'front_photo', maxCount: 1 },
