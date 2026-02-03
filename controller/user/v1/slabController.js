@@ -1,6 +1,7 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { Op, Sequelize } = require('sequelize');
+const { generateTransactionID } = require('../../../utils/transactionID');
 
 const createSlab = async (req, res) => {
   try {
@@ -812,11 +813,360 @@ const updateSlabDetails = async (req, res) => {
   }
 };
 
+const upradeORChangeSlab = async (req, res) => {
+  try {
+    if (![3, 4, 5].includes(req.user.userRole)) {
+      return res.failure({ message: 'You are not authorized to upgrade or change slab' });
+    }
+
+    const slabId = req.params.id;
+    const companyId = req.companyId ?? req.user?.companyId ?? null;
+
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    const existingUser = await dbService.findOne(model.user, {
+      id: req.user.id,
+      companyId: companyId,
+      isActive: true
+    });
+
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    if (!slabId) {
+      return res.failure({ message: 'slabId is required' });
+    }
+
+    // Find parent user (reportingTo) or company admin to determine which slabs to show
+    let addedByUserId = existingUser.reportingTo;
+    if (!addedByUserId) {
+      const companyAdmin = await dbService.findOne(model.user, {
+        companyId: companyId,
+        userRole: 2,
+        isActive: true,
+        isDeleted: false
+      });
+
+      if (!companyAdmin) {
+        return res.failure({ message: 'Company admin not found' });
+      }
+
+      addedByUserId = companyAdmin.id;
+    }
+
+    const slab = await dbService.findOne(model.slab, {
+      id: slabId,
+      companyId: companyId,
+      isActive: true,
+      addedBy: addedByUserId
+    });
+
+    if (!slab) {
+      return res.failure({ message: 'Slab not found' });
+    }
+
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) {
+      return res.failure({ message: 'Company not found' });
+    }
+
+    const previousSlabId = existingUser.slabId;
+    const isSlabAssigned = Number(previousSlabId) === Number(slabId);
+    const slabUsers = slab.users || [];
+    const isUserInSlab = Array.isArray(slabUsers) && slabUsers.includes(existingUser.id);
+    const slabViews = slab.views || [];
+    const isUserInViews = Array.isArray(slabViews) && slabViews.includes(existingUser.id);
+
+    // Check wallet balance early before any database operations
+    if (!isSlabAssigned) {
+      // Check if subscription already exists
+      const existingSubscription = await dbService.findOne(model.subscription, {
+        slabId: slabId,
+        userId: existingUser.id,
+        companyId: companyId
+      });
+
+      if (!existingSubscription) {
+        const subscriptionAmount = parseFloat(slab.subscriptionAmount || 0);
+
+        if (subscriptionAmount > 0) {
+          // Get or create wallet for existingUser.id
+          let requesterWallet = await dbService.findOne(model.wallet, {
+            refId: existingUser.id,
+            companyId: companyId
+          });
+
+          if (!requesterWallet) {
+            requesterWallet = await dbService.createOne(model.wallet, {
+              refId: existingUser.id,
+              companyId: companyId,
+              roleType: existingUser.userType,
+              mainWallet: 0,
+              apes1Wallet: 0,
+              apes2Wallet: 0,
+              addedBy: existingUser.id,
+              updatedBy: existingUser.id
+            });
+          }
+
+          const openingBalance = parseFloat(requesterWallet.mainWallet || 0);
+
+          if (openingBalance < subscriptionAmount) {
+            return res.failure({
+              message: `Insufficient wallet balance. Required: ${subscriptionAmount}, Available: ${openingBalance}`
+            });
+          }
+        }
+      }
+    }
+
+    // If user was already assigned to some other slab, remove them from that slab's users array
+    if (!isSlabAssigned && previousSlabId) {
+      const previousSlab = await dbService.findOne(model.slab, { id: previousSlabId });
+      if (previousSlab && Array.isArray(previousSlab.users) && previousSlab.users.length > 0) {
+        const filteredUsers = previousSlab.users.filter((userId) => userId !== existingUser.id);
+        if (filteredUsers.length !== previousSlab.users.length) {
+          await dbService.update(
+            model.slab,
+            { id: previousSlabId },
+            { users: filteredUsers }
+          );
+        }
+      }
+      // Remove user from previous slab's views array
+      if (previousSlab && Array.isArray(previousSlab.views) && previousSlab.views.length > 0) {
+        const filteredViews = previousSlab.views.filter((userId) => userId !== existingUser.id);
+        if (filteredViews.length !== previousSlab.views.length) {
+          await dbService.update(
+            model.slab,
+            { id: previousSlabId },
+            { views: filteredViews }
+          );
+        }
+      }
+    }
+
+    if (!isSlabAssigned) {
+      await dbService.update(
+        model.user,
+        { id: existingUser.id },
+        { slabId: slabId }
+      );
+    }
+
+    // Ensure user is present in the new slab's users array
+    if (!isUserInSlab) {
+      const updatedUsers = Array.isArray(slabUsers) ? [...slabUsers, existingUser.id] : [existingUser.id];
+      await dbService.update(
+        model.slab,
+        { id: slabId },
+        { users: updatedUsers }
+      );
+    }
+
+    // Ensure user is present in the new slab's views array (for visibility)
+    if (!isUserInViews) {
+      const updatedViews = Array.isArray(slabViews) ? [...slabViews, existingUser.id] : [existingUser.id];
+      await dbService.update(
+        model.slab,
+        { id: slabId },
+        { views: updatedViews }
+      );
+    }
+
+    const originalCompanyId = slab.companyId;
+
+    // 1) Try to copy existing commissions from the slab's original company
+    if (originalCompanyId !== companyId) {
+      const existingCommissions = await dbService.findAll(model.commSlab, {
+        slabId: slabId,
+        companyId: originalCompanyId
+      });
+
+      if (existingCommissions && existingCommissions.length > 0) {
+        const existingForNewCompany = await dbService.findAll(model.commSlab, {
+          slabId: slabId,
+          companyId: companyId
+        });
+
+        if (!existingForNewCompany || existingForNewCompany.length === 0) {
+          const commissionsToCreate = existingCommissions.map((comm) => {
+            const commData = comm.toJSON ? comm.toJSON() : comm;
+            return {
+              slabId: slabId,
+              companyId: companyId,
+              operatorId: commData.operatorId,
+              operatorName: commData.operatorName,
+              operatorType: commData.operatorType,
+              roleType: commData.roleType,
+              roleName: commData.roleName,
+              commAmt: commData.commAmt || 0,
+              commType: commData.commType || 'com',
+              amtType: commData.amtType || 'fix',
+              paymentMode: commData.paymentMode || null,
+              addedBy: req.user.id,
+              updatedBy: req.user.id
+            };
+          });
+
+          await dbService.createMany(model.commSlab, commissionsToCreate);
+        }
+      }
+    }
+
+    // 2) If still no commissions for this slab + company, create default ones
+    const companyCommissions = await dbService.findAll(model.commSlab, {
+      slabId: slabId,
+      companyId: companyId
+    });
+
+    if (!companyCommissions || companyCommissions.length === 0) {
+      const operators = await dbService.findAll(
+        model.operator,
+        { inSlab: true },
+        { select: ['id', 'operatorName', 'operatorType'] }
+      );
+
+      if (operators && operators.length > 0) {
+        // Map userRole to roleType and roleName for creating commissions
+        const roleMapping = {
+          3: { roleType: 3, roleName: 'MD' },
+          4: { roleType: 4, roleName: 'DI' },
+          5: { roleType: 5, roleName: 'RE' }
+        };
+
+        const roleConfig = roleMapping[existingUser.userRole];
+        if (roleConfig) {
+          const defaultCommissions = operators.map((op) => ({
+            slabId: slabId,
+            companyId: companyId,
+            operatorId: op.id,
+            operatorName: op.operatorName,
+            operatorType: op.operatorType,
+            roleType: roleConfig.roleType,
+            roleName: roleConfig.roleName,
+            commAmt: 0,
+            commType: 'com',
+            amtType: 'fix',
+            paymentMode: null,
+            addedBy: existingUser.id,
+            updatedBy: existingUser.id
+          }));
+
+          if (defaultCommissions.length > 0) {
+            await dbService.createMany(model.commSlab, defaultCommissions);
+          }
+        }
+      }
+    }
+
+    // Create subscription record when slab is assigned
+    if (!isSlabAssigned) {
+      // Check if subscription already exists
+      const existingSubscription = await dbService.findOne(model.subscription, {
+        slabId: slabId,
+        userId: existingUser.id,
+        companyId: companyId
+      });
+
+      if (!existingSubscription) {
+        // New subscription - deduct subscriptionAmount from existingUser.id's mainWallet
+        const subscriptionAmount = parseFloat(slab.subscriptionAmount || 0);
+
+        if (subscriptionAmount > 0) {
+          // Get wallet (already checked balance above, wallet exists or was created)
+          const requesterWallet = await dbService.findOne(model.wallet, {
+            refId: existingUser.id,
+            companyId: companyId
+          });
+
+          const openingBalance = parseFloat(requesterWallet.mainWallet || 0);
+          const closingBalance = parseFloat((openingBalance - subscriptionAmount).toFixed(2));
+
+          // Generate transaction ID
+          const requesterCompany = await dbService.findOne(model.company, { id: companyId });
+          const transactionID = generateTransactionID(requesterCompany?.companyName || 'SYSTEM');
+
+          // Update wallet
+          await dbService.update(
+            model.wallet,
+            { refId: existingUser.id, companyId: companyId },
+            { mainWallet: closingBalance, updatedBy: existingUser.id }
+          );
+
+          // Create wallet history entry
+          await dbService.createOne(model.walletHistory, {
+            refId: existingUser.id,
+            companyId: companyId,
+            walletType: 'mainWallet',
+            amount: subscriptionAmount,
+            debit: subscriptionAmount,
+            credit: 0,
+            openingAmt: openingBalance,
+            closingAmt: closingBalance,
+            transactionId: transactionID,
+            paymentStatus: 'SUCCESS',
+            remark: `Slab subscription payment - ${slab.slabName || `Slab ID: ${slabId}`}`,
+            addedBy: existingUser.id,
+            updatedBy: existingUser.id
+          });
+        }
+
+        // Create subscription record
+        await dbService.createOne(model.subscription, {
+          slabId: slabId,
+          userId: existingUser.id,
+          companyId: companyId,
+          status: 'SUCCESS',
+          addedBy: existingUser.id,
+          isActive: true
+        });
+      } else {
+        // Subscription already exists - no deduction needed
+        // Update existing subscription status to SUCCESS
+        await dbService.update(
+          model.subscription,
+          {
+            slabId: slabId,
+            userId: existingUser.id,
+            companyId: companyId
+          },
+          {
+            status: 'SUCCESS',
+            updatedBy: existingUser.id,
+            isActive: true
+          }
+        );
+      }
+    }
+
+    return res.status(200).send({
+      status: 'SUCCESS',
+      message: 'Slab assigned to user successfully',
+      data: {
+        slabId: slabId,
+        companyId: companyId,
+        userId: existingUser.id,
+        wasAlreadyAssigned: isSlabAssigned && isUserInSlab
+      }
+    });
+  } catch (error) {
+    console.error('Upgrade or change slab error', error);
+    return res.status(500).send({
+      status: 'FAILURE',
+      message: error.message || 'Internal server error'
+    });
+  }
+};
 
 module.exports = {
   createSlab,
   getAllSlabs,
   findAllslabComm,
   updateSlabComm,
-  updateSlabDetails
+  updateSlabDetails,
+  upradeORChangeSlab
 };

@@ -902,7 +902,15 @@ const upradeORChangeSlab = async (req, res) => {
 
     const slabId = req.params.id;
     const companyId = req.user.companyId;
-    const companyAdmin = req.user;
+    const companyAdmin = await dbService.findOne(model.user, {
+      id: req.user.id,
+      companyId: companyId,
+      userRole: 2
+    });
+
+    if (!companyAdmin) {
+      return res.failure({ message: 'Company admin not found' });
+    }
 
     if (!slabId) {
       return res.failure({ message: 'slabId is required' });
