@@ -71,7 +71,6 @@ const isAllowedCompanyDomain = (domain) => {
 const getRequestedDomain = (req) => {
   const d = req.get('x-company-domain') || '';
   const domain = (d || '').toString().trim().toLowerCase();
-  // Default to app.gmaxepay.in if no domain provided
   return domain || 'app.gmaxepay.in';
 };
 
@@ -499,10 +498,7 @@ const revertKycVerification = async (userId, companyId, kycType) => {
   }
 };
 
-/**
- * Verify onboarding token and return user details
- * @route GET /company/onboarding/:token
- */
+
 const verifyOnboardingLink = async (req, res) => {
   try {
     if (!ensureAllowedOrigin(req)) {
@@ -538,10 +534,7 @@ const verifyOnboardingLink = async (req, res) => {
   }
 };
 
-/**
- * Mark onboarding token as used (call this after successful onboarding)
- * @route POST /company/onboarding/:token/complete
- */
+
 const completeOnboarding = async (req, res) => {
   try {
     if (!ensureAllowedOrigin(req)) {
@@ -862,14 +855,17 @@ const connectAadhaarVerification = async (req, res) => {
     }
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
     
+    // Append isRedirect=true to redirect_url
+    const modifiedRedirectUrl = redirect_url.includes('?') 
+      ? `${redirect_url}&isRedirect=true` 
+      : `${redirect_url}?isRedirect=true`;
+    
     const existingUser = await dbService.findOne(model.user, { 
       id: ctx.tokenData.userId, 
       companyId: ctx.tokenData.companyId, 
       isDeleted: false 
     });
     if(!existingUser) return res.failure({ message: 'User not found' });
-    
-    console.log(`[connectAadhaarVerification] User ID: ${ctx.tokenData.userId}, Company ID: ${ctx.tokenData.companyId}`);
     
     const allDigilockerDocuments = await dbService.findAll(model.digilockerDocument, {
       refId: ctx.tokenData.userId,
@@ -883,7 +879,6 @@ const connectAadhaarVerification = async (req, res) => {
     const existingDoc = allDigilockerDocuments && allDigilockerDocuments.length > 0 ? allDigilockerDocuments[0] : null;
     
     if (existingDoc && existingUser.aadharVerify) {
-      console.log(`[connectAadhaarVerification] Aadhaar already verified for user ${ctx.tokenData.userId}`);
       // Use existing context with the existingDoc
       const pendingInfo = getPendingSteps({ 
         userDetails: ctx.userDetails, 
@@ -901,9 +896,7 @@ const connectAadhaarVerification = async (req, res) => {
       });
     }
     
-    console.log(`[connectAadhaarVerification] Creating Aadhaar verification URL for user ${ctx.tokenData.userId}`);
-    const response = await ekycHub.createAadharVerificationUrl(redirect_url);
-    console.log(`[connectAadhaarVerification] API Response status: ${response?.status}`);
+    const response = await ekycHub.createAadharVerificationUrl(modifiedRedirectUrl);
     
     if (response && response.status === 'Success') {
       const { verification_id, reference_id } = response;
@@ -919,15 +912,12 @@ const connectAadhaarVerification = async (req, res) => {
           addedBy: ctx.user.id,
           isActive: true
         });
-        console.log(`[connectAadhaarVerification] Document record created for user ${ctx.tokenData.userId}, verification_id: ${verification_id}`);
       }
       return res.success({ message: 'Aadhaar Connection Successful' , data: response });
     } else {
-      console.error(`[connectAadhaarVerification] Failed response:`, response);
       return res.failure({ message: 'Failed to connect Aadhaar verification', data: response });
     }
   } catch (error) {
-    console.error('[connectAadhaarVerification] Error:', error);
     return res.failure({ message: 'Failed to connect Aadhaar verification', error: error.message });
   }
 }
@@ -1033,8 +1023,6 @@ const getDigilockerDocuments = async (req, res) => {
 
     const userId = ctx.tokenData.userId;
     const companyId = ctx.tokenData.companyId;
-    
-    console.log(`[getDigilockerDocuments] Request - User ID: ${userId}, Company ID: ${companyId}, Document Type: ${docType}`);
 
     const existingUser = await dbService.findOne(model.user, { 
       id: userId, 
@@ -1042,7 +1030,6 @@ const getDigilockerDocuments = async (req, res) => {
       isDeleted: false 
     });
     if(!existingUser) {
-      console.error(`[getDigilockerDocuments] User not found - User ID: ${userId}, Company ID: ${companyId}`);
       return res.failure({ message: 'User not found' });
     }
 
@@ -1056,46 +1043,34 @@ const getDigilockerDocuments = async (req, res) => {
     });
 
     if (!allDigilockerDocuments || allDigilockerDocuments.length === 0) {
-      console.log(`[getDigilockerDocuments] No document record found for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: `Please connect your ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} to digilocker first` });
     }
 
     const existingDigilockerDocument = allDigilockerDocuments[0];
-    console.log(`[getDigilockerDocuments] Found ${allDigilockerDocuments.length} document(s), using latest - ID: ${existingDigilockerDocument.id}`);
 
     if (existingDigilockerDocument.refId !== userId || existingDigilockerDocument.companyId !== companyId || existingDigilockerDocument.documentType !== docType) {
-      console.error(`[getDigilockerDocuments] Security check failed - Document ownership mismatch`);
-      console.error(`[getDigilockerDocuments] Expected - User: ${userId}, Company: ${companyId}, Type: ${docType}`);
-      console.error(`[getDigilockerDocuments] Found - User: ${existingDigilockerDocument.refId}, Company: ${existingDigilockerDocument.companyId}, Type: ${existingDigilockerDocument.documentType}`);
       return res.failure({ message: 'Document access denied. Data mismatch detected.' });
     }
 
     if (!existingDigilockerDocument.verificationId) {
-      console.error(`[getDigilockerDocuments] Missing verificationId for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: 'Verification ID is required. Please connect verification first' });
     }
 
     if (!existingDigilockerDocument.referenceId) {
-      console.error(`[getDigilockerDocuments] Missing referenceId for User ID: ${userId}, Document Type: ${docType}`);
       return res.failure({ message: 'Reference ID is required. Please connect verification first' });
     }
 
     const verification_id = existingDigilockerDocument.verificationId;
     const reference_id = existingDigilockerDocument.referenceId;
     
-    console.log(`[getDigilockerDocuments] Document found - ID: ${existingDigilockerDocument.id}, Verification ID: ${verification_id}, Reference ID: ${reference_id}`);
-    
     let response;
     let shouldFetchFromApi = true;
     
     const isUserVerified = docType === 'AADHAAR' ? existingUser.aadharVerify : existingUser.panVerify;
-    console.log(`[getDigilockerDocuments] User verification status: ${isUserVerified}`);
     
     const hasFullData = (docType === 'AADHAAR' && existingDigilockerDocument.name) || (docType === 'PAN' && existingDigilockerDocument.panNumber);
-    console.log(`[getDigilockerDocuments] Document has full data: ${hasFullData}`);
     
     if (isUserVerified && hasFullData) {
-      console.log(`[getDigilockerDocuments] Returning existing data for User ID: ${userId}, Document Type: ${docType}`);
       response = {
         status: 'SUCCESS',
         message: `${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} Verification Already Processed`,
@@ -1128,9 +1103,7 @@ const getDigilockerDocuments = async (req, res) => {
     }
     
     if (shouldFetchFromApi) {
-      console.log(`[getDigilockerDocuments] Fetching latest data from API for User ID: ${userId}, Document Type: ${docType}`);
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
-      console.log(`[getDigilockerDocuments] API Response status: ${response?.status}`);
       
       // Handle both 'Success' and 'SUCCESS' status, and check if data is nested
       const responseStatus = (response?.status || '').toString().toUpperCase();
@@ -1172,8 +1145,6 @@ const getDigilockerDocuments = async (req, res) => {
           }
         }
         
-        console.log(`[getDigilockerDocuments] Update data for ${docType}:`, JSON.stringify(updateData, null, 2));
-        
         await dbService.update(
           model.digilockerDocument,
           { 
@@ -1185,7 +1156,6 @@ const getDigilockerDocuments = async (req, res) => {
           },
           updateData
         );
-        console.log(`[getDigilockerDocuments] Document updated successfully for User ID: ${userId}, Document Type: ${docType}`);
         
         if (docType === 'AADHAAR') {
           const userUpdateData = {
@@ -1200,20 +1170,74 @@ const getDigilockerDocuments = async (req, res) => {
             companyId: companyId,
             isDeleted: false
           }, userUpdateData);
-          console.log(`[getDigilockerDocuments] User Aadhaar verification updated for User ID: ${userId}`);
         } else if (docType === 'PAN') {
           await dbService.update(model.user, { 
             id: userId,
             companyId: companyId,
             isDeleted: false
           }, { panVerify: true });
-          console.log(`[getDigilockerDocuments] User PAN verification updated for User ID: ${userId}`);
         }
         
         // Update KYC status after document download
         await updateKycStatus(userId, companyId, { aadhaarDoc: docType === 'AADHAAR' ? existingDigilockerDocument : ctx?.aadhaarDoc, panDoc: docType === 'PAN' ? existingDigilockerDocument : ctx?.panDoc });
       } else {
-        console.error(`[getDigilockerDocuments] API fetch failed for User ID: ${userId}, Document Type: ${docType}`, response);
+        // Check if the error is "url_expired" or "validation_pending" - if so, invalidate the connection
+        const responseData = response?.data || response || {};
+        const errorCode = responseData.code || responseData.error_code || null;
+        const errorMessage = responseData.message || responseData.error_message || '';
+        
+        if (errorCode === 'url_expired' || errorCode === 'validation_pending' || 
+            errorMessage.toLowerCase().includes('url expired') || 
+            errorMessage.toLowerCase().includes('expired') ||
+            errorMessage.toLowerCase().includes('validation in process')) {
+          
+          // Mark the digilocker document as deleted to reset the connect step
+          await dbService.update(
+            model.digilockerDocument,
+            { 
+              id: existingDigilockerDocument.id,
+              refId: userId,
+              companyId: companyId,
+              documentType: docType,
+              isDeleted: false
+            },
+            { 
+              isDeleted: true,
+              status: errorCode === 'validation_pending' ? 'VALIDATION_PENDING' : 'EXPIRED'
+            }
+          );
+          
+          // If it was Aadhaar, also reset the aadharVerify flag
+          if (docType === 'AADHAAR') {
+            await dbService.update(model.user, { 
+              id: userId,
+              companyId: companyId,
+              isDeleted: false
+            }, { aadharVerify: false });
+          } else if (docType === 'PAN') {
+            await dbService.update(model.user, { 
+              id: userId,
+              companyId: companyId,
+              isDeleted: false
+            }, { panVerify: false });
+          }
+          
+          // Update KYC status after invalidating connection
+          await updateKycStatus(userId, companyId, { aadhaarDoc: docType === 'AADHAAR' ? null : ctx?.aadhaarDoc, panDoc: docType === 'PAN' ? null : ctx?.panDoc });
+          
+          const errorMsg = errorCode === 'validation_pending' 
+            ? `Validation is in process. Please reconnect your ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'}.`
+            : `Digilocker request URL has expired. Please reconnect your ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'}.`;
+          
+          return res.failure({ 
+            message: errorMsg, 
+            data: {
+              ...responseData,
+              requiresReconnect: true
+            }
+          });
+        }
+        
         return res.failure({ 
           message: `Failed to fetch ${docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} document from digilocker`, 
           data: response 
@@ -1252,15 +1276,12 @@ const getDigilockerDocuments = async (req, res) => {
           { id: userId, companyId: companyId, isDeleted: false },
           { panDetails: panDetailsPayload }
         );
-        console.log(`[getDigilockerDocuments] Stored PAN details for User ID: ${userId}`);
       }
     }
     
-    console.log(`[getDigilockerDocuments] Successfully completed for User ID: ${userId}, Document Type: ${docType}`);
     return res.success({ message, data: response.data || response });
   }
   catch (error) {
-    console.error('[getDigilockerDocuments] Error:', error);
     return res.failure({ message: 'Failed to download verification', error: error.message });
   }
 }
