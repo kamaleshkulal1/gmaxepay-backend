@@ -21,7 +21,7 @@ router.post('/:token/connectAadhaarVerification', onboardingCors, onboardingCont
 router.post('/:token/connectPanVerification', onboardingCors, onboardingController.connectPanVerification);
 router.post('/:token/getDigilockerDocuments', onboardingCors, onboardingController.getDigilockerDocuments);
 
-router.post('/:token/uploadAadharDocuments', uploadFields([
+router.post('/:token/uploadAadharDocuments', onboardingCors, uploadFields([
   { name: 'front_photo', maxCount: 1 },
   { name: 'back_photo', maxCount: 1 }
 ]), multer, onboardingController.uploadFrontBackAadharDocuments);
