@@ -13,6 +13,7 @@ const googleMap = require('../../../services/googleMap');
 const ekycHub = require('../../../services/eKycHub');
 const llmService = require('../../../services/llmService');
 const rekognitionService = require('../../../services/rekognitionService');
+const textractService = require('../../../services/textractService');
 const razorpayApi = require('../../../services/razorpayApi');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
 const axios = require('axios');
@@ -2486,6 +2487,100 @@ const getPending = async (req, res) => {
   }
 };
 
+
+const uploadFrontBackAadharDocuments = async (req, res) => {
+  try {
+    if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
+    const token = getTokenFromReq(req);
+    const ctx = await loadContextByToken(token);
+    if (ctx.error) return res.failure({ message: ctx.error });
+    if (!ensureDomainMatches(req, ctx.company)) {
+      return res.failure({ message: 'Invalid Domain' });
+    }
+    
+    const front_photo = req.files?.front_photo?.[0];
+    const back_photo = req.files?.back_photo?.[0];
+    
+    if (!front_photo || !back_photo) {
+      const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
+      return res.failure({ 
+        message: !front_photo ? 'Front photo is required' : 'Back photo is required',
+        receivedFields: receivedFields || 'none',
+        expectedFields: ['front_photo', 'back_photo']
+      });
+    }
+
+    // Extract data from both images using Textract
+    const [frontData, backData, frontPhoto] = await Promise.all([
+      textractService.extractAadhaarData(front_photo.buffer),
+      textractService.extractAadhaarData(back_photo.buffer),
+      textractService.extractAadhaarPhoto(front_photo.buffer)
+    ]);
+
+    // Check if extraction was successful
+    if (!frontData.success) {
+      return res.failure({ 
+        message: frontData.error || 'Failed to extract data from front image',
+        success: false
+      });
+    }
+
+    if (!backData.success) {
+      return res.failure({ 
+        message: backData.error || 'Failed to extract data from back image',
+        success: false
+      });
+    }
+
+    // Extract aadhaar numbers from both images
+    const frontAadhaarNumber = frontData.aadhaar_number 
+      ? frontData.aadhaar_number.toString().replace(/\D/g, '') 
+      : null;
+    const backAadhaarNumber = backData.aadhaar_number 
+      ? backData.aadhaar_number.toString().replace(/\D/g, '') 
+      : null;
+
+    // Check if aadhaar numbers match
+    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber 
+      ? frontAadhaarNumber === backAadhaarNumber 
+      : false;
+
+    // Use front image data for response (name, dob, gender)
+    const response = {
+      success: aadhaar_numbers_match && (frontAadhaarNumber || backAadhaarNumber),
+      aadhaar_number: frontAadhaarNumber || backAadhaarNumber || null,
+      aadhaar_numbers_match: aadhaar_numbers_match,
+      name: frontData.name || null,
+      dob: frontData.dob || null,
+      gender: frontData.gender || null,
+      photo: frontPhoto || null
+    };
+
+    // Determine message based on validation results
+    let message = 'Aadhaar documents processed successfully';
+    if (!response.aadhaar_number) {
+      message = 'Could not extract Aadhaar number from images';
+      response.success = false;
+    } else if (!aadhaar_numbers_match) {
+      message = 'Aadhaar numbers from front and back images do not match';
+      response.success = false;
+    }
+
+    // Always return success response with the data object containing success field
+    return res.success({ 
+      message: message,
+      ...response
+    });
+  } catch (error) {
+    console.error('Error in upload front back Aadhar documents:', error);
+    return res.failure({ 
+      message: 'Failed to process Aadhar documents', 
+      error: error.message,
+      success: false
+    });
+  }
+}
+
 module.exports = {
   verifyOnboardingLink,
   completeOnboarding,
@@ -2503,5 +2598,6 @@ module.exports = {
   postProfile,
   getPending,
   uploadAadharDocuments,
-  uploadPanDocuments
+  uploadPanDocuments,
+  uploadFrontBackAadharDocuments
 };
