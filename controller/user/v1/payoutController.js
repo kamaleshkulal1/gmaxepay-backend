@@ -2,7 +2,6 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const asl = require('../../../services/asl');
-const bcrypt = require('bcrypt');
 
 const payout = async (req, res) => {
     try {
@@ -10,7 +9,6 @@ const payout = async (req, res) => {
             amount, 
             mode, 
             aepsType,
-            mpin,
             customerBankId, 
             bankId, 
             accountNumber, 
@@ -37,11 +35,6 @@ const payout = async (req, res) => {
             return res.failure({ message: 'Invalid AEPS type' });
         }
         
-        // Validate MPIN
-        if (!mpin) {
-            return res.failure({ message: 'MPIN is required' });
-        }
-        
         if (!latitude || !longitude) {
             return res.failure({ message: 'Latitude and longitude are required' });
         }
@@ -50,26 +43,14 @@ const payout = async (req, res) => {
         const normalizedAepsType = aepsType.toUpperCase();
         const walletType = normalizedAepsType === 'AEPS1' ? 'apes1Wallet' : 'apes2Wallet';
         
-        // Parallel fetch: company, wallet, and user with secureKey for MPIN verification
-        const [company, wallet, userWithSecureKey] = await Promise.all([
+        // Parallel fetch: company and wallet
+        const [company, wallet] = await Promise.all([
             dbService.findOne(model.company, { id: user.companyId }),
-            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId }),
-            dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true })
+            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId })
         ]);
         
         if (!company) return res.failure({ message: 'Company not found' });
         if (!wallet) return res.failure({ message: 'Wallet not found' });
-        if (!userWithSecureKey) return res.failure({ message: 'User not found' });
-        
-        // Verify MPIN
-        if (!userWithSecureKey.secureKey) {
-            return res.failure({ message: 'MPIN is not set. Please set your MPIN first' });
-        }
-        
-        const isMPINValid = await bcrypt.compare(mpin.toString(), userWithSecureKey.secureKey);
-        if (!isMPINValid) {
-            return res.failure({ message: 'Invalid MPIN' });
-        }
         
         // Check AEPS wallet balance based on type
         const currentAepsBalance = parseFloat(wallet[walletType] || 0);
