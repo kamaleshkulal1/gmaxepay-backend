@@ -192,7 +192,7 @@ let Outlet = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: PractomindCompanyCode,
+        model: 'practomindCompanyCode',
         key: 'id'
       }
     },

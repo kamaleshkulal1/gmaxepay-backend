@@ -898,7 +898,7 @@ const getCompleteKycData = async (req, res) => {
     };
 
     const shopCategory = await dbService.findOne(model.practomindCompanyCode, {
-      id: outlet.shopCategoryId,
+      id: outlet?.shopCategoryId||1,
       isDeleted: false
     });
 
