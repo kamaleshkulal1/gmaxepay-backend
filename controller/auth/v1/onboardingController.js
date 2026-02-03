@@ -2517,6 +2517,10 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       textractService.extractAadhaarPhoto(front_photo.buffer)
     ]);
 
+    console.log("frontData",frontData);
+    console.log("backData",backData);
+    console.log("frontPhoto",frontPhoto);
+
     // Check if extraction was successful
     if (!frontData.success) {
       return res.failure({ 
