@@ -2490,6 +2490,7 @@ const getPending = async (req, res) => {
 
 const uploadFrontBackAadharDocuments = async (req, res) => {
   try {
+    // Validate origin and authentication
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
@@ -2498,9 +2499,11 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
     
+    // Extract uploaded files
     const front_photo = req.files?.front_photo?.[0];
     const back_photo = req.files?.back_photo?.[0];
     
+    // Validate that both photos are provided
     if (!front_photo || !back_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
       return res.failure({ 
@@ -2510,15 +2513,15 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       });
     }
 
-    // Extract data from both images using Textract
+    // Extract data from both images using AWS Textract service
+    // Processes front image, back image, and extracts photo from front image in parallel
     const [frontData, backData, frontPhoto] = await Promise.all([
       textractService.extractAadhaarData(front_photo.buffer),
       textractService.extractAadhaarData(back_photo.buffer),
       textractService.extractAadhaarPhoto(front_photo.buffer)
     ]);
 
-
-    // Check if extraction was successful
+    // Validate that data extraction was successful for front image
     if (!frontData.success) {
       return res.failure({ 
         message: frontData.error || 'Failed to extract data from front image',
@@ -2526,6 +2529,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       });
     }
 
+    // Validate that data extraction was successful for back image
     if (!backData.success) {
       return res.failure({ 
         message: backData.error || 'Failed to extract data from back image',
@@ -2533,7 +2537,6 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       });
     }
 
-    // Extract aadhaar numbers from both images - ensure exactly 12 digits
     const extractExact12Digits = (aadhaarValue) => {
       if (!aadhaarValue) return null;
       const digits = aadhaarValue.toString().replace(/\D/g, '');
@@ -2541,20 +2544,16 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       return digits.length === 12 ? digits : null;
     };
 
+    // Extract Aadhaar numbers from both images - ensure exactly 12 digits
     const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
     const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
 
-    console.log("frontAadhaarNumber",frontAadhaarNumber);
-    console.log("backAadhaarNumber",backAadhaarNumber);
-
-    // Check if aadhaar numbers match
     const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber 
       ? frontAadhaarNumber === backAadhaarNumber 
       : false;
 
-    // Use front image data for response (name, dob, gender)
     const response = {
-      success: aadhaar_numbers_match && (frontAadhaarNumber || backAadhaarNumber),
+      success: aadhaar_numbers_match,
       aadhaar_number: frontAadhaarNumber || backAadhaarNumber || null,
       aadhaar_numbers_match: aadhaar_numbers_match,
       name: frontData.name || null,
@@ -2562,18 +2561,33 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       gender: frontData.gender || null,
       photo: frontPhoto || null
     };
+
+    console.log("frontAadhaarNumber", frontAadhaarNumber);
+    console.log("backAadhaarNumber", backAadhaarNumber);
+
+    console.log("response", response);
  
-    // Determine message based on validation results
-    let message = 'Aadhaar documents processed successfully';
+    // Determine response message and status based on validation results
+    let message = '';
+    
+    // Case 1: Aadhaar number could not be extracted from either image
     if (!response.aadhaar_number) {
       message = 'Could not extract Aadhaar number from images';
-      response.success = false;
-    } else if (!aadhaar_numbers_match) {
+      return res.failure({ 
+        message: message,
+        ...response
+      });
+    }
+    
+    if (!aadhaar_numbers_match) {
       message = 'Aadhaar numbers from front and back images do not match';
-      response.success = false;
+      return res.failure({ 
+        message: message,
+        ...response
+      });
     }
 
-    // Always return success response with the data object containing success field
+    message = 'Aadhaar documents processed successfully';
     return res.success({ 
       message: message,
       ...response
