@@ -51,6 +51,8 @@ const createAadharVerificationUrl = async (redirect_url) => {
     return axios
       .request(config)
       .then((response) => {
+        console.log('response', response);
+        console.log('response', response.data);
         return response.data;
       })
       .catch((error) => {
