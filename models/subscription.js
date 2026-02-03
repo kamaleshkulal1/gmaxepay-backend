@@ -17,7 +17,7 @@ let Subscription = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'slabs',
+        model: 'Slab',
         key: 'id'
       }
     },
