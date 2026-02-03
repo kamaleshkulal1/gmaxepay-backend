@@ -3,10 +3,6 @@ const dbService = require('../../../utils/dbService');
 const imageService = require('../../../services/imageService');
 const { uploadImageToS3, deleteImageFromS3, getImageUrl, getImageFromS3 } = imageService;
 
-/**
- * Upload image
- * @description Upload image to S3 and save metadata to database
- */
 const uploadImage = async (req, res) => {
   try {
     const { name, type, subtype } = req.body;
@@ -21,7 +17,6 @@ const uploadImage = async (req, res) => {
       return res.failure({ message: 'Name and type are required' });
     }
 
-    // Validate type
     const validTypes = ['loginSlider', 'signature'];
     if (!validTypes.includes(type)) {
       return res.failure({ message: 'Invalid type. Must be loginSlider or signature' });
