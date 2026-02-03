@@ -1,6 +1,7 @@
 
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
+const model = require('./index');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
 const { reusableSMSAttribute } = require('../utils/common');
@@ -17,7 +18,7 @@ let Subscription = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'slab',
+        model: model.slab,
         key: 'id'
       }
     },
