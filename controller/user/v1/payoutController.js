@@ -2,12 +2,15 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const asl = require('../../../services/asl');
+const bcrypt = require('bcrypt');
 
 const payout = async (req, res) => {
     try {
         const { 
             amount, 
             mode, 
+            aepsType,
+            mpin,
             customerBankId, 
             bankId, 
             accountNumber, 
@@ -29,23 +32,53 @@ const payout = async (req, res) => {
             return res.failure({ message: 'Valid mode is required (wallet or bank)' });
         }
         
+        // Validate AEPS type
+        if (!aepsType || !['AEPS1', 'AEPS2'].includes(aepsType.toUpperCase())) {
+            return res.failure({ message: 'Invalid AEPS type' });
+        }
+        
+        // Validate MPIN
+        if (!mpin) {
+            return res.failure({ message: 'MPIN is required' });
+        }
+        
         if (!latitude || !longitude) {
             return res.failure({ message: 'Latitude and longitude are required' });
         }
         
-        // Parallel fetch: company and wallet
-        const [company, wallet] = await Promise.all([
+        // Normalize AEPS type
+        const normalizedAepsType = aepsType.toUpperCase();
+        const walletType = normalizedAepsType === 'AEPS1' ? 'apes1Wallet' : 'apes2Wallet';
+        
+        // Parallel fetch: company, wallet, and user with secureKey for MPIN verification
+        const [company, wallet, userWithSecureKey] = await Promise.all([
             dbService.findOne(model.company, { id: user.companyId }),
-            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId })
+            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId }),
+            dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true })
         ]);
         
         if (!company) return res.failure({ message: 'Company not found' });
         if (!wallet) return res.failure({ message: 'Wallet not found' });
+        if (!userWithSecureKey) return res.failure({ message: 'User not found' });
         
-        // Check AEPS wallet balance
-        const currentAepsBalance = parseFloat(wallet.apes1Wallet || 0);
+        // Verify MPIN
+        if (!userWithSecureKey.secureKey) {
+            return res.failure({ message: 'MPIN is not set. Please set your MPIN first' });
+        }
+        
+        const isMPINValid = await bcrypt.compare(mpin.toString(), userWithSecureKey.secureKey);
+        if (!isMPINValid) {
+            return res.failure({ message: 'Invalid MPIN' });
+        }
+        
+        // Check AEPS wallet balance based on type
+        const currentAepsBalance = parseFloat(wallet[walletType] || 0);
         if (currentAepsBalance < payoutAmount) {
-            return res.failure({ message: 'Insufficient AEPS wallet balance' });
+            return res.failure({ 
+                message: `Insufficient ${normalizedAepsType} wallet balance`,
+                currentBalance: currentAepsBalance,
+                requiredAmount: payoutAmount
+            });
         }
         
         // Generate transaction ID and calculate balances
@@ -62,7 +95,8 @@ const payout = async (req, res) => {
             type: mode === 'wallet' ? 'internal' : 'external',
             transactionID: transactionID,
             amount: payoutAmount,
-            walletType: 'apes1Wallet',
+            walletType: walletType,
+            aepsType: normalizedAepsType,
             openingBalance: aepsOpeningBalance,
             closingBalance: aepsClosingBalance,
             status: mode === 'wallet' ? 'SUCCESS' : 'PENDING',
@@ -162,9 +196,9 @@ const payout = async (req, res) => {
         // Update wallet balance only if payout is successful
         if (payoutHistoryData.status === 'SUCCESS') {
             if (mode === 'wallet') {
-                // Internal transfer: Debit from apes1Wallet, Credit to mainWallet
+                // Internal transfer: Debit from selected AEPS wallet, Credit to mainWallet
                 const walletUpdate = {
-                    apes1Wallet: aepsClosingBalance,
+                    [walletType]: aepsClosingBalance,
                     mainWallet: mainWalletClosingBalance,
                     updatedBy: user.id
                 };
@@ -173,7 +207,7 @@ const payout = async (req, res) => {
                     {
                         refId: user.id,
                         companyId: user.companyId,
-                        walletType: 'apes1Wallet',
+                        walletType: walletType,
                         amount: payoutAmount,
                         debit: payoutAmount,
                         credit: 0,
@@ -181,7 +215,7 @@ const payout = async (req, res) => {
                         closingAmt: aepsClosingBalance,
                         transactionId: transactionID,
                         paymentStatus: 'SUCCESS',
-                        remark: 'Internal transfer: AEPS to Main Wallet',
+                        remark: `Internal transfer: ${normalizedAepsType} to Main Wallet`,
                         addedBy: user.id,
                         updatedBy: user.id
                     },
@@ -196,7 +230,7 @@ const payout = async (req, res) => {
                         closingAmt: mainWalletClosingBalance,
                         transactionId: transactionID,
                         paymentStatus: 'SUCCESS',
-                        remark: 'Internal transfer: From AEPS Wallet',
+                        remark: `Internal transfer: From ${normalizedAepsType} Wallet`,
                         addedBy: user.id,
                         updatedBy: user.id
                     }
@@ -210,11 +244,11 @@ const payout = async (req, res) => {
                 ]);
                 
             } else {
-                // External bank transfer: Only debit from apes1Wallet
+                // External bank transfer: Only debit from selected AEPS wallet
                 const walletHistoryData = {
                     refId: user.id,
                     companyId: user.companyId,
-                    walletType: 'apes1Wallet',
+                    walletType: walletType,
                     amount: payoutAmount,
                     debit: payoutAmount,
                     credit: 0,
@@ -222,7 +256,7 @@ const payout = async (req, res) => {
                     closingAmt: aepsClosingBalance,
                     transactionId: transactionID,
                     paymentStatus: 'SUCCESS',
-                    remark: `Bank payout via ${paymentMode}`,
+                    remark: `Bank payout via ${paymentMode} from ${normalizedAepsType}`,
                     addedBy: user.id,
                     updatedBy: user.id
                 };
@@ -238,11 +272,16 @@ const payout = async (req, res) => {
                 }
                 
                 // Parallel execution: Update wallet and create history
+                const walletUpdateData = {
+                    [walletType]: aepsClosingBalance,
+                    updatedBy: user.id
+                };
+                
                 await Promise.all([
                     dbService.update(
                         model.wallet,
                         { refId: user.id, companyId: user.companyId },
-                        { apes1Wallet: aepsClosingBalance, updatedBy: user.id }
+                        walletUpdateData
                     ),
                     dbService.createOne(model.walletHistory, walletHistoryData)
                 ]);
@@ -253,7 +292,8 @@ const payout = async (req, res) => {
         const responseData = {
             transactionID: transactionID,
             status: payoutHistoryData.status,
-            aepsWallet: {
+            aepsType: normalizedAepsType,
+            [normalizedAepsType.toLowerCase()]: {
                 openingBalance: aepsOpeningBalance,
                 closingBalance: aepsClosingBalance
             }
@@ -279,8 +319,12 @@ const payout = async (req, res) => {
         }
         
         // Return success response for SUCCESS or PENDING status
+        const successMessage = mode === 'wallet' 
+            ? `Payout from ${normalizedAepsType} wallet to Main wallet successful`
+            : `Payout request processed from ${normalizedAepsType}`;
+        
         return res.success({
-            message: mode === 'wallet' ? 'Payout from AEPS wallet to Main wallet successful' : 'Payout request processed',
+            message: successMessage,
             data: responseData
         });
         

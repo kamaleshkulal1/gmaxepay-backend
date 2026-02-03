@@ -24,6 +24,8 @@ router.delete('/operators/:id', operatorController.deleteService);
 router.get('/operators/states', operatorController.findAllstate);
 router.get('/operators/types', operatorController.findAlloperatorType);
 router.get('/operators/list', operatorController.operatorList);
+
+router.use('/service', require('./v1/servicesRoutes'));
 router.use('/company', require('./v1/companyRoute'));
 router.use('/ekyc-hub', require('./v1/ekycHubRoutes'));
 router.use('/bank', require('./v1/bankRoutes'));
