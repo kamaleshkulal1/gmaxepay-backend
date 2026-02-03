@@ -2536,13 +2536,19 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       });
     }
 
-    // Extract aadhaar numbers from both images
-    const frontAadhaarNumber = frontData.aadhaar_number 
-      ? frontData.aadhaar_number.toString().replace(/\D/g, '') 
-      : null;
-    const backAadhaarNumber = backData.aadhaar_number 
-      ? backData.aadhaar_number.toString().replace(/\D/g, '') 
-      : null;
+    // Extract aadhaar numbers from both images - ensure exactly 12 digits
+    const extractExact12Digits = (aadhaarValue) => {
+      if (!aadhaarValue) return null;
+      const digits = aadhaarValue.toString().replace(/\D/g, '');
+      // Return only if exactly 12 digits, otherwise null
+      return digits.length === 12 ? digits : null;
+    };
+
+    const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
+    const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
+
+    console.log("frontAadhaarNumber",frontAadhaarNumber);
+    console.log("backAadhaarNumber",backAadhaarNumber);
 
     // Check if aadhaar numbers match
     const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber 
@@ -2559,7 +2565,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       gender: frontData.gender || null,
       photo: frontPhoto || null
     };
-
+ 
     // Determine message based on validation results
     let message = 'Aadhaar documents processed successfully';
     if (!response.aadhaar_number) {
