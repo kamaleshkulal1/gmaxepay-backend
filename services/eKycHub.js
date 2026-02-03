@@ -47,7 +47,7 @@ const createAadharVerificationUrl = async (redirect_url) => {
         orderid
       }
     };
-  
+    console.log('config', config);
     return axios
       .request(config)
       .then((response) => {
