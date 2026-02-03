@@ -1999,7 +1999,47 @@ const uploadAadharDocuments = async (req, res) => {
     const oldFrontImageKey = extractS3Key(existingUser?.aadharFrontImage);
     const oldBackImageKey = extractS3Key(existingUser?.aadharBackImage);
     
-    const [frontUploadResult, backUploadResult, llmResponse] = await Promise.all([
+    // Extract data from both images using AWS Textract service
+    // Processes front image, back image, and extracts photo from front image in parallel
+    const [frontData, backData, frontPhoto] = await Promise.all([
+      textractService.extractAadhaarData(front_photo.buffer),
+      textractService.extractAadhaarData(back_photo.buffer),
+      textractService.extractAadhaarPhoto(front_photo.buffer)
+    ]);
+
+    // Validate that data extraction was successful for front image
+    if (!frontData.success) {
+      return res.failure({ 
+        message: frontData.error || 'Failed to extract data from front image',
+        success: false
+      });
+    }
+
+    // Validate that data extraction was successful for back image
+    if (!backData.success) {
+      return res.failure({ 
+        message: backData.error || 'Failed to extract data from back image',
+        success: false
+      });
+    }
+
+    const extractExact12Digits = (aadhaarValue) => {
+      if (!aadhaarValue) return null;
+      const digits = aadhaarValue.toString().replace(/\D/g, '');
+      // Return only if exactly 12 digits, otherwise null
+      return digits.length === 12 ? digits : null;
+    };
+
+    // Extract Aadhaar numbers from both images - ensure exactly 12 digits
+    const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
+    const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
+
+    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber 
+      ? frontAadhaarNumber === backAadhaarNumber 
+      : false;
+
+    // Upload images to S3 after successful extraction
+    const [frontUploadResult, backUploadResult] = await Promise.all([
       imageService.uploadImageToS3(
         front_photo.buffer,
         front_photo.originalname || 'front_photo.jpg',
@@ -2015,15 +2055,15 @@ const uploadAadharDocuments = async (req, res) => {
         ctx.company.id,
         'back',
         ctx.user.id
-      ),
-      llmService.llmAadhaarOcr(front_photo, back_photo)
+      )
     ]);
     
     const frontImageS3Key = frontUploadResult.key;
     const backImageS3Key = backUploadResult.key;
-    
-    if (!llmResponse || !llmResponse.success) {
-      // Delete newly uploaded images from S3 since LLM failed and we won't save them
+
+    // Validate Aadhaar numbers match
+    if (!frontAadhaarNumber && !backAadhaarNumber) {
+      // Delete newly uploaded images from S3 since validation failed
       await Promise.all([
         imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
           console.error('Error deleting front image from S3:', err)
@@ -2032,16 +2072,27 @@ const uploadAadharDocuments = async (req, res) => {
           console.error('Error deleting back image from S3:', err)
         )
       ]);
-      
-      const errorMessage = llmResponse?.message || llmResponse?.error || 'Failed to extract Aadhar data';
-      return res.failure({ message: errorMessage });
+      return res.failure({ message: 'Could not extract Aadhaar number from images' });
+    }
+
+    if (!aadhaar_numbers_match) {
+      // Delete newly uploaded images from S3 since validation failed
+      await Promise.all([
+        imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+          console.error('Error deleting front image from S3:', err)
+        ),
+        imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+          console.error('Error deleting back image from S3:', err)
+        )
+      ]);
+      return res.failure({ message: 'Aadhaar numbers from front and back images do not match' });
     }
     
     const extractedData = {
-      aadhaar_number: llmResponse.aadhaar_number || null,
-      photo: llmResponse.photo || null,
-      dob: llmResponse.dob || null,
-      aadhaar_numbers_match: llmResponse.aadhaar_numbers_match || false
+      aadhaar_number: frontAadhaarNumber || backAadhaarNumber || null,
+      photo: frontPhoto || null,
+      dob: frontData.dob || null,
+      aadhaar_numbers_match: aadhaar_numbers_match
     };
 
     const validationResults = {
@@ -2487,112 +2538,84 @@ const getPending = async (req, res) => {
   }
 };
 
-
 const uploadFrontBackAadharDocuments = async (req, res) => {
   try {
-    // Validate origin and authentication
-    if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
-    const token = getTokenFromReq(req);
-    const ctx = await loadContextByToken(token);
-    if (ctx.error) return res.failure({ message: ctx.error });
-    if (!ensureDomainMatches(req, ctx.company)) {
-      return res.failure({ message: 'Invalid Domain' });
-    }
-    
-    // Extract uploaded files
-    const front_photo = req.files?.front_photo?.[0];
-    const back_photo = req.files?.back_photo?.[0];
-    
-    // Validate that both photos are provided
-    if (!front_photo || !back_photo) {
-      const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
-      return res.failure({ 
-        message: !front_photo ? 'Front photo is required' : 'Back photo is required',
-        receivedFields: receivedFields || 'none',
-        expectedFields: ['front_photo', 'back_photo']
-      });
+    const validationResult = await validateRequest(req);
+    if (!validationResult.success) {
+      return res.failure({ message: validationResult.message });
     }
 
-    // Extract data from both images using AWS Textract service
-    // Processes front image, back image, and extracts photo from front image in parallel
-    const [frontData, backData, frontPhoto] = await Promise.all([
-      textractService.extractAadhaarData(front_photo.buffer),
-      textractService.extractAadhaarData(back_photo.buffer),
-      textractService.extractAadhaarPhoto(front_photo.buffer)
+    const { ctx, front_photo, back_photo } = validationResult.data;
+
+    const [existingUser, existingAadharDetails] = await Promise.all([
+      dbService.findOne(model.user, { id: ctx.user.id }),
+      dbService.findOne(model.digilockerDocument, { 
+        refId: ctx.user.id, 
+        companyId: ctx.company.id, 
+        documentType: 'AADHAAR', 
+        isDeleted: false 
+      })
     ]);
 
-    // Validate that data extraction was successful for front image
-    if (!frontData.success) {
-      return res.failure({ 
-        message: frontData.error || 'Failed to extract data from front image',
-        success: false
-      });
+    const extractionResult = await extractAndValidateAadharData(front_photo, back_photo);
+    if (!extractionResult.success) {
+      return res.failure({ message: extractionResult.message });
     }
 
-    // Validate that data extraction was successful for back image
-    if (!backData.success) {
-      return res.failure({ 
-        message: backData.error || 'Failed to extract data from back image',
-        success: false
-      });
+    const { frontData, backData, frontPhoto, frontAadhaarNumber, backAadhaarNumber } = extractionResult.data;
+
+    const uploadResult = await uploadImagesToS3(front_photo, back_photo, ctx);
+    if (!uploadResult.success) {
+      return res.failure({ message: uploadResult.message });
     }
 
-    const extractExact12Digits = (aadhaarValue) => {
-      if (!aadhaarValue) return null;
-      const digits = aadhaarValue.toString().replace(/\D/g, '');
-      // Return only if exactly 12 digits, otherwise null
-      return digits.length === 12 ? digits : null;
+    const { frontImageS3Key, backImageS3Key } = uploadResult;
+
+    const aadhaarValidation = validateAadhaarNumbers(frontAadhaarNumber, backAadhaarNumber);
+    if (!aadhaarValidation.success) {
+      await cleanupFailedUpload(frontImageS3Key, backImageS3Key);
+      return res.failure({ message: aadhaarValidation.message });
+    }
+
+    const extractedData = {
+      aadhaar_number: frontAadhaarNumber || backAadhaarNumber,
+      photo: frontPhoto,
+      dob: frontData.dob,
+      aadhaar_numbers_match: aadhaarValidation.numbersMatch
     };
 
-    // Extract Aadhaar numbers from both images - ensure exactly 12 digits
-    const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
-    const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
+    const validationResults = await performDetailedValidations(
+      existingAadharDetails, 
+      extractedData, 
+      frontImageS3Key, 
+      backImageS3Key
+    );
 
-    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber 
-      ? frontAadhaarNumber === backAadhaarNumber 
-      : false;
-
-    const response = {
-      success: aadhaar_numbers_match,
-      aadhaar_number: frontAadhaarNumber || backAadhaarNumber || null,
-      aadhaar_numbers_match: aadhaar_numbers_match,
-      name: frontData.name || null,
-      dob: frontData.dob || null,
-      gender: frontData.gender || null,
-      photo: frontPhoto || null
-    };
-
-    console.log("frontAadhaarNumber", frontAadhaarNumber);
-    console.log("backAadhaarNumber", backAadhaarNumber);
-    console.log("response", response);
-    console.log("DataResponse", response)
-
- 
-    // Determine response message and status based on validation results
-    let message = '';
-    
-    // Case 1: Aadhaar number could not be extracted from either image
-    if (!response.aadhaar_number) {
-      message = 'Could not extract Aadhaar number from images';
-      return res.failure({ 
-        message: message,
-        ...response
-      });
-    }
-    
-    if (!aadhaar_numbers_match) {
-      message = 'Aadhaar numbers from front and back images do not match';
-      return res.failure({ 
-        message: message,
-        ...response
-      });
+    if (!validationResults.success) {
+      return res.failure({ message: validationResults.message });
     }
 
-    message = 'Aadhaar documents processed successfully';
-    return res.success({ 
-      message: message,
-      ...response
-    });
+    const updateData = buildUpdatePayload(
+      frontImageS3Key, 
+      backImageS3Key, 
+      extractedData, 
+      existingAadharDetails, 
+      validationResults.data
+    );
+
+    await persistUserData(ctx.user.id, updateData);
+
+    const oldFrontImageKey = extractS3Key(existingUser?.aadharFrontImage);
+    const oldBackImageKey = extractS3Key(existingUser?.aadharBackImage);
+    await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+
+    await updateKycStatus(ctx.user.id, ctx.company.id, ctx);
+
+    const responseMessage = buildResponseMessage(existingAadharDetails, validationResults.data);
+    const responseData = buildResponseData(extractedData, frontData, aadhaarValidation.numbersMatch);
+
+    return res.success({ message: responseMessage, data: responseData });
+
   } catch (error) {
     console.error('Error in upload front back Aadhar documents:', error);
     return res.failure({ 
@@ -2601,7 +2624,343 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       success: false
     });
   }
-}
+};
+
+const validateRequest = async (req) => {
+  if (!ensureAllowedOrigin(req)) {
+    return { success: false, message: 'Origin not allowed' };
+  }
+
+  const token = getTokenFromReq(req);
+  const ctx = await loadContextByToken(token);
+  
+  if (ctx.error) {
+    return { success: false, message: ctx.error };
+  }
+
+  if (!ensureDomainMatches(req, ctx.company)) {
+    return { success: false, message: 'Invalid Domain' };
+  }
+
+  const front_photo = req.files?.front_photo?.[0];
+  const back_photo = req.files?.back_photo?.[0];
+
+  if (!front_photo || !back_photo) {
+    const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
+    return { 
+      success: false, 
+      message: !front_photo ? 'Front photo is required' : 'Back photo is required',
+      receivedFields,
+      expectedFields: ['front_photo', 'back_photo']
+    };
+  }
+
+  return { success: true, data: { ctx, front_photo, back_photo } };
+};
+
+const extractAndValidateAadharData = async (front_photo, back_photo) => {
+  const [frontData, backData, frontPhoto] = await Promise.all([
+    textractService.extractAadhaarData(front_photo.buffer),
+    textractService.extractAadhaarData(back_photo.buffer),
+    textractService.extractAadhaarPhoto(front_photo.buffer)
+  ]);
+
+  if (!frontData.success) {
+    return { 
+      success: false, 
+      message: frontData.error || 'Failed to extract data from front image' 
+    };
+  }
+
+  if (!backData.success) {
+    return { 
+      success: false, 
+      message: backData.error || 'Failed to extract data from back image' 
+    };
+  }
+
+  const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
+  const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
+
+  return {
+    success: true,
+    data: { frontData, backData, frontPhoto, frontAadhaarNumber, backAadhaarNumber }
+  };
+};
+
+const extractExact12Digits = (aadhaarValue) => {
+  if (!aadhaarValue) return null;
+  const digits = aadhaarValue.toString().replace(/\D/g, '');
+  return digits.length === 12 ? digits : null;
+};
+
+const uploadImagesToS3 = async (front_photo, back_photo, ctx) => {
+  const [frontUploadResult, backUploadResult] = await Promise.all([
+    imageService.uploadImageToS3(
+      front_photo.buffer,
+      front_photo.originalname || 'front_photo.jpg',
+      'aadhaar',
+      ctx.company.id,
+      'front',
+      ctx.user.id
+    ),
+    imageService.uploadImageToS3(
+      back_photo.buffer,
+      back_photo.originalname || 'back_photo.jpg',
+      'aadhaar',
+      ctx.company.id,
+      'back',
+      ctx.user.id
+    )
+  ]);
+
+  return {
+    success: true,
+    frontImageS3Key: frontUploadResult.key,
+    backImageS3Key: backUploadResult.key
+  };
+};
+
+const validateAadhaarNumbers = (frontAadhaarNumber, backAadhaarNumber) => {
+  if (!frontAadhaarNumber && !backAadhaarNumber) {
+    return { success: false, message: 'Could not extract Aadhaar number from images' };
+  }
+
+  const numbersMatch = frontAadhaarNumber && backAadhaarNumber 
+    ? frontAadhaarNumber === backAadhaarNumber 
+    : false;
+
+  if (!numbersMatch) {
+    return { success: false, message: 'Aadhaar numbers from front and back images do not match' };
+  }
+
+  return { success: true, numbersMatch };
+};
+
+const performDetailedValidations = async (existingAadharDetails, extractedData, frontImageS3Key, backImageS3Key) => {
+  const validationResults = {
+    aadhaarLast4Match: false,
+    dobMatch: false,
+    dobOptional: true,
+    photoMatch: false,
+    allValidationsPassed: false
+  };
+
+  if (!existingAadharDetails) {
+    return { success: true, data: validationResults };
+  }
+
+  const aadhaarValidation = validateAadhaarLast4(existingAadharDetails, extractedData);
+  if (!aadhaarValidation.success) {
+    await cleanupFailedUpload(frontImageS3Key, backImageS3Key);
+    return { success: false, message: aadhaarValidation.message };
+  }
+  validationResults.aadhaarLast4Match = aadhaarValidation.match;
+
+  const dobValidation = validateDateOfBirth(existingAadharDetails, extractedData);
+  validationResults.dobMatch = dobValidation.match;
+  validationResults.dobOptional = dobValidation.optional;
+
+  const photoValidation = await validatePhoto(existingAadharDetails, extractedData, frontImageS3Key, backImageS3Key);
+  if (!photoValidation.success) {
+    return { success: false, message: photoValidation.message };
+  }
+  validationResults.photoMatch = photoValidation.match;
+
+  validationResults.allValidationsPassed = 
+    validationResults.aadhaarLast4Match && 
+    validationResults.dobMatch &&
+    validationResults.photoMatch;
+
+  return { success: true, data: validationResults };
+};
+
+const validateAadhaarLast4 = (existingAadharDetails, extractedData) => {
+  if (!existingAadharDetails.uid || !extractedData.aadhaar_number) {
+    return { success: true, match: false };
+  }
+
+  const existingLast4 = getLast4Digits(existingAadharDetails.uid);
+  const extractedLast4 = getLast4Digits(extractedData.aadhaar_number);
+
+  if (!existingLast4 || !extractedLast4) {
+    return { success: true, match: false };
+  }
+
+  if (existingLast4 !== extractedLast4) {
+    return { success: false, message: 'pls check your uploaded image' };
+  }
+
+  return { success: true, match: true };
+};
+
+const validateDateOfBirth = (existingAadharDetails, extractedData) => {
+  const hasExistingDob = !!existingAadharDetails.dob;
+  const hasExtractedDob = !!extractedData.dob;
+
+  if (!hasExistingDob || !hasExtractedDob) {
+    return { match: true, optional: true };
+  }
+
+  const existingDob = normalizeDate(existingAadharDetails.dob);
+  const extractedDob = normalizeDate(extractedData.dob);
+
+  return { 
+    match: existingDob === extractedDob, 
+    optional: false 
+  };
+};
+
+const validatePhoto = async (existingAadharDetails, extractedData, frontImageS3Key, backImageS3Key) => {
+  if (!existingAadharDetails.photoLink || !extractedData.photo) {
+    const match = !existingAadharDetails.photoLink && !extractedData.photo;
+    return { success: true, match };
+  }
+
+  try {
+    const [photoLinkBase64, extractedPhotoBase64] = await Promise.all([
+      extractBase64FromImage(existingAadharDetails.photoLink),
+      extractBase64FromImage(extractedData.photo)
+    ]);
+
+    if (!photoLinkBase64 || !extractedPhotoBase64) {
+      return { success: false, message: 'Invalid photo data. Please try again.' };
+    }
+
+    const photoLinkBuffer = validateAndConvertBase64(photoLinkBase64);
+    const extractedPhotoBuffer = validateAndConvertBase64(extractedPhotoBase64);
+
+    if (!photoLinkBuffer || !extractedPhotoBuffer) {
+      return { success: false, message: 'Invalid photo format. Please try again.' };
+    }
+
+    const faceComparison = await rekognitionService.compareFaces(
+      photoLinkBuffer.toString('base64'), 
+      extractedPhotoBuffer.toString('base64')
+    );
+
+    const photoMatch = faceComparison.success && faceComparison.matched;
+
+    if (!photoMatch) {
+      await cleanupFailedUpload(frontImageS3Key, backImageS3Key);
+      return { success: false, message: 'pls check your uploaded image' };
+    }
+
+    return { success: true, match: photoMatch };
+
+  } catch (error) {
+    console.error('Error comparing faces:', error);
+    return { success: true, match: false };
+  }
+};
+
+const buildUpdatePayload = (frontImageS3Key, backImageS3Key, extractedData, existingAadharDetails, validationResults) => {
+  const updateData = {
+    aadharFrontImage: frontImageS3Key,
+    aadharBackImage: backImageS3Key
+  };
+
+  const sanitizedAadhaarNumber = extractedData.aadhaar_number?.toString().replace(/\D/g, '') || '';
+  
+  if (sanitizedAadhaarNumber) {
+    const aadharLast4 = sanitizedAadhaarNumber.slice(-4);
+    const canPersistFullAadhaarNumber = !existingAadharDetails || validationResults.allValidationsPassed;
+
+    updateData.aadharDetails = {
+      aadhaarLast4: aadharLast4 || null,
+      aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
+    };
+  }
+
+  if (extractedData.aadhaar_number && extractedData.aadhaar_numbers_match) {
+    if (!existingAadharDetails || validationResults.allValidationsPassed) {
+      updateData.aadharVerify = true;
+    }
+  }
+
+  return updateData;
+};
+
+const persistUserData = async (userId, updateData) => {
+  try {
+    await dbService.update(model.user, { id: userId }, updateData);
+  } catch (dbError) {
+    const errorMessage = dbError.message || dbError.parent?.message || '';
+    const isTooLongError = dbError.name === 'SequelizeDatabaseError' && 
+      (errorMessage.includes('too long') || errorMessage.includes('value too long'));
+
+    if (!isTooLongError) {
+      throw dbError;
+    }
+
+    if (updateData.aadharDetails) {
+      const { aadhaarLast4, aadhaarNumber } = updateData.aadharDetails;
+      try {
+        updateData.aadharDetails = { aadhaarLast4, aadhaarNumber };
+        await dbService.update(model.user, { id: userId }, updateData);
+        return;
+      } catch (secondError) {
+        const { aadharDetails, ...updateDataWithoutDetails } = updateData;
+        await dbService.update(model.user, { id: userId }, updateDataWithoutDetails);
+        return;
+      }
+    }
+
+    const { aadharDetails, ...updateDataWithoutDetails } = updateData;
+    await dbService.update(model.user, { id: userId }, updateDataWithoutDetails);
+  }
+};
+
+const buildResponseMessage = (existingAadharDetails, validationResults) => {
+  if (!existingAadharDetails) {
+    return 'Aadhar documents processed and uploaded successfully';
+  }
+
+  if (validationResults.allValidationsPassed) {
+    return 'Aadhar documents verified and uploaded successfully.';
+  }
+
+  const failedValidations = [];
+  if (!validationResults.aadhaarLast4Match) {
+    failedValidations.push('Last 4 digits of Aadhaar number do not match');
+  }
+  if (!validationResults.dobMatch && !validationResults.dobOptional) {
+    failedValidations.push('Date of birth does not match');
+  }
+  if (!validationResults.photoMatch) {
+    failedValidations.push('Photo does not match');
+  }
+
+  if (failedValidations.length > 0) {
+    return `Aadhar documents uploaded successfully. However, some validations failed: ${failedValidations.join(', ')}`;
+  }
+
+  return 'Aadhar documents processed and uploaded successfully';
+};
+
+const buildResponseData = (extractedData, frontData, aadhaarNumbersMatch) => {
+  return {
+    success: aadhaarNumbersMatch,
+    aadhaar_number: extractedData.aadhaar_number,
+    aadhaar_numbers_match: aadhaarNumbersMatch,
+    name: frontData.name || null,
+    dob: extractedData.dob || null,
+    gender: frontData.gender || null,
+    photo: extractedData.photo || null
+  };
+};
+
+const cleanupFailedUpload = async (frontImageS3Key, backImageS3Key) => {
+  await Promise.all([
+    imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+      console.error('Error deleting front image from S3:', err)
+    ),
+    imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+      console.error('Error deleting back image from S3:', err)
+    )
+  ]);
+};
+
 
 module.exports = {
   verifyOnboardingLink,
