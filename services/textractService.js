@@ -212,11 +212,58 @@ const extractAadhaarData = async (imageBuffer) => {
     }
 
     // Extract DOB (various formats: DD/MM/YYYY, DD-MM-YYYY, etc.)
-    const dobRegex = /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/g;
-    const dobMatches = textBlocks.match(dobRegex);
+    // Look for DOB specifically after DOB-related keywords, not Download Date or Issue Date
     let dob = null;
-    if (dobMatches && dobMatches.length > 0) {
-      dob = dobMatches[0];
+    const dobKeywords = ['DOB', 'dob', 'Date of Birth', 'date of birth', 'जन्म दिनांक', 'जन्मदिनांक', 'Date Of Birth'];
+    const excludeDateKeywords = ['Download Date', 'download date', 'Issue Date', 'issue date', 'Download', 'Issue'];
+    
+    // First, find all dates in the text
+    const dobRegex = /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/g;
+    const allDates = [];
+    let match;
+    while ((match = dobRegex.exec(textBlocks)) !== null) {
+      const dateStr = match[0];
+      const dateIndex = match.index;
+      
+      // Get context around the date (50 chars before and after)
+      const contextStart = Math.max(0, dateIndex - 50);
+      const contextEnd = Math.min(textBlocks.length, dateIndex + dateStr.length + 50);
+      const context = textBlocks.substring(contextStart, contextEnd).toLowerCase();
+      
+      // Check if this date is associated with excluded keywords
+      const isExcluded = excludeDateKeywords.some(keyword => 
+        context.includes(keyword.toLowerCase())
+      );
+      
+      // Check if this date is associated with DOB keywords
+      const isDobDate = dobKeywords.some(keyword => 
+        context.includes(keyword.toLowerCase())
+      );
+      
+      if (isDobDate && !isExcluded) {
+        dob = dateStr;
+        break; // Found the DOB, stop searching
+      } else if (!isExcluded && !dob) {
+        // If no DOB keyword found but date is not excluded, store as potential DOB
+        // (fallback if DOB keyword is not detected)
+        allDates.push({ date: dateStr, index: dateIndex, context });
+      }
+    }
+    
+    // If DOB not found with keywords, try to find date that's not near excluded keywords
+    if (!dob && allDates.length > 0) {
+      // Filter out dates that are near excluded keywords
+      const validDates = allDates.filter(dateInfo => {
+        const contextLower = dateInfo.context.toLowerCase();
+        return !excludeDateKeywords.some(keyword => 
+          contextLower.includes(keyword.toLowerCase())
+        );
+      });
+      
+      if (validDates.length > 0) {
+        // Take the first valid date that's not excluded
+        dob = validDates[0].date;
+      }
     }
 
     // Extract gender (MALE, FEMALE, M, F)
@@ -229,31 +276,131 @@ const extractAadhaarData = async (imageBuffer) => {
                genderText === 'F' || genderText === 'FEMALE' ? 'FEMALE' : null;
     }
 
-    // Extract name (usually appears before DOB or after "Name" keyword)
-    // This is a simplified extraction - you may need to refine based on actual card format
+    // Extract name - skip header text like "Government of India"
     let name = null;
-    const nameKeywords = ['Name', 'NAME', 'नाम'];
+    const excludeNamePatterns = [
+      'government of india',
+      'भारत सरकार',
+      'भारत सरकार government of india',
+      'government',
+      'india',
+      'aadhaar',
+      'आधार',
+      'enrolment',
+      'my aadhaar',
+      'my identity',
+      'नನ್ನ ಆಧಾರ್',
+      'ನನ್ನ ಗುರುತು'
+    ];
+    
+    // First, try to find name using keywords
+    const nameKeywords = ['Name', 'NAME', 'नाम', 'ಹೆಸರು'];
     for (const keyword of nameKeywords) {
       const keywordIndex = textBlocks.indexOf(keyword);
       if (keywordIndex !== -1) {
         const afterKeyword = textBlocks.substring(keywordIndex + keyword.length).trim();
-        const nameMatch = afterKeyword.match(/^[A-Z\s]{3,}/);
+        // Match name pattern: letters, spaces, and common name characters
+        const nameMatch = afterKeyword.match(/^([A-Z][A-Za-z\s\.]{2,})/);
         if (nameMatch) {
-          name = nameMatch[0].trim();
-          break;
+          const candidateName = nameMatch[0].trim();
+          // Check if it's not an excluded pattern
+          const isExcluded = excludeNamePatterns.some(pattern => 
+            candidateName.toLowerCase().includes(pattern.toLowerCase())
+          );
+          if (!isExcluded) {
+            name = candidateName;
+            break;
+          }
         }
       }
     }
 
-    // If name not found with keyword, try to extract first meaningful text block
+    // If name not found with keyword, try to extract from line blocks
+    // Skip header text and look for person's name
     if (!name) {
       const lines = response.Blocks
-        .filter(block => block.BlockType === 'LINE' && block.Confidence > 80)
-        .map(block => block.Text.trim())
-        .filter(text => text.length > 3 && !text.match(/^\d+$/));
+        .filter(block => block.BlockType === 'LINE' && block.Confidence > 70)
+        .map(block => ({
+          text: block.Text.trim(),
+          confidence: block.Confidence,
+          geometry: block.Geometry
+        }))
+        .filter(block => {
+          const text = block.text.toLowerCase();
+          const originalText = block.text;
+          
+          // Filter out:
+          // - Pure numbers
+          // - Excluded patterns
+          // - Very short text
+          // - Text that looks like dates or Aadhaar numbers
+          if (originalText.match(/^\d+$/) || originalText.length < 3) return false;
+          if (originalText.match(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/)) return false;
+          if (originalText.match(/^\d{4}\s+\d{4}\s+\d{4}$/)) return false;
+          
+          // Filter out excluded patterns
+          if (excludeNamePatterns.some(pattern => text.includes(pattern))) return false;
+          
+          // Explicitly filter out "Government of India" and variations
+          if (text.includes('government') && text.includes('india')) return false;
+          if (text.includes('भारत') && text.includes('सरकार')) return false;
+          
+          // Filter out text that's all uppercase and long (likely headers)
+          // But allow short uppercase text (could be initials)
+          if (originalText === originalText.toUpperCase() && originalText.length > 15) return false;
+          
+          // Filter out text that contains only common words (likely not a name)
+          const commonWords = ['of', 'the', 'and', 'or', 'to', 'in', 'on', 'at', 'for', 'with'];
+          const words = text.split(/\s+/);
+          if (words.length > 1 && words.every(word => commonWords.includes(word))) return false;
+          
+          // Filter out text that starts with common header words
+          const headerStartWords = ['government', 'भारत', 'india', 'aadhaar', 'आधार'];
+          if (headerStartWords.some(word => text.startsWith(word))) return false;
+          
+          return true;
+        })
+        .sort((a, b) => b.confidence - a.confidence); // Sort by confidence
       
+      // Try to find name that appears near Aadhaar number or DOB
       if (lines.length > 0) {
-        name = lines[0];
+        // Look for lines that contain letters and spaces (likely names)
+        const nameCandidates = lines.filter(block => {
+          const text = block.text;
+          // Should start with uppercase letter, contain letters, may contain spaces, dots, and be reasonable length
+          // Exclude if it's all uppercase and too long (likely header)
+          if (text === text.toUpperCase() && text.length > 20) return false;
+          
+          // Match pattern: starts with letter, contains letters/spaces/dots, reasonable length
+          return /^[A-Z][A-Za-z\s\.]{2,}$/.test(text) && text.length >= 3 && text.length <= 50;
+        });
+        
+        if (nameCandidates.length > 0) {
+          // Prefer names that appear before DOB or near Aadhaar number
+          const aadhaarIndex = aadhaarNumber ? textBlocks.indexOf(aadhaarNumber) : -1;
+          const dobIndex = dob ? textBlocks.indexOf(dob) : -1;
+          
+          for (const candidate of nameCandidates) {
+            const candidateIndex = textBlocks.indexOf(candidate.text);
+            
+            // If we have Aadhaar number, prefer name that appears before it
+            if (aadhaarIndex !== -1 && candidateIndex < aadhaarIndex) {
+              name = candidate.text;
+              break;
+            }
+            
+            // If we have DOB, prefer name that appears before it
+            if (dobIndex !== -1 && candidateIndex < dobIndex) {
+              name = candidate.text;
+              break;
+            }
+          }
+          
+          // If still no name, take the first valid candidate
+          if (!name && nameCandidates.length > 0) {
+            name = nameCandidates[0].text;
+          }
+        }
       }
     }
 
