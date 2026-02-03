@@ -2564,8 +2564,9 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
 
     console.log("frontAadhaarNumber", frontAadhaarNumber);
     console.log("backAadhaarNumber", backAadhaarNumber);
-
     console.log("response", response);
+    console.log("DataResponse", response)
+
  
     // Determine response message and status based on validation results
     let message = '';
