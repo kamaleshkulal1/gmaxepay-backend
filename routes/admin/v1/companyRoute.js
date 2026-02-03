@@ -19,7 +19,6 @@ router.post('/create-company', authentication, upload.single('profileImage'), mu
 router.put('/update-company/:id', authentication, companyController.updateCompany );
 router.put('/update-logo-favicon/:id', authentication, upload.single('image'), multer, companyController.updateCompanyLogoAndFavicon );
 router.post('/ip-check', authentication, companyController.getIpCheck );
-// deactivate and resend onboarding link
 router.post('/:token/deactivate-onboarding-link', authentication, companyController.deactivateOnboarding);
 router.post('/:companyid/resend-onboarding-link', authentication, companyController.resendOnboardingLink);
 

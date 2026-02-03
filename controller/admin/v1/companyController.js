@@ -195,336 +195,277 @@ const createCompany = async (req, res) => {
       });
     }
     
-    // Check for duplicate phone number
-    const existingPhone = await dbService.findOne(model.user, {
-      mobileNo: data.MobileNo,
-      isDeleted: false
-    });
+    // Parallel duplicate checks for better performance
+    const [
+      existingPhone,
+      existingEmail,
+      existingDomain,
+      existingCompany,
+      existingPanCompany,
+      existingPan
+    ] = await Promise.all([
+      // Check for duplicate phone number
+      dbService.findOne(model.user, {
+        mobileNo: data.MobileNo,
+        isDeleted: false
+      }),
+      // Check for duplicate email
+      dbService.findOne(model.user, {
+        email: data.email,
+        isDeleted: false
+      }),
+      // Check for duplicate domain name
+      dbService.findOne(model.company, {
+        customDomain: data.customDomain,
+        isDeleted: false
+      }),
+      // Check for duplicate company name
+      dbService.findOne(model.company, {
+        companyName: data.companyName,
+        isDeleted: false
+      }),
+      // Check for duplicate PAN number (direct query)
+      dbService.findOne(model.company, {
+        companyPan: data.PanNumber,
+        isDeleted: false
+      }),
+      // Check PAN in eKycHub for verification
+      dbService.findOne(model.ekycHub, {
+        identityNumber1: data.PanNumber,
+        identityType: 'PAN'
+      })
+    ]);
     
+    // Validate duplicates
     if (existingPhone) {
       return res.failure({
         message: 'Phone number already exists',
-        data: {
-          mobileNo: data.MobileNo
-        }
+        data: { mobileNo: data.MobileNo }
       });
     }
-    
-    // Check for duplicate email
-    const existingEmail = await dbService.findOne(model.user, {
-      email: data.email,
-      isDeleted: false
-    });
     
     if (existingEmail) {
       return res.failure({
         message: 'Email already exists',
-        data: {
-          email: data.email
-        }
+        data: { email: data.email }
       });
     }
-    
-    // Check for duplicate domain name
-    const existingDomain = await dbService.findOne(model.company, {
-      customDomain: data.customDomain,
-      isDeleted: false
-    });
     
     if (existingDomain) {
       return res.failure({
         message: 'Domain name already exists',
-        data: {
-          customDomain: data.customDomain
-        }
+        data: { customDomain: data.customDomain }
       });
     }
-    
-    // Check for duplicate company name
-    const existingCompany = await dbService.findOne(model.company, {
-      companyName: data.companyName,
-      isDeleted: false
-    });
     
     if (existingCompany) {
       return res.failure({
         message: 'Company name already exists',
-        data: {
-          companyName: data.companyName
-        }
+        data: { companyName: data.companyName }
       });
     }
-    
-    // Check for duplicate PAN number
-    // First try direct query (in case PAN is stored as plain text)
-    const existingPanCompany = await dbService.findOne(model.company, {
-      companyPan: data.PanNumber,
-      isDeleted: false
-    });
     
     if (existingPanCompany) {
       return res.failure({
         message: 'PAN number already exists',
-        data: {
-          panNumber: data.PanNumber
-        }
+        data: { panNumber: data.PanNumber }
       });
     }
     
-    // Also check if PAN is stored encrypted by fetching all companies and decrypting
-    // This handles the case where PAN might be encrypted in the database
-    try {
-      const allCompanies = await dbService.findAll(
-        model.company,
-        { isDeleted: false },
-        { attributes: ['id', 'companyPan'] }
-      );
-      
-      for (const company of allCompanies) {
-        let decryptedPan = null;
-        try {
-          // Try to parse as JSON (encrypted format)
-          const panData = typeof company.companyPan === 'string' 
-            ? JSON.parse(company.companyPan) 
-            : company.companyPan;
-          
-          if (panData && panData.encrypted) {
-            // It's encrypted, decrypt it
-            decryptedPan = decrypt(panData, key);
-          } else {
-            // It's plain text
-            decryptedPan = company.companyPan;
-          }
-        } catch (e) {
-          // If parsing fails, assume it's plain text
-          decryptedPan = company.companyPan;
-        }
-        
-        // Compare with input PAN (case-insensitive)
-        if (decryptedPan && decryptedPan.toLowerCase().trim() === data.PanNumber.toLowerCase().trim()) {
-          return res.failure({
-            message: 'PAN number already exists',
-            data: {
-              panNumber: data.PanNumber
-            }
-          });
-        }
-      }
-    } catch (panCheckError) {
-      console.error('Error checking duplicate PAN:', panCheckError);
-      // Don't fail the entire request if PAN check fails, but log it
-    }
-    
-  const encryptedPanNumber = doubleEncrypt(data.PanNumber, key);
-
-  // Declare panNameFromAPI outside the if block so it's accessible throughout the function
+  // PAN verification logic (using already fetched existingPan)
   let panNameFromAPI = null;
-
-  // PAN verification logic
-  try {
-    // Check if PAN already exists in eKycHub table
-    const existingPan = await dbService.findOne(model.ekycHub, {
-      identityNumber1: data.PanNumber,
-      identityType: 'PAN'
-    });
-
-    if (existingPan) {
-      // Decrypt the cached response
-      let panVerificationResult = null;
-      try {
-        const encryptedData = JSON.parse(existingPan.response);
-        if (encryptedData && encryptedData.encrypted) {
-          const decryptedResponse = decrypt(encryptedData, key);
-          if (decryptedResponse) {
-            panVerificationResult = JSON.parse(decryptedResponse);
-          } else {
-            panVerificationResult = encryptedData;
-          }
-        } else {
-          panVerificationResult = JSON.parse(existingPan.response);
-        }
-      } catch (e) {
-        // If not encrypted or not JSON, return as is
-        panVerificationResult = existingPan.response;
-      }
-      // Check if PAN name matches
-      if (panVerificationResult && panVerificationResult.status === 'Success') {
-        panNameFromAPI = panVerificationResult.registered_name || panVerificationResult.data?.name || panVerificationResult.name;
-        if (panNameFromAPI && panNameFromAPI.toLowerCase().trim() === data.PanName.toLowerCase().trim()) {
-          // PAN name matches, continue with company creation
-        } else {
-          // PAN name doesn't match
-          return res.failure({
-            message: 'PAN name mismatch. Please verify your PAN name.',
-            data: {
-              providedPanName: data.PanName,
-            }
-          });
-        }
-      } else {
-        // PAN verification failed
-        return res.failure({
-          message: 'PAN verification failed. Please fetch PAN verification first.',
-          data: {
-            panNumber: data.PanNumber,
-            status: panVerificationResult?.status || 'Failed'
-          }
-        });
-      }
-    } else {
-      // PAN not found in eKycHub table
-      return res.failure({
-        message: 'PAN not found in verification records. Please fetch PAN verification first.',
-        data: {
-          panNumber: data.PanNumber
-        }
-      });
-    }
-
-  } catch (panError) {
-    console.error('PAN verification error:', panError);
+  
+  if (!existingPan) {
     return res.failure({
-      message: 'PAN verification failed. Please try again.',
-      error: panError.message
+      message: 'PAN not found in verification records. Please fetch PAN verification first.',
+      data: { panNumber: data.PanNumber }
     });
   }
 
-  // Handle profile image upload - will be done after user creation to get userId
-  let profileImageKey = data.profileImage;
+  // Decrypt the cached response
+  let panVerificationResult = null;
+  try {
+    const encryptedData = JSON.parse(existingPan.response);
+    if (encryptedData && encryptedData.encrypted) {
+      const decryptedResponse = decrypt(encryptedData, key);
+      if (decryptedResponse) {
+        panVerificationResult = JSON.parse(decryptedResponse);
+      } else {
+        panVerificationResult = encryptedData;
+      }
+    } else {
+      panVerificationResult = JSON.parse(existingPan.response);
+    }
+  } catch (e) {
+    // If not encrypted or not JSON, return as is
+    panVerificationResult = existingPan.response;
+  }
+  
+  // Check if PAN name matches
+  if (panVerificationResult && panVerificationResult.status === 'Success') {
+    panNameFromAPI = panVerificationResult.registered_name || panVerificationResult.data?.name || panVerificationResult.name;
+    if (panNameFromAPI && panNameFromAPI.toLowerCase().trim() !== data.PanName.toLowerCase().trim()) {
+      return res.failure({
+        message: 'PAN name mismatch. Please verify your PAN name.',
+        data: { providedPanName: data.PanName }
+      });
+    }
+  } else {
+    return res.failure({
+      message: 'PAN verification failed. Please fetch PAN verification first.',
+      data: {
+        panNumber: data.PanNumber,
+        status: panVerificationResult?.status || 'Failed'
+      }
+    });
+  }
+
+  const encryptedPanNumber = doubleEncrypt(data.PanNumber, key);
 
   // Prepare company data
-    const companyData = {
-      companyName: data.companyName,
-      companyPan: data.PanNumber,
-      BussinessEntity: data.BussinessEntity,
-      fullAddress: data.address,
-      city: data.city,
-      state: data.state,
-      postalCode: data.postalCode,
-      customDomain: data.customDomain,
-      remark: data.Remarks,
-      companyGst: data.companyGst,
-      isActive: true
-    };
+  const companyData = {
+    companyName: data.companyName,
+    companyPan: data.PanNumber,
+    BussinessEntity: data.BussinessEntity,
+    fullAddress: data.address,
+    city: data.city,
+    state: data.state,
+    postalCode: data.postalCode,
+    customDomain: data.customDomain,
+    remark: data.Remarks,
+    companyGst: data.companyGst,
+    isActive: true
+  };
 
-    // Create company first
-    const company = await dbService.createOne(model.company, companyData);
+  // Generate unique refer code in parallel with company creation
+  const [company, referCode] = await Promise.all([
+    dbService.createOne(model.company, companyData),
+    generateUniqueReferCode(data.companyName)
+  ]);
 
-    // Generate unique refer code for the company admin user
-    const referCode = await generateUniqueReferCode(data.companyName);
+  // Handle profile image - prepare key
+  let profileImageKey = data.profileImage;
 
-    const userData = {
-      mobileNo: data.MobileNo,
-      email: data.email,
-      profileImage: profileImageKey,
-      userRole: 2,
-      companyId: company.id,
-      userType: 1,
-      name: panNameFromAPI || data.PanName, 
-      fullAddress: data.address,
-      city: data.city,
-      state: data.state,
-      zipcode: data.postalCode,
-      referCode: referCode,
-      isActive: true,
-      companyName: data.companyName, // Pass company name for userId generation (temporary field, not saved to DB)
-    };
+  // Prepare user data
+  const userData = {
+    mobileNo: data.MobileNo,
+    email: data.email,
+    profileImage: profileImageKey,
+    userRole: 2,
+    companyId: company.id,
+    userType: 1,
+    name: panNameFromAPI || data.PanName, 
+    fullAddress: data.address,
+    city: data.city,
+    state: data.state,
+    zipcode: data.postalCode,
+    referCode: referCode,
+    isActive: true,
+    companyName: data.companyName, // Pass company name for userId generation (temporary field, not saved to DB)
+  };
 
-    let user = await dbService.createOne(model.user, userData);
+  // Create user
+  let user = await dbService.createOne(model.user, userData);
 
-    // Upload profile image if file is provided (after user creation to get userId)
-    if (req.file && !data.profileImage) {
-      try {
-        // Upload profile image with path pattern: images/{userId}/{companyId}/profile/
-        const fileBuffer = req.file.buffer;
-        const fileName = req.file.originalname;
-        const uploadResult = await uploadImageToS3(
-          fileBuffer,
-          fileName,
-          'profile',
-          company.id, // companyId
-          null, // subtype not needed
-          user.id // userId for path pattern: images/{userId}/{companyId}/profile/
-        );
-        profileImageKey = uploadResult.key;
-        
-        // Update user with profile image
-        await dbService.update(model.user, { id: user.id }, { profileImage: profileImageKey });
-        // Reload user to get updated profileImage
-        user = await dbService.findOne(model.user, { id: user.id });
-      } catch (uploadError) {
-        console.error('Profile image upload error:', uploadError);
-        return res.failure({
-          message: 'Failed to upload profile image. Please try again.',
-          error: uploadError.message
-        });
+  // Parallel: Upload image (if needed) and create wallet
+  const [uploadResult, wallet] = await Promise.all([
+    // Upload profile image if file is provided
+    (async () => {
+      if (req.file && !data.profileImage) {
+        try {
+          const fileBuffer = req.file.buffer;
+          const fileName = req.file.originalname;
+          const result = await uploadImageToS3(
+            fileBuffer,
+            fileName,
+            'profile',
+            company.id,
+            null,
+            user.id
+          );
+          profileImageKey = result.key;
+          // Update user with profile image
+          await dbService.update(model.user, { id: user.id }, { profileImage: profileImageKey });
+          return result;
+        } catch (uploadError) {
+          console.error('Profile image upload error:', uploadError);
+          // Don't fail the request, just log the error
+          return null;
+        }
       }
-    }
-
+      return null;
+    })(),
     // Create wallet for the user
-    const walletData = {
+    dbService.createOne(model.wallet, {
       refId: user.id,
       companyId: company.id,
       mainWallet: 0,
       apes1Wallet: 0,
       apes2Wallet: 0,
       roleType: 2
-    };
+    })
+  ]);
 
-    const wallet = await dbService.createOne(model.wallet, walletData);
+  // Reload user if image was uploaded
+  if (uploadResult) {
+    user = await dbService.findOne(model.user, { id: user.id });
+  }
 
-    // Generate onboarding token
-    const onboardingExpiry = process.env.ON_BOARDING_EXPIRY || '6d';
-    const tokenData = generateOnboardingToken({
-      userId: user.id,
-      name: user.name,
-      companyId: company.id,
-      userRole: user.userRole
-    }, onboardingExpiry);
+  // Generate onboarding token
+  const onboardingExpiry = process.env.ON_BOARDING_EXPIRY || '6d';
+  const tokenData = generateOnboardingToken({
+    userId: user.id,
+    name: user.name,
+    companyId: company.id,
+    userRole: user.userRole
+  }, onboardingExpiry);
 
-    // Save onboarding token to database
-    const onboardingTokenData = {
-      userId: user.id,
-      companyId: company.id,
-      token: tokenData.token,
-      expiresAt: tokenData.expiresAt,
-      isUsed: false
-    };
+  // Save onboarding token to database
+  await dbService.createOne(model.onboardingToken, {
+    userId: user.id,
+    companyId: company.id,
+    token: tokenData.token,
+    expiresAt: tokenData.expiresAt,
+    isUsed: false
+  });
 
-    await dbService.createOne(model.onboardingToken, onboardingTokenData);
+    // Prepare response data
+    const profileImageUrl = user.profileImage ? (() => {
+      const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+      let plainKey = user.profileImage;
+      if (typeof plainKey === 'string' && !plainKey.startsWith('images/')) {
+        try {
+          const { decrypt } = require('../../../utils/encryption');
+          plainKey = decrypt(plainKey);
+        } catch (e) {
+          // If decryption fails, use as is
+        }
+      }
+      return plainKey ? `${cdnUrl}/${plainKey}` : null;
+    })() : null;
 
-    // Construct onboarding URL
+    // Send welcome email asynchronously (non-blocking)
     const frontendUrl = process.env.FRONTEND_URL || 'https://app.gmaxepay.in';
     const onboardingLink = `${frontendUrl}/onboarding/${tokenData.token}`;
-
-    // Get company logo URL (from company.logo or default)
-    let logoUrl = company.logo ? getImageUrl(company.logo) : null;
-    if (!logoUrl) {
-      // Use default logo from public folder
-      const backendUrl = process.env.BASE_URL;
-      logoUrl = `${backendUrl}/gmaxepay.png`;
-    }
-
-    // Get mail icons URL
     const backendUrl = process.env.BASE_URL;
+    const logoUrl = company.logo ? getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
     const iconUrl = `${backendUrl}/mailicons.png`;
-
-    // Send welcome email with onboarding link
-    try {
-      await sendWelcomeEmail({
-        to: user.email,
-        userName: user.name,
-        onboardingLink: onboardingLink,
-        logoUrl: logoUrl,
-        iconUrl: iconUrl,
-        expiryTime: tokenData.expiryDisplay
-      });
+    
+    // Fire and forget email (don't wait for it)
+    sendWelcomeEmail({
+      to: user.email,
+      userName: user.name,
+      onboardingLink: onboardingLink,
+      logoUrl: logoUrl,
+      iconUrl: iconUrl,
+      expiryTime: tokenData.expiryDisplay
+    }).then(() => {
       console.log('Welcome email sent successfully to:', user.email);
-    } catch (emailError) {
+    }).catch((emailError) => {
       console.error('Failed to send welcome email:', emailError);
-      // Don't fail the entire request if email fails, just log it
-    }
+    });
 
+    // Return response immediately
     return res.success({
       message: 'Company created successfully',
       data: {
@@ -534,22 +475,8 @@ const createCompany = async (req, res) => {
           userId: user.userId,
           mobileNo: user.mobileNo,
           email: user.email,
-          referCode: user.referCode, // Refer code (already decrypted by model hooks)
-          profileImageUrl: user.profileImage ? (() => {
-            // For profile images, use simple CDN URL (no secure proxy)
-            const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
-            // Extract plain key (already decrypted by model hooks)
-            let plainKey = user.profileImage;
-            if (typeof plainKey === 'string' && !plainKey.startsWith('images/')) {
-              try {
-                const { decrypt } = require('../../../utils/encryption');
-                plainKey = decrypt(plainKey);
-              } catch (e) {
-                // If decryption fails, use as is
-              }
-            }
-            return plainKey ? `${cdnUrl}/${plainKey}` : null;
-          })() : null
+          referCode: user.referCode,
+          profileImageUrl: profileImageUrl
         }
       }
     });
