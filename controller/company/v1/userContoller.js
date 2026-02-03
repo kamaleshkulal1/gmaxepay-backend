@@ -786,6 +786,7 @@ const findAllCompanyReportToUser = async (req, res) => {
     return res.internalServerError({ message: error.message });
   }
 };
+
 module.exports = {
   findAllUsers,
   setMPIN,

@@ -829,11 +829,255 @@ const resetMPIN = async (req, res) => {
   }
 };
 
+const getUserProfile = async (req, res) => {
+  try {
+    if (![3, 4, 5].includes(req.user.userRole)) {
+      return res.failure({ message: 'You are not authorized to get user details' });
+    }
+    const existingUser = await dbService.findOne(model.user, { id: req.user.id ,companyId: req.user.companyId});
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+    
+    const companyDetails = existingUser.companyId 
+      ? await dbService.findOne(model.company, { id: existingUser.companyId })
+      : null;
+
+    const [outletDetails, companyBankDetails] = await Promise.all([
+      existingUser.companyId 
+        ? dbService.findOne(model.outlet, { refId: existingUser.id, companyId: existingUser.companyId })
+        : null,
+      existingUser.companyId
+        ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId })
+        : []
+    ]);
+
+    const getCdnImageUrl = (imageData) => {
+      if (!imageData) return null;
+      const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+      if (typeof imageData === 'object' && imageData.key) {
+        return `${cdnUrl}/${imageData.key}`;
+      }
+      if (typeof imageData === 'string' && imageData.startsWith('images/')) {
+        return `${cdnUrl}/${imageData}`;
+      }
+      return imageData;
+    };
+
+    const response = {
+      id: existingUser.id,
+      name: existingUser.name,
+      email: existingUser.email,
+      mobileNo: existingUser.mobileNo,
+      slabId: existingUser.slabId,
+      aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
+      pancardNumber: existingUser.panDetails?.pancardNumber,
+      aadhaarFrontImage: getCdnImageUrl(existingUser.aadharFrontImage),
+      aadhaarBackImage: getCdnImageUrl(existingUser.aadharBackImage),
+      pancardFrontImage: getCdnImageUrl(existingUser.panCardFrontImage),
+      pancardBackImage: getCdnImageUrl(existingUser.panCardBackImage),
+      profileImage: getCdnImageUrl(existingUser.profileImage),
+      agentCode: existingUser.userId,
+      status: existingUser.isActive ? 'Active' : 'Inactive',
+      createdAt: existingUser.createdAt,
+      address: existingUser.fullAddress,
+      pinCode: existingUser.zipcode,
+      state: existingUser.state,
+      district: existingUser.district,
+      country: existingUser.country,
+      city: existingUser.city,
+      longitude: existingUser.longitude,
+      latitude: existingUser.latitude,
+      kycStatus: existingUser.kycStatus,
+      companyDetails: companyDetails
+        ? {
+          companyId: companyDetails.id,
+          companyName: companyDetails.companyName,
+          compnyPan: companyDetails.companyPan,
+          companyDomain: companyDetails.customDomain ? `https://${companyDetails.customDomain}` : null,
+          compnyGst: companyDetails.companyGst,
+          compnyLogo: getCdnImageUrl(companyDetails.logo)
+        }
+        : null,
+      outletDetails: outletDetails
+        ? {
+          shopName: outletDetails.shopName,
+          shopImage: getCdnImageUrl(outletDetails.shopImage),
+          shopAddress: outletDetails.shopAddress,
+          googleMapsLink: outletDetails.outletGoogleMapsLink
+        }
+        : null,
+      bankDetails: (companyBankDetails || []).map(bank => ({
+        id: bank.id,
+        bankName: bank.bankName,
+        accountNumber: bank.accountNumber,
+        ifsc: bank.ifsc,
+        city: bank.city,
+        branch: bank.branch
+      }))
+    };
+    
+    return res.success({ message: 'User details retrieved successfully', data: response });
+  } catch (error) {
+    console.error('Error retrieving user details:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
+const findAllTheirDownlineUsers = async (req, res) => {
+  try {
+    if (![3, 4].includes(req.user.userRole)) {
+      return res.failure({ message: 'You are not authorized to access this resource' });
+    }
+
+    const companyId = req.user.companyId;
+    const currentUserId = req.user.id;
+    const currentUserRole = req.user.userRole;
+    
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    // Determine allowed user roles based on current user's role
+    let allowedRoles = [];
+    if (currentUserRole === 3) {
+      // Master Distributor (3) can see Distributors (4) and Retailers (5)
+      allowedRoles = [4, 5];
+    } else if (currentUserRole === 4) {
+      // Distributor (4) can only see Retailers (5)
+      allowedRoles = [5];
+    }
+
+    // Get request body for filtering, pagination, and search
+    let dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      companyId: companyId,
+      reportingTo: currentUserId, // Only users that report directly to the current user
+      userRole: { [Op.in]: allowedRoles }
+    };
+
+    // Build query from request body
+    if (dataToFind.query) {
+      // Apply userRole filter if provided (must be within allowed roles)
+      if (dataToFind.query.userRole !== undefined) {
+        const requestedRole = dataToFind.query.userRole;
+        
+        // Access denied for userRole 1 (Admin) and 2 (Whitelabel)
+        if (requestedRole === 1 || requestedRole === 2) {
+          return res.failure({ message: "Access denied! You cannot filter by this user role." });
+        }
+        
+        // Ensure requested role is within allowed roles for current user
+        if (allowedRoles.includes(requestedRole)) {
+          query.userRole = requestedRole;
+        } else {
+          return res.failure({ 
+            message: `Access denied! You can only view users with roles: ${allowedRoles.join(', ')}` 
+          });
+        }
+      }
+
+      // Apply other query filters
+      Object.keys(dataToFind.query).forEach(key => {
+        if (key !== 'userRole' && key !== 'reportingTo') {
+          query[key] = dataToFind.query[key];
+        }
+      });
+    }
+
+    // Handle options (pagination, sorting)
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+    }
+
+    // Handle customSearch
+    if (dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        // Combine customSearch with existing query conditions
+        query = {
+          companyId: query.companyId,
+          reportingTo: query.reportingTo,
+          userRole: query.userRole,
+          [Op.and]: [
+            {
+              [Op.or]: orConditions
+            }
+          ]
+        };
+      }
+    }
+
+    // Use pagination
+    let foundUsers = await dbService.paginate(model.user, query, {
+      ...options,
+      attributes: ['id', 'name', 'userId', 'userRole', 'mobileNo', 'email', 'isActive', 'createdAt']
+    });
+
+    if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
+      return res.success({
+        message: 'Users Retrieved Successfully',
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
+      });
+    }
+
+    // Transform users data - only return id, name, userId
+    const transformedUsers = foundUsers.data.map((user) => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      
+      return {
+        id: userData.id,
+        name: userData.name || null,
+        userId: userData.userId || null,
+        mobileNo: userData.mobileNo || null,
+      };
+    });
+
+    return res.success({
+      message: 'Users Retrieved Successfully',
+      data: transformedUsers,
+      total: foundUsers.total,
+      paginator: foundUsers.paginator
+    });
+  } catch (error) {
+    console.error('Error retrieving users reporting to company admin:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   getProfile,
   upgradeUserRole,
   degradeUserRole,
   findAllUsers,
   setMPIN,
-  resetMPIN
+  resetMPIN,
+  getUserProfile,
+  findAllTheirDownlineUsers
 };

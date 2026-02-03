@@ -161,5 +161,5 @@ const getAllSubscriptions = async (req, res) => {
 };
 
 module.exports = {
-    getAllSubscriptions
+  getAllSubscriptions
 };
