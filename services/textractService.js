@@ -344,9 +344,6 @@ const extractAadhaarData = async (imageBuffer) => {
           // Explicitly filter out "Government of India" and variations
           if (text.includes('government') && text.includes('india')) return false;
           if (text.includes('भारत') && text.includes('सरकार')) return false;
-          
-          // Filter out text that's all uppercase and long (likely headers)
-          // But allow short uppercase text (could be initials)
           if (originalText === originalText.toUpperCase() && originalText.length > 15) return false;
           
           // Filter out text that contains only common words (likely not a name)
