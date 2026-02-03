@@ -1,6 +1,7 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { decryptOnboardingToken } = require('../../../utils/onboardingToken');
+const { encrypt } = require('../../../utils/encryption');
 const bcrypt = require('bcrypt');
 const moment = require('moment');
 const random = require('../../../utils/common');
@@ -107,7 +108,6 @@ const loadContextByToken = async (token) => {
   if (!token) return { error: 'Onboarding token is required' };
   
   // Encrypt the token before searching (since tokens are stored encrypted in database)
-  const { encrypt } = require('../../../utils/encryption');
   let encryptedToken;
   try {
     encryptedToken = encrypt(token);
