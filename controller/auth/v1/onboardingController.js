@@ -3059,7 +3059,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
               
               await Promise.all(updatePromises);
             } else {
-              verificationMessage = 'PAN verification failed - Photo does not match Aadhaar photo';
+              verificationMessage = 'Pls check your uploaded Image';
             }
           }
         }
