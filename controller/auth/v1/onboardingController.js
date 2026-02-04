@@ -2907,6 +2907,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
 
+    // Extract uploaded file - only front photo is required for PAN
     const front_photo = req.file || req.files?.front_photo?.[0];
     
     // Validate that front photo is provided
@@ -2919,22 +2920,23 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       });
     }
 
-    // Read static back image file (PAN back doesn't have any information)
-    const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
-    const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
-
     // Extract data from front image using AWS Textract service
-    // Processes front image and extracts photo from front image in parallel
     const [frontData, frontPhoto] = await Promise.all([
       textractService.extractPanData(front_photo.buffer),
       textractService.extractPanPhoto(front_photo.buffer)
     ]);
 
-    // Validate that data extraction was successful for front image
+    // Validate that data extraction was successful
     if (!frontData.success) {
       return res.failure({ 
         message: frontData.error || 'Failed to extract data from front image',
-        success: false
+        data: {
+          textractVerification: {
+            success: false,
+            message: frontData.error || 'Failed to extract data from front image',
+            faceComparison: null
+          }
+        }
       });
     }
 
@@ -2949,38 +2951,196 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       return null;
     };
 
-    const panNumber = extractPanNumber(frontData.pan_number);
+    const extractedPanNumber = extractPanNumber(frontData.pan_number);
 
     // Validate PAN number was extracted
-    if (!panNumber) {
+    if (!extractedPanNumber) {
       return res.failure({ 
         message: 'Could not extract PAN number from image',
-        success: false
+        data: {
+          textractVerification: {
+            success: false,
+            message: 'Could not extract PAN number from image',
+            faceComparison: null
+          }
+        }
       });
     }
 
-    const response = {
+    // Initialize response variables
+    let frontImageS3Key = null;
+    let backImageS3Key = null;
+    let faceComparisonResult = null;
+    let panExistsInDigilocker = false;
+    let uploaded = false;
+    let verificationMessage = 'PAN card processed successfully';
+
+    // Read static back image file (PAN back doesn't have any information)
+    const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
+    const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
+
+    // Parallelize: Get existing user data, check digilocker PAN, and fetch Aadhaar doc
+    const [existingUser, digilockerPanDoc, aadhaarDocResult] = await Promise.all([
+      dbService.findOne(model.user, { id: ctx.user.id }),
+      dbService.findOne(model.digilockerDocument, {
+        refId: ctx.user.id,
+        companyId: ctx.company.id,
+        documentType: 'PAN',
+        panNumber: extractedPanNumber,
+        isDeleted: false
+      }),
+      // Fetch Aadhaar doc only if not in context (parallel fetch)
+      ctx.aadhaarDoc ? Promise.resolve(null) : dbService.findOne(model.digilockerDocument, {
+        refId: ctx.user.id,
+        companyId: ctx.company.id,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      })
+    ]);
+
+    // Use Aadhaar doc from context if available, otherwise use fetched result
+    const aadhaarDoc = ctx.aadhaarDoc || aadhaarDocResult;
+
+    const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
+    const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
+
+    // Check if PAN exists in digilocker
+    if (digilockerPanDoc) {
+      panExistsInDigilocker = true;
+    }
+
+    // Perform face comparison first (before uploading to S3)
+    if (aadhaarDoc?.photoLink && frontPhoto) {
+      try {
+        // Extract base64 from Aadhaar photo
+        const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
+        
+        // Use frontPhoto from Textract (already base64)
+        const panPhotoBase64 = frontPhoto;
+
+        if (aadhaarPhotoBase64 && panPhotoBase64) {
+          const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
+          const panBuffer = validateAndConvertBase64(panPhotoBase64);
+
+          if (aadhaarBuffer && panBuffer) {
+            faceComparisonResult = await rekognitionService.compareFaces(
+              aadhaarBuffer.toString('base64'),
+              panBuffer.toString('base64')
+            );
+
+            // Only proceed with S3 upload if face matches
+            if (faceComparisonResult?.success && faceComparisonResult?.matched) {
+              uploaded = true;
+              verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';
+
+              // Upload images to S3 only if face comparison matches
+              const [frontUploadResult, backUploadResult] = await Promise.all([
+                imageService.uploadImageToS3(
+                  front_photo.buffer,
+                  front_photo.originalname || 'front_pan_photo.jpg',
+                  'pan',
+                  ctx.company.id,
+                  'front',
+                  ctx.user.id
+                ),
+                imageService.uploadImageToS3(
+                  staticBackImageBuffer,
+                  'panbackside.jpeg',
+                  'pan',
+                  ctx.company.id,
+                  'back',
+                  ctx.user.id
+                )
+              ]);
+
+              frontImageS3Key = frontUploadResult.key;
+              backImageS3Key = backUploadResult.key;
+
+              // Update user records with uploaded image keys
+              const updateData = {
+                panCardFrontImage: frontImageS3Key,
+                panCardBackImage: backImageS3Key,
+                panVerify: true
+              };
+
+              await dbService.update(model.user, { id: ctx.user.id }, updateData);
+              await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
+
+              // Update KYC status after PAN upload
+              await updateKycStatus(ctx.user.id, ctx.company.id, { aadhaarDoc: aadhaarDoc });
+            } else {
+              // If face doesn't match, set verification failed message (no S3 upload)
+              verificationMessage = 'PAN verification failed - Photo does not match Aadhaar photo';
+            }
+          }
+        }
+      } catch (comparisonError) {
+        console.error('Error comparing faces:', comparisonError);
+        verificationMessage = 'PAN verification failed - Error during face comparison';
+      }
+    } else {
+      // If Aadhaar photo is not available, set appropriate message
+      verificationMessage = 'Aadhaar photo not available for verification';
+    }
+
+    // Handle failure cases - return failure response
+    // Case 1: Face comparison failed (matched: false)
+    if (faceComparisonResult && !faceComparisonResult.matched) {
+      return res.failure({
+        message: verificationMessage || 'PAN verification failed',
+        data: {
+          textractVerification: {
+            success: true,
+            pan_number: extractedPanNumber,
+            message: verificationMessage || 'PAN verification failed',
+            faceComparison: {
+              matched: faceComparisonResult.matched,
+              similarity: faceComparisonResult.similarity
+            }
+          }
+        }
+      });
+    }
+
+    // Case 2: Aadhaar photo not available (face comparison couldn't be performed)
+    if (!faceComparisonResult && frontData.success) {
+      return res.failure({
+        message: verificationMessage || 'Aadhaar photo not available for verification',
+        data: {
+          textractVerification: {
+            success: true,
+            pan_number: extractedPanNumber,
+            message: verificationMessage || 'Aadhaar photo not available for verification',
+            faceComparison: null
+          }
+        }
+      });
+    }
+
+    // Success case: Face comparison matched - prepare response
+    const textractVerificationResponse = {
       success: true,
-      pan_number: panNumber,
-      photo_b64: frontPhoto || null
+      pan_number: extractedPanNumber,
+      message: verificationMessage,
+      faceComparison: faceComparisonResult ? {
+        matched: faceComparisonResult.matched,
+        similarity: faceComparisonResult.similarity
+      } : null
     };
 
-    console.log("panNumber", panNumber);
-    console.log("response", response);
-    console.log("DataResponse", response);
-
     return res.success({ 
-      message: 'PAN card processed successfully',
+      message: 'PAN documents uploaded successfully',
       data: {
-        ...response
+        panCardFrontImage: frontImageS3Key,
+        panCardBackImage: backImageS3Key,
+        textractVerification: textractVerificationResponse
       }
     });
   } catch (error) {
     console.error('Error in upload front back Pan documents:', error);
     return res.failure({ 
       message: 'Failed to process Pan documents', 
-      error: error.message,
-      success: false
+      error: error.message
     });
   }
 };
