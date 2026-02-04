@@ -631,8 +631,8 @@ const updateSlabComm = async (req, res) => {
 
 const updateSlabDetails = async (req, res) => {
   try {
-    if (req.user.userRole !== 2) {
-      return res.failure({ message: 'You are not authorized to update slab details' });
+    if(![3,4].includes(req.user.userRole)) {
+      return res.failure({ message: 'You are not authorized to access this resource' });
     }
 
     const { slabName, subscriptionAmount, schemaMode, schemaType, views } = req.body;
