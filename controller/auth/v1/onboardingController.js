@@ -1152,7 +1152,7 @@ const getDigilockerDocuments = async (req, res) => {
         
         // Update user verification status
         const userUpdateData = docType === 'AADHAAR' 
-          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }), ...(updateData.address && { address: updateData.address}) }
+          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }), ...(updateData.address && { fullAddress: updateData.address}) }
           : { panVerify: true };
         
         await dbService.update(model.user, { 
