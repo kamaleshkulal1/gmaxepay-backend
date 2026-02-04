@@ -1717,7 +1717,7 @@ const postProfile = async (req, res) => {
       await dbService.update(
         model.outlet,
         { id: ctx.outlet.id },
-        { shopImage: updates.profileImage, shopImageVerify: true }
+        { shopImageVerify: true }
       );
     }
 
