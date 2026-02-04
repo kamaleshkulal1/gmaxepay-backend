@@ -459,14 +459,43 @@ const extractPanData = async (imageBuffer) => {
     const textBlocks = lineBlocks.map(block => block.text).join(' ');
 
     // Extract PAN number - format: 5 letters, 4 digits, 1 letter (e.g., ABCDE1234F)
-    // PAN can appear with or without spaces
+    // PAN can appear with or without spaces, and may have OCR errors
     let panNumber = null;
+    
+    // More flexible patterns to handle OCR errors and various formats
     const panPatterns = [
-      /\b[A-Z]{5}\s?\d{4}\s?[A-Z]\b/g,  // With optional spaces: ABCDE 1234 F or ABCDE1234F
-      /\b[A-Z]{5}\d{4}[A-Z]\b/g         // Without spaces: ABCDE1234F
+      /\b[A-Z]{5}\s?\d{4}\s?[A-Z]\b/g,           // With optional spaces: ABCDE 1234 F or ABCDE1234F
+      /\b[A-Z]{5}\d{4}[A-Z]\b/g,                 // Without spaces: ABCDE1234F
+      /[A-Z]{5}[\s\-]?\d{4}[\s\-]?[A-Z]/g,        // With hyphens or spaces: ABCDE-1234-F
+      /[A-Z0-9]{5}\d{4}[A-Z]/g                   // More lenient (handles OCR errors like 0 for O)
     ];
 
     const panCandidates = [];
+    
+    // Helper function to clean and validate PAN
+    const cleanAndValidatePan = (text) => {
+      // Remove all spaces, hyphens, and special characters
+      let cleaned = text.replace(/[\s\-\.\_]/g, '').toUpperCase();
+      
+      // Fix common OCR errors: 0 -> O, 1 -> I, 5 -> S (but be careful with digits)
+      // Only fix in letter positions (first 5 and last 1)
+      if (cleaned.length === 10) {
+        const firstFive = cleaned.substring(0, 5);
+        const digits = cleaned.substring(5, 9);
+        const lastOne = cleaned.substring(9);
+        
+        // Fix common OCR errors in letter positions only
+        const fixedFirstFive = firstFive.replace(/0/g, 'O').replace(/1/g, 'I').replace(/5/g, 'S');
+        const fixedLastOne = lastOne.replace(/0/g, 'O').replace(/1/g, 'I').replace(/5/g, 'S');
+        cleaned = fixedFirstFive + digits + fixedLastOne;
+      }
+      
+      // Validate format
+      if (cleaned.length === 10 && /^[A-Z]{5}\d{4}[A-Z]$/.test(cleaned)) {
+        return cleaned;
+      }
+      return null;
+    };
     
     // Search in line blocks first (more accurate)
     lineBlocks.forEach(block => {
@@ -479,42 +508,61 @@ const extractPanData = async (imageBuffer) => {
         return;
       }
       
-      // Try to find PAN in this line
+      // Try to find PAN in this line with all patterns
       panPatterns.forEach(pattern => {
         const matches = lineText.match(pattern);
         if (matches) {
           matches.forEach(match => {
-            const cleanedPan = match.replace(/\s/g, '').toUpperCase();
-            if (cleanedPan.length === 10 && /^[A-Z]{5}\d{4}[A-Z]$/.test(cleanedPan)) {
-              panCandidates.push({
-                pan: cleanedPan,
-                confidence: block.confidence,
-                source: 'line_block'
-              });
+            const cleanedPan = cleanAndValidatePan(match);
+            if (cleanedPan) {
+              // Avoid duplicates
+              if (!panCandidates.find(c => c.pan === cleanedPan)) {
+                panCandidates.push({
+                  pan: cleanedPan,
+                  confidence: block.confidence,
+                  source: 'line_block'
+                });
+              }
             }
           });
         }
       });
     });
 
-    // Also search in full text blocks
+    // Also search in full text blocks (more lenient search)
     panPatterns.forEach(pattern => {
       const matches = textBlocks.match(pattern);
       if (matches) {
         matches.forEach(match => {
-          const cleanedPan = match.replace(/\s/g, '').toUpperCase();
-          if (cleanedPan.length === 10 && /^[A-Z]{5}\d{4}[A-Z]$/.test(cleanedPan)) {
-            if (!panCandidates.find(c => c.pan === cleanedPan)) {
-              panCandidates.push({
-                pan: cleanedPan,
-                confidence: 0,
-                source: 'full_text'
-              });
-            }
+          const cleanedPan = cleanAndValidatePan(match);
+          if (cleanedPan && !panCandidates.find(c => c.pan === cleanedPan)) {
+            panCandidates.push({
+              pan: cleanedPan,
+              confidence: 0,
+              source: 'full_text'
+            });
           }
         });
       }
     });
+    
+    // If still no PAN found, try a more aggressive search without word boundaries
+    if (panCandidates.length === 0) {
+      const aggressivePattern = /[A-Z0-9]{5}[\s\-]?\d{1,4}[\s\-]?[A-Z0-9]{1}/g;
+      const matches = textBlocks.match(aggressivePattern);
+      if (matches) {
+        matches.forEach(match => {
+          const cleanedPan = cleanAndValidatePan(match);
+          if (cleanedPan && !panCandidates.find(c => c.pan === cleanedPan)) {
+            panCandidates.push({
+              pan: cleanedPan,
+              confidence: 0,
+              source: 'aggressive_search'
+            });
+          }
+        });
+      }
+    }
 
     // Select the best PAN candidate
     if (panCandidates.length > 0) {
