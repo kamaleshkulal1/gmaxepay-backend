@@ -1344,8 +1344,8 @@ const postShopDetails = async (req, res) => {
       shopPincode: addressData?.address_components?.postal_code,
       shopLatitude: latitude,
       shopLongitude: longitude,
-      shopCountry: addressData?.address_components?.country
-
+      shopCountry: addressData?.address_components?.country,
+      shopCategoryId: 1
     };
 
     const outlet = await dbService.createOne(
@@ -1354,7 +1354,7 @@ const postShopDetails = async (req, res) => {
     );
 
     // Set shopDetailsVerify to true in user table (prevents multiple shops)
-    await dbService.update(model.user, { id: ctx.user.id }, { shopDetailsVerify: true });
+    await dbService.update(model.user, { id: ctx.user.id }, { shopDetailsVerify: true});
 
     // Update KYC status
     await updateKycStatus(ctx.user.id, ctx.company.id, { outlet, customerBank: ctx.customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
