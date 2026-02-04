@@ -429,7 +429,313 @@ const extractAadhaarPhoto = async (imageBuffer) => {
   }
 };
 
+const extractPanData = async (imageBuffer) => {
+  try {
+    const params = {
+      Document: {
+        Bytes: imageBuffer
+      }
+    };
+
+    const command = new DetectDocumentTextCommand(params);
+    const response = await textractClient.send(command);
+
+    if (!response.Blocks || response.Blocks.length === 0) {
+      return {
+        success: false,
+        error: 'No text detected in the image'
+      };
+    }
+
+    // Extract all text lines with their block information
+    const lineBlocks = response.Blocks
+      .filter(block => block.BlockType === 'LINE')
+      .map(block => ({
+        text: block.Text,
+        confidence: block.Confidence || 0,
+        geometry: block.Geometry
+      }));
+
+    const textBlocks = lineBlocks.map(block => block.text).join(' ');
+
+    // Extract PAN number - format: 5 letters, 4 digits, 1 letter (e.g., ABCDE1234F)
+    // PAN can appear with or without spaces
+    let panNumber = null;
+    const panPatterns = [
+      /\b[A-Z]{5}\s?\d{4}\s?[A-Z]\b/g,  // With optional spaces: ABCDE 1234 F or ABCDE1234F
+      /\b[A-Z]{5}\d{4}[A-Z]\b/g         // Without spaces: ABCDE1234F
+    ];
+
+    const panCandidates = [];
+    
+    // Search in line blocks first (more accurate)
+    lineBlocks.forEach(block => {
+      const lineText = block.text;
+      const lowerText = lineText.toLowerCase();
+      
+      // Skip lines that contain date keywords or other non-PAN text
+      if (lowerText.includes('date') || lowerText.includes('issue') || 
+          lowerText.includes('download') || lowerText.includes('qr')) {
+        return;
+      }
+      
+      // Try to find PAN in this line
+      panPatterns.forEach(pattern => {
+        const matches = lineText.match(pattern);
+        if (matches) {
+          matches.forEach(match => {
+            const cleanedPan = match.replace(/\s/g, '').toUpperCase();
+            if (cleanedPan.length === 10 && /^[A-Z]{5}\d{4}[A-Z]$/.test(cleanedPan)) {
+              panCandidates.push({
+                pan: cleanedPan,
+                confidence: block.confidence,
+                source: 'line_block'
+              });
+            }
+          });
+        }
+      });
+    });
+
+    // Also search in full text blocks
+    panPatterns.forEach(pattern => {
+      const matches = textBlocks.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          const cleanedPan = match.replace(/\s/g, '').toUpperCase();
+          if (cleanedPan.length === 10 && /^[A-Z]{5}\d{4}[A-Z]$/.test(cleanedPan)) {
+            if (!panCandidates.find(c => c.pan === cleanedPan)) {
+              panCandidates.push({
+                pan: cleanedPan,
+                confidence: 0,
+                source: 'full_text'
+              });
+            }
+          }
+        });
+      }
+    });
+
+    // Select the best PAN candidate
+    if (panCandidates.length > 0) {
+      if (panCandidates.length === 1) {
+        panNumber = panCandidates[0].pan;
+      } else {
+        // Score candidates based on context and confidence
+        const scoredCandidates = panCandidates.map(candidate => {
+          const pan = candidate.pan;
+          const matchIndex = textBlocks.indexOf(pan);
+          const context = textBlocks.substring(Math.max(0, matchIndex - 50), matchIndex + 50).toLowerCase();
+          let score = 0;
+          
+          // Add confidence score
+          score += candidate.confidence / 10;
+          
+          // Higher score if it came from line block
+          if (candidate.source === 'line_block') {
+            score += 15;
+          }
+          
+          // Higher score if it appears near "PAN" or "Permanent Account Number" keywords
+          if (context.includes('pan') || context.includes('permanent account number') || 
+              context.includes('स्थायी लेखा संख्या')) {
+            score += 20;
+          }
+          
+          // Lower score if it appears near date keywords
+          if (context.includes('date') || context.includes('issue') || context.includes('download')) {
+            score -= 15;
+          }
+          
+          return { candidate: pan, score };
+        });
+        
+        // Sort by score (highest first) and take the best one
+        scoredCandidates.sort((a, b) => b.score - a.score);
+        panNumber = scoredCandidates[0].candidate;
+      }
+    }
+
+    // Extract DOB (various formats: DD/MM/YYYY, DD-MM-YYYY, etc.)
+    let dob = null;
+    const dobKeywords = ['DOB', 'dob', 'Date of Birth', 'date of birth', 'जन्म की तारीख', 'Date Of Birth'];
+    const excludeDateKeywords = ['Download Date', 'download date', 'Issue Date', 'issue date', 'Download', 'Issue'];
+    
+    const dobRegex = /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/g;
+    const allDates = [];
+    let match;
+    while ((match = dobRegex.exec(textBlocks)) !== null) {
+      const dateStr = match[0];
+      const dateIndex = match.index;
+      
+      const contextStart = Math.max(0, dateIndex - 50);
+      const contextEnd = Math.min(textBlocks.length, dateIndex + dateStr.length + 50);
+      const context = textBlocks.substring(contextStart, contextEnd).toLowerCase();
+      
+      const isExcluded = excludeDateKeywords.some(keyword => 
+        context.includes(keyword.toLowerCase())
+      );
+      
+      const isDobDate = dobKeywords.some(keyword => 
+        context.includes(keyword.toLowerCase())
+      );
+      
+      if (isDobDate && !isExcluded) {
+        dob = dateStr;
+        break;
+      } else if (!isExcluded && !dob) {
+        allDates.push({ date: dateStr, index: dateIndex, context });
+      }
+    }
+    
+    if (!dob && allDates.length > 0) {
+      const validDates = allDates.filter(dateInfo => {
+        const contextLower = dateInfo.context.toLowerCase();
+        return !excludeDateKeywords.some(keyword => 
+          contextLower.includes(keyword.toLowerCase())
+        );
+      });
+      
+      if (validDates.length > 0) {
+        dob = validDates[0].date;
+      }
+    }
+
+    // Extract name - skip header text like "Government of India", "Income Tax Department"
+    let name = null;
+    const excludeNamePatterns = [
+      'government of india',
+      'भारत सरकार',
+      'income tax department',
+      'आयकर विभाग',
+      'permanent account number',
+      'स्थायी लेखा संख्या',
+      'pan card',
+      'pan application',
+      'digitally signed',
+      'card not valid'
+    ];
+    
+    // First, try to find name using keywords
+    const nameKeywords = ['Name', 'NAME', 'नाम'];
+    for (const keyword of nameKeywords) {
+      const keywordIndex = textBlocks.indexOf(keyword);
+      if (keywordIndex !== -1) {
+        const afterKeyword = textBlocks.substring(keywordIndex + keyword.length).trim();
+        const nameMatch = afterKeyword.match(/^([A-Z][A-Za-z\s\.]{2,})/);
+        if (nameMatch) {
+          const candidateName = nameMatch[0].trim();
+          const isExcluded = excludeNamePatterns.some(pattern => 
+            candidateName.toLowerCase().includes(pattern.toLowerCase())
+          );
+          if (!isExcluded) {
+            name = candidateName;
+            break;
+          }
+        }
+      }
+    }
+
+    // If name not found with keyword, try to extract from line blocks
+    if (!name) {
+      const lines = response.Blocks
+        .filter(block => block.BlockType === 'LINE' && block.Confidence > 70)
+        .map(block => ({
+          text: block.Text.trim(),
+          confidence: block.Confidence,
+          geometry: block.Geometry
+        }))
+        .filter(block => {
+          const text = block.text.toLowerCase();
+          const originalText = block.text;
+          
+          if (originalText.match(/^\d+$/) || originalText.length < 3) return false;
+          if (originalText.match(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/)) return false;
+          if (originalText.match(/^[A-Z]{5}\d{4}[A-Z]$/)) return false; // PAN number
+          
+          if (excludeNamePatterns.some(pattern => text.includes(pattern))) return false;
+          
+          if (text.includes('government') && text.includes('india')) return false;
+          if (text.includes('income') && text.includes('tax')) return false;
+          
+          if (originalText === originalText.toUpperCase() && originalText.length > 20) return false;
+          
+          const commonWords = ['of', 'the', 'and', 'or', 'to', 'in', 'on', 'at', 'for', 'with'];
+          const words = text.split(/\s+/);
+          if (words.length > 1 && words.every(word => commonWords.includes(word))) return false;
+          
+          const headerStartWords = ['government', 'भारत', 'india', 'income', 'tax', 'pan', 'permanent'];
+          if (headerStartWords.some(word => text.startsWith(word))) return false;
+          
+          return true;
+        })
+        .sort((a, b) => b.confidence - a.confidence);
+      
+      if (lines.length > 0) {
+        const nameCandidates = lines.filter(block => {
+          const text = block.text;
+          if (text === text.toUpperCase() && text.length > 20) return false;
+          return /^[A-Z][A-Za-z\s\.]{2,}$/.test(text) && text.length >= 3 && text.length <= 50;
+        });
+        
+        if (nameCandidates.length > 0) {
+          const panIndex = panNumber ? textBlocks.indexOf(panNumber) : -1;
+          const dobIndex = dob ? textBlocks.indexOf(dob) : -1;
+          
+          for (const candidate of nameCandidates) {
+            const candidateIndex = textBlocks.indexOf(candidate.text);
+            
+            if (panIndex !== -1 && candidateIndex < panIndex) {
+              name = candidate.text;
+              break;
+            }
+            
+            if (dobIndex !== -1 && candidateIndex < dobIndex) {
+              name = candidate.text;
+              break;
+            }
+          }
+          
+          if (!name && nameCandidates.length > 0) {
+            name = nameCandidates[0].text;
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      pan_number: panNumber,
+      name: name,
+      dob: dob,
+      rawText: textBlocks,
+      blocks: response.Blocks
+    };
+  } catch (error) {
+    console.error('Error extracting PAN data with Textract:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+const extractPanPhoto = async (imageBuffer) => {
+  try {
+    // Convert buffer to base64
+    const base64Photo = imageBuffer.toString('base64');
+    // Return in data URL format for consistency
+    // You can enhance this later to crop just the face region using Rekognition
+    return base64Photo;
+  } catch (error) {
+    console.error('Error extracting PAN photo:', error);
+    return null;
+  }
+};
+
 module.exports = {
   extractAadhaarData,
-  extractAadhaarPhoto
+  extractAadhaarPhoto,
+  extractPanData,
+  extractPanPhoto
 };
