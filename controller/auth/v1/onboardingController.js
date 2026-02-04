@@ -2906,13 +2906,12 @@ const uploadFrontBackPanDocuments = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    
-    // Extract uploaded files - only front photo is required for PAN
-    const front_photo = req.files?.front_photo?.[0];
+
+    const front_photo = req.file || req.files?.front_photo?.[0];
     
     // Validate that front photo is provided
     if (!front_photo) {
-      const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
+      const receivedFields = req.file ? 'front_photo' : (req.files ? Object.keys(req.files).join(', ') : 'none');
       return res.failure({ 
         message: 'Front photo is required',
         receivedFields: receivedFields || 'none',
