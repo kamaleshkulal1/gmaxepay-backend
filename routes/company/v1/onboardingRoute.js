@@ -29,7 +29,7 @@ router.post('/:token/uploadAadharDocuments', onboardingCors, uploadFields([
 router.post('/:token/uploadPanDocuments', onboardingCors, uploadFields([
   { name: 'front_photo', maxCount: 1 },
   { name: 'back_photo', maxCount: 1 }
-]), multer, onboardingController.uploadPanDocuments);
+]), multer, onboardingController.uploadFrontBackPanDocuments);
 
 //step 5
 router.post('/:token/postShopDetails', uploadSingle('shopImage'), multer, onboardingController.postShopDetails);
