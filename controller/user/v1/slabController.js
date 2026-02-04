@@ -320,17 +320,31 @@ const getAllSlabs = async (req, res) => {
     }
 
     const allSlabs = await dbService.findAll(model.slab, query, {
-      attributes: ['users']
+      attributes: ['users', 'views', 'schemaMode']
     });
 
     const allUserIds = new Set();
+    const allViewUserIds = new Set();
+    
     if (allSlabs && allSlabs.length > 0) {
       allSlabs.forEach(slab => {
-        const users = slab.users || [];
+        const slabData = slab.toJSON ? slab.toJSON() : slab;
+        const users = slabData.users || [];
+        const views = slabData.views || [];
+        
         if (Array.isArray(users) && users.length > 0) {
           users.forEach(userId => {
             if (userId) {
               allUserIds.add(userId);
+            }
+          });
+        }
+        
+        // Collect view user IDs only for private slabs
+        if (slabData.schemaMode === 'private' && Array.isArray(views) && views.length > 0) {
+          views.forEach(userId => {
+            if (userId) {
+              allViewUserIds.add(userId);
             }
           });
         }
@@ -339,22 +353,98 @@ const getAllSlabs = async (req, res) => {
 
     const totalUsers = allUserIds.size;
 
+    // Fetch user details with company information for view users
+    let viewUsersMap = {};
+    if (allViewUserIds.size > 0) {
+      const viewUserIdsArray = Array.from(allViewUserIds);
+      
+      // Fetch users
+      const viewUsers = await dbService.findAll(model.user, {
+        id: { [Op.in]: viewUserIdsArray },
+        isActive: true
+      }, {
+        attributes: ['id', 'name', 'companyId']
+      });
+
+      // Get unique company IDs
+      const companyIds = new Set();
+      if (viewUsers && viewUsers.length > 0) {
+        viewUsers.forEach(user => {
+          const userData = user.toJSON ? user.toJSON() : user;
+          if (userData.companyId) {
+            companyIds.add(userData.companyId);
+          }
+        });
+      }
+
+      // Fetch companies
+      let companiesMap = {};
+      if (companyIds.size > 0) {
+        const companies = await dbService.findAll(model.company, {
+          id: { [Op.in]: Array.from(companyIds) }
+        }, {
+          attributes: ['id', 'companyName']
+        });
+
+        if (companies && companies.length > 0) {
+          companies.forEach(company => {
+            const companyData = company.toJSON ? company.toJSON() : company;
+            companiesMap[companyData.id] = companyData.companyName || null;
+          });
+        }
+      }
+
+      // Map users with their company names
+      if (viewUsers && viewUsers.length > 0) {
+        viewUsers.forEach(user => {
+          const userData = user.toJSON ? user.toJSON() : user;
+          viewUsersMap[userData.id] = {
+            userId: userData.id,
+            userName: userData.name || null,
+            companyId: userData.companyId || null,
+            companyName: userData.companyId ? (companiesMap[userData.companyId] || null) : null
+          };
+        });
+      }
+    }
+
     const result = await dbService.paginate(model.slab, query, {
       ...options,
-      select: ['id', 'slabName', 'schemaMode', 'schemaType', 'subscriptionAmount', 'isActive', 'remark', 'users', 'createdAt', 'updatedAt']
+      select: ['id', 'slabName', 'schemaMode', 'schemaType', 'subscriptionAmount', 'isActive', 'remark', 'users', 'views', 'createdAt', 'updatedAt']
     });
 
     const processedData = (result?.data || []).map(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       const users = slabData.users || [];
+      const views = slabData.views || [];
       const totalUsersInSlab = Array.isArray(users) ? users.filter(id => id).length : 0;
       
-      const { users: _, ...rest } = slabData;
+      const { users: _, views: __, ...rest } = slabData;
       
-      return {
+      const responseData = {
         ...rest,
         totalUsers: totalUsersInSlab
       };
+
+      // Only include view details for private slabs
+      if (slabData.schemaMode === 'private') {
+        const viewDetails = [];
+        if (Array.isArray(views) && views.length > 0) {
+          views.forEach(userId => {
+            if (userId && viewUsersMap[userId]) {
+              viewDetails.push(viewUsersMap[userId]);
+            }
+          });
+        }
+        responseData.totalViews = viewDetails.length;
+        responseData.viewDetails = viewDetails;
+      } else {
+        // For global slabs, don't show view details
+        responseData.totalViews = 0;
+        responseData.viewDetails = [];
+      }
+      
+      return responseData;
     });
 
     return res.status(200).send({
