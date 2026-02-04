@@ -2898,7 +2898,6 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
 
 const uploadFrontBackPanDocuments = async (req, res) => {
   try {
-    // Validate origin and authentication
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
@@ -2907,10 +2906,8 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
 
-    // Extract uploaded file - only front photo is required for PAN
     const front_photo = req.file || req.files?.front_photo?.[0];
     
-    // Validate that front photo is provided
     if (!front_photo) {
       const receivedFields = req.file ? 'front_photo' : (req.files ? Object.keys(req.files).join(', ') : 'none');
       return res.failure({ 
@@ -2920,28 +2917,23 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       });
     }
 
-    // Extract PAN number helper function
     const extractPanNumber = (panValue) => {
       if (!panValue) return null;
       const cleaned = panValue.toString().replace(/\s/g, '').toUpperCase();
-      // PAN format: 5 letters, 4 digits, 1 letter
-      if (/^[A-Z]{5}\d{4}[A-Z]$/.test(cleaned)) {
+      if (cleaned.length === 10 && /^[A-Z]{5}\d{4}[A-Z]$/.test(cleaned)) {
         return cleaned;
       }
       return null;
     };
 
-    // Prepare static back image path
     const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
 
-    // Parallelize: Extract data from front image, extract photo, and read static back image
     const [frontData, frontPhoto, staticBackImageBuffer] = await Promise.all([
       textractService.extractPanData(front_photo.buffer),
       textractService.extractPanPhoto(front_photo.buffer),
       fs.promises.readFile(staticBackImagePath)
     ]);
 
-    // Validate that data extraction was successful
     if (!frontData.success) {
       return res.failure({ 
         message: frontData.error || 'Failed to extract data from front image',
@@ -2955,32 +2947,18 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       });
     }
 
-    // Log extracted data for debugging
-    console.log('PAN Extraction Debug:', {
-      pan_number: frontData.pan_number,
-      name: frontData.name,
-      dob: frontData.dob,
-      rawTextLength: frontData.rawText?.length || 0,
-      rawTextPreview: frontData.rawText?.substring(0, 200) || 'No text'
-    });
-
     let extractedPanNumber = extractPanNumber(frontData.pan_number);
-
-    // Validate PAN number was extracted - try fallback if not found
+    
     if (!extractedPanNumber && frontData.rawText) {
-      // Try to find PAN in raw text as fallback (more lenient pattern)
-      const panPattern = /[A-Z]{5}\s?\d{4}\s?[A-Z]/gi;
-      const matches = frontData.rawText.match(panPattern);
-      if (matches && matches.length > 0) {
-        const fallbackPan = matches[0].replace(/\s/g, '').toUpperCase();
-        if (/^[A-Z]{5}\d{4}[A-Z]$/.test(fallbackPan)) {
-          extractedPanNumber = fallbackPan;
-          console.log('PAN found via fallback extraction:', extractedPanNumber);
+      const match = frontData.rawText.match(/[A-Z]{4,5}\s*[A-Z]?\d{4}[A-Z]/);
+      if (match) {
+        const cleaned = match[0].replace(/\s/g, '').toUpperCase();
+        if (cleaned.length === 10 && /^[A-Z]{5}\d{4}[A-Z]$/.test(cleaned)) {
+          extractedPanNumber = cleaned;
         }
       }
     }
 
-    // Final validation
     if (!extractedPanNumber) {
       return res.failure({ 
         message: 'Could not extract PAN number from image. Please ensure the PAN card image is clear and readable.',
@@ -2988,24 +2966,18 @@ const uploadFrontBackPanDocuments = async (req, res) => {
           textractVerification: {
             success: false,
             message: 'Could not extract PAN number from image',
-            faceComparison: null,
-            debug: {
-              extractedPanNumber: frontData.pan_number,
-              rawTextPreview: frontData.rawText?.substring(0, 500) || 'No text extracted'
-            }
+            faceComparison: null
           }
         }
       });
     }
 
-    // Initialize response variables
     let frontImageS3Key = null;
     let backImageS3Key = null;
     let faceComparisonResult = null;
     let panExistsInDigilocker = false;
     let verificationMessage = 'PAN card processed successfully';
 
-    // Parallelize: Get existing user data, check digilocker PAN, and fetch Aadhaar doc
     const [existingUser, digilockerPanDoc, aadhaarDocResult] = await Promise.all([
       dbService.findOne(model.user, { id: ctx.user.id }),
       dbService.findOne(model.digilockerDocument, {
@@ -3015,8 +2987,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
         panNumber: extractedPanNumber,
         isDeleted: false
       }),
-      // Fetch Aadhaar doc only if not in context (parallel fetch)
-      ctx.aadhaarDoc ? Promise.resolve(null) : dbService.findOne(model.digilockerDocument, {
+      ctx.aadhaarDoc ? null : dbService.findOne(model.digilockerDocument, {
         refId: ctx.user.id,
         companyId: ctx.company.id,
         documentType: 'AADHAAR',
@@ -3024,32 +2995,22 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       })
     ]);
 
-    // Use Aadhaar doc from context if available, otherwise use fetched result
     const aadhaarDoc = ctx.aadhaarDoc || aadhaarDocResult;
-
     const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
     const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
-
-    // Check if PAN exists in digilocker
+    
     if (digilockerPanDoc) {
       panExistsInDigilocker = true;
     }
 
-    // Perform face comparison first (before uploading to S3)
     if (aadhaarDoc?.photoLink && frontPhoto) {
       try {
-        // Parallelize: Extract base64 from Aadhaar photo and convert PAN photo buffer
-        const [aadhaarPhotoBase64, panPhotoBase64] = await Promise.all([
-          extractBase64FromImage(aadhaarDoc.photoLink),
-          Promise.resolve(frontPhoto) // frontPhoto is already base64 from Textract
-        ]);
+        const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
+        const panPhotoBase64 = frontPhoto;
 
         if (aadhaarPhotoBase64 && panPhotoBase64) {
-          // Parallelize: Convert both base64 strings to buffers
-          const [aadhaarBuffer, panBuffer] = await Promise.all([
-            Promise.resolve(validateAndConvertBase64(aadhaarPhotoBase64)),
-            Promise.resolve(validateAndConvertBase64(panPhotoBase64))
-          ]);
+          const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
+          const panBuffer = validateAndConvertBase64(panPhotoBase64);
 
           if (aadhaarBuffer && panBuffer) {
             faceComparisonResult = await rekognitionService.compareFaces(
@@ -3057,11 +3018,9 @@ const uploadFrontBackPanDocuments = async (req, res) => {
               panBuffer.toString('base64')
             );
 
-            // Only proceed with S3 upload if face matches
             if (faceComparisonResult?.success && faceComparisonResult?.matched) {
               verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';
 
-              // Parallelize: Upload both images to S3
               const [frontUploadResult, backUploadResult] = await Promise.all([
                 imageService.uploadImageToS3(
                   front_photo.buffer,
@@ -3084,21 +3043,22 @@ const uploadFrontBackPanDocuments = async (req, res) => {
               frontImageS3Key = frontUploadResult.key;
               backImageS3Key = backUploadResult.key;
 
-              // Prepare update data
               const updateData = {
                 panCardFrontImage: frontImageS3Key,
                 panCardBackImage: backImageS3Key,
                 panVerify: true
               };
 
-              // Parallelize: Update user record, cleanup old images, and update KYC status
-              await Promise.all([
+              const updatePromises = [
                 dbService.update(model.user, { id: ctx.user.id }, updateData),
-                cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key),
                 updateKycStatus(ctx.user.id, ctx.company.id, { aadhaarDoc: aadhaarDoc })
-              ]);
+              ];
+              
+              cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key)
+                .catch(err => console.error('Error cleaning up old images:', err));
+              
+              await Promise.all(updatePromises);
             } else {
-              // If face doesn't match, set verification failed message (no S3 upload)
               verificationMessage = 'PAN verification failed - Photo does not match Aadhaar photo';
             }
           }
@@ -3108,12 +3068,9 @@ const uploadFrontBackPanDocuments = async (req, res) => {
         verificationMessage = 'PAN verification failed - Error during face comparison';
       }
     } else {
-      // If Aadhaar photo is not available, set appropriate message
       verificationMessage = 'Aadhaar photo not available for verification';
     }
 
-    // Handle failure cases - return failure response
-    // Case 1: Face comparison failed (matched: false)
     if (faceComparisonResult && !faceComparisonResult.matched) {
       return res.failure({
         message: verificationMessage || 'PAN verification failed',
@@ -3131,7 +3088,6 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       });
     }
 
-    // Case 2: Aadhaar photo not available (face comparison couldn't be performed)
     if (!faceComparisonResult && frontData.success) {
       return res.failure({
         message: verificationMessage || 'Aadhaar photo not available for verification',
@@ -3146,7 +3102,6 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       });
     }
 
-    // Success case: Face comparison matched - prepare response
     const textractVerificationResponse = {
       success: true,
       pan_number: extractedPanNumber,

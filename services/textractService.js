@@ -575,8 +575,6 @@ const extractPanData = async (imageBuffer) => {
           panKeywordIndex + 'permanent account number'.length + 40
         ).trim();
         
-        console.log('PAN extraction - text after keyword:', afterKeyword);
-        
         // Pattern to catch "DUBP K7528H" or similar splits
         // Matches: 4-5 letters, space(s), then letter+digits+letter or digits+letter
         const splitPanPatterns = [
@@ -592,8 +590,6 @@ const extractPanData = async (imageBuffer) => {
             const part2 = match[2].toUpperCase().replace(/\s/g, '');
             const reconstructed = part1 + part2;
             
-            console.log('PAN reconstruction attempt:', { part1, part2, reconstructed });
-            
             if (reconstructed.length === 10) {
               const cleanedPan = cleanAndValidatePan(reconstructed);
               if (cleanedPan && !panCandidates.find(c => c.pan === cleanedPan)) {
@@ -602,7 +598,6 @@ const extractPanData = async (imageBuffer) => {
                   confidence: 60, // High confidence for keyword-based reconstruction
                   source: 'keyword_reconstruction'
                 });
-                console.log('PAN found via keyword reconstruction:', cleanedPan);
                 break; // Found valid PAN, no need to try other patterns
               }
             }
@@ -620,7 +615,6 @@ const extractPanData = async (imageBuffer) => {
               confidence: 55,
               source: 'direct_keyword_extraction'
             });
-            console.log('PAN found via direct keyword extraction:', cleanedPan);
           }
         }
       }
