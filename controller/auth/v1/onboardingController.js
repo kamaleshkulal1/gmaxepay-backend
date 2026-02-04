@@ -2907,19 +2907,22 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
     
-    // Extract uploaded files
+    // Extract uploaded files - only front photo is required for PAN
     const front_photo = req.files?.front_photo?.[0];
-    const back_photo = req.files?.back_photo?.[0];
     
-    // Validate that both photos are provided
-    if (!front_photo || !back_photo) {
+    // Validate that front photo is provided
+    if (!front_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
       return res.failure({ 
-        message: !front_photo ? 'Front photo is required' : 'Back photo is required',
+        message: 'Front photo is required',
         receivedFields: receivedFields || 'none',
-        expectedFields: ['front_photo', 'back_photo']
+        expectedFields: ['front_photo']
       });
     }
+
+    // Read static back image file (PAN back doesn't have any information)
+    const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
+    const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
 
     // Extract data from front image using AWS Textract service
     // Processes front image and extracts photo from front image in parallel
