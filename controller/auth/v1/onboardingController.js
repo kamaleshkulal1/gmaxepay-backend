@@ -1713,14 +1713,6 @@ const postProfile = async (req, res) => {
 
     await dbService.update(model.user, { id: ctx.user.id }, updates);
 
-    if (updates.profileImage && ctx.outlet?.id) {
-      await dbService.update(
-        model.outlet,
-        { id: ctx.outlet.id },
-        { shopImageVerify: true }
-      );
-    }
-
     const updatedUser = await dbService.findOne(model.user, { id: ctx.user.id });
     const updatedCtx = await loadContextByToken(token);
     const latestUser = updatedCtx.user || updatedUser;
