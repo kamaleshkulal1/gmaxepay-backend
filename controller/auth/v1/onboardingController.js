@@ -1065,7 +1065,7 @@ const getDigilockerDocuments = async (req, res) => {
     const isUserVerified = docType === 'AADHAAR' ? existingUser.aadharVerify : existingUser.panVerify;
     const hasFullData = (docType === 'AADHAAR' && existingDigilockerDocument.name) || 
                        (docType === 'PAN' && existingDigilockerDocument.panNumber);
-    
+    const hasAddress = docType === 'AADHAAR' && existingDigilockerDocument.address;
     let response;
     if (isUserVerified && hasFullData) {
       // Return cached data
@@ -1152,7 +1152,7 @@ const getDigilockerDocuments = async (req, res) => {
         
         // Update user verification status
         const userUpdateData = docType === 'AADHAAR' 
-          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }), ...(updateData.address && { gender: updateData.address}) }
+          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }), ...(updateData.address && { address: updateData.address}) }
           : { panVerify: true };
         
         await dbService.update(model.user, { 
