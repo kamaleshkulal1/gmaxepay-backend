@@ -708,7 +708,6 @@ const resetSmsOtp = async (req, res) => {
     return res.failure({ message: 'Failed to reset OTP', error: error.message });
   }
 };
-
 // Step 2: Email verification
 
 // Email OTP: send
@@ -1153,7 +1152,7 @@ const getDigilockerDocuments = async (req, res) => {
         
         // Update user verification status
         const userUpdateData = docType === 'AADHAAR' 
-          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }) }
+          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }), ...(updateData.address && { gender: updateData.address}) }
           : { panVerify: true };
         
         await dbService.update(model.user, { 
@@ -1593,7 +1592,6 @@ const postBankDetails = async (req, res) => {
     return res.failure({ message: 'Failed to save bank details', error: error.message });
   }
 };
-
 
 // Step 8: Profile (single photo used for liveness + Aadhaar comparison)
 const postProfile = async (req, res) => {
