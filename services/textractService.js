@@ -563,6 +563,107 @@ const extractPanData = async (imageBuffer) => {
         });
       }
     }
+    
+    // Special handling: Look for PAN near "Permanent Account Number" keyword
+    // This handles cases where PAN is split like "DUBP K7528H" -> "DUBPK7528H"
+    if (panCandidates.length === 0) {
+      const panKeywordIndex = textBlocks.toLowerCase().indexOf('permanent account number');
+      if (panKeywordIndex !== -1) {
+        // Extract text after "Permanent Account Number" (up to 40 characters to catch split PANs)
+        const afterKeyword = textBlocks.substring(
+          panKeywordIndex + 'permanent account number'.length, 
+          panKeywordIndex + 'permanent account number'.length + 40
+        ).trim();
+        
+        console.log('PAN extraction - text after keyword:', afterKeyword);
+        
+        // Pattern to catch "DUBP K7528H" or similar splits
+        // Matches: 4-5 letters, space(s), then letter+digits+letter or digits+letter
+        const splitPanPatterns = [
+          /([A-Z]{4,5})\s+([A-Z]?\d{4}[A-Z])/i,  // "DUBP K7528H" or "ABCDE 1234F"
+          /([A-Z]{4,5})\s+(\d{4}[A-Z])/i,         // "DUBP 7528H"
+          /([A-Z]{5})\s+(\d{4}[A-Z])/i            // "ABCDE 1234F"
+        ];
+        
+        for (const pattern of splitPanPatterns) {
+          const match = afterKeyword.match(pattern);
+          if (match) {
+            const part1 = match[1].toUpperCase();
+            const part2 = match[2].toUpperCase().replace(/\s/g, '');
+            const reconstructed = part1 + part2;
+            
+            console.log('PAN reconstruction attempt:', { part1, part2, reconstructed });
+            
+            if (reconstructed.length === 10) {
+              const cleanedPan = cleanAndValidatePan(reconstructed);
+              if (cleanedPan && !panCandidates.find(c => c.pan === cleanedPan)) {
+                panCandidates.push({
+                  pan: cleanedPan,
+                  confidence: 60, // High confidence for keyword-based reconstruction
+                  source: 'keyword_reconstruction'
+                });
+                console.log('PAN found via keyword reconstruction:', cleanedPan);
+                break; // Found valid PAN, no need to try other patterns
+              }
+            }
+          }
+        }
+        
+        // Also try direct extraction: remove all spaces and look for PAN pattern
+        const noSpaces = afterKeyword.replace(/\s/g, '');
+        const directPanMatch = noSpaces.match(/([A-Z]{5}\d{4}[A-Z])/i);
+        if (directPanMatch) {
+          const cleanedPan = cleanAndValidatePan(directPanMatch[1]);
+          if (cleanedPan && !panCandidates.find(c => c.pan === cleanedPan)) {
+            panCandidates.push({
+              pan: cleanedPan,
+              confidence: 55,
+              source: 'direct_keyword_extraction'
+            });
+            console.log('PAN found via direct keyword extraction:', cleanedPan);
+          }
+        }
+      }
+    }
+    
+    // Final fallback: Look for any pattern that could be a PAN when spaces are removed
+    // This specifically handles "DUBP K7528H" -> "DUBPK7528H"
+    if (panCandidates.length === 0) {
+      // Pattern: 4-5 letters, space, then rest (digit+letter or letter+digit+letter)
+      const fallbackPattern = /\b([A-Z]{4,5})\s+([A-Z]?\d{1,4}[A-Z])\b/gi;
+      const fallbackMatches = textBlocks.matchAll(fallbackPattern);
+      
+      for (const match of fallbackMatches) {
+        const part1 = match[1].toUpperCase();
+        const part2 = match[2].toUpperCase().replace(/\s/g, '');
+        const combined = part1 + part2;
+        
+        // Check if combined could be a valid PAN
+        if (combined.length === 10) {
+          const cleanedPan = cleanAndValidatePan(combined);
+          if (cleanedPan && !panCandidates.find(c => c.pan === cleanedPan)) {
+            panCandidates.push({
+              pan: cleanedPan,
+              confidence: 30,
+              source: 'fallback_reconstruction'
+            });
+          }
+        } else if (combined.length === 9 || combined.length === 11) {
+          // Try to extract valid PAN from it
+          const panMatch = combined.match(/([A-Z]{5}\d{4}[A-Z])/);
+          if (panMatch) {
+            const cleanedPan = cleanAndValidatePan(panMatch[1]);
+            if (cleanedPan && !panCandidates.find(c => c.pan === cleanedPan)) {
+              panCandidates.push({
+                pan: cleanedPan,
+                confidence: 30,
+                source: 'fallback_reconstruction'
+              });
+            }
+          }
+        }
+      }
+    }
 
     // Select the best PAN candidate
     if (panCandidates.length > 0) {
