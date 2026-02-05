@@ -253,6 +253,7 @@ const getBillerInfo = async (billerId) => {
     let parsedResponse;
     if (typeof response.data === 'object' && response.data !== null) {
       parsedResponse = response.data;
+      console.log('parsedResponse', parsedResponse);
     } else if (typeof response.data === 'string') {
       try {
         parsedResponse = JSON.parse(response.data);
@@ -260,6 +261,7 @@ const getBillerInfo = async (billerId) => {
         try {
           const decryptedResponse = decrypt(response.data);
           parsedResponse = JSON.parse(decryptedResponse);
+          console.log('parsedResponse', parsedResponse);
         } catch (decryptError) {
           console.error('Decryption error:', decryptError);
           throw new Error(

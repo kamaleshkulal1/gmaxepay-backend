@@ -391,6 +391,7 @@ const findAllState = async (req, res) => {
     return res.internalServerError({ data: error.message });
   }
 };
+
 const operatorList = async (req, res) => { 
   try {
     let query = { ...req.body };
