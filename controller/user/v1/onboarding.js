@@ -1363,11 +1363,8 @@ const getDigilockerDocuments = async (req, res) => {
     if (userCtx.error) {
       return res.failure({ message: userCtx.error });
     }
-    console.log('companyId', companyId);
-
     const { user } = userCtx;
-    console.log('userId', user.id);
-    console.log('user', user);
+
     const { document_type } = req.body || {};
 
     if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
@@ -1404,12 +1401,8 @@ const getDigilockerDocuments = async (req, res) => {
     if (!allDigilockerDocuments || allDigilockerDocuments.length === 0) {
       return res.failure({ message: `Please connect your ${docTypeLabel} to digilocker first` });
     }
-
-    console.log('allDigilockerDocuments', allDigilockerDocuments);
     
     const existingDigilockerDocument = allDigilockerDocuments[0];
-
-    console.log('existingDigilockerDocument', existingDigilockerDocument);
 
     // Normalize values for safe comparison (avoid string vs number / case issues)
     const docRefId = Number(existingDigilockerDocument.refId);
@@ -1418,16 +1411,6 @@ const getDigilockerDocuments = async (req, res) => {
     const reqCompanyId = Number(companyIdNum);
     const docDocType = (existingDigilockerDocument.documentType || '').toString().toUpperCase();
     const reqDocType = docType.toString().toUpperCase();
-
-    // Extra debug to understand mismatches if they occur
-    console.log('Digilocker ownership check:', {
-      docRefId,
-      reqUserId,
-      docCompanyId,
-      reqCompanyId,
-      docDocType,
-      reqDocType
-    });
 
     // Validate document ownership and required fields
     if (docRefId !== reqUserId || docCompanyId !== reqCompanyId || docDocType !== reqDocType) {
