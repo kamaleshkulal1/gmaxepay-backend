@@ -249,6 +249,8 @@ const getBillerInfo = async (billerId) => {
         'Content-Type': 'text/plain'
       }
     });
+    console.log('response', response);
+    console.log('response.data', response.data);
 
     let parsedResponse;
     if (typeof response.data === 'object' && response.data !== null) {
