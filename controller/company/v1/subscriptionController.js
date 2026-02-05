@@ -36,7 +36,8 @@ const getAllSubscriptions = async (req, res) => {
     // 1. If schemaMode is 'global' - show it
     // 2. If schemaMode is 'private' and user ID is in views array - show it
     const visibleSlabs = allSlabs.filter(slab => {
-      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      // Use dataValues to access all fields including those removed by toJSON()
+      const slabData = slab.dataValues || slab;
       
       // Global slabs are visible to everyone
       if (slabData.schemaMode === 'global') {
@@ -58,7 +59,7 @@ const getAllSubscriptions = async (req, res) => {
     }
 
     const slabIds = visibleSlabs.map((s) => {
-      const slabData = s.toJSON ? s.toJSON() : s;
+      const slabData = s.dataValues || s;
       return slabData.id;
     }).filter(Boolean);
     
@@ -66,15 +67,37 @@ const getAllSubscriptions = async (req, res) => {
       return res.failure({ message: 'No visible slabs found' });
     }
 
+    // Extract addedBy values from visible slabs using dataValues to avoid toJSON() removal
+    const addedByValues = visibleSlabs
+      .map((s) => {
+        const slabData = s.dataValues || s;
+        return slabData.addedBy;
+      })
+      .filter((addedBy) => addedBy !== null && addedBy !== undefined);
+    
+    // Get unique addedBy values
+    const uniqueAddedByValues = [...new Set(addedByValues)];
+
     const roleConfig = { roleType: 2, roleName: 'WU' };
 
-    // Fetch commissions for all slabs based on company admin role
-    const allSlabCommissions = await dbService.findAll(model.commSlab, {
+    // Build query conditions for commissions
+    const commissionQuery = {
       slabId: { [Op.in]: slabIds },
       roleType: roleConfig.roleType,
-      roleName: roleConfig.roleName,
-      companyId: companyId
-    }, {
+      roleName: roleConfig.roleName
+    };
+
+    // Add addedBy filter if we have values
+    if (uniqueAddedByValues.length > 0) {
+      if (uniqueAddedByValues.length === 1) {
+        commissionQuery.addedBy = uniqueAddedByValues[0];
+      } else {
+        commissionQuery.addedBy = { [Op.in]: uniqueAddedByValues };
+      }
+    }
+
+    // Fetch commissions for all slabs based on company admin role
+    const allSlabCommissions = await dbService.findAll(model.commSlab, commissionQuery, {
       attributes: ['id', 'slabId', 'operatorId', 'operatorName', 'operatorType', 'commAmt', 'commType', 'amtType']
     });
 
@@ -126,7 +149,7 @@ const getAllSubscriptions = async (req, res) => {
     }
 
     const subscriptions = visibleSlabs.map(slab => {
-      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const slabData = slab.dataValues || slab;
       const subscriptionAmount = slabData.subscriptionAmount || 0;
       const isFree = subscriptionAmount === 0;
       const hasSubscription = subscribedSlabs.has(slabData.id);
