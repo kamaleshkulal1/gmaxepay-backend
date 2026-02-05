@@ -2,85 +2,82 @@ const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
 
+// Helper function to get raw data from Sequelize model instance
+const getRawData = (instance) => instance.dataValues || instance;
+
+// Helper function to check if slab is visible to user
+const isSlabVisible = (slabData, userId) => {
+  if (slabData.schemaMode === 'global') return true;
+  if (slabData.schemaMode === 'private') {
+    const views = slabData.views || [];
+    return Array.isArray(views) && views.includes(userId);
+  }
+  return false;
+};
+
 const getAllSubscriptions = async (req, res) => {
   try {
+    // Authorization check
     if (req.user.userRole !== 2) {
       return res.failure({ message: 'You are not authorized to access this resource' });
     }
     
+    // Get company ID and user ID
     const companyId = req.companyId ?? req.user?.companyId ?? null;
+    const userId = req.user.id;
+    
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
     }
 
-    const existingUser = await dbService.findOne(model.user, { id: req.user.id, isActive: true, companyId: companyId });
-    if(!existingUser) {
-        return res.failure({ message: 'User not found' });
+    // Verify user exists
+    const existingUser = await dbService.findOne(model.user, { 
+      id: userId, 
+      isActive: true, 
+      companyId: companyId 
+    });
+    
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
     }
-    
-    const userId = req.user.id;
-    
-    // Fetch all slabs with views field
+
+    const currentSlabId = existingUser.slabId || null;
+
+    // Fetch all active slabs created by admin (addedBy: 1)
     const allSlabs = await dbService.findAll(model.slab, { 
       isActive: true, 
       addedBy: 1
     }, {
-      attributes: ['id', 'slabName', 'subscriptionAmount', 'schemaMode', 'schemaType', 'views']
+      attributes: ['id', 'slabName', 'subscriptionAmount', 'schemaMode', 'schemaType', 'views', 'addedBy']
     });
     
-    if(!allSlabs || allSlabs.length === 0) {
-        return res.failure({ message: 'No slabs found' });
+    if (!allSlabs?.length) {
+      return res.failure({ message: 'No slabs found' });
     }
 
-    // Filter slabs based on visibility:
-    // 1. If schemaMode is 'global' - show it
-    // 2. If schemaMode is 'private' and user ID is in views array - show it
-    const visibleSlabs = allSlabs.filter(slab => {
-      // Use dataValues to access all fields including those removed by toJSON()
-      const slabData = slab.dataValues || slab;
-      
-      // Global slabs are visible to everyone
-      if (slabData.schemaMode === 'global') {
-        return true;
-      }
-      
-      // Private slabs are only visible if user is in views array
-      if (slabData.schemaMode === 'private') {
-        const views = slabData.views || [];
-        return Array.isArray(views) && views.includes(userId);
-      }
-      
-      // Default: not visible
-      return false;
-    });
+    // Filter visible slabs and extract data in one pass
+    const visibleSlabsData = [];
+    const slabIds = [];
+    const addedBySet = new Set();
 
-    if (!visibleSlabs || visibleSlabs.length === 0) {
+    for (const slab of allSlabs) {
+      const slabData = getRawData(slab);
+      
+      if (isSlabVisible(slabData, userId)) {
+        visibleSlabsData.push(slabData);
+        slabIds.push(slabData.id);
+        if (slabData.addedBy) {
+          addedBySet.add(slabData.addedBy);
+        }
+      }
+    }
+
+    if (!visibleSlabsData.length) {
       return res.failure({ message: 'No visible slabs found' });
     }
 
-    const slabIds = visibleSlabs.map((s) => {
-      const slabData = s.dataValues || s;
-      return slabData.id;
-    }).filter(Boolean);
-    
-    if (!slabIds.length) {
-      return res.failure({ message: 'No visible slabs found' });
-    }
-
-    // Extract addedBy values from visible slabs using dataValues to avoid toJSON() removal
-    const addedByValues = visibleSlabs
-      .map((s) => {
-        const slabData = s.dataValues || s;
-        return slabData.addedBy;
-      })
-      .filter((addedBy) => addedBy !== null && addedBy !== undefined);
-    
-    // Get unique addedBy values
-    const uniqueAddedByValues = [...new Set(addedByValues)];
-
+    // Prepare commission query
     const roleConfig = { roleType: 2, roleName: 'WU' };
-
-    // Build query conditions for commissions
     const commissionQuery = {
       slabId: { [Op.in]: slabIds },
       roleType: roleConfig.roleType,
@@ -88,25 +85,34 @@ const getAllSubscriptions = async (req, res) => {
     };
 
     // Add addedBy filter if we have values
-    if (uniqueAddedByValues.length > 0) {
-      if (uniqueAddedByValues.length === 1) {
-        commissionQuery.addedBy = uniqueAddedByValues[0];
-      } else {
-        commissionQuery.addedBy = { [Op.in]: uniqueAddedByValues };
-      }
+    if (addedBySet.size > 0) {
+      const addedByArray = Array.from(addedBySet);
+      commissionQuery.addedBy = addedByArray.length === 1 
+        ? addedByArray[0] 
+        : { [Op.in]: addedByArray };
     }
 
-    // Fetch commissions for all slabs based on company admin role
-    const allSlabCommissions = await dbService.findAll(model.commSlab, commissionQuery, {
-      attributes: ['id', 'slabId', 'operatorId', 'operatorName', 'operatorType', 'commAmt', 'commType', 'amtType']
-    });
+    // Fetch commissions and user subscriptions in parallel
+    const [allCommissions, userSubscriptions] = await Promise.all([
+      dbService.findAll(model.commSlab, commissionQuery, {
+        attributes: ['id', 'slabId', 'operatorId', 'operatorName', 'operatorType', 'commAmt', 'commType', 'amtType']
+      }),
+      dbService.findAll(model.subscription, {
+        userId: userId,
+        companyId: companyId,
+        status: 'SUCCESS',
+        isActive: true
+      }, {
+        attributes: ['slabId']
+      })
+    ]);
 
-    // Group commissions by slabId using Map for O(1) lookup performance
+    // Group commissions by slabId
     const commissionsBySlab = new Map();
-    if (allSlabCommissions && allSlabCommissions.length > 0) {
-      allSlabCommissions.forEach((commission) => {
-        const commData = commission.toJSON ? commission.toJSON() : commission;
-        const slabId = commData.slabId;
+    if (allCommissions?.length) {
+      for (const commission of allCommissions) {
+        const commData = getRawData(commission);
+        const { slabId } = commData;
         
         if (!commissionsBySlab.has(slabId)) {
           commissionsBySlab.set(slabId, []);
@@ -121,52 +127,38 @@ const getAllSubscriptions = async (req, res) => {
           commType: commData.commType,
           amtType: commData.amtType
         });
-      });
+      }
     }
 
-    // Get current user's slab ID
-    const currentSlabId = existingUser.slabId || null;
-
-    // Fetch successful subscriptions for this user
-    const userSubscriptions = await dbService.findAll(model.subscription, {
-      userId: userId,
-      companyId: companyId,
-      status: 'SUCCESS',
-      isActive: true
-    }, {
-      attributes: ['slabId', 'status']
-    });
-
-    // Create a map of slabId -> has successful subscription
-    const subscribedSlabs = new Set();
-    if (userSubscriptions && userSubscriptions.length > 0) {
-      userSubscriptions.forEach(sub => {
-        const subData = sub.toJSON ? sub.toJSON() : sub;
+    // Create set of subscribed slab IDs
+    const subscribedSlabIds = new Set();
+    if (userSubscriptions?.length) {
+      for (const sub of userSubscriptions) {
+        const subData = getRawData(sub);
         if (subData.slabId) {
-          subscribedSlabs.add(subData.slabId);
+          subscribedSlabIds.add(subData.slabId);
         }
-      });
+      }
     }
 
-    const subscriptions = visibleSlabs.map(slab => {
-      const slabData = slab.dataValues || slab;
+    // Build response data
+    const subscriptions = visibleSlabsData.map(slabData => {
       const subscriptionAmount = slabData.subscriptionAmount || 0;
       const isFree = subscriptionAmount === 0;
-      const hasSubscription = subscribedSlabs.has(slabData.id);
+      const hasSubscription = subscribedSlabIds.has(slabData.id);
       const isCurrentSlab = slabData.id === currentSlabId;
-      const alreadySubscribed = (isFree && hasSubscription) || isCurrentSlab;
       
       return {
         id: slabData.id,
         slabName: slabData.slabName,
-        subscriptionAmount: subscriptionAmount,
+        subscriptionAmount,
         schemaMode: slabData.schemaMode,
         schemaType: slabData.schemaType,
         roleType: roleConfig.roleType,
         roleName: roleConfig.roleName,
         commissions: commissionsBySlab.get(slabData.id) || [],
-        isCurrentSlab: isCurrentSlab,
-        alreadySubscribed: alreadySubscribed,
+        isCurrentSlab,
+        alreadySubscribed: (isFree && hasSubscription) || isCurrentSlab,
         isSubscribed: hasSubscription
       };
     });
@@ -175,7 +167,7 @@ const getAllSubscriptions = async (req, res) => {
       message: 'Subscriptions retrieved successfully', 
       data: subscriptions,
       total: subscriptions.length,
-      currentSlabId: currentSlabId
+      currentSlabId
     });
   } catch (error) {
     console.error('Get all subscriptions error', error);
