@@ -91,8 +91,8 @@ const registerOperator = async (req, res) => {
           roleType,
           roleName: roleNames[index],
           commAmt: 0,
-          commType: 'com',
-          amtType: 'fix'
+          commType: dataToCreate.commType,
+          amtType: dataToCreate.amtType
         });
       });
     }
