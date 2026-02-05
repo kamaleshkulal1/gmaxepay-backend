@@ -2434,7 +2434,6 @@ const extractBase64FromImage = async (imageString) => {
   return null;
 };
 
-// Helper function to validate and convert base64 to buffer
 const validateAndConvertBase64 = (base64String) => {
   if (!base64String) return null;
   
