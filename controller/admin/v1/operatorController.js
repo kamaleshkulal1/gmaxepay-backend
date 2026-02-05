@@ -90,7 +90,7 @@ const registerOperator = async (req, res) => {
           operatorName: userToReturn.operatorName,
           operatorType: userToReturn.operatorType,
           roleType,
-          addedBy: addedBy,
+          addedBy: addedBy || req.user.id,
           roleName: roleNames[index],
           commAmt: 0,
           commType: dataToCreate.commType,
