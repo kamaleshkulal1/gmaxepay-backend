@@ -2355,7 +2355,6 @@ const getPending = async (req, res) => {
   }
 };
 
-// Helper functions
 const getLast4Digits = (aadhaarNumber) => {
   if (!aadhaarNumber) return null;
   const digits = aadhaarNumber.toString().replace(/\D/g, '');
