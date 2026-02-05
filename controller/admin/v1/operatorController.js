@@ -19,7 +19,7 @@ const registerOperator = async (req, res) => {
 
     let dataToCreate = { ...(req.body || {}) };
     let { operator_image } = req.files || {};
-    const companyId = req.user.companyId ;
+    const companyId = req.user.companyId;
 
     if (operator_image) {
       operator_image.map((file) => ({
@@ -46,12 +46,14 @@ const registerOperator = async (req, res) => {
     let userToReturn = {
       ...createdUser.dataValues
     };
-    const slabs = await dbService.findAll(model.slab, {
-      [Op.or]: [
-        { companyId: companyId },
-        { companyId: 1 }
-      ]
-    }, { select: ['id', 'addedByRole'] });
+
+    // Fetch all slabs (for all companies) so that the new operator
+    // is available in commission slabs for every company.
+    const slabs = await dbService.findAll(
+      model.slab,
+      { isDelete: false },
+      { select: ['id', 'addedByRole', 'companyId'] }
+    );
 
     const getRoleConfig = (userRole) => {
       switch (userRole) {
@@ -69,11 +71,12 @@ const registerOperator = async (req, res) => {
     };
 
     const dataToInsert = [];
-    
+
     for (const slab of slabs) {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       const addedByRole = slabData.addedByRole;
-      
+      const slabCompanyId = slabData.companyId;
+
       const config = getRoleConfig(addedByRole);
       const roleTypes = config.roleTypes;
       const roleNames = config.roleNames;
@@ -81,7 +84,7 @@ const registerOperator = async (req, res) => {
       roleTypes.forEach((roleType, index) => {
         dataToInsert.push({
           slabId: slab.id,
-          companyId: companyId,
+          companyId: slabCompanyId,
           operatorId: userToReturn.id,
           operatorName: userToReturn.operatorName,
           operatorType: userToReturn.operatorType,
