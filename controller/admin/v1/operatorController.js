@@ -52,7 +52,7 @@ const registerOperator = async (req, res) => {
     const slabs = await dbService.findAll(
       model.slab,
       { isDelete: false },
-      { select: ['id', 'addedByRole', 'companyId'] }
+      { select: ['id', 'addedByRole', 'addedBy', 'companyId'] }
     );
 
     const getRoleConfig = (userRole) => {
@@ -76,6 +76,7 @@ const registerOperator = async (req, res) => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       const addedByRole = slabData.addedByRole;
       const slabCompanyId = slabData.companyId;
+      const addedBy = slabData.addedBy;
 
       const config = getRoleConfig(addedByRole);
       const roleTypes = config.roleTypes;
@@ -89,6 +90,7 @@ const registerOperator = async (req, res) => {
           operatorName: userToReturn.operatorName,
           operatorType: userToReturn.operatorType,
           roleType,
+          addedBy: addedBy,
           roleName: roleNames[index],
           commAmt: 0,
           commType: dataToCreate.commType,
