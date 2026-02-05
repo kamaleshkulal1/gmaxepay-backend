@@ -1,17 +1,11 @@
-/**
- * aepsDailyLogin.js
- * @description :: sequelize model to store daily AEPS login records
- */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
 const { reusableModelAttribute } = require('../utils/common');
 
-/**
- * Get current date in Indian timezone (IST) as YYYY-MM-DD.
- * Kept here to ensure loginDate is always populated consistently even if controller forgets.
- */
+
 const getIndianDateOnly = () => {
   const now = new Date();
   const formatter = new Intl.DateTimeFormat('en-CA', {
