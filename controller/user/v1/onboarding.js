@@ -1404,6 +1404,7 @@ const getDigilockerDocuments = async (req, res) => {
 
     const existingDigilockerDocument = allDigilockerDocuments[0];
 
+    console.log('existingDigilockerDocument', existingDigilockerDocument);
     // Validate document ownership and required fields
     if (
       existingDigilockerDocument.refId !== userId ||
