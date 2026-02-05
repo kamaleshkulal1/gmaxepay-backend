@@ -1363,8 +1363,11 @@ const getDigilockerDocuments = async (req, res) => {
     if (userCtx.error) {
       return res.failure({ message: userCtx.error });
     }
+    console.log('companyId', companyId);
 
     const { user } = userCtx;
+    console.log('userId', user.id);
+    console.log('user', user);
     const { document_type } = req.body || {};
 
     if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
@@ -1402,6 +1405,8 @@ const getDigilockerDocuments = async (req, res) => {
       return res.failure({ message: `Please connect your ${docTypeLabel} to digilocker first` });
     }
 
+    console.log('allDigilockerDocuments', allDigilockerDocuments);
+    
     const existingDigilockerDocument = allDigilockerDocuments[0];
 
     console.log('existingDigilockerDocument', existingDigilockerDocument);
