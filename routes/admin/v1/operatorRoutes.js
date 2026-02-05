@@ -5,9 +5,10 @@ const operatorController = require('../../../controller/admin/v1/operatorControl
 
 router.post('/', authentication, operatorController.registerOperator);
 router.post('/list', authentication, operatorController.findAllOperator);
-router.get('/:id', authentication, operatorController.getOperator);
-router.patch('/:id', authentication, operatorController.partialUpdateOperator);
+router.post('/:id', authentication, operatorController.getOperator);
+router.put('/:id', authentication, operatorController.partialUpdateOperator);
 router.delete('/:id', authentication, operatorController.deleteOperator);
+
 router.get('/states', authentication, operatorController.findAllState);
 router.get('/types', authentication, operatorController.findAllOperatorType);
 router.get('/list', authentication, operatorController.operatorList);

@@ -148,7 +148,6 @@ let Operator = sequelize.define(
       type: DataTypes.FLOAT,
       allowNull: true
     },
-    // Typo-friendly alias (some code/data uses this key)
     masterDistrbutorCom: {
       type: DataTypes.FLOAT,
       allowNull: true

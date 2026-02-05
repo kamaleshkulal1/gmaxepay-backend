@@ -391,7 +391,7 @@ const findAllState = async (req, res) => {
     return res.internalServerError({ data: error.message });
   }
 };
-const operatorList = async (req, res) => { // TODO: Check if this is needed
+const operatorList = async (req, res) => { 
   try {
     let query = { ...req.body };
     const datas = await dbService.findAll(model.operator, query, {
