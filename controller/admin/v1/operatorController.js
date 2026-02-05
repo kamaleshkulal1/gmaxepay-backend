@@ -77,12 +77,11 @@ const registerOperator = async (req, res) => {
     const amtType = dataToCreate.amtType || dataToCreate.AmtType || 'fix';
 
     for (const slab of slabs) {
-      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const slabData = slab.dataValues || slab;
       const addedByRole = slabData.addedByRole;
       const slabCompanyId = slabData.companyId;
       const addedBy = slabData.addedBy;
-      console.log('slabData', slabData);
-      console.log('addedBy', addedBy);
+
 
       const config = getRoleConfig(addedByRole);
       const roleTypes = config.roleTypes;
