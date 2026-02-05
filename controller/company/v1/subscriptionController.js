@@ -130,7 +130,6 @@ const getAllSubscriptions = async (req, res) => {
       }
     }
 
-    // Create set of subscribed slab IDs
     const subscribedSlabIds = new Set();
     if (userSubscriptions?.length) {
       for (const sub of userSubscriptions) {
