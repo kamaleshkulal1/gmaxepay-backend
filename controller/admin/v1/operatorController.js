@@ -81,6 +81,7 @@ const registerOperator = async (req, res) => {
       const addedByRole = slabData.addedByRole;
       const slabCompanyId = slabData.companyId;
       const addedBy = slabData.addedBy;
+      console.log('addedBy', addedBy);
 
       const config = getRoleConfig(addedByRole);
       const roleTypes = config.roleTypes;
