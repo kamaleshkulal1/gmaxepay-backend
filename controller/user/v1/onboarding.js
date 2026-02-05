@@ -1410,12 +1410,27 @@ const getDigilockerDocuments = async (req, res) => {
     const existingDigilockerDocument = allDigilockerDocuments[0];
 
     console.log('existingDigilockerDocument', existingDigilockerDocument);
+
+    // Normalize values for safe comparison (avoid string vs number / case issues)
+    const docRefId = Number(existingDigilockerDocument.refId);
+    const reqUserId = Number(userId);
+    const docCompanyId = Number(existingDigilockerDocument.companyId);
+    const reqCompanyId = Number(companyIdNum);
+    const docDocType = (existingDigilockerDocument.documentType || '').toString().toUpperCase();
+    const reqDocType = docType.toString().toUpperCase();
+
+    // Extra debug to understand mismatches if they occur
+    console.log('Digilocker ownership check:', {
+      docRefId,
+      reqUserId,
+      docCompanyId,
+      reqCompanyId,
+      docDocType,
+      reqDocType
+    });
+
     // Validate document ownership and required fields
-    if (
-      existingDigilockerDocument.refId !== userId ||
-      existingDigilockerDocument.companyId !== companyIdNum ||
-      existingDigilockerDocument.documentType !== docType
-    ) {
+    if (docRefId !== reqUserId || docCompanyId !== reqCompanyId || docDocType !== reqDocType) {
       return res.failure({ message: 'Document access denied. Data mismatch detected.' });
     }
 
