@@ -1,10 +1,8 @@
 const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { encrypt, decrypt } = require('../utils/encryption');
 
-// Initialize S3 Client
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
@@ -17,231 +15,161 @@ const BUCKET_NAME = process.env.AWS_BUCKET || 'gmaxepaybucket';
 const AWS_CDN_URL = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
 const BASE_URL = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
 
-/**
- * Extract S3 key from encrypted or plain image data
- * @param {String|Object} imageData - Encrypted key, plain key, or JSON object
- * @returns {String} - Decrypted S3 key
- */
 const extractS3Key = (imageData) => {
   if (!imageData) return null;
-  
-  // Fast path: if it's already a plain S3 key string, return immediately
+
   if (typeof imageData === 'string' && imageData.startsWith('images/')) {
     return imageData;
   }
-  
-  // If it's an object, extract key
+
   if (typeof imageData === 'object') {
     const key = imageData.key || imageData;
-    // If key is already a plain S3 key, return it
     if (typeof key === 'string' && key.startsWith('images/')) {
       return key;
     }
-    // If key doesn't start with 'images/', try to decrypt it
     if (typeof key === 'string') {
       try {
         const decrypted = decrypt(key);
-        // Only return decrypted if it's a valid S3 key
-        if (decrypted && decrypted.startsWith('images/')) {
-          return decrypted;
-        }
-        return key;
-      } catch (e) {
-        // If decryption fails, return as is (might be invalid)
+        return (decrypted && decrypted.startsWith('images/')) ? decrypted : key;
+      } catch {
         return key;
       }
     }
     return key;
   }
-  
-  // If it's a string
+
   if (typeof imageData === 'string') {
-    // Fast check: if it starts with 'images/', it's already a plain key
     if (imageData.startsWith('images/')) {
       return imageData;
     }
-    
-    // Check if it's JSON (only if it looks like JSON)
+
     if (imageData.trim().startsWith('{')) {
       try {
         const parsed = JSON.parse(imageData);
         const key = parsed.key || imageData;
-        // If key is already a plain S3 key, return it
         if (typeof key === 'string' && key.startsWith('images/')) {
           return key;
         }
-        // Try to decrypt if needed
         if (typeof key === 'string') {
           try {
             const decrypted = decrypt(key);
-            if (decrypted && decrypted.startsWith('images/')) {
-              return decrypted;
-            }
-            return key;
-          } catch (e) {
+            return (decrypted && decrypted.startsWith('images/')) ? decrypted : key;
+          } catch {
             return key;
           }
         }
         return key;
       } catch {
-        // Not valid JSON, fall through to decryption attempt
       }
     }
-    
-    // Try to decrypt if it doesn't start with 'images/'
+
     try {
       const decrypted = decrypt(imageData);
-      if (decrypted && decrypted.startsWith('images/')) {
-        return decrypted;
-      }
-      return imageData;
-    } catch (e) {
-      // If decryption fails, return as is (might be already decrypted or invalid)
+      return (decrypted && decrypted.startsWith('images/')) ? decrypted : imageData;
+    } catch {
       return imageData;
     }
   }
-  
+
   return imageData;
 };
 
-/**
- * Get image URL - simple CDN URL for profile images and company images, secure proxy for others
- * @param {String|Object} encryptedKey - Encrypted S3 key from database (or plain key for backward compatibility)
- * @param {Boolean} useSecureProxy - Whether to use secure proxy endpoint (default: true, false for profile images and company images)
- * @returns {String} - CDN URL or secure proxy URL for the image
- */
 const getImageUrl = (encryptedKey, useSecureProxy = true) => {
   if (!encryptedKey) return null;
-  
+
   try {
-    // Extract S3 key (decrypt if needed)
     const s3Key = extractS3Key(encryptedKey);
-    
     if (!s3Key || !s3Key.startsWith('images/')) {
       return null;
     }
-    
-    // For profile images, always use simple CDN URL (no secure proxy)
+
     const isProfileImage = s3Key.includes('/profile/');
-    // For company images (signature/logo, signature/favicon, loginSlider), use proxy endpoint to avoid CORS issues
     const isCompanyImage = s3Key.includes('/signature/') || s3Key.includes('/loginSlider/');
-    
+
     if (isProfileImage || !useSecureProxy) {
-      // Use simple CDN URL for profile images (if useSecureProxy is false)
-      const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
-      return `${cdnUrl}/${s3Key}`;
-    } else if (isCompanyImage) {
-      // Use proxy endpoint for company images to avoid CORS issues
-      // The route /api/images/* expects the full S3 key path
-      return `${BASE_URL}/api/images/${s3Key}`;
-    } else {
-      // Use secure proxy for other images
-      // Encrypt the S3 key for secure URL
-      const encrypted = encrypt(s3Key);
-      // URL encode the encrypted key
-      const encodedKey = encodeURIComponent(encrypted);
-      // Return secure proxy URL
-      return `${BASE_URL}/api/v1/images/secure/${encodedKey}`;
+      return `${AWS_CDN_URL}/${s3Key}`;
     }
+
+    if (isCompanyImage) {
+      return `${BASE_URL}/api/images/${s3Key}`;
+    }
+
+    const encrypted = encrypt(s3Key);
+    const encodedKey = encodeURIComponent(encrypted);
+    return `${BASE_URL}/api/v1/images/secure/${encodedKey}`;
   } catch (error) {
     console.error('Error generating image URL:', error);
-    // Fallback: use proxy endpoint for company images, CDN for others
     try {
       const s3Key = extractS3Key(encryptedKey);
       if (s3Key && s3Key.startsWith('images/')) {
         const isCompanyImage = s3Key.includes('/signature/') || s3Key.includes('/loginSlider/');
-        if (isCompanyImage) {
-          // Use proxy endpoint for company images to avoid CORS
-          return `${BASE_URL}/api/images/${s3Key}`;
-        } else {
-          // Use CDN for other images
-          const cdnUrl = AWS_CDN_URL || 'https://assets.gmaxepay.in';
-          return `${cdnUrl}/${s3Key}`;
-        }
+        return isCompanyImage
+          ? `${BASE_URL}/api/images/${s3Key}`
+          : `${AWS_CDN_URL}/${s3Key}`;
       }
-    } catch (e) {
+    } catch {
       // Ignore errors
     }
     return null;
   }
 };
 
-/**
- * Upload image to S3
- * @param {Buffer} fileBuffer - File buffer
- * @param {String} fileName - File name
- * @param {String} type - Image type (loginSlider, signature)
- * @param {String} companyId - Company ID
- * @param {String} subtype - For signature type (logo, stamp, signature)
- * @param {String} userId - User ID (required for aadhaar and pan types)
- * @returns {Promise<Object>} - Returns S3 URL and key
- */
+const generateS3Key = (type, companyId, subtype, userId, fileName) => {
+  const defaultCompanyId = companyId || 'default';
+
+  const keyMap = {
+    loginSlider: `images/${defaultCompanyId}/loginSlider/${fileName}`,
+    signature: subtype ? `images/${defaultCompanyId}/signature/${subtype}/${fileName}` : null,
+    company: subtype ? `images/company/${defaultCompanyId}/${subtype}/${fileName}` : null,
+    bank: `images/bank/${subtype || 'bankLogo'}/${fileName}`,
+    profile: userId && companyId
+      ? (subtype ? `images/${userId}/${companyId}/profile/${subtype}/${fileName}` : `images/${userId}/${companyId}/profile/${fileName}`)
+      : (subtype ? `images/profile/${subtype}/${fileName}` : null),
+    shop: userId
+      ? `images/${defaultCompanyId}/${userId}/shopImage/${fileName}`
+      : `images/${defaultCompanyId}/shop/${fileName}`,
+    aadhaar: subtype && userId ? `images/${defaultCompanyId}/aadhaar/${userId}/${subtype}/${fileName}` : null,
+    pan: subtype && userId ? `images/${defaultCompanyId}/pan/${userId}/${subtype}/${fileName}` : null,
+    service: subtype
+      ? `images/${defaultCompanyId}/service/${subtype}/${fileName}`
+      : `images/${defaultCompanyId}/service/${fileName}`,
+  };
+
+  return keyMap[type] || `images/${defaultCompanyId}/other/${fileName}`;
+};
+
+const getContentType = (fileExt) => {
+  const contentTypeMap = {
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+  };
+  return contentTypeMap[fileExt.toLowerCase()] || 'image/jpeg';
+};
+
 const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = null, userId = null) => {
   try {
-    // Generate unique file name
     const timestamp = Date.now();
     const randomString = crypto.randomBytes(8).toString('hex');
     const ext = path.extname(fileName) || '.jpg';
     const sanitizedFileName = `${timestamp}_${randomString}${ext}`;
-    
-    // Construct S3 key based on type
-    let s3Key;
-    if (type === 'loginSlider') {
-      s3Key = `images/${companyId||'default'}/loginSlider/${sanitizedFileName}`;
-    } else if (type === 'signature' && subtype) {
-      s3Key = `images/${companyId||'default'}/signature/${subtype}/${sanitizedFileName}`;
-    } else if (type === 'company' && subtype) {
-      s3Key = `images/company/${companyId||'default'}/${subtype}/${sanitizedFileName}`;
-    } else if (type === 'bank') {
-      s3Key = `images/bank/${subtype || 'bankLogo'}/${sanitizedFileName}`;
-    } else if (type === 'profile' && userId && companyId) {
-      // Simple path pattern: images/{userId}/{companyId}/profile/
-      // Include subtype if provided (e.g., liveness)
-      if (subtype) {
-        s3Key = `images/${userId}/${companyId}/profile/${subtype}/${sanitizedFileName}`;
-      } else {
-        s3Key = `images/${userId}/${companyId}/profile/${sanitizedFileName}`;
-      }
-    } else if (type === 'profile' && subtype) {
-      s3Key = `images/profile/${subtype}/${sanitizedFileName}`;
-    } else if (type === 'shop') {
-      if (userId) {
-        // New pattern: companyId/userId/shopImage/
-        s3Key = `images/${companyId||'default'}/${userId}/shopImage/${sanitizedFileName}`;
-      } else {
-        // Old pattern for backward compatibility
-        s3Key = `images/${companyId||'default'}/shop/${sanitizedFileName}`;
-      }
-    } else if (type === 'aadhaar' && subtype && userId) {
-      s3Key = `images/${companyId||'default'}/aadhaar/${userId}/${subtype}/${sanitizedFileName}`;
-    } else if (type === 'pan' && subtype && userId) {
-      s3Key = `images/${companyId||'default'}/pan/${userId}/${subtype}/${sanitizedFileName}`;
-    } else {
-      s3Key = `images/${companyId||'default'}/other/${sanitizedFileName}`;
-    }
-    
-    // Determine content type from file extension
-    let contentType = 'image/jpeg';
-    const fileExt = ext.toLowerCase();
-    if (fileExt === '.png') contentType = 'image/png';
-    else if (fileExt === '.gif') contentType = 'image/gif';
-    else if (fileExt === '.webp') contentType = 'image/webp';
-    
-    // Upload to S3
+
+    const s3Key = generateS3Key(type, companyId, subtype, userId, sanitizedFileName);
+    const contentType = getContentType(ext);
+
     const params = {
       Bucket: BUCKET_NAME,
       Key: s3Key,
       Body: fileBuffer,
       ContentType: contentType
     };
-    
+
     await s3Client.send(new PutObjectCommand(params));
-    
-    // Return S3 key (will be encrypted before storing in database)
-    // Controllers should encrypt this key before storing
+
     return {
-      url: s3Key, // Plain S3 key (for immediate use)
-      key: s3Key  // Plain S3 key (will be encrypted in model hooks)
+      url: s3Key,
+      key: s3Key
     };
   } catch (error) {
     console.error('Error uploading image to S3:', error);
@@ -249,28 +177,21 @@ const uploadImageToS3 = async (fileBuffer, fileName, type, companyId, subtype = 
   }
 };
 
-/**
- * Delete image from S3
- * @param {String|Object} encryptedKey - Encrypted S3 key from database (or plain key)
- * @returns {Promise<Boolean>}
- */
 const deleteImageFromS3 = async (encryptedKey) => {
   try {
     if (!encryptedKey) return false;
-    
-    // Extract and decrypt S3 key if needed
+
     const s3Key = extractS3Key(encryptedKey);
-    
     if (!s3Key || !s3Key.startsWith('images/')) {
       console.error('Invalid S3 key for deletion');
       return false;
     }
-    
+
     const params = {
       Bucket: BUCKET_NAME,
       Key: s3Key
     };
-    
+
     await s3Client.send(new DeleteObjectCommand(params));
     return true;
   } catch (error) {
@@ -279,31 +200,24 @@ const deleteImageFromS3 = async (encryptedKey) => {
   }
 };
 
-/**
- * Get image stream from S3 (memory efficient - for streaming)
- * @param {String|Object} encryptedKey - Encrypted S3 key from database (or plain key)
- * @returns {Promise<Object>} - Returns { stream, contentType, contentLength }
- */
 const getImageStreamFromS3 = async (encryptedKey) => {
   try {
     if (!encryptedKey) {
       throw new Error('S3 key is required');
     }
-    
-    // Extract and decrypt S3 key if needed
+
     const s3Key = extractS3Key(encryptedKey);
-    
     if (!s3Key || !s3Key.startsWith('images/')) {
       throw new Error('Invalid S3 key');
     }
-    
+
     const params = {
       Bucket: BUCKET_NAME,
       Key: s3Key
     };
-    
+
     const response = await s3Client.send(new GetObjectCommand(params));
-    
+
     return {
       stream: response.Body,
       contentType: response.ContentType || 'image/jpeg',
@@ -316,36 +230,29 @@ const getImageStreamFromS3 = async (encryptedKey) => {
   }
 };
 
-/**
- * Get image from S3 (legacy - loads into memory, use getImageStreamFromS3 for better memory efficiency)
- * @param {String|Object} encryptedKey - Encrypted S3 key from database (or plain key)
- * @returns {Promise<Buffer>}
- */
 const getImageFromS3 = async (encryptedKey) => {
   try {
     if (!encryptedKey) {
       throw new Error('S3 key is required');
     }
-    
-    // Extract and decrypt S3 key if needed
+
     const s3Key = extractS3Key(encryptedKey);
-    
     if (!s3Key || !s3Key.startsWith('images/')) {
       throw new Error('Invalid S3 key');
     }
-    
+
     const params = {
       Bucket: BUCKET_NAME,
       Key: s3Key
     };
-    
+
     const response = await s3Client.send(new GetObjectCommand(params));
     const chunks = [];
-    
+
     for await (const chunk of response.Body) {
       chunks.push(chunk);
     }
-    
+
     return Buffer.concat(chunks);
   } catch (error) {
     console.error('Error getting image from S3:', error);
@@ -353,19 +260,15 @@ const getImageFromS3 = async (encryptedKey) => {
   }
 };
 
-/**
- * Encrypt S3 key for secure storage in database
- * @param {String} s3Key - Plain S3 key
- * @returns {String} - Encrypted key
- */
 const encryptS3Key = (s3Key) => {
   if (!s3Key) return null;
-  if (!s3Key.startsWith('images/')) return s3Key; // Don't encrypt if it's not an S3 key
+  if (!s3Key.startsWith('images/')) return s3Key;
+
   try {
     return encrypt(s3Key);
   } catch (error) {
     console.error('Error encrypting S3 key:', error);
-    return s3Key; // Return original if encryption fails
+    return s3Key;
   }
 };
 
@@ -379,4 +282,3 @@ module.exports = {
   encryptS3Key,
   BUCKET_NAME
 };
-

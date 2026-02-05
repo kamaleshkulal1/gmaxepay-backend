@@ -72,7 +72,10 @@ let Slab = sequelize.define(
       allowNull: false,
       defaultValue: 0
     },
-
+    addedByRole: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
     ...reusableSMSAttribute
   },
   {

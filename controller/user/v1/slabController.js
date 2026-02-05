@@ -145,6 +145,7 @@ const createSlab = async (req, res) => {
       users: [],
       isActive: true,
       addedBy: req.user.id,
+      addedByRole: req.user.userRole,
       type: req.user.userType
     };
 

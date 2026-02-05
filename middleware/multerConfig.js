@@ -6,17 +6,18 @@ const storage = multerLib.memoryStorage();
 
 // File filter function
 const fileFilter = function (req, file, callback) {
-  const allowedTypes = /jpeg|jpg|png|gif|webp|ico/;
+  const allowedTypes = /jpeg|jpg|png|gif|webp|ico|svg/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   
-  // Check MIME type, including special handling for .ico files
-  const allowedMimeTypes = /image\/(jpeg|jpg|png|gif|webp|x-icon|vnd\.microsoft\.icon)/;
-  const mimetype = allowedMimeTypes.test(file.mimetype);
+  // Check MIME type, including special handling for .ico and .svg files
+  const allowedMimeTypes = /image\/(jpeg|jpg|png|gif|webp|x-icon|vnd\.microsoft\.icon|svg\+xml)|application\/image|text\/plain/;
+  const mimetype = allowedMimeTypes.test(file.mimetype) || 
+                   (path.extname(file.originalname).toLowerCase() === '.svg');
   
-  if (mimetype && extname) {
+  if ((mimetype || extname === '.svg') && extname) {
     return callback(null, true);
   } else {
-    callback(new Error('Only image files are allowed!'));
+    callback(new Error('Only image files (including SVG) are allowed!'));
   }
 };
 

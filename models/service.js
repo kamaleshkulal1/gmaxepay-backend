@@ -17,6 +17,14 @@ let Services = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false
     },
+    icon: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     ...reusableSMSAttribute
   },
   {

@@ -4,7 +4,7 @@ const model = require('../../../models/index');
 const { Op } = require('sequelize');
 const fs = require('fs');
 
-const registerService = async (req, res) => {
+const registerOperator = async (req, res) => {
   try {
     let permissions = req.permission;
     let hasPermission = permissions.some(
@@ -46,152 +46,55 @@ const registerService = async (req, res) => {
     let userToReturn = {
       ...createdUser.dataValues
     };
-    const [slabs, ranges, paymentInstruments, cardTypes] = await Promise.all([
-      dbService.findAll(model.slab, {
-        [Op.or]: [
-          { companyId: companyId },
-          { companyId: 1 } // Include global slabs
-        ]
-      }, { select: ['id'] }),
-      dbService.findAll(
-        model.range,
-        { operatorType: userToReturn.operatorType },
-        { select: ['id', 'min', 'max'] }
-      ),
-      dbService.findAll(
-        model.paymentInstrument,
-        {},
-        { select: ['id', 'name', 'isCardType'] }
-      ),
-      dbService.findAll(model.cardType, {}, { select: ['id', 'name'] })
-    ]);
+    const slabs = await dbService.findAll(model.slab, {
+      [Op.or]: [
+        { companyId: companyId },
+        { companyId: 1 }
+      ]
+    }, { select: ['id', 'addedByRole'] });
 
-    let roleTypes;
-    let roleNames;
-
-    if (userToReturn.operatorType === 'BBPS') {
-      roleTypes = [1, 2, 3, 4, 5];
-      roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
-    } else {
-      roleTypes = [1, 2, 3, 4, 5];
-      roleNames = ['AD', 'WU', 'MD', 'DI', 'RE'];
-    }
-
-    const dataToInsert = slabs.flatMap((slab) =>
-      roleTypes.map((roleType, index) => ({
-        slabId: slab.id,
-        companyId: companyId,
-        operatorId: userToReturn.id,
-        operatorName: userToReturn.operatorName,
-        operatorType: userToReturn.operatorType,
-        roleType,
-        roleName: roleNames[index],
-        commAmt: 0,
-        commType: 'com',
-        amtType: 'fix'
-      }))
-    );
-
-    const dataToInsertRangeComm = slabs.flatMap((slab) =>
-      ranges.flatMap((range) =>
-        roleTypes.map((roleType, index) => ({
-          slabId: slab.id,
-          companyId: companyId,
-          operatorId: userToReturn.id,
-          operatorName: userToReturn.operatorName,
-          operatorType: userToReturn.operatorType,
-          rangeId: range.id,
-          min: range.min,
-          max: range.max,
-          roleType,
-          roleName: roleNames[index],
-          commAmt: 0,
-          commType: 'com',
-          amtType: 'fix'
-        }))
-      )
-    );
-
-    const dataToInsertRangeCharges = slabs.flatMap((slab) =>
-      ranges.flatMap((range) =>
-        roleTypes.map((roleType, index) => ({
-          slabId: slab.id,
-          companyId: companyId,
-          operatorId: userToReturn.id,
-          operatorName: userToReturn.operatorName,
-          operatorType: userToReturn.operatorType,
-          rangeId: range.id,
-          min: range.min,
-          max: range.max,
-          roleType,
-          roleName: roleNames[index],
-          commAmt: 0,
-          commType: 'com',
-          amtType: 'fix'
-        }))
-      )
-    );
-
-    let dataToInsertPgCommercials = [];
-
-    if (userToReturn.operatorType === 'PayIn') {
-      for (const slab of slabs) {
-        roleTypes.map((roleType, index) => {
-          for (const paymentInstrument of paymentInstruments) {
-            if (paymentInstrument.isCardType) {
-              for (const cardType of cardTypes) {
-                dataToInsertPgCommercials.push({
-                  slabId: slab.id,
-                  companyId: companyId,
-                  operatorId: userToReturn.id,
-                  operatorName: userToReturn.operatorName,
-                  operatorType: userToReturn.operatorType,
-                  roleType,
-                  roleName: roleNames[index],
-                  commAmt: 0,
-                  commType: 'com',
-                  amtType: 'fix',
-                  paymentInstrumentId: paymentInstrument.id,
-                  paymentInstrumentName: paymentInstrument.name,
-                  cardTypeId: cardType.id,
-                  cardTypeName: cardType.name
-                });
-              }
-            } else {
-              dataToInsertPgCommercials.push({
-                slabId: slab.id,
-                companyId: companyId,
-                operatorId: userToReturn.id,
-                operatorName: userToReturn.operatorName,
-                operatorType: userToReturn.operatorType,
-                roleType,
-                roleName: roleNames[index],
-                commAmt: 0,
-                commType: 'com',
-                amtType: 'fix',
-                paymentInstrumentId: paymentInstrument.id,
-                paymentInstrumentName: paymentInstrument.name,
-                cardTypeId: null,
-                cardTypeName: null
-              });
-            }
-          }
-        });
+    const getRoleConfig = (userRole) => {
+      switch (userRole) {
+        case 1:
+          return { roleTypes: [1, 2], roleNames: ['AD', 'WU'] };
+        case 2:
+          return { roleTypes: [2, 3, 4, 5], roleNames: ['WU', 'MD', 'DI', 'RE'] };
+        case 3:
+          return { roleTypes: [3, 4, 5], roleNames: ['MD', 'DI', 'RE'] };
+        case 4:
+          return { roleTypes: [4, 5], roleNames: ['DI', 'RE'] };
+        default:
+          return { roleTypes: [1, 2, 3, 4, 5], roleNames: ['AD', 'WU', 'MD', 'DI', 'RE'] };
       }
+    };
+
+    const dataToInsert = [];
+    
+    for (const slab of slabs) {
+      const slabData = slab.toJSON ? slab.toJSON() : slab;
+      const addedByRole = slabData.addedByRole;
+      
+      const config = getRoleConfig(addedByRole);
+      const roleTypes = config.roleTypes;
+      const roleNames = config.roleNames;
+
+      roleTypes.forEach((roleType, index) => {
+        dataToInsert.push({
+          slabId: slab.id,
+          companyId: companyId,
+          operatorId: userToReturn.id,
+          operatorName: userToReturn.operatorName,
+          operatorType: userToReturn.operatorType,
+          roleType,
+          roleName: roleNames[index],
+          commAmt: 0,
+          commType: 'com',
+          amtType: 'fix'
+        });
+      });
     }
 
-    if (userToReturn.operatorType === 'BBPS') {
-    }
-
-    await Promise.all([
-      dbService.createMany(model.commSlab, dataToInsert),
-      dbService.createMany(model.distributorSlabCom, dataToInsert),
-      dbService.createMany(model.rangeCommission, dataToInsertRangeComm),
-      dbService.createMany(model.rangeCharges, dataToInsertRangeCharges),
-      dbService.createMany(model.pgCommercials, dataToInsertPgCommercials, {
-        ignoreDuplicates: true
-      })
-    ]);
+    await dbService.createMany(model.commSlab, dataToInsert);
 
     return res.success({
       message: 'New Operator Created Successfully',
@@ -207,7 +110,7 @@ const registerService = async (req, res) => {
   }
 };
 
-const findAllService = async (req, res) => {
+const findAllOperator = async (req, res) => {
   try {
     let dataToFind = req.body;
     const companyId = req.companyId;
@@ -281,7 +184,7 @@ const findAllService = async (req, res) => {
   }
 };
 
-const getService = async (req, res) => {
+const getOperator = async (req, res) => {
   try {
     let permissions = req.permission;
     let hasPermission = permissions.some(
@@ -313,7 +216,7 @@ const getService = async (req, res) => {
   }
 };
 
-const partialUpdateService = async (req, res) => {
+const partialUpdateOperator = async (req, res) => {
   try {
     let permissions = req.permission;
     let hasPermission = permissions.some(
@@ -427,7 +330,7 @@ const partialUpdateService = async (req, res) => {
   }
 };
 
-const deleteService = async (req, res) => {
+const deleteOperator = async (req, res) => {
   try {
     const foundApi = await dbService.findOne(operator, {
       id: req.params.id
@@ -465,7 +368,7 @@ const deleteService = async (req, res) => {
   }
 };
 
-const findAlloperatorType = async (req, res) => {
+const findAllOperatorType = async (req, res) => {
   try {
     let query = {};
     const datas = await dbService.findAll(operatorType, query);
@@ -477,7 +380,7 @@ const findAlloperatorType = async (req, res) => {
   }
 };
 
-const findAllstate = async (req, res) => {
+const findAllState = async (req, res) => {
   try {
     let query = {};
     const datas = await dbService.findAll(state, query);
@@ -488,7 +391,7 @@ const findAllstate = async (req, res) => {
     return res.internalServerError({ data: error.message });
   }
 };
-const operatorList = async (req, res) => {
+const operatorList = async (req, res) => { // TODO: Check if this is needed
   try {
     let query = { ...req.body };
     const datas = await dbService.findAll(model.operator, query, {
@@ -503,12 +406,12 @@ const operatorList = async (req, res) => {
 };
 
 module.exports = {
-  registerService,
-  findAllService,
-  getService,
-  partialUpdateService,
-  deleteService,
-  findAllstate,
-  findAlloperatorType,
+  registerOperator,
+  findAllOperator,
+  getOperator,
+  partialUpdateOperator,
+  deleteOperator,
+  findAllOperatorType,
+  findAllState,
   operatorList
 };

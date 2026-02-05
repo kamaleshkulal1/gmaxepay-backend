@@ -593,6 +593,7 @@ const createSlab = async (req, res) => {
       subscriptionAmount: validatedSubscriptionAmount,
       isActive: true,
       addedBy: req.user.id,
+      addedByRole: req.user.userRole,
       type: req.user.userType
     };
 

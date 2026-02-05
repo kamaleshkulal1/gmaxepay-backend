@@ -1,13 +1,15 @@
 const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
+const imageService = require('../../../services/imageService');
+const { uploadImageToS3, deleteImageFromS3, getImageUrl, encryptS3Key } = imageService;
 
 const registerService = async (req, res) => {
   try {
-    let permissions = req.permission;
-    let hasPermission = permissions.some(
+    const permissions = req.permission;
+    const hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 9 &&
+        permission.dataValues.permissionId === 1 &&
         permission.dataValues.write === true
     );
 
@@ -15,10 +17,13 @@ const registerService = async (req, res) => {
       return res.failure({ message: "User doesn't have Permission!" });
     }
 
-    let dataToCreate = { ...(req.body || {}) };
-    const companyId = req.companyId;
+    if (req.user.userRole !== 1) {
+      return res.failure({ message: "You are not authorized to create services" });
+    }
 
-    // Check if service with same name already exists
+    const dataToCreate = { ...(req.body || {}) };
+    const companyId = req.companyId || req.user?.companyId;
+
     const existingService = await dbService.findOne(model.services, {
       serviceName: dataToCreate.serviceName,
       isDelete: false
@@ -31,82 +36,175 @@ const registerService = async (req, res) => {
       });
     }
 
-    dataToCreate = {
-      ...dataToCreate,
-      isActive: true,
-      addedBy: req.user.id,
-      type: req.user.userType,
-      companyId
-    };
-    let createdServices = await dbService.createOne(
-      model.services,
-      dataToCreate
-    );
-    if (!createdServices) {
+    if (req.file) {
+      try {
+        const fileBuffer = req.file.buffer;
+        const fileName = req.file.originalname;
+        const uploadResult = await uploadImageToS3(
+          fileBuffer,
+          fileName,
+          'service',
+          companyId,
+          'icon'
+        );
+        dataToCreate.icon = encryptS3Key(uploadResult.key);
+      } catch (error) {
+        console.error('Error uploading service icon:', error);
+        return res.failure({ message: 'Failed to upload service icon: ' + error.message });
+      }
+    }
+
+    dataToCreate.addedBy = req.user.id;
+
+    const createdService = await dbService.createOne(model.services, dataToCreate);
+    if (!createdService) {
       return res.failure({ message: 'Failed to create Service' });
     }
-    let serviceToReturn = {
-      ...createdServices.dataValues
-    };
+
+    const serviceToReturn = { ...createdService.dataValues };
+    if (serviceToReturn.icon) {
+      serviceToReturn.iconUrl = getImageUrl(serviceToReturn.icon, false);
+    }
+
     return res.success({
       message: 'Service Created Successfully',
       data: serviceToReturn
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return res.internalServerError({ message: error.message });
   }
 };
 
 const findAllServices = async (req, res) => {
   try {
-    let query = {};
-    let foundPackage = await dbService.findAll(model.services, query);
+    const dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      isDelete: false
+    };
 
-    if (!foundPackage || foundPackage.length === 0) {
-      return res.recordNotFound();
+    if (dataToFind.query) {
+      query = { ...query, ...dataToFind.query };
     }
+
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+    }
+
+    if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+      const keys = Object.keys(dataToFind.customSearch);
+      const searchOrConditions = [];
+
+      for (const key of keys) {
+        const value = dataToFind.customSearch[key];
+        if (value === undefined || value === null || String(value).trim() === '') continue;
+
+        if (key === 'serviceName') {
+          searchOrConditions.push({
+            serviceName: {
+              [Op.iLike]: `%${String(value).trim()}%`
+            }
+          });
+        } else if (key === 'description') {
+          searchOrConditions.push({
+            description: {
+              [Op.iLike]: `%${String(value).trim()}%`
+            }
+          });
+        }
+      }
+
+      if (searchOrConditions.length > 0) {
+        if (searchOrConditions.length === 1) {
+          Object.assign(query, searchOrConditions[0]);
+        } else {
+          query[Op.and] = [
+            { [Op.or]: searchOrConditions }
+          ];
+        }
+      }
+    }
+
+    const result = await dbService.paginate(model.services, query, {
+      ...options,
+      select: ['id', 'serviceName', 'icon', 'description', 'isActive', 'isDelete', 'createdAt', 'updatedAt']
+    });
+
+    const processedData = (result?.data || []).map(service => {
+      const serviceData = service.toJSON ? service.toJSON() : service;
+      if (serviceData.icon) {
+        serviceData.iconUrl = getImageUrl(serviceData.icon, false);
+      }
+      return serviceData;
+    });
+
     return res.status(200).send({
       status: 'SUCCESS',
-      message: 'Your request is successfully executed',
-      data: foundPackage
+      message: 'Services retrieved successfully',
+      data: processedData,
+      total: result?.total || 0,
+      paginator: result?.paginator || {
+        page: options.page || 1,
+        paginate: options.paginate || 10,
+        totalPages: 0
+      }
     });
   } catch (error) {
-    console.log(error);
-    return res.internalServerError({ data: error.message });
+    console.error(error);
+    return res.internalServerError({ message: error.message });
   }
 };
 
 const getServices = async (req, res) => {
   try {
-    let permissions = req.permission;
-    let hasPermission = permissions.some(
+    const permissions = req.permission;
+    const hasPermission = permissions.some(
       (permission) =>
-        permission.dataValues.permissionId === 9 &&
+        permission.dataValues.permissionId === 1 &&
         permission.dataValues.read === true
     );
 
     if (!hasPermission) {
       return res.failure({ message: "User doesn't have Permission!" });
     }
-    let id = req.params.id;
-    let foundUser = await dbService.findAll(model.packageService, {
+
+    const id = req.params.id;
+    const foundPackageServices = await dbService.findAll(model.packageService, {
       packageId: id
     });
-    if (!foundUser || foundUser.length === 0) {
+
+    if (!foundPackageServices || foundPackageServices.length === 0) {
       return res.recordNotFound();
     }
-    return res.success({ data: foundUser });
+
+    const packageServicesWithIcons = await Promise.all(
+      foundPackageServices.map(async (ps) => {
+        const psData = { ...ps.dataValues };
+        if (psData.serviceId) {
+          const service = await dbService.findOne(model.services, {
+            id: psData.serviceId,
+            isDelete: false
+          });
+          if (service && service.icon) {
+            psData.serviceIconUrl = getImageUrl(service.icon, false);
+          }
+        }
+        return psData;
+      })
+    );
+
+    return res.success({ data: packageServicesWithIcons });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return res.internalServerError({ message: error.message });
   }
 };
 
 const updateService = async (req, res) => {
   try {
-    let permissions = req.permission;
-    let hasPermission = permissions.some(
+    const permissions = req.permission;
+    const hasPermission = permissions.some(
       (permission) =>
         permission.dataValues.permissionId === 9 &&
         permission.dataValues.write === true
@@ -116,10 +214,10 @@ const updateService = async (req, res) => {
       return res.failure({ message: "User doesn't have Permission!" });
     }
 
-    let dataToUpdate = { ...req.body };
+    const dataToUpdate = { ...req.body };
     const serviceId = req.params.id;
+    const companyId = req.companyId || req.user?.companyId;
 
-    // Check if service exists
     const existingService = await dbService.findOne(model.services, {
       id: serviceId,
       isDelete: false
@@ -129,11 +227,42 @@ const updateService = async (req, res) => {
       return res.recordNotFound({ message: 'Service not found' });
     }
 
-    // Add updatedBy field
-    dataToUpdate = {
-      ...dataToUpdate,
-      updatedBy: req.user.id
-    };
+    if (dataToUpdate.hasOwnProperty('icon') && (dataToUpdate.icon === null || dataToUpdate.icon === '')) {
+      if (existingService.icon) {
+        try {
+          await deleteImageFromS3(existingService.icon);
+        } catch (error) {
+          console.error('Error deleting old service icon:', error);
+        }
+      }
+      dataToUpdate.icon = null;
+    } else if (req.file) {
+      try {
+        if (existingService.icon) {
+          try {
+            await deleteImageFromS3(existingService.icon);
+          } catch (error) {
+            console.error('Error deleting old service icon:', error);
+          }
+        }
+
+        const fileBuffer = req.file.buffer;
+        const fileName = req.file.originalname;
+        const uploadResult = await uploadImageToS3(
+          fileBuffer,
+          fileName,
+          'service',
+          companyId,
+          'icon'
+        );
+        dataToUpdate.icon = encryptS3Key(uploadResult.key);
+      } catch (error) {
+        console.error('Error uploading service icon:', error);
+        return res.failure({ message: 'Failed to upload service icon: ' + error.message });
+      }
+    }
+
+    dataToUpdate.updatedBy = req.user.id;
 
     const service = await dbService.update(
       model.services,
@@ -145,308 +274,29 @@ const updateService = async (req, res) => {
       return res.failure({ message: 'Failed to update Service' });
     }
 
+    const updatedService = await dbService.findOne(model.services, {
+      id: serviceId,
+      isDelete: false
+    });
+
+    const serviceData = updatedService ? { ...updatedService.dataValues } : service[0];
+    if (serviceData.icon) {
+      serviceData.iconUrl = getImageUrl(serviceData.icon, false);
+    }
+
     return res.success({
       message: 'Service Updated Successfully',
-      data: service
+      data: serviceData
     });
-  } catch (error) {
-    console.log(error);
-    return res.internalServerError({ message: error.message });
-  }
-};
-
-const processData = (data) => {
-  const groupedData = {};
-  data.forEach((item) => {
-    const key = item.userId;
-    if (!groupedData[key]) {
-      groupedData[key] = {
-        cost: item.cost,
-        packageId: item.packageId,
-        packageName: item.packageName,
-        services: []
-      };
-    }
-    groupedData[key].services.push({
-      serviceId: item.serviceId,
-      serviceName: item.serviceName,
-      isActive: item.isActive
-    });
-  });
-  return Object.values(groupedData);
-};
-
-const listUserPackage = async (req, res) => {
-  try {
-    const userId = req.params.id;
-
-    const user = await dbService.findOne(model.user, { id: userId });
-    if (!user) {
-      return res.recordNotFound({ message: 'User not found' });
-    }
-
-    const packageService = await dbService.findAll(
-      model.packageService,
-      { packageId: user.packageId },
-      { select: ['serviceId'] }
-    );
-
-    if (!packageService || packageService.length === 0) {
-      return res.failure({
-        message: 'No services found for the given package'
-      });
-    }
-
-    const serviceIds = packageService.map((ps) => ps.dataValues.serviceId);
-
-    const Services = await dbService.findAll(model.services, {
-      id: serviceIds
-    });
-
-    if (!Services || Services.length === 0) {
-      return res.failure({
-        message: 'No services found for the given service IDs'
-      });
-    }
-
-    const formattedResponse = processData(Services);
-
-    if (!Services || Services.length === 0) {
-      return res.recordNotFound({
-        message: 'No services found for the given user'
-      });
-    }
-    return res.success({ data: formattedResponse });
-  } catch (error) {
-    console.log(error);
-    return res.internalServerError({ message: error.message });
-  }
-};
-
-const updateUserService = async (req, res) => {
-  try {
-    let permissions = req.permission;
-    let hasPermission = permissions.some(
-      (permission) =>
-        permission.dataValues.permissionId === 28 &&
-        permission.dataValues.read === true
-    );
-
-    if (!hasPermission) {
-      return res.failure({ message: "User doesn't have Permission!" });
-    }
-
-    let dataToUpdate = { ...req.body };
-
-    const userId = req.params.id;
-
-    if (dataToUpdate.allTrue) {
-      let foundPackage = await dbService.update(
-        model.userPackage,
-        { userId },
-        { isActive: true }
-      );
-      return res.success({
-        message: 'All Services are Active!',
-        data: foundPackage
-      });
-    } else {
-      const serviceId = dataToUpdate.serviceId;
-
-      dataToUpdate = {
-        ...dataToUpdate
-      };
-
-      let foundUser = await dbService.update(
-        model.userPackage,
-        { userId, serviceId },
-        dataToUpdate
-      );
-
-      if (!foundUser || foundUser.length == 0) {
-        return res.recordNotFound();
-      }
-
-      return res.success({ data: foundUser });
-    }
-  } catch (error) {
-    console.log(error);
-    return res.internalServerError({ message: error.message });
-  }
-};
-
-const updateUserPackage = async (req, res) => {
-  try {
-    const permissions = req.permission;
-    const hasPermission = permissions.some(
-      (permission) =>
-        permission.dataValues.permissionId === 28 &&
-        permission.dataValues.write === true
-    );
-
-    if (!hasPermission) {
-      return res.failure({ message: "User doesn't have Permission!" });
-    }
-
-    let dataToUpdate = { ...req.body };
-    const packageId = dataToUpdate.packageId;
-    const userId = req.params.id;
-
-    const [packages, userData] = await Promise.all([
-      dbService.findOne(model.packages, { id: packageId }),
-      dbService.findOne(model.user, { id: userId })
-    ]);
-
-    if (!packages) {
-      return res.failure({ message: 'Package not found' });
-    }
-
-    if (!userData) {
-      return res.badRequest({ data: 'User not found!' });
-    }
-
-    const packageService = await dbService.findAll(
-      model.packageService,
-      { packageId },
-      { select: ['serviceId'] }
-    );
-
-    if (!packageService || packageService.length === 0) {
-      return res.failure({
-        message: 'No services found for the given package'
-      });
-    }
-
-    const serviceIds = packageService.map((ps) => ps.dataValues.serviceId);
-
-    const Services = await dbService.findAll(model.services, {
-      id: serviceIds
-    });
-
-    if (!Services || Services.length === 0) {
-      return res.failure({
-        message: 'No services found for the given service IDs'
-      });
-    }
-
-    await dbService.destroy(model.userPackage, { userId });
-
-    const cost = packages.cost;
-    const dataToInsert = Services.map((service) => ({
-      userId,
-      packageId,
-      packageName: packages.packageName,
-      cost: dataToUpdate.cost || cost,
-      serviceId: service.id,
-      serviceName: service.serviceName,
-      isActive: true
-    }));
-
-    const createdPackage = await dbService.createMany(
-      model.userPackage,
-      dataToInsert
-    );
-    return res.success({ data: createdPackage });
   } catch (error) {
     console.error(error);
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else if (error.name === 'SequelizeValidationError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else {
-      return res.internalServerError({ message: error });
-    }
-  }
-};
-
-const registerServicePackage = async (req, res) => {
-  try {
-    let permissions = req.permission;
-    let hasPermission = permissions.some(
-      (permission) =>
-        permission.dataValues.permissionId === 9 &&
-        permission.dataValues.write === true
-    );
-
-    if (!hasPermission) {
-      return res.failure({ message: "User doesn't have Permission!" });
-    }
-
-    let dataToCreate = { ...(req.body || {}) };
-
-    const packages = await dbService.findOne(model.packages, {
-      id: dataToCreate.packageId
-    });
-    if (!packages) {
-      return res.badRequest({ message: 'Package not found' });
-    }
-
-    const service = await dbService.findOne(model.services, {
-      id: dataToCreate.serviceId
-    });
-    if (!service) {
-      return res.badRequest({ message: 'Service not found' });
-    }
-
-    let where = {
-      packageId: dataToCreate.packageId,
-      serviceId: dataToCreate.serviceId
-    };
-
-    const api = await dbService.findOne(model.packageService, where);
-
-    if (api) {
-      if (dataToCreate.isActive == false) {
-        await dbService.destroy(model.packageService, where);
-        return res.success({ message: 'Data Deleted Successully' });
-      }
-      dataToCreate = {
-        ...dataToCreate,
-        companyId: req.user?.companyId,
-        updatedBy: req.user.id,
-        isActive: true,
-        isDelete: false
-      };
-
-      const apiCommsion = await dbService.update(
-        model.packageService,
-        { id: api.id },
-        dataToCreate
-      );
-      return res.success({ data: apiCommsion });
-    } else {
-      dataToCreate = {
-        ...dataToCreate,
-        addedBy: req.user.id,
-        isActive: true
-      };
-
-      const apiCommsion = await dbService.createOne(
-        model.packageService,
-        dataToCreate
-      );
-
-      res.success({ data: apiCommsion });
-    }
-  } catch (error) {
-    console.log(error);
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else if (error.name === 'SequelizeValidationError') {
-      return res.validationError({ message: error.errors[0].message });
-    } else {
-      return res.internalServerError({ message: error });
-    }
+    return res.internalServerError({ message: error.message });
   }
 };
 
 module.exports = {
   registerService,
   findAllServices,
-  registerServicePackage,
   getServices,
-  updateService,
-  updateUserPackage,
-  listUserPackage,
-  updateUserService
+  updateService
 };
