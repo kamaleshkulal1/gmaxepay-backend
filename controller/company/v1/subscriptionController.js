@@ -73,7 +73,7 @@ const getAllSubscriptions = async (req, res) => {
       slabId: { [Op.in]: slabIds },
       roleType: roleConfig.roleType,
       roleName: roleConfig.roleName,
-      addedBy: 1
+      companyId: companyId
     }, {
       attributes: ['id', 'slabId', 'operatorId', 'operatorName', 'operatorType', 'commAmt', 'commType', 'amtType']
     });

@@ -72,6 +72,10 @@ const registerOperator = async (req, res) => {
 
     const dataToInsert = [];
 
+    // Use commType and amtType from request body if provided, else fallback to defaults
+    const commType = dataToCreate.commType || dataToCreate.CommType || 'com';
+    const amtType = dataToCreate.amtType || dataToCreate.AmtType || 'fix';
+
     for (const slab of slabs) {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       const addedByRole = slabData.addedByRole;
@@ -90,11 +94,11 @@ const registerOperator = async (req, res) => {
           operatorName: userToReturn.operatorName,
           operatorType: userToReturn.operatorType,
           roleType,
-          addedBy: addedBy || req.user.id,
+          addedBy: addedBy,
           roleName: roleNames[index],
           commAmt: 0,
-          commType: dataToCreate.commType,
-          amtType: dataToCreate.amtType
+          commType: commType,
+          amtType: amtType
         });
       });
     }
