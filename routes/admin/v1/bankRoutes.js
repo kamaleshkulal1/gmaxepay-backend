@@ -9,5 +9,6 @@ router.put('/update-bank/:bankId',authentication, upload.single('bankLogo'), mul
 router.post('/delete-bank/:bankId', authentication, bankController.deleteBank);
 router.post('/get-bank/:bankId', authentication, bankController.getBankById);
 router.post('/get-all-banks', authentication, bankController.getAllBanks);
+router.post('/add-bank', authentication, bankController.addBank);
 
 module.exports = router;

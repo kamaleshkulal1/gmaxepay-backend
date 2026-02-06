@@ -2,6 +2,12 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
 const imageService = require('../../../services/imageService');
+const { generateTransactionID } = require('../../../utils/transactionID');
+const razorpayApi = require('../../../services/razorpayApi');
+const ekycHub = require('../../../services/eKycHub');
+const { doubleEncrypt, decrypt } = require('../../../utils/encryption');
+const key = Buffer.from(process.env.AES_KEY, 'hex');
+
 const path = require('path');
 
 // Normalize bank record and attach public CDN URL for bankLogo
@@ -300,11 +306,259 @@ const getAllBanks = async (req, res) => {
   }
 };
 
+const addBank = async (req, res) => {
+  try {
+    const existingUser = await dbService.findOne(model.user, {
+      id: req.user.id,
+      isActive: true
+    });
+
+    if (!existingUser || existingUser.userRole !== 1) {
+      return res.failure({ message: 'Unauthorized access' });
+    }
+
+    const userId = existingUser.id;
+    const companyId = existingUser.companyId;
+
+    // Get admin wallet
+    const adminWallet = await dbService.findOne(model.wallet, {
+      refId: userId,
+      companyId
+    });
+
+    if (!adminWallet) {
+      return res.failure({ message: 'Admin wallet not found' });
+    }
+
+    const { account_number, ifsc } = req.body || {};
+
+    if (!account_number || !ifsc) {
+      return res.validationError({
+        message: !account_number ? 'Account number is required' : 'IFSC is required'
+      });
+    }
+
+    // Check if bank already exists for this admin
+    const existingBanks = await dbService.findAll(model.customerBank, {
+      refId: userId,
+      companyId,
+      isActive: true
+    });
+
+    const duplicateBank = existingBanks.find(
+      (bank) => bank.accountNumber === account_number && bank.ifsc === ifsc
+    );
+
+    if (duplicateBank) {
+      return res.failure({
+        message:
+          'This bank account with the same account number and IFSC already exists in your account',
+        data: {
+          existingBank: {
+            id: duplicateBank.id,
+            bankName: duplicateBank.bankName,
+            accountNumber: duplicateBank.accountNumber,
+            ifsc: duplicateBank.ifsc,
+            isPrimary: duplicateBank.isPrimary
+          }
+        }
+      });
+    }
+
+    const verificationStart = Date.now();
+
+    // Check ekycHub cache first, then call APIs in parallel
+    const [cachedVerification, razorpayBankData] = await Promise.all([
+      (async () => {
+        const existingBank = await dbService.findOne(model.ekycHub, {
+          identityNumber1: account_number,
+          identityNumber2: ifsc,
+          identityType: 'BANK'
+        });
+
+        if (existingBank) {
+          try {
+            const encryptedData = JSON.parse(existingBank.response);
+            if (encryptedData && encryptedData.encrypted) {
+              const decryptedResponse = decrypt(encryptedData, key);
+              return decryptedResponse ? JSON.parse(decryptedResponse) : encryptedData;
+            }
+            return JSON.parse(existingBank.response);
+          } catch (e) {
+            return existingBank.response;
+          }
+        }
+        return null;
+      })(),
+      razorpayApi.bankDetails(ifsc).catch(() => null)
+    ]);
+
+    let bankVerification = cachedVerification;
+    let verificationSource = 'cache';
+
+    if (!bankVerification) {
+      verificationSource = 'api';
+      bankVerification = await ekycHub.bankVerification(account_number, ifsc);
+
+      if (bankVerification && bankVerification.status === 'Success') {
+        const encryptedRequest = doubleEncrypt(
+          JSON.stringify({ account_number, ifsc }),
+          key
+        );
+        const encryptedResponse = doubleEncrypt(
+          JSON.stringify(bankVerification),
+          key
+        );
+
+        dbService
+          .createOne(model.ekycHub, {
+            identityNumber1: account_number,
+            identityNumber2: ifsc,
+            request: JSON.stringify(encryptedRequest),
+            response: JSON.stringify(encryptedResponse),
+            identityType: 'BANK',
+            companyId: companyId || null,
+            addedBy: userId
+          })
+          .catch((err) => console.error('Error caching bank verification:', err));
+      }
+    }
+
+    console.log('admin addBank verification completed', {
+      userId,
+      source: verificationSource,
+      durationMs: Date.now() - verificationStart
+    });
+
+    if (!bankVerification || bankVerification.status !== 'Success') {
+      console.log('admin addBank bank verification failed', {
+        userId,
+        account_number,
+        ifsc,
+        status: bankVerification?.status
+      });
+      return res.failure({ message: 'Bank verification failed' });
+    }
+
+    // ---------------- Commission from Operator (no slab) ----------------
+    const operator = await dbService.findOne(model.operator, {
+      operatorType: 'BANK VERIFICATION',
+      inSlab: true
+    });
+
+    if (!operator) {
+      return res.failure({ message: 'Bank verification operator not configured' });
+    }
+
+    const surchargeAmt = parseFloat(operator.comm || 0);
+
+    if (surchargeAmt <= 0 || operator.commType !== 'sur') {
+      return res.failure({
+        message: 'Invalid operator commission configuration for bank verification'
+      });
+    }
+
+    const adminOpeningBalance = parseFloat(adminWallet.mainWallet || 0);
+
+    if (adminOpeningBalance < surchargeAmt) {
+      return res.failure({
+        message: `Insufficient wallet balance. Required: ${surchargeAmt}, Available: ${adminOpeningBalance}`
+      });
+    }
+
+    const adminClosingBalance = parseFloat((adminOpeningBalance - surchargeAmt).toFixed(2));
+
+    // Generate transaction ID
+    const companyDetails = await dbService.findOne(model.company, { id: companyId });
+    const transactionId = generateTransactionID(companyDetails?.companyName || 'BANK_VERIFY');
+
+    // Update admin wallet
+    await dbService.update(
+      model.wallet,
+      { id: adminWallet.id },
+      { mainWallet: adminClosingBalance, updatedBy: userId }
+    );
+
+    const operatorName = 'Bank Verification';
+    const remarkText = 'Bank verification charge (admin)';
+
+    const beneficiaryNameFromVerification =
+      bankVerification.nameAtBank ||
+      bankVerification.beneficiary_name ||
+      bankVerification.beneficiaryName ||
+      bankVerification['nameAtBank'] ||
+      null;
+
+    const bankNameFromVerification =
+      razorpayBankData?.BANK ||
+      bankVerification.bank_name ||
+      bankVerification.bankName ||
+      null;
+
+    // Wallet history for admin (debit only, commission from operator)
+    await dbService.createOne(model.walletHistory, {
+      refId: userId,
+      companyId,
+      walletType: 'mainWallet',
+      operator: operatorName,
+      remark: remarkText,
+      amount: surchargeAmt,
+      comm: 0,
+      surcharge: surchargeAmt,
+      openingAmt: adminOpeningBalance,
+      closingAmt: adminClosingBalance,
+      credit: 0,
+      debit: surchargeAmt,
+      transactionId,
+      paymentStatus: 'SUCCESS',
+      beneficiaryName: beneficiaryNameFromVerification,
+      beneficiaryAccountNumber: account_number,
+      beneficiaryBankName: bankNameFromVerification,
+      beneficiaryIfsc: ifsc,
+      paymentMode: 'WALLET',
+      addedBy: userId,
+      updatedBy: userId
+    });
+
+    const city = razorpayBankData?.CITY || bankVerification.city || null;
+    const branch = razorpayBankData?.BRANCH || bankVerification.branch || null;
+
+    // Create bank account for admin
+    const customerBank = await dbService.createOne(model.customerBank, {
+      bankName: bankNameFromVerification,
+      beneficiaryName: beneficiaryNameFromVerification,
+      accountNumber: account_number,
+      ifsc,
+      city,
+      branch,
+      companyId,
+      refId: userId,
+      isActive: true,
+      isPrimary: false
+    });
+
+    console.log('admin addBank success', {
+      userId,
+      companyId,
+      bankId: customerBank?.id
+    });
+
+    return res.success({
+      message: 'Bank details added successfully',
+      data: customerBank
+    });
+  } catch (error) {
+    console.log(error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   createBank,
   updateBank,
   deleteBank,
   getBankById,
-  getAllBanks
+  getAllBanks,
+  addBank
 };
 
