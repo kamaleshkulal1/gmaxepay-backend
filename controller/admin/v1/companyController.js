@@ -13,7 +13,6 @@ const googleMap = require('../../../services/googleMap');
 const postalPincode = require('../../../services/postalPincode');
 const mapplesMap = require('../../../services/mapplesMap');
 
-// Helper function to check IP address
 const checkDomainIP = async (domain) => {
   const dns = require('dns').promises;
   
@@ -486,7 +485,6 @@ const createCompany = async (req, res) => {
   }
 };
 
-
 const getPincodeByCity = async (req, res) => {
   try {
     const { city } = req.body;
@@ -727,7 +725,7 @@ const updateCompany = async (req, res) => {
 const updateCompanyLogoAndFavicon = async (req, res) => {
   try {
     const { id } = req.params;
-    const { type } = req.body; // 'logo' or 'favicon'
+    const { type } = req.body; 
     
     if (!req.file) {
       return res.failure({ message: 'Image file is required' });
@@ -969,7 +967,6 @@ const testMappplesMap = async (req, res) => {
   }
 }
 
-// Deactivate an onboarding token by token string
 const deactivateOnboarding = async (req, res) => {
   try {
     const { token } = req.params;
@@ -1002,7 +999,6 @@ const deactivateOnboarding = async (req, res) => {
   }
 };
 
-// Resend onboarding link for a company (generates a new token and emails it)
 const resendOnboardingLink = async (req, res) => {
   try {
     const { companyid } = req.params;

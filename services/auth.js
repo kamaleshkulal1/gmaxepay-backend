@@ -1,7 +1,4 @@
-/**
- * auth.js
- * @description :: service functions used in authentication
- */
+
 const { Op } = require('sequelize');
 const model = require('../models/index');
 const moment = require('moment');
@@ -17,7 +14,6 @@ const amezesmsApi = require('../services/amezesmsApi');
 const crypto = require('crypto');
 const aepsDailyLoginService = require('./aepsDailyLoginService');
 
-// Helper function to load user permissions based on role
 const loadUserPermissions = async (userRole) => {
   try {
     if (!userRole) {
@@ -105,8 +101,6 @@ const loadUserPermissions = async (userRole) => {
   }
 };
 
-// Helper function to determine security method based on user flags
-// Returns security method and required action
 const determineSecurityMethod = async (user) => {
   // If 2FA is disabled (both flags false), use MPIN as default
   if (user.is2FAenabled === false && user.is2faEnabledActive === false) {
@@ -168,7 +162,6 @@ const determineSecurityMethod = async (user) => {
   };
 };
 
-// Helper function to validate and decrypt dataToken with expiration check
 const validateAndDecryptDataToken = async (dataToken) => {
   try {
     if (!dataToken) {
@@ -246,7 +239,6 @@ const validateAndDecryptDataToken = async (dataToken) => {
   }
 };
 
-// Encryption/Decryption utility functions
 const doubleEncrypt = (value, key) => {
   if (!value || !key) {
     throw new Error('Value and key are required for encryption');
@@ -297,7 +289,8 @@ const generateToken = (user, secret) => {
       userRole: user.userRole,
       userType: user.userType,
       companyId: user.companyId,
-      tokenVersion: user.tokenVersion
+      tokenVersion: user.tokenVersion,
+      slabId: user.slabId
     },
     secret,
     {
@@ -326,9 +319,7 @@ const generateToken = (user, secret) => {
   };
 };
 
-// Generate tokens with access token expiring in 2 minutes and refresh token expiring
-// exactly 28 minutes from the original login timestamp
-// The refresh token includes the original login timestamp to preserve the 30-minute session limit
+
 const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
   const now = Date.now();
   const loginTs = typeof loginTimestamp === 'number' ? loginTimestamp : now;
@@ -347,7 +338,8 @@ const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
       userRole: user.userRole,
       userType: user.userType,
       companyId: user.companyId,
-      tokenVersion: user.tokenVersion
+      tokenVersion: user.tokenVersion,
+      slabId: user.slabId
     },
     secret,
     {
