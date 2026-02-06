@@ -2,6 +2,8 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const ekycHub = require('../../../services/eKycHub');
 const razorpayApi = require('../../../services/razorpayApi');
+const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const key = Buffer.from(process.env.AES_KEY, 'hex');
 
 const getAllCustomerBanks = async (req, res) => {
     try {
@@ -104,22 +106,24 @@ const addCustomerBank = async (req, res) => {
         const { account_number, ifsc } = req.body;
 
         // Validate required fields
-        if (!account_number) {
-            return res.validationError({ message: 'Account number is required' });
-        }
-        if (!ifsc) {
-            return res.validationError({ message: 'IFSC is required' });
+        if (!account_number || !ifsc) {
+            return res.validationError({ 
+                message: !account_number ? 'Account number is required' : 'IFSC is required' 
+            });
         }
 
-        const duplicateBank = await dbService.findOne(
+        const existingBanks = await dbService.findAll(
             model.customerBank,
             {
                 refId: req.user.id,
                 companyId: req.user.companyId,
-                accountNumber: account_number,
-                ifsc: ifsc,
                 isActive: true
             }
+        );
+
+        // Check for duplicate bank
+        const duplicateBank = existingBanks.find(
+            bank => bank.accountNumber === account_number && bank.ifsc === ifsc
         );
 
         if (duplicateBank) {
@@ -137,16 +141,7 @@ const addCustomerBank = async (req, res) => {
             });
         }
 
-        // Check existing banks count
-        const existingBanks = await dbService.findAll(
-            model.customerBank,
-            {
-                refId: req.user.id,
-                companyId: req.user.companyId,
-                isActive: true
-            }
-        );
-
+        // Check maximum banks limit
         const MAX_BANKS = 5;
         if (existingBanks && existingBanks.length >= MAX_BANKS) {
             return res.failure({
@@ -165,39 +160,80 @@ const addCustomerBank = async (req, res) => {
             });
         }
 
-        let bankVerification;
-        bankVerification = await ekycHub.bankVerification(account_number, ifsc);
+        // Check ekycHub cache first, then call APIs in parallel
+        const [cachedVerification, razorpayBankData] = await Promise.all([
+            // Check cache for bank verification
+            (async () => {
+                const existingBank = await dbService.findOne(model.ekycHub, {
+                    identityNumber1: account_number,
+                    identityNumber2: ifsc,
+                    identityType: 'BANK'
+                });
+
+                if (existingBank) {
+                    try {
+                        const encryptedData = JSON.parse(existingBank.response);
+                        if (encryptedData && encryptedData.encrypted) {
+                            const decryptedResponse = decrypt(encryptedData, key);
+                            return decryptedResponse ? JSON.parse(decryptedResponse) : encryptedData;
+                        }
+                        return JSON.parse(existingBank.response);
+                    } catch (e) {
+                        return existingBank.response;
+                    }
+                }
+                return null;
+            })(),
+            // Fetch Razorpay bank details (non-blocking, can fail)
+            razorpayApi.bankDetails(ifsc).catch(() => null)
+        ]);
+
+        // Get bank verification (from cache or API)
+        let bankVerification = cachedVerification;
+        if (!bankVerification) {
+            bankVerification = await ekycHub.bankVerification(account_number, ifsc);
+            
+            // Cache successful verification
+            if (bankVerification && bankVerification.status === 'Success') {
+                const encryptedRequest = doubleEncrypt(JSON.stringify({ account_number, ifsc }), key);
+                const encryptedResponse = doubleEncrypt(JSON.stringify(bankVerification), key);
+                
+                dbService.createOne(model.ekycHub, {
+                    identityNumber1: account_number,
+                    identityNumber2: ifsc,
+                    request: JSON.stringify(encryptedRequest),
+                    response: JSON.stringify(encryptedResponse),
+                    identityType: 'BANK',
+                    companyId: req.user.companyId || null,
+                    addedBy: req.user.id
+                }).catch(err => console.error('Error caching bank verification:', err));
+            }
+        }
 
         if (!bankVerification || bankVerification.status !== 'Success') {
             return res.failure({ message: 'Bank verification failed' });
         }
-        let razorpayBankData = null;
-        try {
-            razorpayBankData = await razorpayApi.bankDetails(ifsc);
-        } catch (error) {
-            console.error('Error fetching bank details from Razorpay:', error);
-        }
 
-        const bankName = (razorpayBankData && razorpayBankData.BANK)
-            ? razorpayBankData.BANK
-            : (bankVerification.bank_name || bankVerification.bankName || null);
+        // Extract bank details
+        const bankName = (razorpayBankData?.BANK) || bankVerification.bank_name || bankVerification.bankName || null;
+        const beneficiaryName = bankVerification.nameAtBank || bankVerification.beneficiary_name || bankVerification.beneficiaryName || bankVerification['nameAtBank'] || null;
+        const city = (razorpayBankData?.CITY) || bankVerification.city || null;
+        const branch = (razorpayBankData?.BRANCH) || bankVerification.branch || null;
 
+        // Create bank account
         const customerBank = await dbService.createOne(model.customerBank, {
             bankName,
-            beneficiaryName: bankVerification.nameAtBank || bankVerification.beneficiary_name || bankVerification.beneficiaryName || bankVerification['nameAtBank'] || null,
+            beneficiaryName,
             accountNumber: account_number,
             ifsc,
-            city: (razorpayBankData && razorpayBankData.CITY)
-                ? razorpayBankData.CITY
-                : (bankVerification.city || null),
-            branch: (razorpayBankData && razorpayBankData.BRANCH)
-                ? razorpayBankData.BRANCH
-                : (bankVerification.branch || null),
+            city,
+            branch,
             companyId: req.user.companyId,
             refId: req.user.id,
             isActive: true,
             isPrimary: false
         });
+
         return res.success({ message: 'Bank details added successfully', data: customerBank });
     } catch (error) {
         console.log('Add bank details error:', error);
