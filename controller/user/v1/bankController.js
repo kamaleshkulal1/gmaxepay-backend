@@ -103,6 +103,11 @@ const getCustomerBankById = async (req, res) => {
 
 const addCustomerBank = async (req, res) => {
     try {
+        
+        if(![3,4,5].includes(req.user.userRole)){
+            return res.failure({ message: 'You are not authorized to add bank details' });
+        }
+
         const { account_number, ifsc } = req.body;
 
         // Validate required fields
