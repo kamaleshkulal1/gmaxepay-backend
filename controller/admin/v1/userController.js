@@ -1763,6 +1763,124 @@ const getByUserProfile = async (req, res) => {
   }
 }
 
+const getProfile = async (req, res) => {
+  try {
+    if(req.user.userRole !== 1 && req.user.companyId !== 1){
+      return res.failure({ message: 'Access Denied due to insufficient permissions' });
+    }
+    
+    const existingUser = await dbService.findOne(model.user, {
+      id: req.user.id,
+      isDeleted: false
+    });
+
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    const companyDetails = existingUser.companyId
+      ? await dbService.findOne(model.company, { id: existingUser.companyId })
+      : null;
+
+    const [outletDetails, slabDetails, companyBankDetails] = await Promise.all([
+      existingUser.companyId
+        ? dbService.findOne(model.outlet, {
+            refId: existingUser.id,
+            companyId: existingUser.companyId
+          })
+        : null,
+      existingUser.companyId
+        ? dbService.findOne(model.slab, {
+            id: existingUser.slabId,
+            isActive: true
+          }, { attributes: ['id', 'slabName'] })
+        : null,
+      existingUser.companyId
+        ? dbService.findAll(model.customerBank, {
+            refId: existingUser.id,
+            companyId: existingUser.companyId
+          })
+        : []
+    ]);
+
+    const getCdnImageUrl = (imageData) => {
+      if (!imageData) return null;
+      const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+      if (typeof imageData === 'object' && imageData.key) {
+        return `${cdnUrl}/${imageData.key}`;
+      }
+      if (typeof imageData === 'string' && imageData.startsWith('images/')) {
+        return `${cdnUrl}/${imageData}`;
+      }
+      return imageData;
+    };
+
+    const response = {
+      id: existingUser.id,
+      name: existingUser.name,
+      email: existingUser.email,
+      mobileNo: existingUser.mobileNo,
+      slabId: existingUser.slabId,
+      slabName: slabDetails?.slabName || null,
+      aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
+      pancardNumber: existingUser.panDetails?.pancardNumber,
+      aadhaarFrontImage: getCdnImageUrl(existingUser.aadharFrontImage),
+      aadhaarBackImage: getCdnImageUrl(existingUser.aadharBackImage),
+      pancardFrontImage: getCdnImageUrl(existingUser.panCardFrontImage),
+      pancardBackImage: getCdnImageUrl(existingUser.panCardBackImage),
+      profileImage: getCdnImageUrl(existingUser.profileImage),
+      agentCode: existingUser.userId,
+      status: existingUser.isActive ? 'Active' : 'Inactive',
+      createdAt: existingUser.createdAt,
+      address: existingUser.fullAddress,
+      pinCode: existingUser.zipcode,
+      state: existingUser.state,
+      district: existingUser.district,
+      country: existingUser.country,
+      city: existingUser.city,
+      longitude: existingUser.longitude,
+      latitude: existingUser.latitude,
+      kycStatus: existingUser.kycStatus,
+      companyDetails: companyDetails
+        ? {
+            companyId: companyDetails.id,
+            companyName: companyDetails.companyName,
+            compnyPan: companyDetails.companyPan,
+            companyDomain: companyDetails.customDomain
+              ? `https://${companyDetails.customDomain}`
+              : null,
+            compnyGst: companyDetails.companyGst,
+            compnyLogo: getCdnImageUrl(companyDetails.logo)
+          }
+        : null,
+      outletDetails: outletDetails
+        ? {
+            shopName: outletDetails.shopName,
+            shopImage: getCdnImageUrl(outletDetails.shopImage),
+            shopAddress: outletDetails.shopAddress,
+            googleMapsLink: outletDetails.outletGoogleMapsLink
+          }
+        : null,
+      bankDetails: (companyBankDetails || []).map((bank) => ({
+        id: bank.id,
+        bankName: bank.bankName,
+        accountNumber: bank.accountNumber,
+        ifsc: bank.ifsc,
+        city: bank.city,
+        branch: bank.branch
+      }))
+    };
+
+    return res.success({
+      message: 'User profile fetched successfully',
+      data: response
+    });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   createUser,
   findAllUsers,
@@ -1775,5 +1893,6 @@ module.exports = {
   revertKycData,
   uploadBankDetailsForUser,
   getCompanyAdminById,
-  getByUserProfile
+  getByUserProfile,
+  getProfile
 };

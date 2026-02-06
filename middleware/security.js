@@ -1,18 +1,9 @@
-/**
- * security.js
- * @description: Security middleware for input sanitization, XSS protection, and more
- */
 
 const { MESSAGE } = require('../constants/msgConstant');
 
-/**
- * SECURITY: Input sanitization middleware
- * Removes potentially dangerous characters and patterns
- */
 const sanitizeInput = (req, res, next) => {
   const sanitize = (obj) => {
     if (typeof obj === 'string') {
-      // Remove potential XSS patterns
       return obj
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
         .replace(/javascript:/gi, '')
@@ -32,7 +23,6 @@ const sanitizeInput = (req, res, next) => {
     return obj;
   };
 
-  // Sanitize body, query, and params
   if (req.body) {
     req.body = sanitize(req.body);
   }
@@ -46,15 +36,12 @@ const sanitizeInput = (req, res, next) => {
   next();
 };
 
-/**
- * SECURITY: Prevent NoSQL injection attempts
- */
+
 const preventNoSqlInjection = (req, res, next) => {
   const sendFailureResponse = (message) => {
     if (typeof res.failure === 'function') {
       return res.failure({ message });
     }
-    // Fallback to standard Express response if responseHandler hasn't run
     if (!res.headersSent) {
       return res.status(200).json({
         status: 'FAILURE',
@@ -66,7 +53,6 @@ const preventNoSqlInjection = (req, res, next) => {
 
   const checkForNoSqlInjection = (obj, path = '') => {
     if (typeof obj === 'string') {
-      // Check for MongoDB injection patterns
       const dangerousPatterns = [
         /\$where/i,
         /\$ne/i,
@@ -129,9 +115,7 @@ const preventNoSqlInjection = (req, res, next) => {
   }
 };
 
-/**
- * SECURITY: Request ID generator for tracking
- */
+
 const requestId = (req, res, next) => {
   req.id = req.headers['x-request-id'] || 
            `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -139,11 +123,8 @@ const requestId = (req, res, next) => {
   next();
 };
 
-/**
- * SECURITY: Error handler that doesn't leak sensitive information
- */
+
 const secureErrorHandler = (err, req, res, next) => {
-  // Log full error for internal debugging
   console.error('Error:', {
     message: err.message,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
@@ -152,7 +133,6 @@ const secureErrorHandler = (err, req, res, next) => {
     method: req.method
   });
 
-  // Check if response handler methods are available, otherwise use standard Express responses
   const sendResponse = (statusCode, message, data = null) => {
     if (res.headersSent) return;
     res.status(statusCode).json({
@@ -162,9 +142,7 @@ const secureErrorHandler = (err, req, res, next) => {
     });
   };
 
-  // Don't expose sensitive error details to client
   if (process.env.NODE_ENV === 'production') {
-    // In production, send generic error messages
     if (err.name === 'SequelizeValidationError' || err.name === 'ValidationError') {
       if (typeof res.validationError === 'function') {
         return res.validationError({ 
@@ -192,7 +170,6 @@ const secureErrorHandler = (err, req, res, next) => {
       return sendResponse(401, 'Invalid or expired token. Please login again.');
     }
 
-    // Generic error response
     if (typeof res.internalServerError === 'function') {
       return res.internalServerError({ 
         message: 'An error occurred. Please try again later.' 
@@ -200,7 +177,6 @@ const secureErrorHandler = (err, req, res, next) => {
     }
     return sendResponse(500, 'An error occurred. Please try again later.');
   } else {
-    // In development, show more details
     if (typeof res.internalServerError === 'function') {
       return res.internalServerError({ 
         message: err.message,
@@ -211,32 +187,31 @@ const secureErrorHandler = (err, req, res, next) => {
   }
 };
 
-/**
- * SECURITY: Validate Content-Type header
- */
+
 const validateContentType = (req, res, next) => {
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
     const contentType = req.headers['content-type'];
+    const contentLength = req.headers['content-length'];
+    
+    const hasBody = contentLength && parseInt(contentLength) > 0;
 
-    // Allow multipart/form-data (file uploads)
     if (contentType && contentType.includes('multipart/form-data')) {
       return next();
     }
-
-    // For JSON endpoints, require JSON content type
-    if (req.path.includes('/api/') && !contentType?.includes('application/json')) {
-      if (typeof res.failure === 'function') {
-        return res.failure({ 
-          message: 'Content-Type must be application/json' 
-        });
-      }
-      // Fallback to standard Express response if responseHandler hasn't run
-      if (!res.headersSent) {
-        return res.status(200).json({
-          status: 'FAILURE',
-          message: 'Content-Type must be application/json',
-          data: null
-        });
+    if (hasBody) {
+      if (req.path.includes('/api/') && !contentType?.includes('application/json')) {
+        if (typeof res.failure === 'function') {
+          return res.failure({ 
+            message: 'Content-Type must be application/json' 
+          });
+        }
+        if (!res.headersSent) {
+          return res.status(200).json({
+            status: 'FAILURE',
+            message: 'Content-Type must be application/json',
+            data: null
+          });
+        }
       }
     }
   }
