@@ -14,10 +14,23 @@ const addCustomerBank = async (req, res) => {
 
     const userId = req.user?.id;
     const companyId = req.user?.companyId;
+    const { account_number, ifsc } = req.body;
 
+    // Early validation
+    if (!account_number || !ifsc) {
+      return res.validationError({
+        message: !account_number ? 'Account number is required' : 'IFSC is required'
+      });
+    }
+
+    // OPTIMIZATION: Parallelize all initial queries
     const [
       existingUser,
-      reportingToUser
+      reportingToUser,
+      existingUserWallet,
+      existingBanks,
+      cachedVerificationData,
+      companyDetails
     ] = await Promise.all([
       dbService.findOne(model.user, {
         id: userId,
@@ -25,48 +38,58 @@ const addCustomerBank = async (req, res) => {
         isActive: true
       }),
       dbService.findOne(model.user, {
-        id:  1,
+        id: 1,
         isActive: true
-      })
-    ]);
-    const [existingUserWallet, reportingToUserWallet] = await Promise.all([
+      }),
       dbService.findOne(model.wallet, { refId: userId, companyId }),
-      dbService.findOne(model.wallet, { refId: reportingToUser?.id || 1 })
+      dbService.findAll(model.customerBank, {
+        refId: userId,
+        companyId,
+        isActive: true
+      }),
+      // Cache lookup in parallel
+      dbService.findOne(model.ekycHub, {
+        identityNumber1: account_number,
+        identityNumber2: ifsc,
+        identityType: 'BANK'
+      }).then(existingBank => {
+        if (existingBank) {
+          try {
+            const storedResponse = JSON.parse(existingBank.response);
+            if (storedResponse && storedResponse.encrypted && storedResponse.iv && storedResponse.authTag) {
+              const decryptedString = decrypt(storedResponse, key);
+              if (decryptedString) {
+                return JSON.parse(decryptedString);
+              }
+            }
+            return null;
+          } catch (e) {
+            return null;
+          }
+        }
+        return null;
+      }).catch(() => null),
+      dbService.findOne(model.company, { id: companyId })
     ]);
+
+    // Early validations
     if (!existingUser) {
       return res.failure({ message: 'User not found' });
     }
-
     if (!existingUserWallet) {
       return res.failure({ message: 'User wallet not found' });
     }
-
     if (!reportingToUser) {
       return res.failure({ message: 'User not found' });
     }
 
-    const { account_number, ifsc } = req.body;
-
-    if (!account_number || !ifsc) {
-      return res.validationError({
-        message: !account_number ? 'Account number is required' : 'IFSC is required'
-      });
-    }
-
-    const existingBanks = await dbService.findAll(model.customerBank, {
-      refId: userId,
-      companyId,
-      isActive: true
-    });
-
+    // Check duplicate
     const duplicateBank = existingBanks.find(
       (bank) => bank.accountNumber === account_number && bank.ifsc === ifsc
     );
-
     if (duplicateBank) {
       return res.failure({
-        message:
-          'This bank account with the same account number and IFSC already exists in your account',
+        message: 'This bank account with the same account number and IFSC already exists in your account',
         data: {
           existingBank: {
             id: duplicateBank.id,
@@ -79,6 +102,7 @@ const addCustomerBank = async (req, res) => {
       });
     }
 
+    // Check max banks limit
     const MAX_BANKS = 5;
     if (existingBanks && existingBanks.length >= MAX_BANKS) {
       return res.failure({
@@ -97,59 +121,44 @@ const addCustomerBank = async (req, res) => {
       });
     }
 
-    const [cachedVerification, razorpayBankData] = await Promise.all([
-      (async () => {
-        const existingBank = await dbService.findOne(model.ekycHub, {
-          identityNumber1: account_number,
-          identityNumber2: ifsc,
-          identityType: 'BANK'
-        });
-
-        if (existingBank) {
-          try {
-            const storedResponse = JSON.parse(existingBank.response);
-            if (storedResponse && storedResponse.encrypted && storedResponse.iv && storedResponse.authTag) {
-              const decryptedString = decrypt(storedResponse, key);
-              if (decryptedString) {
-                return JSON.parse(decryptedString);
-              }
-            }
-            return null;
-          } catch (e) {
-            return null;
-          }
-        }
-        return null;
-      })(),
-      razorpayApi.bankDetails(ifsc).catch(() => null)
+    // OPTIMIZATION: Fetch slab and commission in parallel with verification
+    // Also fetch reporting user wallet and razorpay data in parallel
+    let bankVerification = cachedVerificationData;
+    const [
+      reportingToUserWallet,
+      existingUserSlab,
+      razorpayBankData
+    ] = await Promise.all([
+      dbService.findOne(model.wallet, { refId: reportingToUser?.id || 1 }),
+      existingUser?.slabId
+        ? dbService.findOne(model.slab, { id: existingUser.slabId })
+        : Promise.resolve(null),
+      // Make razorpay API call non-blocking (with timeout)
+      Promise.race([
+        razorpayApi.bankDetails(ifsc),
+        new Promise(resolve => setTimeout(() => resolve(null), 500)) // 500ms timeout
+      ]).catch(() => null)
     ]);
 
-    let bankVerification = cachedVerification;
-
+    // Bank verification (only if not cached)
     if (!bankVerification || !bankVerification.status || bankVerification.status !== 'Success') {
       bankVerification = await ekycHub.bankVerification(account_number, ifsc);
-
+      
+      // OPTIMIZATION: Cache verification asynchronously (don't wait)
       if (bankVerification && bankVerification.status === 'Success') {
-        const encryptedRequest = doubleEncrypt(
-          JSON.stringify({ account_number, ifsc }),
-          key
-        );
-        const encryptedResponse = doubleEncrypt(
-          JSON.stringify(bankVerification),
-          key
-        );
-
-        dbService
-          .createOne(model.ekycHub, {
-            identityNumber1: account_number,
-            identityNumber2: ifsc,
-            request: JSON.stringify(encryptedRequest),
-            response: JSON.stringify(encryptedResponse),
-            identityType: 'BANK',
-            companyId: companyId || null,
-            addedBy: userId
-          })
-          .catch(() => {});
+        const encryptedRequest = doubleEncrypt(JSON.stringify({ account_number, ifsc }), key);
+        const encryptedResponse = doubleEncrypt(JSON.stringify(bankVerification), key);
+        
+        // Fire and forget - don't wait for cache write
+        dbService.createOne(model.ekycHub, {
+          identityNumber1: account_number,
+          identityNumber2: ifsc,
+          request: JSON.stringify(encryptedRequest),
+          response: JSON.stringify(encryptedResponse),
+          identityType: 'BANK',
+          companyId: companyId || null,
+          addedBy: userId
+        }).catch(() => {});
       }
     }
 
@@ -157,14 +166,15 @@ const addCustomerBank = async (req, res) => {
       return res.failure({ message: 'Bank verification failed' });
     }
 
-    const existingUserSlab = await dbService.findOne(model.slab, {
-      id: existingUser?.slabId
-    });
-
     if (!existingUserSlab) {
       return res.failure({ message: 'Slab not found' });
     }
 
+    if (!reportingToUserWallet) {
+      return res.failure({ message: 'Reporting to user wallet not found' });
+    }
+
+    // Fetch commission data
     const slabComm = await dbService.findAll(
       model.commSlab,
       {
@@ -186,43 +196,24 @@ const addCustomerBank = async (req, res) => {
 
     const adminSurchargeAmt = parseFloat(adminCommission?.commAmt || 0);
     const userSurchargeAmt = parseFloat(userCommission?.commAmt || 0);
-    
 
     if (adminSurchargeAmt <= 0 || userSurchargeAmt <= 0) {
       return res.failure({ message: 'Invalid surcharge configuration for bank verification' });
     }
 
-    if (!reportingToUserWallet) {
-      return res.failure({ message: 'Reporting to user wallet not found' });
-    }
-
     const userOpeningBalance = parseFloat(existingUserWallet.mainWallet || 0);
-
     if (userOpeningBalance < userSurchargeAmt) {
       return res.failure({
         message: `Insufficient wallet balance. Required: ${userSurchargeAmt}, Available: ${userOpeningBalance}`
       });
     }
 
+    // Calculate balances
     const userClosingBalance = parseFloat((userOpeningBalance - userSurchargeAmt).toFixed(2));
     const reportingOpeningBalance = parseFloat(reportingToUserWallet.mainWallet || 0);
     const reportingClosingBalance = parseFloat((reportingOpeningBalance + adminSurchargeAmt).toFixed(2));
 
-    const companyDetails = await dbService.findOne(model.company, { id: companyId });
     const transactionId = generateTransactionID(companyDetails?.companyName || 'BANK_VERIFY');
-
-    await dbService.update(
-      model.wallet,
-      { id: existingUserWallet.id },
-      { mainWallet: userClosingBalance, updatedBy: userId }
-    );
-
-    await dbService.update(
-      model.wallet,
-      { id: reportingToUserWallet.id },
-      { mainWallet: reportingClosingBalance, updatedBy: reportingToUser?.id || 1 }
-    );
-
     const operatorName = 'Bank Verification';
     const remarkText = 'Bank verification charge';
 
@@ -239,69 +230,86 @@ const addCustomerBank = async (req, res) => {
       bankVerification.bankName ||
       null;
 
-    await dbService.createOne(model.walletHistory, {
-      refId: userId,
-      companyId,
-      walletType: 'mainWallet',
-      operator: operatorName,
-      remark: remarkText,
-      amount: userSurchargeAmt,
-      comm: 0,
-      surcharge: userSurchargeAmt,
-      openingAmt: userOpeningBalance,
-      closingAmt: userClosingBalance,
-      credit: 0,
-      debit: userSurchargeAmt,
-      transactionId,
-      paymentStatus: 'SUCCESS',
-      beneficiaryName: beneficiaryNameFromVerification,
-      beneficiaryAccountNumber: account_number,
-      beneficiaryBankName: bankNameFromVerification,
-      beneficiaryIfsc: ifsc,
-      paymentMode: 'WALLET',
-      addedBy: userId,
-      updatedBy: userId
-    });
-
-    await dbService.createOne(model.walletHistory, {
-      refId: reportingToUser?.id || 1,
-      companyId: reportingToUser?.companyId || companyId,
-      walletType: 'mainWallet',
-      operator: operatorName,
-      remark: `${remarkText} - commission`,
-      amount: adminSurchargeAmt,
-      comm: adminSurchargeAmt,
-      surcharge: 0,
-      openingAmt: reportingOpeningBalance,
-      closingAmt: reportingClosingBalance,
-      credit: adminSurchargeAmt,
-      debit: 0,
-      transactionId,
-      paymentStatus: 'SUCCESS',
-      beneficiaryName: reportingToUser?.name || null,
-      beneficiaryAccountNumber: null,
-      beneficiaryBankName: null,
-      beneficiaryIfsc: null,
-      paymentMode: 'WALLET',
-      addedBy: reportingToUser?.id || 1,
-      updatedBy: reportingToUser?.id || 1
-    });
-
     const city = razorpayBankData?.CITY || bankVerification.city || null;
     const branch = razorpayBankData?.BRANCH || bankVerification.branch || null;
 
-    const customerBank = await dbService.createOne(model.customerBank, {
-      bankName: bankNameFromVerification,
-      beneficiaryName: beneficiaryNameFromVerification,
-      accountNumber: account_number,
-      ifsc,
-      city,
-      branch,
-      companyId,
-      refId: userId,
-      isActive: true,
-      isPrimary: false
-    });
+    // OPTIMIZATION: Batch all database writes in parallel
+    const [
+      customerBank,
+      walletUpdate1,
+      walletUpdate2,
+      walletHistory1,
+      walletHistory2
+    ] = await Promise.all([
+      dbService.createOne(model.customerBank, {
+        bankName: bankNameFromVerification,
+        beneficiaryName: beneficiaryNameFromVerification,
+        accountNumber: account_number,
+        ifsc,
+        city,
+        branch,
+        companyId,
+        refId: userId,
+        isActive: true,
+        isPrimary: false
+      }),
+      dbService.update(
+        model.wallet,
+        { id: existingUserWallet.id },
+        { mainWallet: userClosingBalance, updatedBy: userId }
+      ),
+      dbService.update(
+        model.wallet,
+        { id: reportingToUserWallet.id },
+        { mainWallet: reportingClosingBalance, updatedBy: reportingToUser?.id || 1 }
+      ),
+      dbService.createOne(model.walletHistory, {
+        refId: userId,
+        companyId,
+        walletType: 'mainWallet',
+        operator: operatorName,
+        remark: remarkText,
+        amount: userSurchargeAmt,
+        comm: 0,
+        surcharge: userSurchargeAmt,
+        openingAmt: userOpeningBalance,
+        closingAmt: userClosingBalance,
+        credit: 0,
+        debit: userSurchargeAmt,
+        transactionId,
+        paymentStatus: 'SUCCESS',
+        beneficiaryName: beneficiaryNameFromVerification,
+        beneficiaryAccountNumber: account_number,
+        beneficiaryBankName: bankNameFromVerification,
+        beneficiaryIfsc: ifsc,
+        paymentMode: 'WALLET',
+        addedBy: userId,
+        updatedBy: userId
+      }),
+      dbService.createOne(model.walletHistory, {
+        refId: reportingToUser?.id || 1,
+        companyId: reportingToUser?.companyId || companyId,
+        walletType: 'mainWallet',
+        operator: operatorName,
+        remark: `${remarkText} - commission`,
+        amount: adminSurchargeAmt,
+        comm: adminSurchargeAmt,
+        surcharge: 0,
+        openingAmt: reportingOpeningBalance,
+        closingAmt: reportingClosingBalance,
+        credit: adminSurchargeAmt,
+        debit: 0,
+        transactionId,
+        paymentStatus: 'SUCCESS',
+        beneficiaryName: reportingToUser?.name || null,
+        beneficiaryAccountNumber: null,
+        beneficiaryBankName: null,
+        beneficiaryIfsc: null,
+        paymentMode: 'WALLET',
+        addedBy: reportingToUser?.id || 1,
+        updatedBy: reportingToUser?.id || 1
+      })
+    ]);
 
     return res.success({
       message: 'Bank details added successfully',
