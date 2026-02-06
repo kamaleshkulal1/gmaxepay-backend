@@ -1790,12 +1790,6 @@ const getProfile = async (req, res) => {
           })
         : null,
       existingUser.companyId
-        ? dbService.findOne(model.slab, {
-            id: existingUser.slabId,
-            isActive: true
-          }, { attributes: ['id', 'slabName'] })
-        : null,
-      existingUser.companyId
         ? dbService.findAll(model.customerBank, {
             refId: existingUser.id,
             companyId: existingUser.companyId
