@@ -92,7 +92,6 @@ const preventNoSqlInjection = (req, res, next) => {
     } else if (obj && typeof obj === 'object') {
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          // Check if key itself is dangerous
           if (key.startsWith('$') && key !== '$or' && key !== '$and') {
             console.warn(`SECURITY: Blocked dangerous key: ${key} at ${path}`);
             return sendFailureResponse('Invalid input detected. Please check your input and try again.');
