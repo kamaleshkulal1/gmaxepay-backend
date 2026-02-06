@@ -10,6 +10,7 @@ router.use('/bbps', require('./v1/bbpsRoute'));
 router.use('/pan', require('./v1/panRoute'));
 router.use('/slab', require('./v1/slabRoute'));
 router.use('/payout', require('./v1/payoutRoute'));
+router.use('/service', require('./v1/serviceRoute'));
 router.use('/recharge', require('./v1/rechargeRoute'));
 router.use('/dth', require('./v1/dthRoute'));
 router.use('/callback', require('./v1/callbackRoute'));
