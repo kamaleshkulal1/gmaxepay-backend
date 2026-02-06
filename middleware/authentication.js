@@ -56,7 +56,7 @@ const authentication = async (req, res, next) => {
         isActive: true,
         isDeleted: false
       },
-      { attributes: ['id', 'mobileNo', 'companyId', 'userRole', 'userType', 'tokenVersion'] }
+      { attributes: ['id', 'mobileNo', 'companyId', 'userRole', 'userType', 'tokenVersion','slabId'] }
     );
 
     if (!user) {
@@ -109,7 +109,8 @@ const authentication = async (req, res, next) => {
       companyId: user.companyId,
       userRole: user.userRole,
       userType: user.userType,
-      tokenVersion: user.tokenVersion
+      tokenVersion: user.tokenVersion,
+      slabId: user.slabId
     };
 
     req.permission = permissions;
