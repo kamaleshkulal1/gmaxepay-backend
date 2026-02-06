@@ -21,7 +21,7 @@ const {
   validateContentType 
 } = require('./middleware/security');
 const aepsLogout = require('./utils/aepsLogout');
-  
+const { generalLimit } = require('./middleware/ratelimiter');
 
 const app = express();
 app.use(
@@ -72,19 +72,11 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware - MUST be early to handle all requests including OPTIONS
 app.use(cors(corsOptions));
-
-// SECURITY: Request ID for tracking
 app.use(requestId);
-
-// IMPORTANT: responseHandler must run before any middleware that uses res.failure, res.internalServerError, etc.
 app.use(require('./utils/response/responseHandler'));
-
-// SECURITY: Validate Content-Type (now safe to use res.failure)
 app.use(validateContentType);
 const httpServer = require('http').createServer(app);
-// SECURITY: Limit URL-encoded payload size (increased for file uploads)
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.set('view engine', 'ejs');
@@ -95,8 +87,6 @@ app.set('views', path.join(__dirname, 'views'));
 // app.use(morganMiddleware);
 // SECURITY: Limit request body size (increased for file uploads, multer handles individual file limits)
 app.use(express.json({ limit: '10mb' }));
-
-// SECURITY: Input sanitization and NoSQL injection prevention
 app.use(sanitizeInput);
 app.use(preventNoSqlInjection);
 
@@ -106,11 +96,7 @@ app.use(preventNoSqlInjection);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static('uploads'));
 
-// SECURITY: Apply general rate limiting before routes
-const { generalLimit } = require('./middleware/ratelimiter');
 app.use(generalLimit);
-
-// Favicon route
 app.get('/favicon.ico', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'favicon.ico'));
 });
@@ -122,7 +108,6 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => {
   try {
-    // Basic health checks
     const healthStatus = {
       status: 'ok',
       message: 'gmaxepay is running beautifully',
@@ -130,11 +115,8 @@ app.get('/health', (req, res) => {
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development'
     };
-    
-    // Return 200 OK status
     res.status(200).json(healthStatus);
   } catch (error) {
-    // Return 500 Internal Server Error if something goes wrong
     res.status(500).json({
       status: 'error',
       message: 'Health check failed',
@@ -144,7 +126,6 @@ app.get('/health', (req, res) => {
   }
 });
 
-// Helper function to detect IP type
 function detectIPType(ip) {
   if (!ip || ip === 'unknown') return 'unknown';
   
@@ -156,8 +137,6 @@ function detectIPType(ip) {
   if (ipv6Regex.test(ip) || ipv6CompressedRegex.test(ip)) return 'IPv6';
   return 'unknown';
 }
-
-// If needed for debugging, add authentication and only enable in development
 if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
   // Add authentication middleware here if you need this endpoint
   app.get('/test-ip', require('./middleware/authentication'), (req, res) => {
@@ -173,9 +152,7 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS
 // LOGGING DISABLED - Commented out error logger
 // app.use(errorLogger);
 
-// SECURITY: Secure error handler (must be last error handler)
 app.use(secureErrorHandler);
-
 app.use((req, res, next) => {
   next();
 });

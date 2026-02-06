@@ -15,5 +15,6 @@ router.post('/:id/kyc/revert', authentication, userController.revertKycData);
 router.post('/company-admin/:id', authentication, userController.getCompanyAdminById);
 router.post('/bank-details/upload', authentication, userController.uploadBankDetailsForUser);
 router.post('/:id/profile', authentication, userController.getByUserProfile);
+router.post('/getProfile', authentication, userController.getProfile);
 
 module.exports = router;
