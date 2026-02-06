@@ -127,7 +127,7 @@ const dthRecharge = async (req, res) => {
         const orderid = response.orderid;
         const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
         const isPending = response.status === 'Pending' || response.status === 'PENDING';
-        const paymentStatus = isSuccess ? 'Success' : (isPending ? 'Pending' : 'Failure');
+        const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILURE');
 
         // Create wallet if doesn't exist
         let currentWallet = wallet;
@@ -148,12 +148,13 @@ const dthRecharge = async (req, res) => {
         const creditToApply = isSuccess ? retailerNetCredit : 0;
         const closingMainWallet = isSuccess ? round2(openingMainWallet + creditToApply) : openingMainWallet;
 
-        // Prepare DTH recharge data
+        // Prepare service transaction data for DTH recharge
         // Store calculated commissions for all statuses (needed for checkStatus when status changes)
         // But only credit wallet on Success
-        const dthRechargeData = {
+        const serviceTransactionData = {
             refId: req.user.id,
             companyId: req.user.companyId,
+            serviceType: 'DTHRecharge',
             dthNumber: dth_number,
             opcode,
             amount: amountNumber,
@@ -164,18 +165,18 @@ const dthRecharge = async (req, res) => {
             message: response.message || null,
             apiResponse: response,
             // Store calculated commissions for all statuses (will be reverted to 0 in checkStatus if Failure)
-            superadminComm: paymentStatus === 'Failure' ? 0 : superadminComm,
-            whitelabelComm: paymentStatus === 'Failure' ? 0 : whitelabelComm,
-            masterDistributorCom: paymentStatus === 'Failure' ? 0 : masterDistributorCom,
-            distributorCom: paymentStatus === 'Failure' ? 0 : distributorCom,
-            retailerCom: paymentStatus === 'Failure' ? 0 : retailerCom,
+            superadminComm: paymentStatus === 'FAILURE' ? 0 : superadminComm,
+            whitelabelComm: paymentStatus === 'FAILURE' ? 0 : whitelabelComm,
+            masterDistributorCom: paymentStatus === 'FAILURE' ? 0 : masterDistributorCom,
+            distributorCom: paymentStatus === 'FAILURE' ? 0 : distributorCom,
+            retailerCom: paymentStatus === 'FAILURE' ? 0 : retailerCom,
             isActive: true,
             addedBy: req.user.id
         };
 
-        // Execute wallet update and DTH recharge record creation in parallel
+        // Execute wallet update and service transaction creation in parallel
         const updates = [
-            dbService.createOne(model.dthRecharge, dthRechargeData)
+            dbService.createOne(model.serviceTransaction, serviceTransactionData)
         ];
 
         if (isSuccess && creditToApply > 0) {

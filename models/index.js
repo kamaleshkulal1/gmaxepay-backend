@@ -68,6 +68,7 @@ db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
 db.recharge = require('./recharge');
 db.dthRecharge = require('./dthRecharge');
+db.serviceTransaction = require('./serviceTransaction');
 db.fundRequest = require('./fundRequest');
 db.fundHistory = require('./fundHistrory');
 

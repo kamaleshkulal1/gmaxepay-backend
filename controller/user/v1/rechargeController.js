@@ -82,7 +82,7 @@ const recharge = async (req, res) => {
         const orderid = response.orderid;
         const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
         const isPending = response.status === 'Pending' || response.status === 'PENDING';
-        const paymentStatus = isSuccess ? 'Success' : (isPending ? 'Pending' : 'Failure');
+        const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILURE');
 
         // Create wallet if doesn't exist
         let currentWallet = wallet;
@@ -103,10 +103,11 @@ const recharge = async (req, res) => {
         const creditToApply = isSuccess ? retailerNetCredit : 0;
         const closingMainWallet = isSuccess ? round2(openingMainWallet + creditToApply) : openingMainWallet;
          if(isSuccess) response.operatorName = operator?.operatorName;
-        // Prepare recharge data
-        const rechargeData = {
+        // Prepare service transaction data
+        const serviceTransactionData = {
             refId: req.user.id,
             companyId: req.user.companyId,
+            serviceType: 'MobileRecharge',
             mobileNumber,
             opcode,
             circle: circle || null,
@@ -121,18 +122,18 @@ const recharge = async (req, res) => {
             value3: value3 || null,
             value4: value4 || null,
             apiResponse: response,
-            superadminComm: paymentStatus === 'Success' ? superadminComm : 0,
-            whitelabelComm: paymentStatus === 'Success' ? whitelabelComm : 0,
-            masterDistributorCom: paymentStatus === 'Success' ? masterDistributorCom : 0,
-            distributorCom: paymentStatus === 'Success' ? distributorCom : 0,
-            retailerCom: paymentStatus === 'Success' ? retailerCom : 0,
+            superadminComm: paymentStatus === 'SUCCESS' ? superadminComm : 0,
+            whitelabelComm: paymentStatus === 'SUCCESS' ? whitelabelComm : 0,
+            masterDistributorCom: paymentStatus === 'SUCCESS' ? masterDistributorCom : 0,
+            distributorCom: paymentStatus === 'SUCCESS' ? distributorCom : 0,
+            retailerCom: paymentStatus === 'SUCCESS' ? retailerCom : 0,
             isActive: true,
             addedBy: req.user.id
         };
 
-        // Execute wallet update and recharge record creation in parallel
+        // Execute wallet update and service transaction creation in parallel
         const updates = [
-            dbService.createOne(model.recharge, rechargeData)
+            dbService.createOne(model.serviceTransaction, serviceTransactionData)
         ];
 
         if (isSuccess && creditToApply > 0) {

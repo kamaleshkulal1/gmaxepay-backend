@@ -37,25 +37,36 @@ const panCardActions = async (req, res) => {
     const response = await eKycHubPromise;
     console.log("response", response);
 
-    const panCardRequestData = {
+    // Normalize status to uppercase
+    const normalizeStatus = (status) => {
+      if (!status) return 'FAILURE';
+      const statusUpper = status.toUpperCase();
+      if (statusUpper === 'SUCCESS') return 'SUCCESS';
+      if (statusUpper === 'PENDING') return 'PENDING';
+      return 'FAILURE';
+    };
+
+    const serviceTransactionData = {
       refId: userId,
       companyId: companyId,
+      serviceType: 'Pan',
       orderid: response.orderid,
       transactionId: transactionId,
       mobile_number: mobileNumber,
       redirect_url: response?.redirect_url || response?.url || null,
-      status: response.status || 'Failed',
+      status: normalizeStatus(response.status),
       action: action,
       request: JSON.stringify({
         mobile_number: mobileNumber,
         orderid: response.orderid
       }),
       response: JSON.stringify(response),
+      apiResponse: response,
       addedBy: userId,
       updatedBy: userId
     };
 
-    await dbService.createOne(model.panCardCrud, panCardRequestData);
+    await dbService.createOne(model.serviceTransaction, serviceTransactionData);
 
     if (response.status === 'Success' || response.status.toLowerCase() === 'success') {
       return res.success({
