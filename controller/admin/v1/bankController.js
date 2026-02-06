@@ -363,8 +363,6 @@ const addBank = async (req, res) => {
       });
     }
 
-    const verificationStart = Date.now();
-
     const [cachedVerification, razorpayBankData] = await Promise.all([
       (async () => {
         const existingBank = await dbService.findOne(model.ekycHub, {
@@ -421,19 +419,7 @@ const addBank = async (req, res) => {
       }
     }
 
-    console.log('admin addBank verification completed', {
-      userId,
-      source: verificationSource,
-      durationMs: Date.now() - verificationStart
-    });
-
     if (!bankVerification || bankVerification.status !== 'Success') {
-      console.log('admin addBank bank verification failed', {
-        userId,
-        account_number,
-        ifsc,
-        status: bankVerification?.status
-      });
       return res.failure({ message: 'Bank verification failed' });
     }
 
@@ -527,12 +513,6 @@ const addBank = async (req, res) => {
       refId: userId,
       isActive: true,
       isPrimary: false
-    });
-
-    console.log('admin addBank success', {
-      userId,
-      companyId,
-      bankId: customerBank?.id
     });
 
     return res.success({
