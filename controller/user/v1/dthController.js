@@ -218,15 +218,13 @@ const dthRecharge = async (req, res) => {
     }
 };
 
-// Helper function to update DTH recharge status (used by both checkStatus and callback)
 const updateDthRechargeStatus = async (orderid, newStatus, opid, companyId = null) => {
-    // Find existing DTH recharge record
     const whereClause = { orderid };
     if (companyId) {
         whereClause.companyId = companyId;
     }
 
-    const existingDthRecharge = await dbService.findOne(model.dthRecharge, whereClause);
+    const existingDthRecharge = await dbService.findOne(model.serviceTransaction, whereClause);
 
     if (!existingDthRecharge) {
         return { success: false, message: 'DTH recharge record not found' };
@@ -327,7 +325,7 @@ const updateDthRechargeStatus = async (orderid, newStatus, opid, companyId = nul
 
     // Update DTH recharge record
     await dbService.update(
-        model.dthRecharge,
+        model.serviceTransaction,
         { id: existingDthRecharge.id },
         updateData
     );
@@ -348,7 +346,7 @@ const checkStatus = async (req, res) => {
         }
 
         // Find existing DTH recharge record
-        const existingDthRecharge = await dbService.findOne(model.dthRecharge, {
+        const existingDthRecharge = await dbService.findOne(model.serviceTransaction, {
             orderid,
             companyId: req.user.companyId
         });
@@ -372,7 +370,7 @@ const checkStatus = async (req, res) => {
 
         // Update additional fields from API response
         await dbService.update(
-            model.dthRecharge,
+            model.serviceTransaction,
             { id: result.record.id },
             {
                 txid: response.txid || result.record.txid,
