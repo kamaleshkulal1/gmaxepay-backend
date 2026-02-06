@@ -563,7 +563,7 @@ const getUserProfile = async (req, res) => {
       ? await dbService.findOne(model.company, { id: existingUser.companyId })
       : null;
 
-    const [outletDetails, companyBankDetails, reportingToManager] = await Promise.all([
+    const [outletDetails, reportingToManager, companyBankDetails] = await Promise.all([
       existingUser.companyId 
         ? dbService.findOne(model.outlet, { refId: existingUser.id, companyId: existingUser.companyId })
         : null,
@@ -574,6 +574,7 @@ const getUserProfile = async (req, res) => {
         ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId })
         : []
     ]);
+    console.log("reportingToManager", reportingToManager);
 
     const getCdnImageUrl = (imageData) => {
       if (!imageData) return null;

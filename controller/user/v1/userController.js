@@ -848,7 +848,7 @@ const getUserProfile = async (req, res) => {
       return res.failure({ message: 'Company admin not found' });
     }
 
-    const [outletDetails, companyBankDetails, reportingToManager] = await Promise.all([
+    const [outletDetails, reportingToManager, companyBankDetails] = await Promise.all([
       existingUser.companyId 
         ? dbService.findOne(model.outlet, { refId: existingUser.id, companyId: existingUser.companyId })
         : null,
