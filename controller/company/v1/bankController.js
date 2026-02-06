@@ -2,17 +2,13 @@ const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
 const razorpayApi = require('../../../services/razorpayApi');
 const ekycHub = require('../../../services/eKycHub');
-const { doubleEncrypt, decrypt } = require('../../../utils/encryption');
+const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 
 const addCustomerBank = async (req, res) => {
   try {
     if (![2].includes(req.user.userRole)) {
-      console.log('addCustomerBank unauthorized role', {
-        userId: req.user.id,
-        userRole: req.user.userRole
-      });
       return res.failure({ message: 'You are not authorized to add bank details' });
     }
 
@@ -68,11 +64,6 @@ const addCustomerBank = async (req, res) => {
     );
 
     if (duplicateBank) {
-      console.log('addCustomerBank duplicate bank found', {
-        userId,
-        account_number,
-        ifsc
-      });
       return res.failure({
         message:
           'This bank account with the same account number and IFSC already exists in your account',
@@ -90,10 +81,6 @@ const addCustomerBank = async (req, res) => {
 
     const MAX_BANKS = 5;
     if (existingBanks && existingBanks.length >= MAX_BANKS) {
-      console.log('addCustomerBank max banks limit reached', {
-        userId,
-        count: existingBanks.length
-      });
       return res.failure({
         message: `You have reached the maximum limit of ${MAX_BANKS} bank accounts. Please remove one of your existing banks before adding a new one.`,
         data: {
@@ -110,7 +97,6 @@ const addCustomerBank = async (req, res) => {
       });
     }
 
-    const verificationStart = Date.now();
     const [cachedVerification, razorpayBankData] = await Promise.all([
       (async () => {
         const existingBank = await dbService.findOne(model.ekycHub, {
@@ -122,18 +108,14 @@ const addCustomerBank = async (req, res) => {
         if (existingBank) {
           try {
             const storedResponse = JSON.parse(existingBank.response);
-            if (storedResponse && storedResponse.encrypted) {
+            if (storedResponse && storedResponse.encrypted && storedResponse.iv && storedResponse.authTag) {
               const decryptedString = decrypt(storedResponse, key);
               if (decryptedString) {
                 return JSON.parse(decryptedString);
               }
             }
-            if (typeof storedResponse === 'string') {
-              return JSON.parse(storedResponse);
-            }
-            return storedResponse;
+            return null;
           } catch (e) {
-            console.error('Error parsing cached bank verification:', e);
             return null;
           }
         }
@@ -143,10 +125,8 @@ const addCustomerBank = async (req, res) => {
     ]);
 
     let bankVerification = cachedVerification;
-    let verificationSource = 'cache';
 
     if (!bankVerification || !bankVerification.status || bankVerification.status !== 'Success') {
-      verificationSource = 'api';
       bankVerification = await ekycHub.bankVerification(account_number, ifsc);
 
       if (bankVerification && bankVerification.status === 'Success') {
@@ -169,27 +149,11 @@ const addCustomerBank = async (req, res) => {
             companyId: companyId || null,
             addedBy: userId
           })
-          .catch((err) =>
-            console.error('Error caching bank verification:', err)
-          );
+          .catch(() => {});
       }
     }
 
-    console.log('addCustomerBank verification completed', {
-      userId,
-      source: verificationSource,
-      durationMs: Date.now() - verificationStart,
-      status: bankVerification?.status
-    });
-
     if (!bankVerification || bankVerification.status !== 'Success') {
-      console.log('addCustomerBank bank verification failed', {
-        userId,
-        account_number,
-        ifsc,
-        status: bankVerification?.status,
-        bankVerification: bankVerification
-      });
       return res.failure({ message: 'Bank verification failed' });
     }
 
@@ -222,6 +186,7 @@ const addCustomerBank = async (req, res) => {
 
     const adminSurchargeAmt = parseFloat(adminCommission?.commAmt || 0);
     const userSurchargeAmt = parseFloat(userCommission?.commAmt || 0);
+    
 
     if (adminSurchargeAmt <= 0 || userSurchargeAmt <= 0) {
       return res.failure({ message: 'Invalid surcharge configuration for bank verification' });
@@ -322,12 +287,9 @@ const addCustomerBank = async (req, res) => {
       updatedBy: reportingToUser?.id || 1
     });
 
-    const bankName = bankNameFromVerification;
-    const beneficiaryName = beneficiaryNameFromVerification;
     const city = razorpayBankData?.CITY || bankVerification.city || null;
     const branch = razorpayBankData?.BRANCH || bankVerification.branch || null;
 
-    // Create bank account
     const customerBank = await dbService.createOne(model.customerBank, {
       bankName,
       beneficiaryName,
@@ -341,18 +303,11 @@ const addCustomerBank = async (req, res) => {
       isPrimary: false
     });
 
-    console.log('addCustomerBank success', {
-      userId,
-      companyId,
-      bankId: customerBank?.id
-    });
-
     return res.success({
       message: 'Bank details added successfully',
       data: customerBank
     });
   } catch (error) {
-    console.log('Add bank details error:', error);
     return res.internalServerError({
       message: error.message || 'Internal server error'
     });

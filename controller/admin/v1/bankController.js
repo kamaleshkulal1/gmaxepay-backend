@@ -5,12 +5,11 @@ const imageService = require('../../../services/imageService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const razorpayApi = require('../../../services/razorpayApi');
 const ekycHub = require('../../../services/eKycHub');
-const { doubleEncrypt, decrypt } = require('../../../utils/encryption');
+const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 
 const path = require('path');
 
-// Normalize bank record and attach public CDN URL for bankLogo
 const withBankLogoUrl = (bank) => {
   if (!bank) return bank;
   const data = bank?.toJSON ? bank.toJSON() : bank;
@@ -43,7 +42,6 @@ const createBank = async (req, res) => {
       return res.validationError({ message: 'bankIIN is required' });
     }
    
-    // basic duplicate check (by bankName and/or bankIIN if provided)
     const dupWhere = [{ bankName: { [Op.iLike]: bankName } }];
     dupWhere.push({ bankIIN });
 
@@ -56,7 +54,6 @@ const createBank = async (req, res) => {
       return res.failure({ message: 'Bank already exists' });
     }
 
-    // If logo file provided, upload to S3
     if (req.file && req.file.buffer) {
       const ext = path.extname(req.file.originalname) || '.jpg';
       const fixedFileName = `bankLogo${ext}`;
@@ -83,7 +80,6 @@ const createBank = async (req, res) => {
       data: withBankLogoUrl(created)
     });
   } catch (error) {
-    console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.validationError({ message: error.errors[0].message });
     }
@@ -128,7 +124,6 @@ const updateBank = async (req, res) => {
       }
       dataToUpdate.bankIIN = nextIIN;
     }
-    // If logo file provided, replace logo in S3 and delete old
     if (req.file && req.file.buffer) {
       if (existingBank.bankLogo) {
         await imageService.deleteImageFromS3(existingBank.bankLogo);
@@ -144,7 +139,6 @@ const updateBank = async (req, res) => {
       );
       dataToUpdate.bankLogo = uploadResult?.key || uploadResult?.url || null;
     } else if (body.bankLogo !== undefined) {
-      // allow manual setting if no file uploaded
       dataToUpdate.bankLogo = body.bankLogo ? String(body.bankLogo).trim() : null;
     }
     if (body.isActive !== undefined) dataToUpdate.isActive = !!body.isActive;
@@ -164,7 +158,6 @@ const updateBank = async (req, res) => {
       data: withBankLogoUrl(updated[0])
     });
   } catch (error) {
-    console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.validationError({ message: error.errors[0].message });
     }
@@ -199,7 +192,6 @@ const deleteBank = async (req, res) => {
       return res.failure({ message: 'Bank not found' });
     }
 
-    // soft delete to match other patterns
     const updated = await dbService.update(
       model.aslBankList,
       { bankIIN: bankId },
@@ -212,7 +204,6 @@ const deleteBank = async (req, res) => {
 
     return res.success({ message: 'Bank Deleted Successfully' });
   } catch (error) {
-    console.log(error);
     return res.internalServerError({ message: error.message });
   }
 };
@@ -237,7 +228,6 @@ const getBankById = async (req, res) => {
       data: withBankLogoUrl(found)
     });
   } catch (error) {
-    console.log(error);
     return res.internalServerError({ message: error.message });
   }
 };
@@ -287,7 +277,6 @@ const getAllBanks = async (req, res) => {
       }
     }
 
-    // default: only active banks unless explicitly asked
     if (query.isActive === undefined) {
       query.isActive = true;
     }
@@ -301,7 +290,6 @@ const getAllBanks = async (req, res) => {
       paginator: result?.paginator
     });
   } catch (error) {
-    console.log(error);
     return res.internalServerError({ message: error.message });
   }
 };
@@ -373,14 +361,16 @@ const addBank = async (req, res) => {
 
         if (existingBank) {
           try {
-            const encryptedData = JSON.parse(existingBank.response);
-            if (encryptedData && encryptedData.encrypted) {
-              const decryptedResponse = decrypt(encryptedData, key);
-              return decryptedResponse ? JSON.parse(decryptedResponse) : encryptedData;
+            const storedResponse = JSON.parse(existingBank.response);
+            if (storedResponse && storedResponse.encrypted && storedResponse.iv && storedResponse.authTag) {
+              const decryptedString = decrypt(storedResponse, key);
+              if (decryptedString) {
+                return JSON.parse(decryptedString);
+              }
             }
-            return JSON.parse(existingBank.response);
+            return null;
           } catch (e) {
-            return existingBank.response;
+            return null;
           }
         }
         return null;
@@ -389,10 +379,8 @@ const addBank = async (req, res) => {
     ]);
 
     let bankVerification = cachedVerification;
-    let verificationSource = 'cache';
 
-    if (!bankVerification) {
-      verificationSource = 'api';
+    if (!bankVerification || !bankVerification.status || bankVerification.status !== 'Success') {
       bankVerification = await ekycHub.bankVerification(account_number, ifsc);
 
       if (bankVerification && bankVerification.status === 'Success') {
@@ -415,7 +403,7 @@ const addBank = async (req, res) => {
             companyId: companyId || null,
             addedBy: userId
           })
-          .catch((err) => console.error('Error caching bank verification:', err));
+          .catch(() => {});
       }
     }
 
@@ -520,7 +508,6 @@ const addBank = async (req, res) => {
       data: customerBank
     });
   } catch (error) {
-    console.log(error);
     return res.internalServerError({ message: error.message });
   }
 };
