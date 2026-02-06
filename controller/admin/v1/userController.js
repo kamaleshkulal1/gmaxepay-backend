@@ -1782,7 +1782,7 @@ const getProfile = async (req, res) => {
       ? await dbService.findOne(model.company, { id: existingUser.companyId })
       : null;
 
-    const [outletDetails, slabDetails, companyBankDetails] = await Promise.all([
+    const [outletDetails, companyBankDetails] = await Promise.all([
       existingUser.companyId
         ? dbService.findOne(model.outlet, {
             refId: existingUser.id,
@@ -1793,10 +1793,9 @@ const getProfile = async (req, res) => {
         ? dbService.findAll(model.customerBank, {
             refId: existingUser.id,
             companyId: existingUser.companyId
-          })
-        : null
+          }).catch(() => [])
+        : Promise.resolve([])
     ]);
-    console.log("companyBankDetails", companyBankDetails);
 
     const getCdnImageUrl = (imageData) => {
       if (!imageData) return null;
@@ -1810,13 +1809,13 @@ const getProfile = async (req, res) => {
       return imageData;
     };
 
+    const bankDetailsArray = Array.isArray(companyBankDetails) ? companyBankDetails : [];
+
     const response = {
       id: existingUser.id,
       name: existingUser.name,
       email: existingUser.email,
       mobileNo: existingUser.mobileNo,
-      slabId: existingUser.slabId,
-      slabName: slabDetails?.slabName || null,
       aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
       pancardNumber: existingUser.panDetails?.pancardNumber,
       aadhaarFrontImage: getCdnImageUrl(existingUser.aadharFrontImage),
@@ -1856,7 +1855,7 @@ const getProfile = async (req, res) => {
             googleMapsLink: outletDetails.outletGoogleMapsLink
           }
         : null,
-      bankDetails: (companyBankDetails || []).map((bank) => ({
+      bankDetails: bankDetailsArray.map((bank) => ({
         id: bank.id,
         bankName: bank.bankName,
         accountNumber: bank.accountNumber,
