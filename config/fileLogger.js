@@ -282,10 +282,8 @@ const logFormat = winston.format.combine(
 // NOTE: File-based transports (writing to logs/server.log and logs/error.log)
 // have been commented out to temporarily DISABLE appending to log files.
 // To re-enable file logging later, uncomment the relevant transports below.
-// LOGGING DISABLED - All transports commented out
 const transports = [
-  /*
-  // Console transport for development with prominent IP and API info (DISABLED)
+  // Console transport for development with prominent IP and API info
   new winston.transports.Console({
     format: winston.format.combine(
       winston.format.colorize(),
@@ -312,7 +310,6 @@ const transports = [
       })
     )
   }),
-  */
   /*
   // Custom file transport for terminal-style format (DISABLED)
   new (class extends winston.Transport {
@@ -425,98 +422,91 @@ if (s3Client) {
 */
 
 // Create logger instance
-// LOGGING DISABLED - Logger created with empty transports array (no-op)
 const logger = winston.createLogger({
   level: 'info',
   format: logFormat,
-  transports: transports // Empty array - no logging
+  transports: transports
 });
 
 // Add methods for different log types with enhanced IP tracking
-// LOGGING DISABLED - All methods are no-ops (do nothing)
 logger.logAPIRequest = (data) => {
-  // Logging disabled - no-op
-  // logger.info('API Request', {
-  //   type: 'api_request',
-  //   ip: data.ip || 'unknown',
-  //   method: data.method || 'N/A',
-  //   url: data.url || 'N/A',
-  //   apiPath: data.apiPath || 'N/A',
-  //   statusCode: data.statusCode || 'N/A',
-  //   responseTime: data.responseTime || 'N/A',
-  //   userAgent: data.userAgent || '',
-  //   referrer: data.referrer || '',
-  //   requestBody: redactSensitiveData(data.requestBody || ''),
-  //   queryParams: redactSensitiveData(data.queryParams || ''),
-  //   headers: redactSensitiveData(data.headers || ''),
-  //   responseBody: '',
-  //   timestamp: new Date().toISOString()
-  // });
+  logger.info('API Request', {
+    type: 'api_request',
+    ip: data.ip || 'unknown',
+    method: data.method || 'N/A',
+    url: data.url || 'N/A',
+    apiPath: data.apiPath || 'N/A',
+    statusCode: data.statusCode || 'N/A',
+    responseTime: data.responseTime || 'N/A',
+    userAgent: data.userAgent || '',
+    referrer: data.referrer || '',
+    requestBody: redactSensitiveData(data.requestBody || ''),
+    queryParams: redactSensitiveData(data.queryParams || ''),
+    headers: redactSensitiveData(data.headers || ''),
+    responseBody: '',
+    timestamp: new Date().toISOString()
+  });
 };
 
 logger.logAPIResponse = (data) => {
-  // Logging disabled - no-op
-  // logger.info('API Response', {
-  //   type: 'api_response',
-  //   ip: data.ip || 'unknown',
-  //   method: data.method || 'N/A',
-  //   url: data.url || 'N/A',
-  //   apiPath: data.apiPath || 'N/A',
-  //   statusCode: data.statusCode || 'N/A',
-  //   responseTime: data.responseTime || 'N/A',
-  //   responseBody: redactSensitiveData(data.responseBody || ''),
-  //   userAgent: data.userAgent || '',
-  //   referrer: data.referrer || '',
-  //   requestBody: redactSensitiveData(data.requestBody || ''),
-  //   queryParams: redactSensitiveData(data.queryParams || ''),
-  //   responseHeaders: redactSensitiveData(data.responseHeaders || ''),
-  //   timestamp: new Date().toISOString()
-  // });
+  logger.info('API Response', {
+    type: 'api_response',
+    ip: data.ip || 'unknown',
+    method: data.method || 'N/A',
+    url: data.url || 'N/A',
+    apiPath: data.apiPath || 'N/A',
+    statusCode: data.statusCode || 'N/A',
+    responseTime: data.responseTime || 'N/A',
+    responseBody: redactSensitiveData(data.responseBody || ''),
+    userAgent: data.userAgent || '',
+    referrer: data.referrer || '',
+    requestBody: redactSensitiveData(data.requestBody || ''),
+    queryParams: redactSensitiveData(data.queryParams || ''),
+    responseHeaders: redactSensitiveData(data.responseHeaders || ''),
+    timestamp: new Date().toISOString()
+  });
 };
 
 logger.logAPIError = (data) => {
-  // Logging disabled - no-op
-  // logger.error('API Error', {
-  //   type: 'api_error',
-  //   ip: data.ip || 'unknown',
-  //   method: data.method || 'N/A',
-  //   url: data.url || 'N/A',
-  //   apiPath: data.apiPath || data.url || 'N/A',
-  //   statusCode: data.error?.status || 500,
-  //   responseTime: 'N/A',
-  //   userAgent: data.userAgent || '',
-  //   referrer: data.referrer || '',
-  //   requestBody: '',
-  //   responseBody: redactSensitiveData(JSON.stringify({
-  //     error: {
-  //       message: data.error?.message,
-  //       stack: data.error?.stack,
-  //       status: data.error?.status || 500
-  //     }
-  //   })),
-  //   timestamp: new Date().toISOString()
-  // });
+  logger.error('API Error', {
+    type: 'api_error',
+    ip: data.ip || 'unknown',
+    method: data.method || 'N/A',
+    url: data.url || 'N/A',
+    apiPath: data.apiPath || data.url || 'N/A',
+    statusCode: data.error?.status || 500,
+    responseTime: 'N/A',
+    userAgent: data.userAgent || '',
+    referrer: data.referrer || '',
+    requestBody: '',
+    responseBody: redactSensitiveData(JSON.stringify({
+      error: {
+        message: data.error?.message,
+        stack: data.error?.stack,
+        status: data.error?.status || 500
+      }
+    })),
+    timestamp: new Date().toISOString()
+  });
 };
 
 logger.logConsole = (level, message, data = {}) => {
-  // Logging disabled - no-op
-  // logger.log(level, 'Console Log', {
-  //   type: 'console_log',
-  //   level: level,
-  //   message: redactSensitiveData(message),
-  //   ip: data.ip || 'unknown',
-  //   timestamp: new Date().toISOString()
-  // });
+  logger.log(level, 'Console Log', {
+    type: 'console_log',
+    level: level,
+    message: redactSensitiveData(message),
+    ip: data.ip || 'unknown',
+    timestamp: new Date().toISOString()
+  });
 };
 
 // Method to log with IP tracking for any custom log
 logger.logWithIP = (level, message, data = {}) => {
-  // Logging disabled - no-op
-  // logger.log(level, redactSensitiveData(message), {
-  //   ...redactSensitiveData(data),
-  //   ip: data.ip || 'unknown',
-  //   timestamp: new Date().toISOString()
-  // });
+  logger.log(level, redactSensitiveData(message), {
+    ...redactSensitiveData(data),
+    ip: data.ip || 'unknown',
+    timestamp: new Date().toISOString()
+  });
 };
 
 module.exports = logger;

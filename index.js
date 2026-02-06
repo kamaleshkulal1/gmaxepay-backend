@@ -83,16 +83,14 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // Use custom logging middleware instead of default morgan
-// LOGGING DISABLED - Commented out logging middleware
-// app.use(morganMiddleware);
+app.use(morganMiddleware);
 // SECURITY: Limit request body size (increased for file uploads, multer handles individual file limits)
 app.use(express.json({ limit: '10mb' }));
 app.use(sanitizeInput);
 app.use(preventNoSqlInjection);
 
-// LOGGING DISABLED - Commented out logging middleware
-// app.use(requestLogger);
-// app.use(responseInterceptor);
+app.use(requestLogger);
+app.use(responseInterceptor);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static('uploads'));
 
@@ -149,8 +147,7 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS
   });
 }
 // Error handling middleware
-// LOGGING DISABLED - Commented out error logger
-// app.use(errorLogger);
+app.use(errorLogger);
 
 app.use(secureErrorHandler);
 app.use((req, res, next) => {
