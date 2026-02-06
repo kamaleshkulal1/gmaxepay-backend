@@ -563,9 +563,12 @@ const getUserProfile = async (req, res) => {
       ? await dbService.findOne(model.company, { id: existingUser.companyId })
       : null;
 
-    const [outletDetails, companyBankDetails] = await Promise.all([
+    const [outletDetails, companyBankDetails, reportingToManager] = await Promise.all([
       existingUser.companyId 
         ? dbService.findOne(model.outlet, { refId: existingUser.id, companyId: existingUser.companyId })
+        : null,
+      existingUser.reportingTo
+        ? dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1 })
         : null,
       existingUser.companyId
         ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId })
@@ -609,6 +612,9 @@ const getUserProfile = async (req, res) => {
       longitude: existingUser.longitude,
       latitude: existingUser.latitude,
       kycStatus: existingUser.kycStatus,
+      reportingToManager: reportingToManager?.name || null,
+      reportingToManagerEmail: reportingToManager?.email || null,
+      reportingToManagerMobile: reportingToManager?.mobileNo || null,
       companyDetails: companyDetails
         ? {
           companyId: companyDetails.id,
