@@ -5,8 +5,7 @@ const bcrypt = require('bcrypt');
 const emailService = require('../../../services/emailService');
 
 const findAllUsers = async (req, res) => {
-    try {
-      // Check if user has permission
+  try {
       let permissions = req.permission || [];
       let hasPermission = permissions.some(
         (permission) =>
@@ -14,11 +13,10 @@ const findAllUsers = async (req, res) => {
           permission.dataValues.read === true
       );
   
-      if (!hasPermission) {
+      if (!hasPermission || req.user.userRole !== 2) {
         return res.failure({ message: "User doesn't have Permission!" });
       }
 
-      // Only whitelabel users (userRole 2) can access this endpoint
       const userRole = req.user.userRole;
       const userId = req.user.id;
       const userCompanyId = req.user.companyId;
@@ -27,7 +25,6 @@ const findAllUsers = async (req, res) => {
         return res.failure({ message: "Only whitelabel users can access this endpoint!" });
       }
 
-      // CompanyId cannot be null
       if (!userCompanyId || userCompanyId === null || userCompanyId === undefined) {
         return res.failure({ message: "Company ID is required!" });
       }
@@ -35,9 +32,7 @@ const findAllUsers = async (req, res) => {
       let companyIds = [];
       let companies = [];
 
-      // If companyId is 1, get all companies that have whitelabel users
       if (userCompanyId === 1) {
-        // Get all companies that have whitelabel users (userRole 2) with companyId (companyId cannot be null)
         const whitelabelUsers = await dbService.findAll(model.user, {
           userRole: 2,
           companyId: { [Op.not]: null },
@@ -47,7 +42,6 @@ const findAllUsers = async (req, res) => {
           raw: true
         });
 
-        // Extract unique company IDs
         companyIds = [...new Set(whitelabelUsers.map(u => u.companyId).filter(id => id !== null && id !== undefined))];
 
         if (companyIds.length === 0) {
@@ -58,7 +52,6 @@ const findAllUsers = async (req, res) => {
           });
         }
 
-        // Get companies with their details
         companies = await dbService.findAll(model.company, {
           id: { [Op.in]: companyIds },
           isDeleted: false
@@ -66,8 +59,6 @@ const findAllUsers = async (req, res) => {
           attributes: ['id', 'companyName']
         });
       } else {
-        // For other companyIds, only get that specific company
-        // Verify that the company has a whitelabel user (userRole 2)
         const whitelabelUser = await dbService.findOne(model.user, {
           id: userId,
           userRole: 2,
@@ -79,7 +70,6 @@ const findAllUsers = async (req, res) => {
           return res.failure({ message: "Company not found or user doesn't have access!" });
         }
 
-        // Get the specific company
         const company = await dbService.findOne(model.company, {
           id: userCompanyId,
           isDeleted: false
@@ -99,7 +89,6 @@ const findAllUsers = async (req, res) => {
         companies = [company];
       }
 
-      // Get request body for filtering, pagination, and search
       let dataToFind = req.body || {};
       let options = {};
       let query = {
@@ -108,53 +97,42 @@ const findAllUsers = async (req, res) => {
         isDeleted: false
       };
 
-      // Build query from request body
       if (dataToFind.query) {
-        // Apply userRole filter if provided (3=MD, 4=DI, 5=RE)
         if (dataToFind.query.userRole !== undefined) {
           const requestedRole = dataToFind.query.userRole;
           
-          // Access denied for userRole 1 (Admin) and 2 (Whitelabel)
           if (requestedRole === 1 || requestedRole === 2) {
             return res.failure({ message: "Access denied! You cannot filter by this user role." });
           }
           
-          // Ensure it's one of the allowed roles (3, 4, 5)
           if ([3, 4, 5].includes(requestedRole)) {
             query.userRole = requestedRole;
           }
         }
 
-        // Apply kycStatus filter
         if (dataToFind.query.kycStatus) {
           const kycStatusValue = dataToFind.query.kycStatus;
           
-          // Map "pending" to HALF_KYC and NO_KYC
           if (kycStatusValue === 'pending') {
             query.kycStatus = { [Op.in]: ['HALF_KYC', 'NO_KYC'] };
           }
-          // Map "completed" to FULL_KYC
           else if (kycStatusValue === 'completed') {
             query.kycStatus = 'FULL_KYC';
           }
-          // Handle string with || separator (e.g., "HALF_KYC || NO_KYC")
           else if (typeof kycStatusValue === 'string' && kycStatusValue.includes('||')) {
             const statuses = kycStatusValue.split('||').map(s => s.trim()).filter(s => s);
             if (statuses.length > 0) {
               query.kycStatus = { [Op.in]: statuses };
             }
           }
-          // If it's already an array, use it directly
           else if (Array.isArray(kycStatusValue)) {
             query.kycStatus = { [Op.in]: kycStatusValue };
           }
-          // Otherwise, use the value as is (e.g., "FULL_KYC", "HALF_KYC", "NO_KYC", "REJECTED")
           else {
             query.kycStatus = kycStatusValue;
           }
         }
 
-        // Apply other query filters
         Object.keys(dataToFind.query).forEach(key => {
           if (key !== 'userRole' && key !== 'kycStatus') {
             query[key] = dataToFind.query[key];
@@ -162,12 +140,10 @@ const findAllUsers = async (req, res) => {
         });
       }
 
-      // Handle options (pagination, sorting)
       if (dataToFind.options !== undefined) {
         options = { ...dataToFind.options };
       }
 
-      // Handle customSearch
       if (dataToFind.customSearch) {
         const keys = Object.keys(dataToFind.customSearch);
         const orConditions = [];
@@ -196,7 +172,6 @@ const findAllUsers = async (req, res) => {
         }
       }
 
-      // Include company, wallet, and onboardingToken information
       options.include = [
         {
           model: model.company,
@@ -225,7 +200,6 @@ const findAllUsers = async (req, res) => {
         }
       ];
 
-      // Use pagination
       let foundUsers = await dbService.paginate(model.user, query, options);
 
       if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
@@ -242,7 +216,6 @@ const findAllUsers = async (req, res) => {
         });
       }
 
-      // Map userRole to readable names
       const roleMap = {
         2: 'WL',
         3: 'MD',
@@ -250,22 +223,18 @@ const findAllUsers = async (req, res) => {
         5: 'RE'
       };
 
-      // Transform users data and include companyId for grouping
       const transformedUsers = foundUsers.data.map((user) => {
         const userData = user.toJSON ? user.toJSON() : user;
         const companyData = userData.company || {};
         const walletData = userData.wallet || {};
         const onboardingTokens = userData.onboardingTokens || [];
 
-        // Determine KYC Status
         const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
 
-        // Determine if account is locked
         const isLockedByStatus = !!(userData.isLocked && userData.lockUntil && new Date(userData.lockUntil) > new Date());
         const isLockedByAttempts = (userData.loginAttempts || 0) >= 3;
         const isLocked = isLockedByStatus || isLockedByAttempts;
 
-        // Get the latest active onboarding token's expiresAt
         const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0 
           ? onboardingTokens[0] 
           : null;
@@ -296,7 +265,6 @@ const findAllUsers = async (req, res) => {
         };
       });
 
-      // Group users by company
       const companiesWithUsers = companies.map((company) => {
         const companyData = company.toJSON ? company.toJSON() : company;
         const companyUsers = transformedUsers.filter(user => user.companyId === companyData.id);
@@ -315,12 +283,10 @@ const findAllUsers = async (req, res) => {
         paginator: foundUsers.paginator
       });
     } catch (error) {
-      console.log(error);
       return res.internalServerError({ message: error.message });
     }
 };
 
-// Set MPIN - Company admin can set their own MPIN (first time only, no old MPIN needed)
 const setMPIN = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -410,7 +376,6 @@ const setMPIN = async (req, res) => {
   }
 };
 
-// Reset MPIN - Company admin can reset MPIN (requires oldMPIN, newMPIN, confirmMPIN)
 const resetMPIN = async (req, res) => {
   try {
     const currentUser = req.user;
@@ -574,7 +539,6 @@ const getUserProfile = async (req, res) => {
         ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId })
         : []
     ]);
-    console.log("reportingToManager", reportingToManager);
 
     const getCdnImageUrl = (imageData) => {
       if (!imageData) return null;
@@ -794,10 +758,154 @@ const findAllCompanyReportToUser = async (req, res) => {
   }
 };
 
+const getByUserProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: 'You are not authorized to get user details' });
+    }
+
+    const companyId = req.user.companyId;
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    const existingUser = await dbService.findOne(model.user, {
+      id,
+      companyId,
+      isDeleted: false
+    });
+
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    const companyDetails = existingUser.companyId
+      ? await dbService.findOne(model.company, { id: existingUser.companyId })
+      : null;
+
+    const companyAdmin = existingUser.companyId
+      ? await dbService.findOne(model.user, {
+          companyId: existingUser.companyId,
+          userRole: 2,
+          isDeleted: false
+        })
+      : null;
+
+    const [outletDetails, slabDetails, reportingToManager, companyBankDetails] = await Promise.all([
+      existingUser.companyId
+        ? dbService.findOne(model.outlet, {
+            refId: existingUser.id,
+            companyId: existingUser.companyId
+          })
+        : null,
+      existingUser.companyId
+        ? dbService.findOne(model.slab, {
+            id: existingUser.slabId,
+            isActive: true
+          }, { attributes: ['id', 'slabName'] })
+        : null,
+      existingUser.companyId
+        ? dbService.findOne(model.user, {
+            id: existingUser.reportingTo || companyAdmin?.id,
+            companyId: existingUser.companyId
+          })
+        : null,
+      existingUser.companyId
+        ? dbService.findAll(model.customerBank, {
+            refId: existingUser.id,
+            companyId: existingUser.companyId
+          })
+        : []
+    ]);
+
+    const getCdnImageUrl = (imageData) => {
+      if (!imageData) return null;
+      const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+      if (typeof imageData === 'object' && imageData.key) {
+        return `${cdnUrl}/${imageData.key}`;
+      }
+      if (typeof imageData === 'string' && imageData.startsWith('images/')) {
+        return `${cdnUrl}/${imageData}`;
+      }
+      return imageData;
+    };
+
+    const response = {
+      id: existingUser.id,
+      name: existingUser.name,
+      email: existingUser.email,
+      mobileNo: existingUser.mobileNo,
+      slabId: existingUser.slabId,
+      slabName: slabDetails?.slabName || null,
+      aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
+      pancardNumber: existingUser.panDetails?.pancardNumber,
+      aadhaarFrontImage: getCdnImageUrl(existingUser.aadharFrontImage),
+      aadhaarBackImage: getCdnImageUrl(existingUser.aadharBackImage),
+      pancardFrontImage: getCdnImageUrl(existingUser.panCardFrontImage),
+      pancardBackImage: getCdnImageUrl(existingUser.panCardBackImage),
+      profileImage: getCdnImageUrl(existingUser.profileImage),
+      agentCode: existingUser.userId,
+      status: existingUser.isActive ? 'Active' : 'Inactive',
+      createdAt: existingUser.createdAt,
+      address: existingUser.fullAddress,
+      pinCode: existingUser.zipcode,
+      state: existingUser.state,
+      district: existingUser.district,
+      country: existingUser.country,
+      city: existingUser.city,
+      longitude: existingUser.longitude,
+      latitude: existingUser.latitude,
+      kycStatus: existingUser.kycStatus,
+      reportingToManager: reportingToManager?.name || null,
+      reportingToManagerEmail: reportingToManager?.email || null,
+      reportingToManagerMobile: reportingToManager?.mobileNo || null,
+      companyDetails: companyDetails
+        ? {
+            companyId: companyDetails.id,
+            companyName: companyDetails.companyName,
+            compnyPan: companyDetails.companyPan,
+            companyDomain: companyDetails.customDomain
+              ? `https://${companyDetails.customDomain}`
+              : null,
+            compnyGst: companyDetails.companyGst,
+            compnyLogo: getCdnImageUrl(companyDetails.logo)
+          }
+        : null,
+      outletDetails: outletDetails
+        ? {
+            shopName: outletDetails.shopName,
+            shopImage: getCdnImageUrl(outletDetails.shopImage),
+            shopAddress: outletDetails.shopAddress,
+            googleMapsLink: outletDetails.outletGoogleMapsLink
+          }
+        : null,
+      bankDetails: (companyBankDetails || []).map((bank) => ({
+        id: bank.id,
+        bankName: bank.bankName,
+        accountNumber: bank.accountNumber,
+        ifsc: bank.ifsc,
+        city: bank.city,
+        branch: bank.branch
+      }))
+    };
+
+    return res.success({
+      message: 'User profile fetched successfully',
+      data: response
+    });
+  } catch (error) {
+    console.error('Error retrieving user details:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
+
 module.exports = {
   findAllUsers,
   setMPIN,
   resetMPIN,
   getUserProfile,
-  findAllCompanyReportToUser
+  findAllCompanyReportToUser,
+  getByUserProfile
 };

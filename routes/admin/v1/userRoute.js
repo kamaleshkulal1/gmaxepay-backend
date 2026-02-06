@@ -13,7 +13,7 @@ router.post('/:id/kyc/status', authentication, userController.getKycVerification
 router.post('/:id/kyc/complete', authentication, userController.getCompleteKycData);
 router.post('/:id/kyc/revert', authentication, userController.revertKycData);
 router.post('/company-admin/:id', authentication, userController.getCompanyAdminById);
-// Super Admin Bank Details Upload API
 router.post('/bank-details/upload', authentication, userController.uploadBankDetailsForUser);
+router.post('/:id/profile', authentication, userController.getByUserProfile);
 
 module.exports = router;

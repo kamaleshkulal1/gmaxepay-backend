@@ -28,7 +28,6 @@ const getProfile = async (req, res) => {
   }
 }
 
-// Helper function to get role prefix
 const getRolePrefix = (role) => {
   switch (role) {
     case 1: return 'AD'; // Super Admin
@@ -41,7 +40,6 @@ const getRolePrefix = (role) => {
   }
 };
 
-// Helper function to generate new userId when role changes
 const generateNewUserId = async (currentUserId, newRole, companyId) => {
   if (!currentUserId) {
     return null;
@@ -109,10 +107,6 @@ const generateNewUserId = async (currentUserId, newRole, companyId) => {
   return newUserId;
 };
 
-// Master Distributor upgrade user role
-// Master Distributor (userRole 3) can upgrade:
-// - Retailer (5) to Distributor (4)
-// Only if reportingTo is null
 const upgradeUserRole = async (req, res) => {
   try {
     const currentUser = req.user;
@@ -229,9 +223,6 @@ const upgradeUserRole = async (req, res) => {
   }
 };
 
-// Master Distributor degrade user role
-// Master Distributor (userRole 3) can degrade:
-// - Distributor (4) to Retailer (5)
 const degradeUserRole = async (req, res) => {
   try {
     const currentUser = req.user;
@@ -342,17 +333,13 @@ const findAllUsers = async (req, res) => {
     const userId = req.user.id;
     const userCompanyId = req.user.companyId;
     
-    // Only Master Distributor (3) and Distributor (4) can access
-    if (userRole !== 3 && userRole !== 4) {
-      return res.failure({ message: "Only Master Distributor and Distributor can access this endpoint!" });
+    if(![3, 4].includes(userRole)) {
+      return res.failure({ message: 'You are not authorized to access this resource' });
     }
-
-    // CompanyId cannot be null
-    if (!userCompanyId || userCompanyId === null || userCompanyId === undefined) {
+    if (!userCompanyId) {
       return res.failure({ message: "Company ID is required!" });
     }
 
-    // Get request body for filtering, pagination, and search
     let dataToFind = req.body || {};
     let options = {};
     
@@ -584,7 +571,6 @@ const findAllUsers = async (req, res) => {
   }
 };
 
-// Set MPIN - User can set their own MPIN (first time only, no old MPIN needed)
 const setMPIN = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -678,7 +664,6 @@ const setMPIN = async (req, res) => {
   }
 };
 
-// Reset MPIN - User can reset their own MPIN (requires old MPIN, new MPIN, and confirm MPIN)
 const resetMPIN = async (req, res) => {
   try {
     const currentUser = req.user;
@@ -1082,6 +1067,157 @@ const findAllTheirDownlineUsers = async (req, res) => {
   }
 };
 
+const getByUserProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (![3, 4].includes(req.user.userRole)) {
+      return res.failure({ message: 'You are not authorized to get user details' });
+    }
+
+    const companyId = req.user.companyId;
+    const currentUserId = req.user.id;
+    const currentUserRole = req.user.userRole;
+
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    let allowedRoles = [];
+    if (currentUserRole === 3) {
+      allowedRoles = [4, 5];
+    } else if (currentUserRole === 4) {
+      allowedRoles = [5];
+    }
+
+    const targetUser = await dbService.findOne(model.user, {
+      id,
+      companyId,
+      reportingTo: currentUserId,
+      userRole: { [Op.in]: allowedRoles },
+      isDeleted: false
+    });
+
+    if (!targetUser) {
+      return res.failure({
+        message: 'User not found or not in your downline'
+      });
+    }
+
+    const companyDetails = targetUser.companyId
+      ? await dbService.findOne(model.company, { id: targetUser.companyId })
+      : null;
+
+    const companyAdmin = await dbService.findOne(model.user, {
+      companyId,
+      userRole: 2
+    });
+
+    if (!companyAdmin) {
+      return res.failure({ message: 'Company admin not found' });
+    }
+
+    const [outletDetails, reportingToManager, companyBankDetails] = await Promise.all([
+      targetUser.companyId
+        ? dbService.findOne(model.outlet, {
+            refId: targetUser.id,
+            companyId: targetUser.companyId
+          })
+        : null,
+      targetUser.companyId
+        ? dbService.findOne(model.user, {
+            id: targetUser.reportingTo || companyAdmin.id,
+            companyId: targetUser.companyId
+          })
+        : null,
+      targetUser.companyId
+        ? dbService.findAll(model.customerBank, {
+            refId: targetUser.id,
+            companyId: targetUser.companyId
+          })
+        : []
+    ]);
+
+    const getCdnImageUrl = (imageData) => {
+      if (!imageData) return null;
+      const cdnUrl = process.env.AWS_CDN_URL || 'https://assets.gmaxepay.in';
+      if (typeof imageData === 'object' && imageData.key) {
+        return `${cdnUrl}/${imageData.key}`;
+      }
+      if (typeof imageData === 'string' && imageData.startsWith('images/')) {
+        return `${cdnUrl}/${imageData}`;
+      }
+      return imageData;
+    };
+
+    const response = {
+      id: targetUser.id,
+      name: targetUser.name,
+      email: targetUser.email,
+      mobileNo: targetUser.mobileNo,
+      slabId: targetUser.slabId,
+      aadhaarNumber: targetUser.aadharDetails?.aadhaarNumber,
+      pancardNumber: targetUser.panDetails?.pancardNumber,
+      aadhaarFrontImage: getCdnImageUrl(targetUser.aadharFrontImage),
+      aadhaarBackImage: getCdnImageUrl(targetUser.aadharBackImage),
+      pancardFrontImage: getCdnImageUrl(targetUser.panCardFrontImage),
+      pancardBackImage: getCdnImageUrl(targetUser.panCardBackImage),
+      profileImage: getCdnImageUrl(targetUser.profileImage),
+      agentCode: targetUser.userId,
+      status: targetUser.isActive ? 'Active' : 'Inactive',
+      createdAt: targetUser.createdAt,
+      address: targetUser.fullAddress,
+      pinCode: targetUser.zipcode,
+      state: targetUser.state,
+      district: targetUser.district,
+      country: targetUser.country,
+      city: targetUser.city,
+      longitude: targetUser.longitude,
+      latitude: targetUser.latitude,
+      kycStatus: targetUser.kycStatus,
+      reportingToManager: reportingToManager?.name || null,
+      reportingToManagerEmail: reportingToManager?.email || null,
+      reportingToManagerMobile: reportingToManager?.mobileNo || null,
+      companyDetails: companyDetails
+        ? {
+            companyId: companyDetails.id,
+            companyName: companyDetails.companyName,
+            compnyPan: companyDetails.companyPan,
+            companyDomain: companyDetails.customDomain
+              ? `https://${companyDetails.customDomain}`
+              : null,
+            compnyGst: companyDetails.companyGst,
+            compnyLogo: getCdnImageUrl(companyDetails.logo)
+          }
+        : null,
+      outletDetails: outletDetails
+        ? {
+            shopName: outletDetails.shopName,
+            shopImage: getCdnImageUrl(outletDetails.shopImage),
+            shopAddress: outletDetails.shopAddress,
+            googleMapsLink: outletDetails.outletGoogleMapsLink
+          }
+        : null,
+      bankDetails: (companyBankDetails || []).map((bank) => ({
+        id: bank.id,
+        bankName: bank.bankName,
+        accountNumber: bank.accountNumber,
+        ifsc: bank.ifsc,
+        city: bank.city,
+        branch: bank.branch
+      }))
+    };
+
+    return res.success({
+      message: 'User details retrieved successfully',
+      data: response
+    });
+  } catch (error) {
+    console.error('Error retrieving user details:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   getProfile,
   upgradeUserRole,
@@ -1090,5 +1226,6 @@ module.exports = {
   setMPIN,
   resetMPIN,
   getUserProfile,
-  findAllTheirDownlineUsers
+  findAllTheirDownlineUsers,
+  getByUserProfile
 };
