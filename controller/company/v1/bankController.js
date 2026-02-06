@@ -291,8 +291,8 @@ const addCustomerBank = async (req, res) => {
     const branch = razorpayBankData?.BRANCH || bankVerification.branch || null;
 
     const customerBank = await dbService.createOne(model.customerBank, {
-      bankName,
-      beneficiaryName,
+      bankName: bankNameFromVerification,
+      beneficiaryName: beneficiaryNameFromVerification,
       accountNumber: account_number,
       ifsc,
       city,
