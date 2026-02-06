@@ -278,45 +278,14 @@ const partialUpdateOperator = async (req, res) => {
         operatorType: dataToUpdate.operatorType
       };
 
-      const promises = [
-        dbService.update(
-          model.cicleCommision,
-          { operatorId: operatorExist.id },
-          updateData
-        ),
-        dbService.update(
-          model.apiCommision,
-          { operatorId: operatorExist.id },
-          updateData
-        ),
-        dbService.update(
+      // Only update commSlab – other commission tables are not needed
+      if (model.commSlab) {
+        await dbService.update(
           model.commSlab,
           { operatorId: operatorExist.id },
           updateData
-        ),
-        dbService.update(
-          model.apiOperatorCircle,
-          { operatorId: operatorExist.id },
-          updateData
-        ),
-        dbService.update(
-          model.apiOperatorOptional,
-          { operatorId: operatorExist.id },
-          updateData
-        ),
-        dbService.update(
-          model.apiSwitch,
-          { operatorId: operatorExist.id },
-          updateData
-        ),
-        dbService.update(
-          model.apiSwitchBuffer,
-          { operatorId: operatorExist.id },
-          updateData
-        )
-      ];
-
-      await Promise.all(promises);
+        );
+      }
     }
 
     let updatedUser;
