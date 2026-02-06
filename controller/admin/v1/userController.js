@@ -1794,8 +1794,9 @@ const getProfile = async (req, res) => {
             refId: existingUser.id,
             companyId: existingUser.companyId
           })
-        : []
+        : null
     ]);
+    console.log("companyBankDetails", companyBankDetails);
 
     const getCdnImageUrl = (imageData) => {
       if (!imageData) return null;
