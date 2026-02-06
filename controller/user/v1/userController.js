@@ -852,7 +852,7 @@ const getUserProfile = async (req, res) => {
       existingUser.companyId 
         ? dbService.findOne(model.outlet, { refId: existingUser.id, companyId: existingUser.companyId })
         : null,
-      existingUser.reportingTo
+      existingUser.companyId
         ? dbService.findOne(model.user, { id: existingUser?.reportingTo || companyAdmin?.id, companyId: existingUser.companyId })
         : null,
       existingUser.companyId
