@@ -19,7 +19,6 @@ const addCustomerBank = async (req, res) => {
     const userId = req.user?.id;
     const companyId = req.user?.companyId;
 
-    // Fetch basic user + wallet + reporting user data in parallel
     const [
       existingUser,
       reportingToUser
@@ -64,7 +63,6 @@ const addCustomerBank = async (req, res) => {
       isActive: true
     });
 
-    // Check for duplicate bank
     const duplicateBank = existingBanks.find(
       (bank) => bank.accountNumber === account_number && bank.ifsc === ifsc
     );
@@ -90,7 +88,6 @@ const addCustomerBank = async (req, res) => {
       });
     }
 
-    // Check maximum banks limit
     const MAX_BANKS = 5;
     if (existingBanks && existingBanks.length >= MAX_BANKS) {
       console.log('addCustomerBank max banks limit reached', {
@@ -114,9 +111,7 @@ const addCustomerBank = async (req, res) => {
     }
 
     const verificationStart = Date.now();
-    // Check ekycHub cache first, then call APIs in parallel
     const [cachedVerification, razorpayBankData] = await Promise.all([
-      // Check cache for bank verification
       (async () => {
         const existingBank = await dbService.findOne(model.ekycHub, {
           identityNumber1: account_number,
@@ -126,31 +121,34 @@ const addCustomerBank = async (req, res) => {
 
         if (existingBank) {
           try {
-            const encryptedData = JSON.parse(existingBank.response);
-            if (encryptedData && encryptedData.encrypted) {
-              const decryptedResponse = decrypt(encryptedData, key);
-              return decryptedResponse ? JSON.parse(decryptedResponse) : encryptedData;
+            const storedResponse = JSON.parse(existingBank.response);
+            if (storedResponse && storedResponse.encrypted) {
+              const decryptedString = decrypt(storedResponse, key);
+              if (decryptedString) {
+                return JSON.parse(decryptedString);
+              }
             }
-            return JSON.parse(existingBank.response);
+            if (typeof storedResponse === 'string') {
+              return JSON.parse(storedResponse);
+            }
+            return storedResponse;
           } catch (e) {
-            return existingBank.response;
+            console.error('Error parsing cached bank verification:', e);
+            return null;
           }
         }
         return null;
       })(),
-      // Fetch Razorpay bank details (non-blocking, can fail)
       razorpayApi.bankDetails(ifsc).catch(() => null)
     ]);
 
-    // Get bank verification (from cache or API)
     let bankVerification = cachedVerification;
     let verificationSource = 'cache';
 
-    if (!bankVerification) {
+    if (!bankVerification || !bankVerification.status || bankVerification.status !== 'Success') {
       verificationSource = 'api';
       bankVerification = await ekycHub.bankVerification(account_number, ifsc);
 
-      // Cache successful verification
       if (bankVerification && bankVerification.status === 'Success') {
         const encryptedRequest = doubleEncrypt(
           JSON.stringify({ account_number, ifsc }),
@@ -180,7 +178,8 @@ const addCustomerBank = async (req, res) => {
     console.log('addCustomerBank verification completed', {
       userId,
       source: verificationSource,
-      durationMs: Date.now() - verificationStart
+      durationMs: Date.now() - verificationStart,
+      status: bankVerification?.status
     });
 
     if (!bankVerification || bankVerification.status !== 'Success') {
@@ -188,12 +187,12 @@ const addCustomerBank = async (req, res) => {
         userId,
         account_number,
         ifsc,
-        status: bankVerification?.status
+        status: bankVerification?.status,
+        bankVerification: bankVerification
       });
       return res.failure({ message: 'Bank verification failed' });
     }
 
-    // ---------------- Slab & commission (only after successful verification) ----------------
     const existingUserSlab = await dbService.findOne(model.slab, {
       id: existingUser?.slabId
     });
@@ -218,7 +217,6 @@ const addCustomerBank = async (req, res) => {
       return res.failure({ message: 'Slab commission not found' });
     }
 
-    // Find commission rows for Admin (roleType 1) and Whitelabel/User (roleType 2)
     const adminCommission = slabComm.find((c) => c.roleType === 1) || slabComm[0];
     const userCommission = slabComm.find((c) => c.roleType === 2) || slabComm[slabComm.length - 1];
 
@@ -245,11 +243,9 @@ const addCustomerBank = async (req, res) => {
     const reportingOpeningBalance = parseFloat(reportingToUserWallet.mainWallet || 0);
     const reportingClosingBalance = parseFloat((reportingOpeningBalance + adminSurchargeAmt).toFixed(2));
 
-    // Generate a common transaction ID for this bank verification charge
     const companyDetails = await dbService.findOne(model.company, { id: companyId });
     const transactionId = generateTransactionID(companyDetails?.companyName || 'BANK_VERIFY');
 
-    // Update wallets
     await dbService.update(
       model.wallet,
       { id: existingUserWallet.id },
@@ -278,7 +274,6 @@ const addCustomerBank = async (req, res) => {
       bankVerification.bankName ||
       null;
 
-    // Wallet history for existing user (debit)
     await dbService.createOne(model.walletHistory, {
       refId: userId,
       companyId,
@@ -303,7 +298,6 @@ const addCustomerBank = async (req, res) => {
       updatedBy: userId
     });
 
-    // Wallet history for reporting/admin user (credit)
     await dbService.createOne(model.walletHistory, {
       refId: reportingToUser?.id || 1,
       companyId: reportingToUser?.companyId || companyId,
@@ -328,7 +322,6 @@ const addCustomerBank = async (req, res) => {
       updatedBy: reportingToUser?.id || 1
     });
 
-    // Extract bank details for bank master record
     const bankName = bankNameFromVerification;
     const beneficiaryName = beneficiaryNameFromVerification;
     const city = razorpayBankData?.CITY || bankVerification.city || null;

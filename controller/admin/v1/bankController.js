@@ -320,7 +320,6 @@ const addBank = async (req, res) => {
     const userId = existingUser.id;
     const companyId = existingUser.companyId;
 
-    // Get admin wallet
     const adminWallet = await dbService.findOne(model.wallet, {
       refId: userId,
       companyId
@@ -338,7 +337,6 @@ const addBank = async (req, res) => {
       });
     }
 
-    // Check if bank already exists for this admin
     const existingBanks = await dbService.findAll(model.customerBank, {
       refId: userId,
       companyId,
@@ -367,7 +365,6 @@ const addBank = async (req, res) => {
 
     const verificationStart = Date.now();
 
-    // Check ekycHub cache first, then call APIs in parallel
     const [cachedVerification, razorpayBankData] = await Promise.all([
       (async () => {
         const existingBank = await dbService.findOne(model.ekycHub, {
@@ -440,7 +437,6 @@ const addBank = async (req, res) => {
       return res.failure({ message: 'Bank verification failed' });
     }
 
-    // ---------------- Commission from Operator (no slab) ----------------
     const operator = await dbService.findOne(model.operator, {
       operatorType: 'BANK VERIFICATION',
       inSlab: true
@@ -468,11 +464,9 @@ const addBank = async (req, res) => {
 
     const adminClosingBalance = parseFloat((adminOpeningBalance - surchargeAmt).toFixed(2));
 
-    // Generate transaction ID
     const companyDetails = await dbService.findOne(model.company, { id: companyId });
     const transactionId = generateTransactionID(companyDetails?.companyName || 'BANK_VERIFY');
 
-    // Update admin wallet
     await dbService.update(
       model.wallet,
       { id: adminWallet.id },
@@ -495,7 +489,6 @@ const addBank = async (req, res) => {
       bankVerification.bankName ||
       null;
 
-    // Wallet history for admin (debit only, commission from operator)
     await dbService.createOne(model.walletHistory, {
       refId: userId,
       companyId,
@@ -523,7 +516,6 @@ const addBank = async (req, res) => {
     const city = razorpayBankData?.CITY || bankVerification.city || null;
     const branch = razorpayBankData?.BRANCH || bankVerification.branch || null;
 
-    // Create bank account for admin
     const customerBank = await dbService.createOne(model.customerBank, {
       bankName: bankNameFromVerification,
       beneficiaryName: beneficiaryNameFromVerification,
