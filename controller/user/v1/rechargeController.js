@@ -182,14 +182,7 @@ const findMobileNumberOperator = async (req, res) => {
         if(!mobileNumber){
             return res.failure({ message: 'Mobile number is required' });
         }
-        const [existingUser, response] = await Promise.all([
-            dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId }),
-            inspayService.operatorFetch(mobileNumber)
-        ]);
-
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
+        const response = await inspayService.operatorFetch(mobileNumber);
 
         console.log('response', response);
 
@@ -198,17 +191,14 @@ const findMobileNumberOperator = async (req, res) => {
             return res.failure({ message: 'Failed to fetch operator information' });
         }
         
-        // Use 'company' field from response (API returns 'company' not 'operatorName')
         const operatorName = response?.company || response?.operatorName;
         if (!operatorName) {
             return res.failure({ message: response.message || 'Operator name not found in response' });
         }
         
         const operatorNameUpper = operatorName.toUpperCase();
-        console.log('operatorNameUpper', operatorNameUpper);
         if (operatorNameUpper !== 'BSNL') {
             const operator = await dbService.findOne(model.operator, { operatorName: operatorNameUpper });
-            console.log('operator', operator);
             if (!operator) {
                 return res.failure({ message: 'Operator not found' });
             }
@@ -229,10 +219,6 @@ const findMobileNumberOperator = async (req, res) => {
 const  findAllRechargePlanFetch = async (req, res) => {
     try {
         const { mobileNumber,opCode,circle } = req.body;
-        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
         if(!mobileNumber){
             return res.failure({ message: 'Mobile number is required' });
         }
@@ -309,6 +295,181 @@ const getRechargeHistory = async (req, res) => {
         }
         return res.success({ message: 'Recharge history retrieved successfully', data: rechargeHistory });
         } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+};
+
+const recentRechargeHistory = async (req, res) => {
+    try {
+        if (!req.user.companyId) {
+            return res.failure({ message: 'Company ID is required' });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = {
+            refId: req.user.id,
+            companyId: req.user.companyId
+        };
+
+        if (dataToFind.query) {
+            Object.keys(dataToFind.query).forEach(key => {
+                if (key !== 'refId' && key !== 'companyId') {
+                    query[key] = dataToFind.query[key];
+                }
+            });
+        }
+
+        if (dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+            
+            if (dataToFind.options.sort) {
+                const sortEntries = Object.entries(dataToFind.options.sort);
+                options.order = sortEntries.map(([field, direction]) => {
+                    return [field, direction === -1 ? 'DESC' : 'ASC'];
+                });
+            } else {
+                options.order = [['createdAt', 'DESC']];
+            }
+        } else {
+            options.order = [['createdAt', 'DESC']];
+        }
+
+        if (dataToFind.customSearch && Object.keys(dataToFind.customSearch).length > 0) {
+            const searchConditions = [];
+            const customSearch = dataToFind.customSearch;
+
+            if (customSearch.transactionId) {
+                const searchValue = String(customSearch.transactionId).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        transactionId: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.mobileNumber) {
+                const searchValue = String(customSearch.mobileNumber).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        mobileNumber: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.name) {
+                const searchName = String(customSearch.name).trim();
+                if (searchName) {
+                    const matchingUsers = await dbService.findAll(model.user, {
+                        id: req.user.id,
+                        companyId: req.user.companyId,
+                        name: {
+                            [Op.iLike]: `%${searchName}%`
+                        },
+                        isDeleted: false
+                    }, {
+                        attributes: ['id']
+                    });
+
+                    const matchingUserIds = matchingUsers.map(u => u.id);
+                    if (matchingUserIds.length > 0 && matchingUserIds.includes(req.user.id)) {
+                        searchConditions.push({
+                            refId: req.user.id
+                        });
+                    }
+                }
+            }
+
+            if (searchConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.and]: [
+                        { [Op.or]: searchConditions }
+                    ]
+                };
+            } else {
+                return res.status(200).send({
+                    status: 'SUCCESS',
+                    message: 'Recharge history retrieved successfully',
+                    data: [],
+                    total: 0,
+                    paginator: {
+                        page: options.page || 1,
+                        paginate: options.paginate || 10,
+                        totalPages: 0
+                    }
+                });
+            }
+        }
+
+        const result = await dbService.paginate(model.serviceTransaction, query, options);
+
+        if (!result || !result.data || result.data.length === 0) {
+            return res.status(200).send({
+                status: 'SUCCESS',
+                message: 'No recharge history found',
+                data: [],
+                total: result?.total || 0,
+                paginator: result?.paginator || {
+                    page: options.page || 1,
+                    paginate: options.paginate || 10,
+                    totalPages: 0
+                }
+            });
+        }
+
+        const formattedData = result.data.map(transaction => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const serviceType = transactionData.serviceType;
+
+            if (serviceType === 'MobileRecharge') {
+                return {
+                    mobileNumber: transactionData.mobileNumber || null,
+                    amount: transactionData.amount || null,
+                    opcode: transactionData.opcode || null,
+                    status: transactionData.status || null
+                };
+            }
+
+            if (serviceType === 'DTHRecharge') {
+                return {
+                    dthNumber: transactionData.dthNumber || null,
+                    amount: transactionData.amount || null,
+                    opcode: transactionData.opcode || null,
+                    status: transactionData.status || null
+                };
+            }
+
+            if (serviceType === 'Pan') {
+                return {
+                    mobileNumber: transactionData.mobile_number || null,
+                    redirect_url: transactionData.redirect_url || null,
+                    action: transactionData.action || null,
+                    status: transactionData.status || null
+                };
+            }
+
+            return {
+                mobileNumber: transactionData.mobileNumber || transactionData.mobile_number || null,
+                amount: transactionData.amount || null,
+                opcode: transactionData.opcode || null,
+                status: transactionData.status || null
+            };
+        });
+
+        return res.status(200).send({
+            status: 'SUCCESS',
+            message: 'Recharge history retrieved successfully',
+            data: formattedData,
+            total: result.total || 0,
+            paginator: result.paginator
+        });
+    } catch (error) {
         console.log(error);
         return res.internalServerError({ message: error.message });
     }
@@ -505,7 +666,7 @@ const getDownlineRechargeReports = async (req, res) => {
         console.log(error);
         return res.internalServerError({ message: error.message });
     }
-}
+};
 
 const getRechargeReports = async (req, res) => {
     try {
@@ -627,7 +788,7 @@ const getRechargeReports = async (req, res) => {
         console.log(error);
         return res.internalServerError({ message: error.message });
     }
-}
+};
 
 module.exports = {
     recharge,
@@ -636,5 +797,6 @@ module.exports = {
     findAllRechargePlanFetch,
     findRechargeOfferFetch,
     getDownlineRechargeReports,
-    getRechargeReports
+    getRechargeReports,
+    recentRechargeHistory
 };
