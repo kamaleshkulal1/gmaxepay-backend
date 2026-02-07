@@ -1,6 +1,7 @@
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
 const inspayService = require('../../../services/inspayService');
+const { Op, Sequelize } = require('sequelize');
 
 const recharge = async (req, res) => {
     try {
@@ -293,14 +294,13 @@ const findRechargeOfferFetch = async (req, res) => {
 
 const getRechargeHistory = async (req, res) => {
     try {
-        const { userId } = req.user;
-        const existingUser = await dbService.findOne(model.user, { id: userId, companyId: req.user.companyId });
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
+        if(![4,5].includes(req.user.userRole)){
+            return res.failure({ message: 'You are not authorized to access this resource' });
         }
-        const rechargeHistory = await dbService.findAll(model.recharge, { 
-            refId: userId, 
-            companyId: req.user.companyId 
+        const rechargeHistory = await dbService.findAll(model.serviceTransaction, { 
+            refId: req.user?.id, 
+            companyId: req.user?.companyId,
+            serviceType: 'MobileRecharge'
         }, {
             order: [['createdAt', 'DESC']]
         });
@@ -314,10 +314,327 @@ const getRechargeHistory = async (req, res) => {
     }
 };
 
+const getDownlineRechargeReports = async (req, res) => {
+    try {
+        if (![3, 4].includes(req.user.userRole)) {
+            return res.failure({ message: 'You are not authorized to access this resource' });
+        }
+
+        if (!req.user.companyId) {
+            return res.failure({ message: 'Company ID is required' });
+        }
+
+        const getAllDownlineUserIds = async (userId, userRole, companyId) => {
+            const allUserIds = new Set();
+            const allowedRoles = userRole === 3 ? [4, 5] : [5];
+            let currentLevelUsers = [{ id: userId, userRole }];
+            
+            while (currentLevelUsers.length > 0) {
+                const currentLevelIds = currentLevelUsers.map(u => u.id);
+                const nextLevelUsers = await dbService.findAll(model.user, {
+                    reportingTo: { [Op.in]: currentLevelIds },
+                    companyId: companyId,
+                    userRole: { [Op.in]: allowedRoles },
+                    isDeleted: false
+                }, {
+                    attributes: ['id', 'userRole']
+                });
+
+                nextLevelUsers.forEach(user => {
+                    if (user.id !== userId) {
+                        allUserIds.add(user.id);
+                    }
+                });
+
+                currentLevelUsers = nextLevelUsers;
+            }
+
+            return Array.from(allUserIds);
+        };
+
+        const downlineUserIds = await getAllDownlineUserIds(req.user.id, req.user.userRole, req.user.companyId);
+
+        if (!downlineUserIds || downlineUserIds.length === 0) {
+            return res.status(200).send({
+                status: 'SUCCESS',
+                message: 'No downline users found',
+                data: [],
+                total: 0,
+                paginator: {
+                    page: 1,
+                    paginate: 10,
+                    totalPages: 0
+                }
+            });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = {
+            refId: { [Op.in]: downlineUserIds },
+            companyId: req.user.companyId
+        };
+
+        if (dataToFind.query) {
+            Object.keys(dataToFind.query).forEach(key => {
+                if (key !== 'refId' && key !== 'companyId') {
+                    query[key] = dataToFind.query[key];
+                }
+            });
+        }
+
+        if (dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+            
+            if (dataToFind.options.sort) {
+                const sortEntries = Object.entries(dataToFind.options.sort);
+                options.order = sortEntries.map(([field, direction]) => {
+                    return [field, direction === -1 ? 'DESC' : 'ASC'];
+                });
+            } else {
+                options.order = [['createdAt', 'DESC']];
+            }
+        } else {
+            options.order = [['createdAt', 'DESC']];
+        }
+
+        if (dataToFind.customSearch && Object.keys(dataToFind.customSearch).length > 0) {
+            const searchConditions = [];
+            const customSearch = dataToFind.customSearch;
+
+            if (customSearch.transactionId) {
+                const searchValue = String(customSearch.transactionId).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        transactionId: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.mobileNumber) {
+                const searchValue = String(customSearch.mobileNumber).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        mobileNumber: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.name) {
+                const searchName = String(customSearch.name).trim();
+                if (searchName) {
+                    const matchingUsers = await dbService.findAll(model.user, {
+                        id: { [Op.in]: downlineUserIds },
+                        companyId: req.user.companyId,
+                        name: {
+                            [Op.iLike]: `%${searchName}%`
+                        },
+                        isDeleted: false
+                    }, {
+                        attributes: ['id']
+                    });
+
+                    const matchingUserIds = matchingUsers.map(u => u.id);
+                    if (matchingUserIds.length > 0) {
+                        searchConditions.push({
+                            refId: { [Op.in]: matchingUserIds }
+                        });
+                    }
+                }
+            }
+
+            if (searchConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.and]: [
+                        { [Op.or]: searchConditions }
+                    ]
+                };
+            } else {
+                return res.status(200).send({
+                    status: 'SUCCESS',
+                    message: 'Recharge reports retrieved successfully',
+                    data: [],
+                    total: 0,
+                    paginator: {
+                        page: options.page || 1,
+                        paginate: options.paginate || 10,
+                        totalPages: 0
+                    }
+                });
+            }
+        }
+
+        options.include = [
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['id', 'name', 'userId', 'mobileNo'],
+                required: false
+            }
+        ];
+
+        const result = await dbService.paginate(model.serviceTransaction, query, options);
+
+        if (!result || !result.data || result.data.length === 0) {
+            return res.status(200).send({
+                status: 'SUCCESS',
+                message: 'No recharge reports found',
+                data: [],
+                total: result?.total || 0,
+                paginator: result?.paginator || {
+                    page: options.page || 1,
+                    paginate: options.paginate || 10,
+                    totalPages: 0
+                }
+            });
+        }
+
+        return res.status(200).send({
+            status: 'SUCCESS',
+            message: 'Recharge reports retrieved successfully',
+            data: result.data,
+            total: result.total || 0,
+            paginator: result.paginator
+        });
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+}
+
+const getRechargeReports = async (req, res) => {
+    try {
+        if (!req.user.companyId) {
+            return res.failure({ message: 'Company ID is required' });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = {
+            refId: req.user.id,
+            companyId: req.user.companyId
+        };
+
+        if (dataToFind.query) {
+            Object.keys(dataToFind.query).forEach(key => {
+                if (key !== 'refId' && key !== 'companyId') {
+                    query[key] = dataToFind.query[key];
+                }
+            });
+        }
+
+        if (dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+            
+            if (dataToFind.options.sort) {
+                const sortEntries = Object.entries(dataToFind.options.sort);
+                options.order = sortEntries.map(([field, direction]) => {
+                    return [field, direction === -1 ? 'DESC' : 'ASC'];
+                });
+            } else {
+                options.order = [['createdAt', 'DESC']];
+            }
+        } else {
+            options.order = [['createdAt', 'DESC']];
+        }
+
+        if (dataToFind.customSearch && Object.keys(dataToFind.customSearch).length > 0) {
+            const searchConditions = [];
+            const customSearch = dataToFind.customSearch;
+
+            if (customSearch.transactionId) {
+                const searchValue = String(customSearch.transactionId).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        transactionId: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.mobileNumber) {
+                const searchValue = String(customSearch.mobileNumber).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        mobileNumber: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (searchConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.and]: [
+                        { [Op.or]: searchConditions }
+                    ]
+                };
+            } else {
+                return res.status(200).send({
+                    status: 'SUCCESS',
+                    message: 'Recharge reports retrieved successfully',
+                    data: [],
+                    total: 0,
+                    paginator: {
+                        page: options.page || 1,
+                        paginate: options.paginate || 10,
+                        totalPages: 0
+                    }
+                });
+            }
+        }
+
+        options.include = [
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['id', 'name', 'userId', 'mobileNo'],
+                required: false
+            }
+        ];
+
+        const result = await dbService.paginate(model.serviceTransaction, query, options);
+
+        if (!result || !result.data || result.data.length === 0) {
+            return res.status(200).send({
+                status: 'SUCCESS',
+                message: 'No recharge reports found',
+                data: [],
+                total: result?.total || 0,
+                paginator: result?.paginator || {
+                    page: options.page || 1,
+                    paginate: options.paginate || 10,
+                    totalPages: 0
+                }
+            });
+        }
+
+        return res.status(200).send({
+            status: 'SUCCESS',
+            message: 'Recharge reports retrieved successfully',
+            data: result.data,
+            total: result.total || 0,
+            paginator: result.paginator
+        });
+    } catch (error) {
+        console.log(error);
+        return res.internalServerError({ message: error.message });
+    }
+}
+
 module.exports = {
     recharge,
     findMobileNumberOperator,
     getRechargeHistory,
     findAllRechargePlanFetch,
-    findRechargeOfferFetch
+    findRechargeOfferFetch,
+    getDownlineRechargeReports,
+    getRechargeReports
 };

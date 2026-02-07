@@ -10,7 +10,7 @@ db.kycDocumentSetting = require('./kycDocument');
 db.ekycHub = require('./ekycHub');
 db.aadhaarCard = require('./aadhaarCard');
 db.panCard = require('./panCard');
-db.panCardCrud = require('./panCardCrud');
+// db.panCardCrud = require('./panCardCrud');
 db.digilockerDocument = require('./digilockerDocument');
 
 // User Management Models
@@ -66,8 +66,8 @@ db.practomindAepsHistory = require('./practomindAepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
-db.recharge = require('./recharge');
-db.dthRecharge = require('./dthRecharge');
+// db.recharge = require('./recharge');
+// db.dthRecharge = require('./dthRecharge');
 db.serviceTransaction = require('./serviceTransaction');
 db.fundRequest = require('./fundRequest');
 db.fundHistory = require('./fundHistrory');
@@ -535,27 +535,27 @@ db.bbpsOperatorCategory.hasMany(db.bbpsOperator, {
 });
 
 // PAN Card CRUD Relationships
-db.panCardCrud.belongsTo(db.user, {
-  foreignKey: 'refId',
-  as: 'user',
-  targetKey: 'id'
-});
-db.user.hasMany(db.panCardCrud, {
-  foreignKey: 'refId',
-  as: 'panCardRequests',
-  sourceKey: 'id'
-});
+// db.panCardCrud.belongsTo(db.user, {
+//   foreignKey: 'refId',
+//   as: 'user',
+//   targetKey: 'id'
+// });
+// db.user.hasMany(db.panCardCrud, {
+//   foreignKey: 'refId',
+//   as: 'panCardRequests',
+//   sourceKey: 'id'
+// });
 
-db.panCardCrud.belongsTo(db.company, {
-  foreignKey: 'companyId',
-  as: 'company',
-  targetKey: 'id'
-});
-db.company.hasMany(db.panCardCrud, {
-  foreignKey: 'companyId',
-  as: 'panCardRequests',
-  sourceKey: 'id'
-});
+// db.panCardCrud.belongsTo(db.company, {
+//   foreignKey: 'companyId',
+//   as: 'company',
+//   targetKey: 'id'
+// });
+// db.company.hasMany(db.panCardCrud, {
+//   foreignKey: 'companyId',
+//   as: 'panCardRequests',
+//   sourceKey: 'id'
+// });
 
 // Payout History Relationships
 // Note: belongsTo association is already defined in payoutHistory.js model file
@@ -589,41 +589,41 @@ db.customerBank.hasMany(db.payoutHistory, {
 
 // Recharge Relationships
 // Note: belongsTo association is already defined in recharge.js model file
-db.user.hasMany(db.recharge, {
-  foreignKey: 'refId',
-  as: 'recharges',
-  sourceKey: 'id'
-});
+// db.user.hasMany(db.recharge, {
+//   foreignKey: 'refId',
+//   as: 'recharges',
+//   sourceKey: 'id'
+// });
 
-db.recharge.belongsTo(db.company, {
-  foreignKey: 'companyId',
-  as: 'company',
-  targetKey: 'id'
-});
-db.company.hasMany(db.recharge, {
-  foreignKey: 'companyId',
-  as: 'recharges',
-  sourceKey: 'id'
-});
+// db.recharge.belongsTo(db.company, {
+//   foreignKey: 'companyId',
+//   as: 'company',
+//   targetKey: 'id'
+// });
+// db.company.hasMany(db.recharge, {
+//   foreignKey: 'companyId',
+//   as: 'recharges',
+//   sourceKey: 'id'
+// });
 
 // DTH Recharge Relationships
 // Note: belongsTo association is already defined in dthRecharge.js model file
-db.user.hasMany(db.dthRecharge, {
-  foreignKey: 'refId',
-  as: 'dthRecharges',
-  sourceKey: 'id'
-});
+// db.user.hasMany(db.dthRecharge, {
+//   foreignKey: 'refId',
+//   as: 'dthRecharges',
+//   sourceKey: 'id'
+// });
 
-db.dthRecharge.belongsTo(db.company, {
-  foreignKey: 'companyId',
-  as: 'company',
-  targetKey: 'id'
-});
-db.company.hasMany(db.dthRecharge, {
-  foreignKey: 'companyId',
-  as: 'dthRecharges',
-  sourceKey: 'id'
-});
+// db.dthRecharge.belongsTo(db.company, {
+//   foreignKey: 'companyId',
+//   as: 'company',
+//   targetKey: 'id'
+// });
+// db.company.hasMany(db.dthRecharge, {
+//   foreignKey: 'companyId',
+//   as: 'dthRecharges',
+//   sourceKey: 'id'
+// });
 
 // Fund Request Relationships
 db.fundRequest.belongsTo(db.user, {

@@ -5,6 +5,6 @@ const reportController = require('../../../controller/company/v1/reportControlle
 
 // AEPS Reports routes
 router.post('/aeps', authentication, reportController.getAepsReports);
-
+router.post('/rechargeReports', authentication, reportController.getRechargeReports);
 module.exports = router;
 

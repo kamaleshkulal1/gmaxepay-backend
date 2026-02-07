@@ -7,6 +7,8 @@ router.post('/find-mobile-operator', authentication, rechargeController.findMobi
 router.post('/pay', authentication, rechargeController.recharge);
 router.post('/find-recharge-plan',authentication, rechargeController.findAllRechargePlanFetch);
 router.post('/recharge-offer',authentication, rechargeController.findRechargeOfferFetch);
-router.post('/get-recharge-history', authentication, rechargeController.getRechargeHistory);
+router.post('/recharge-history', authentication, rechargeController.getRechargeHistory);
+router.post('/rechargeReports', authentication, rechargeController.getRechargeReports);
+router.post('/getUserRechargeReports', authentication, rechargeController.getDownlineRechargeReports);
 
 module.exports = router;
