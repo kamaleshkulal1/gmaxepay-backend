@@ -2,7 +2,7 @@ const model = require('../../../models')
 const dbService = require('../../../utils/dbService')
 const asl = require('../../../services/asl')
 const inspayService = require('../../../services/inspayService')
-
+const bbpsService = require('../../../services/bbps')
 const alsWallet = async(req, res)=>{
     try{
         if(req.user.userRole !== 1){
@@ -91,8 +91,46 @@ const inspayWallet = async(req, res)=>{
     }
 };
 
+const bbpsWallet = async(req, res)=>{
+    try{
+        if(req.user.userRole !== 1){
+            return res.failure({ message: 'Unauthorized access' });
+        }
+        
+        const result = await bbpsService.checkBalance();
+        
+        if(result?.data?.responseCode !== '000'){
+            const errorMessage = result?.data?.errorInfo?.[0]?.error?.errorMessage || 
+                                'Unable to fetch BBPS balance. Please try again later.';
+            
+            if(result?.data?.errorInfo && result.data.errorInfo.length > 0){
+                result.data.errorInfo.forEach((errorItem, index) => {
+                    const error = errorItem.error;
+                    console.error(`BBPS Error ${index + 1}: Code: ${error.errorCode}, Message: ${error.errorMessage}`);
+                });
+            }
+            
+            return res.failure({
+                message: errorMessage,
+                data: result.data,
+                requestId: result.requestId
+            });
+        }
+        
+        return res.success({ 
+            message: 'BBPS balance fetched successfully', 
+            data: result.data,
+            requestId: result.requestId
+        });
+    }catch(error){
+        console.error('Error in bbpWallet', error);
+        return res.internalServerError({ message: error.message || 'Unable to fetch BBPS balance' });
+    }
+}
+
 module.exports = {
     alsWallet,
     walletBalance,
-    inspayWallet
+    inspayWallet,
+    bbpsWallet
 };

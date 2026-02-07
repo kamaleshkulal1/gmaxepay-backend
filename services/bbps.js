@@ -285,6 +285,59 @@ const getBillerInfo = async (billerId) => {
   }
 };
 
+const checkBalance = async () => {
+  try {
+    const today = new Date();
+    const todayFormatted = today.toISOString().split('T')[0];
+
+    const jsonData = {
+      fromDate: todayFormatted,
+      toDate: todayFormatted,
+      transType: '',
+      agents: [],
+      transactionId: '',
+      requestId: ''
+    };
+
+    const payload = buildSecurePayload({ jsonData });
+
+    const response = await axios.post(
+      `${BBPS_URL}/billpay/enquireDeposit/fetchDetails/json?accessCode=${payload.access_code}&requestId=${payload.requestId}&ver=${payload.version}&instituteId=${payload.bbpsInstituteId}&encRequest=${payload.enc_request}`,
+      {},
+      {
+        headers: { 'Content-Type': 'text/plain' }
+      }
+    );
+
+    let parsedResponse;
+    if (typeof response.data === 'object' && response.data !== null) {
+      parsedResponse = response.data;
+    } else if (typeof response.data === 'string') {
+      try {
+        parsedResponse = JSON.parse(response.data);
+      } catch (jsonParseError) {
+        try {
+          const decryptedResponse = decrypt(response.data);
+          parsedResponse = JSON.parse(decryptedResponse);
+        } catch (decryptError) {
+          console.error('Error decrypting BBPS balance response:', decryptError);
+          throw new Error(`Failed to process response: ${decryptError.message}`);
+        }
+      }
+    } else {
+      throw new Error(`Unexpected response data type: ${typeof response.data}`);
+    }
+
+    return {
+      data: parsedResponse,
+      requestId: payload.requestId
+    };
+  } catch (error) {
+    console.error('Error checking BBPS balance:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   fetchBillers,
   fetchBillParameters,
@@ -296,5 +349,6 @@ module.exports = {
   getTransactionHistory,
   getBillerInfo,
   buildSecurePayload,
-  buildSecurePayloadComplaint
+  buildSecurePayloadComplaint,
+  checkBalance
 };
