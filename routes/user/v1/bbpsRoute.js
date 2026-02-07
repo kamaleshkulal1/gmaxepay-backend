@@ -14,6 +14,7 @@ router.post('/validate-bill', authentication, bbpsController.validateBill);
 router.post('/pull-plan', authentication, bbpsController.pullPlan);
 router.post('/check-balance', authentication, bbpsController.checkBalance);
 router.post('/report-history', authentication, bbpsController.bbpsReportHistory);
+router.post('/recent-history', authentication, bbpsController.recentHistory);
 router.post('/transaction-history', authentication, bbpsController.getRetailerAllTransaction);
 
 module.exports = router;

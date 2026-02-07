@@ -1870,6 +1870,82 @@ const checkBalance = async (req, res) => {
   }
 };
 
+const recentHistory = async (req, res) => {
+  try {
+    if (!req.user.companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    const dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      refId: req.user.id,
+      companyId: req.user.companyId,
+      transactionType: 'BBPS'
+    };
+
+    if (dataToFind.query) {
+      Object.keys(dataToFind.query).forEach(key => {
+        if (key !== 'refId' && key !== 'companyId' && key !== 'transactionType') {
+          query[key] = dataToFind.query[key];
+        }
+      });
+    }
+
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+      
+      if (dataToFind.options.sort) {
+        const sortEntries = Object.entries(dataToFind.options.sort);
+        options.order = sortEntries.map(([field, direction]) => {
+          return [field, direction === -1 ? 'DESC' : 'ASC'];
+        });
+      } else {
+        options.order = [['createdAt', 'DESC']];
+      }
+    } else {
+      options.order = [['createdAt', 'DESC']];
+    }
+
+    const result = await dbService.paginate(model.billPaymentHistory, query, options);
+
+    if (!result || !result.data || result.data.length === 0) {
+      return res.status(200).send({
+        status: 'SUCCESS',
+        message: 'No transactions found',
+        data: [],
+        total: result?.total || 0,
+        paginator: result?.paginator || {
+          page: options.page || 1,
+          paginate: options.paginate || 10,
+          totalPages: 0
+        }
+      });
+    }
+
+    const formattedData = result.data.map(transaction => {
+      const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+      return {
+        operator: transactionData.operator || null,
+        createdAt: transactionData.createdAt || null,
+        paymentStatus: transactionData.paymentStatus || null,
+        transactionId: transactionData.transactionId || null
+      };
+    });
+
+    return res.status(200).send({
+      status: 'SUCCESS',
+      message: 'Transactions fetched successfully',
+      data: formattedData,
+      total: result.total || 0,
+      paginator: result.paginator
+    });
+  } catch (error) {
+    console.error('BBPS recentHistory error:', error);
+    return res.internalServerError({ message: error.message });
+  }
+}
+
 module.exports = {
   getBillerInfo,
   fetchBill,
@@ -1883,5 +1959,6 @@ module.exports = {
   bbpsReportHistory,
   getRetailerAllTransaction,
   getBillerIds,
-  getAllCategories
+  getAllCategories,
+  recentHistory
 };
