@@ -142,7 +142,6 @@ const getOnboardingStatus = async (req, res) => {
     }
 }
 
-// Onboarding Agent
 const aepsOnboarding = async (req, res) => {
     try {
         const REQUIRED_FIELD_ERRORS = {
@@ -256,16 +255,12 @@ const aepsOnboarding = async (req, res) => {
         const retailerCountry = pickValue(existingUser.country, outletDetails.shopCountry, 'India');
 
         const safeName = (existingUser.name || '').trim();
-        const nameParts = safeName ? safeName.split(/\s+/).filter(Boolean) : [];
-        const retailerFirstName = existingUser.firstName || nameParts[0];
-        const retailerLastName = existingUser.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0]);
-        const retailerMiddleName = existingUser.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : undefined);
-
+        const retailerFirstName = existingUser.name;
         console.log("existingiUser", existingUser.aadharDetails);
         const payload = {
             retailerFirstName,
             retailerMiddleName,
-            retailerLastName,
+            retailerLastName:"",
             retailerEmail: existingUser.email,
             phone: existingUser.mobileNo,
             retailerDob: formatDob(existingUser.dob),
@@ -349,7 +344,6 @@ const aepsOnboarding = async (req, res) => {
     }
 };
 
-// Validate Agent
 const validateAgentOtp = async (req, res) => {
    try{
     const { otp } = req.body;
