@@ -172,6 +172,72 @@ const paymentCallback = async (req, res) => {
     }
 };
 
+const aslPayoutCallback = async (req, res) => {
+    try {
+        const payload = req.body || {};
+        console.log('[ASL Payout Callback] Incoming payload:', JSON.stringify(payload));
+
+        const { status, message, orderId, data, code } = payload;
+
+        if (!orderId || !status) {
+            console.error('[ASL Payout Callback] Missing required fields:', { orderId, status });
+            return res.send('OK');
+        }
+
+        const statusUpper = status.toString().toUpperCase();
+        const newStatus = statusUpper === 'SUCCESS'
+            ? 'SUCCESS'
+            : statusUpper === 'PENDING'
+                ? 'PENDING'
+                : 'FAILED';
+
+        const bankRef = data && data.bankref ? data.bankref : null;
+        const innerStatus = data && data.status ? data.status : null;
+        const agentTransactionId = data && data.agentTransactionId ? data.agentTransactionId : null;
+
+        const existingPayout = await dbService.findOne(model.payoutHistory, { orderId });
+
+        if (!existingPayout) {
+            console.error('[ASL Payout Callback] Payout history not found for orderId:', orderId);
+            return res.send('OK');
+        }
+
+        const updateData = {
+            status: newStatus,
+            statusMessage: message || existingPayout.statusMessage,
+            utrn: bankRef || existingPayout.utrn,
+            orderId: orderId || existingPayout.orderId,
+            agentTransactionID: agentTransactionId || existingPayout.agentTransactionID,
+            apiResponse: payload,
+            updatedBy: existingPayout.refId
+        };
+
+        await dbService.update(
+            model.payoutHistory,
+            { id: existingPayout.id },
+            updateData
+        );
+
+        console.log('[ASL Payout Callback] Payout history updated:', {
+            orderId,
+            previousStatus: existingPayout.status,
+            newStatus,
+            bankRef,
+            innerStatus,
+            agentTransactionId,
+            code
+        });
+
+        return res.send('OK');
+    } catch (error) {
+        console.error('[ASL Payout Callback] Error:', error, { 
+            body: req.body
+        });
+        return res.send('OK');
+    }
+};
+
 module.exports = {
-    paymentCallback
+    paymentCallback,
+    aslPayoutCallback
 };
