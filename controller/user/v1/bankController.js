@@ -91,7 +91,7 @@ const calcSlabAmount = (slab, baseAmount) => {
 const addCustomerBank = async (req, res) => {
     try {
         
-        if (![3, 4, 5].includes(req.user.userRole)) {
+        if(![3,4,5].includes(req.user.userRole)){
             return res.failure({ message: 'You are not authorized to add bank details' });
         }
         let masterDistributor;
@@ -103,7 +103,7 @@ const addCustomerBank = async (req, res) => {
         let whitelabelUserWallet;
         let superAdminWallet;
 
-        if (req.user.userRole === 3) {
+        if(req.user.userRole === 3){
             [
                 masterDistributor,
                 whitelabelUser,
@@ -125,8 +125,8 @@ const addCustomerBank = async (req, res) => {
                     userRole: 1,
                     isActive: true
                 })
-            ]);
-            if (!masterDistributor || !whitelabelUser || !superAdmin) {
+            ])
+            if(!masterDistributor || !whitelabelUser || !superAdmin){
                 return res.failure({ message: 'Master distributor, whitelabel user or super admin not found' });
             }
             [
@@ -161,12 +161,12 @@ const addCustomerBank = async (req, res) => {
                 dbService.findOne(model.wallet, { refId: whitelabelUser.id, companyId: req.user.companyId }),
                 dbService.findOne(model.wallet, { refId: 1, companyId: 1 })
             ]);
-            if (!masterDistributorWallet || !whitelabelUserWallet || !superAdminWallet) {
+            if(!masterDistributorWallet || !whitelabelUserWallet || !superAdminWallet){
                 return res.failure({ message: 'Master distributor, whitelabel user or super admin wallet not found' });
             }
-        } else if (req.user.userRole === 4) {
+        }else if(req.user.userRole === 4){
             
-        } else if (req.user.userRole === 5) {
+        } else if(req.user.userRole === 5){
 
         }
 
@@ -248,14 +248,13 @@ const addCustomerBank = async (req, res) => {
             return res.failure({ message: 'Bank verification failed' });
         }
 
+        // Wallet commission & surcharge logic for Master Distributor (userRole === 3)
         if (req.user.userRole === 3) {
-            const companyIncomingCommission = SuperAdminSlabComm?.find(
-                (c) => c.roleType === 2 || c.roleName === 'WU'
-            );
-            const adminIncomingCommission = SuperAdminSlabComm?.find(
-                (c) => c.roleType === 1 || c.roleName === 'AD'
-            );
 
+            // Slabs:
+            // - mdSlab        : what MD pays for BANK VERIFICATION
+            // - companySlab   : income for companyAdmin/whitelabel (WU)
+            // - adminSlab     : income for superAdmin (AD)
             const mdSlab = companySlabComm?.find(
                 (c) => c.roleType === 3 || c.roleName === 'MD'
             );
@@ -266,68 +265,45 @@ const addCustomerBank = async (req, res) => {
                 (c) => c.roleType === 2 || c.roleName === 'WU'
             );
 
+            console.log('mdSlab', mdSlab);
+            console.log('adminSlab', adminSlab);
+            console.log('companySlab', companySlab);
+
+            // Step 1: determine what MD will be debited for this service.
+            // We treat mdSlab.amtType as:
+            //  - 'fix' → direct fixed debit
+            //  - 'per' → percentage of mdSlab.commAmt base (so you can still use percentage if needed)
             const mdBaseAmount = Number(mdSlab?.commAmt || 0);
             const mdSurchargeAmt = calcSlabAmount(mdSlab, mdBaseAmount);
 
-            let companySurchargeAmt = calcSlabAmount(companySlab, mdSurchargeAmt);
-            let adminSurchargeAmt = calcSlabAmount(adminSlab, mdSurchargeAmt);
+            // Step 2: commissions coming out of MD's debit:
+            // companySurchargeAmt & adminSurchargeAmt are calculated on top of MD debit.
+            const companySurchargeAmt = calcSlabAmount(companySlab, mdSurchargeAmt);
+            const adminSurchargeAmt = calcSlabAmount(adminSlab, mdSurchargeAmt);
 
-            const companyIncomingAmt = calcSlabAmount(
-                companyIncomingCommission,
-                mdSurchargeAmt
-            );
-            const adminIncomingAmt = calcSlabAmount(
-                adminIncomingCommission,
-                mdSurchargeAmt
-            );
+            console.log('Master distributor debit (MD):', mdSurchargeAmt);
+            console.log('Company income (WU):', companySurchargeAmt);
+            console.log('Admin income (AD):', adminSurchargeAmt);
 
-            // Validate MD debit
+            // Basic validations on configuration
             if (mdSurchargeAmt <= 0) {
                 return res.failure({
                     message: 'Invalid MD surcharge configuration for bank verification'
                 });
             }
 
-            if (companyIncomingAmt > 0 && companySurchargeAmt > companyIncomingAmt) {
-                const deficit = round2(companySurchargeAmt - companyIncomingAmt);
-                companySurchargeAmt = round2(companyIncomingAmt);
-
-                if (adminSurchargeAmt < deficit) {
-                    return res.failure({
-                        message:
-                            'Invalid configuration: company commission exceeds incoming margin from admin for bank verification'
-                    });
-                }
-                adminSurchargeAmt = round2(adminSurchargeAmt - deficit);
-            }
-
-            if (
-                adminIncomingAmt > 0 &&
-                adminSurchargeAmt + companySurchargeAmt > adminIncomingAmt
-            ) {
-                const required = round2(adminSurchargeAmt + companySurchargeAmt);
-                const deficit = round2(required - adminIncomingAmt);
-
-                if (adminSurchargeAmt <= deficit) {
-                    return res.failure({
-                        message:
-                            'Invalid configuration: total admin + company commission exceeds incoming admin margin for bank verification'
-                    });
-                }
-
-                adminSurchargeAmt = round2(adminSurchargeAmt - deficit);
-            }
-
             if (adminSurchargeAmt < 0 || companySurchargeAmt < 0) {
                 return res.failure({
-                    message:
-                        'Invalid admin/whitelabel surcharge configuration for bank verification'
+                    message: 'Invalid admin/whitelabel surcharge configuration for bank verification'
                 });
             }
 
-            console.log('Master distributor debit (MD):', mdSurchargeAmt);
-            console.log('Company income (WU):', companySurchargeAmt);
-            console.log('Admin income (AD):', adminSurchargeAmt);
+            // Optional: prevent over-distribution (sum of incomes must not exceed MD debit)
+            if (adminSurchargeAmt + companySurchargeAmt > mdSurchargeAmt) {
+                return res.failure({
+                    message: 'Invalid surcharge configuration: total admin + company income is greater than MD debit for bank verification'
+                });
+            }
 
             const mdOpeningBalance = parseFloat(masterDistributorWallet.mainWallet || 0);
             const companyOpeningBalance = parseFloat(whitelabelUserWallet.mainWallet || 0);
