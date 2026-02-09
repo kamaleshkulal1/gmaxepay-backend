@@ -3,7 +3,6 @@ const router = express.Router();
 const userController = require('../../controller/auth/v1/userController');
 const authentication = require('../../middleware/authentication');
 
-// Auth routes
 router.post('/login', userController.login);
 router.post('/verify-mobile-otp', userController.verifyOTP);
 router.post('/reset-password', userController.resetPassword);
