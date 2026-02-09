@@ -102,7 +102,7 @@ const payout = async (req, res) => {
             // Get customer bank - support both customerBankId/bankId and accountNumber+ifscCode
             const effectiveCustomerBankId = customerBankId || bankId;
             const parsedBankId = effectiveCustomerBankId ? parseInt(effectiveCustomerBankId, 10) : null;
-            
+            console.log('parsedBankId', parsedBankId);
             if (parsedBankId && !isNaN(parsedBankId)) {
                 // Find by ID
                 customerBank = await dbService.findOne(model.customerBank, {
@@ -111,11 +111,12 @@ const payout = async (req, res) => {
                     companyId: user.companyId,
                     isActive: true
                 });
+                console.log('customerBank', customerBank);
             } else if (accountNumber?.toString().trim() && ifscCode?.toString().trim()) {
                 // Find by account number and IFSC
                 customerBank = await dbService.findOne(model.customerBank, {
-                    accountNumber: accountNumber.toString().trim(),
-                    ifsc: ifscCode.toString().trim(),
+                    accountNumber: accountNumber,
+                    ifsc: ifscCode,
                     refId: user.id,
                     companyId: user.companyId,
                     isActive: true
@@ -380,6 +381,8 @@ const getPayoutBankList = async (req, res) => {
             }
             
             return {
+                id: bankData.id,
+                customerBankId: bankData.id,
                 bankName: bankData.bankName,
                 bankLogo: bankLogo,
                 branch: bankData.branch || null,
