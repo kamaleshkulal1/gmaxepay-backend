@@ -146,7 +146,6 @@ const aepsOnboarding = async (req, res) => {
     try {
         const REQUIRED_FIELD_ERRORS = {
             retailerFirstName: 'Enter your first name [PAR001]',
-            retailerLastName: 'Enter your last name [PAR001]',
             retailerEmail: 'Enter your email [PAR002]',
             phone: 'Enter your phone [PAR003]',
             retailerDob: 'Enter your date of birth [PAR004]',
