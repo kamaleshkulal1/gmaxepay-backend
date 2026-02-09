@@ -374,9 +374,17 @@ const getPayoutBankList = async (req, res) => {
             const bankData = bank.toJSON ? bank.toJSON() : bank;
             const rawBankLogo = bankData.bankName ? (logoLookup[bankData.bankName] || null) : null;
             
+            let bankLogo = null;
+            if (rawBankLogo) {
+                bankLogo = `${process.env.AWS_CDN_URL}/${rawBankLogo}`;
+            }
+            
             return {
                 bankName: bankData.bankName,
-                bankLogo: rawBankLogo ? `${process.env.AWS_CDN_URL}/${rawBankLogo}` : null,
+                bankLogo: bankLogo,
+                branch: bankData.branch || null,
+                ifscCode: bankData.ifsc || null,
+                accountNumber: bankData.accountNumber || null,
                 isPrimary: bankData.isPrimary === true || bankData.isPrimary === 1
             };
         });
