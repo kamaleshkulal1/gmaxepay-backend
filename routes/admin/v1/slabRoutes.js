@@ -11,4 +11,5 @@ router.put('/update/:id', authentication, slabController.updateSlab);
 router.post('/visiblity/:id', authentication,  slabController.getAllCompanySlabList);
 router.put('/updateSlabComm/:id', authentication, slabController.updateSlabComm);
 
+
 module.exports = router;
