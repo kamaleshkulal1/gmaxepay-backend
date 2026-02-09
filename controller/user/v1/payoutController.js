@@ -121,6 +121,7 @@ const payout = async (req, res) => {
                     companyId: user.companyId,
                     isActive: true
                 });
+                console.log('customerBank', customerBank);
             }
             
             if (!customerBank) {
