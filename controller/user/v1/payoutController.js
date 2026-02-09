@@ -320,7 +320,6 @@ const getPayoutBankList = async (req, res) => {
     try {
         const user = req.user;
         
-        // Get all customer banks for the user
         const customerBanks = await dbService.findAll(
             model.customerBank,
             {
@@ -333,19 +332,62 @@ const getPayoutBankList = async (req, res) => {
             }
         );
         
-        const banksWithPrimaryFlag = customerBanks.map(bank => ({
-            ...bank.toJSON ? bank.toJSON() : bank,
-            isPrimary: bank.isPrimary === true || bank.isPrimary === 1
-        }));
+        if (!customerBanks || customerBanks.length === 0) {
+            return res.success({
+                message: 'Payout bank list retrieved successfully',
+                data: {
+                    banks: [],
+                    total: 0,
+                    primaryBankCount: 0
+                }
+            });
+        }
         
-        // Count primary banks (should be 0 or 1)
-        const primaryBankCount = banksWithPrimaryFlag.filter(bank => bank.isPrimary === true).length;
+        const uniqueBankNames = [...new Set(customerBanks.map(bank => bank.bankName).filter(Boolean))];
+        
+        const bankLogoPromises = uniqueBankNames.map(async (bankName) => {
+            const [practomindBank, aslBank] = await Promise.all([
+                dbService.findOne(model.practomindBankList, { bankName: bankName }),
+                dbService.findOne(model.aslBankList, { bankName: bankName })
+            ]);
+            
+            let bankLogo = null;
+            if (practomindBank && practomindBank.bankLogo) {
+                bankLogo = practomindBank.bankLogo;
+            } else if (aslBank && aslBank.bankLogo) {
+                bankLogo = aslBank.bankLogo;
+            }
+            
+            return {
+                bankName,
+                bankLogo: bankLogo || null
+            };
+        });
+        
+        const bankLogoMap = await Promise.all(bankLogoPromises);
+        const logoLookup = bankLogoMap.reduce((acc, item) => {
+            acc[item.bankName] = item.bankLogo;
+            return acc;
+        }, {});
+        
+        const banksWithLogo = customerBanks.map(bank => {
+            const bankData = bank.toJSON ? bank.toJSON() : bank;
+            const rawBankLogo = bankData.bankName ? (logoLookup[bankData.bankName] || null) : null;
+            
+            return {
+                bankName: bankData.bankName,
+                bankLogo: rawBankLogo ? `${process.env.AWS_CDN_URL}/${rawBankLogo}` : null,
+                isPrimary: bankData.isPrimary === true || bankData.isPrimary === 1
+            };
+        });
+        
+        const primaryBankCount = banksWithLogo.filter(bank => bank.isPrimary === true).length;
         
         return res.success({
             message: 'Payout bank list retrieved successfully',
             data: {
-                banks: banksWithPrimaryFlag,
-                total: banksWithPrimaryFlag.length,
+                banks: banksWithLogo,
+                total: banksWithLogo.length,
                 primaryBankCount: primaryBankCount
             }
         });

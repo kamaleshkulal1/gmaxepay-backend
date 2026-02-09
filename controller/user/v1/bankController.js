@@ -246,10 +246,46 @@ const addCustomerBank = async (req, res) => {
     }
 };
 
+const deleteCustomerBank = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = req.user;
+        const customerBank = await dbService.deleteOne(model.customerBank, {
+            id: id,
+            refId: user.id,
+            companyId: user.companyId
+        });
+        if (!customerBank) {
+            return res.notFound({ message: 'Customer bank not found' });
+        }
+        if (customerBank.isPrimary) {
+            return res.failure({ message: 'Primary bank account cannot be deleted' });
+        }
+        const updatedBank = {
+            isActive: false
+        }
+        await dbService.update(model.customerBank, {
+            id: id,
+            refId: user.id,
+            companyId: user.companyId
+        }, updatedBank
+       );
+        if (!updatedBank) {
+            return res.failure({ message: 'Failed to delete bank details' });
+        }
+        return res.success({ message: 'Bank details deleted successfully', data: updatedBank });
+    }
+    catch (error) {
+        console.log('Delete customer bank error:', error);
+        return res.internalServerError({ message: error.message || 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCustomerBanks,
     getPrimaryCustomerBank,
     getCustomerBankById,
-    addCustomerBank
+    addCustomerBank,
+    deleteCustomerBank
 };
 
