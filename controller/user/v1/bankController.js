@@ -68,44 +68,30 @@ const getPrimaryCustomerBank = async (req, res) => {
     }
 };
 
-const getCustomerBankById = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const user = req.user;
-        
-        if (!id) {
-            return res.validationError({ message: 'Bank ID is required' });
-        }
-        
-        const customerBank = await dbService.findOne(
-            model.customerBank,
-            {
-                id: id,
-                refId: user.id,
-                companyId: user.companyId,
-                isActive: true
-            }
-        );
-        
-        if (!customerBank) {
-            return res.notFound({ message: 'Customer bank not found' });
-        }
-        
-        return res.success({
-            message: 'Customer bank retrieved successfully',
-            data: customerBank
-        });
-        
-    } catch (error) {
-        console.log('Get customer bank by ID error:', error);
-        return res.internalServerError({ message: error.message || 'Internal server error' });
+const round2 = (num) => {
+    const n = Number(num);
+    return Number.isFinite(n)
+        ? Math.round((n + Number.EPSILON) * 100) / 100
+        : 0;
+};
+
+const calcSlabAmount = (slab, baseAmount) => {
+    if (!slab) return 0;
+    const base = Number(baseAmount || 0);
+    const rawComm = Number(slab.commAmt || 0);
+    if (!Number.isFinite(base) || !Number.isFinite(rawComm)) return 0;
+
+    const amtType = (slab.amtType || 'fix').toLowerCase();
+    if (amtType === 'per') {
+        return round2((base * rawComm) / 100);
     }
+    return round2(rawComm);
 };
 
 const addCustomerBank = async (req, res) => {
     try {
         
-        if(![3,4,5].includes(req.user.userRole)){
+        if (![3, 4, 5].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to add bank details' });
         }
         let masterDistributor;
@@ -117,7 +103,7 @@ const addCustomerBank = async (req, res) => {
         let whitelabelUserWallet;
         let superAdminWallet;
 
-        if(req.user.userRole === 3){
+        if (req.user.userRole === 3) {
             [
                 masterDistributor,
                 whitelabelUser,
@@ -139,8 +125,8 @@ const addCustomerBank = async (req, res) => {
                     userRole: 1,
                     isActive: true
                 })
-            ])
-            if(!masterDistributor || !whitelabelUser || !superAdmin){
+            ]);
+            if (!masterDistributor || !whitelabelUser || !superAdmin) {
                 return res.failure({ message: 'Master distributor, whitelabel user or super admin not found' });
             }
             [
@@ -175,12 +161,12 @@ const addCustomerBank = async (req, res) => {
                 dbService.findOne(model.wallet, { refId: whitelabelUser.id, companyId: req.user.companyId }),
                 dbService.findOne(model.wallet, { refId: 1, companyId: 1 })
             ]);
-            if(!masterDistributorWallet || !whitelabelUserWallet || !superAdminWallet){
+            if (!masterDistributorWallet || !whitelabelUserWallet || !superAdminWallet) {
                 return res.failure({ message: 'Master distributor, whitelabel user or super admin wallet not found' });
             }
-        }else if(req.user.userRole === 4){
+        } else if (req.user.userRole === 4) {
             
-        } else if(req.user.userRole === 5){
+        } else if (req.user.userRole === 5) {
 
         }
 
@@ -202,9 +188,6 @@ const addCustomerBank = async (req, res) => {
             }
         );
 
-        // Pre-calculate duplicate and count, but do NOT return yet.
-        // We always want to perform bank verification and MD debit (if applicable),
-        // even when the bank is already stored or max-bank limit is reached.
         const duplicateBank = existingBanks.find(
             bank => bank.accountNumber === account_number && bank.ifsc === ifsc
         );
@@ -265,8 +248,13 @@ const addCustomerBank = async (req, res) => {
             return res.failure({ message: 'Bank verification failed' });
         }
 
-        // Wallet commission & surcharge logic for Master Distributor (userRole === 3)
         if (req.user.userRole === 3) {
+            const companyIncomingCommission = SuperAdminSlabComm?.find(
+                (c) => c.roleType === 2 || c.roleName === 'WU'
+            );
+            const adminIncomingCommission = SuperAdminSlabComm?.find(
+                (c) => c.roleType === 1 || c.roleName === 'AD'
+            );
 
             const mdSlab = companySlabComm?.find(
                 (c) => c.roleType === 3 || c.roleName === 'MD'
@@ -277,20 +265,69 @@ const addCustomerBank = async (req, res) => {
             const companySlab = companySlabComm?.find(
                 (c) => c.roleType === 2 || c.roleName === 'WU'
             );
-            console.log('mdSlab', mdSlab);
-            console.log('adminSlab', adminSlab);
-            console.log('companySlab', companySlab);
-            const mdSurchargeAmt = parseFloat(mdSlab?.commAmt || 0);
-            const adminSurchargeAmt = parseFloat(adminSlab?.commAmt || 0);
-            const companySurchargeAmt = parseFloat(companySlab?.commAmt || 0);
 
-            console.log('Admin surcharge (AD):', adminSurchargeAmt);
-            console.log('Company surcharge (WU):', companySurchargeAmt);
-            console.log('Master distributor surcharge (MD):', mdSurchargeAmt);
+            const mdBaseAmount = Number(mdSlab?.commAmt || 0);
+            const mdSurchargeAmt = calcSlabAmount(mdSlab, mdBaseAmount);
 
-            if (mdSurchargeAmt <= 0 || adminSurchargeAmt < 0 || companySurchargeAmt < 0) {
-                return res.failure({ message: 'Invalid surcharge configuration for bank verification' });
+            let companySurchargeAmt = calcSlabAmount(companySlab, mdSurchargeAmt);
+            let adminSurchargeAmt = calcSlabAmount(adminSlab, mdSurchargeAmt);
+
+            const companyIncomingAmt = calcSlabAmount(
+                companyIncomingCommission,
+                mdSurchargeAmt
+            );
+            const adminIncomingAmt = calcSlabAmount(
+                adminIncomingCommission,
+                mdSurchargeAmt
+            );
+
+            // Validate MD debit
+            if (mdSurchargeAmt <= 0) {
+                return res.failure({
+                    message: 'Invalid MD surcharge configuration for bank verification'
+                });
             }
+
+            if (companyIncomingAmt > 0 && companySurchargeAmt > companyIncomingAmt) {
+                const deficit = round2(companySurchargeAmt - companyIncomingAmt);
+                companySurchargeAmt = round2(companyIncomingAmt);
+
+                if (adminSurchargeAmt < deficit) {
+                    return res.failure({
+                        message:
+                            'Invalid configuration: company commission exceeds incoming margin from admin for bank verification'
+                    });
+                }
+                adminSurchargeAmt = round2(adminSurchargeAmt - deficit);
+            }
+
+            if (
+                adminIncomingAmt > 0 &&
+                adminSurchargeAmt + companySurchargeAmt > adminIncomingAmt
+            ) {
+                const required = round2(adminSurchargeAmt + companySurchargeAmt);
+                const deficit = round2(required - adminIncomingAmt);
+
+                if (adminSurchargeAmt <= deficit) {
+                    return res.failure({
+                        message:
+                            'Invalid configuration: total admin + company commission exceeds incoming admin margin for bank verification'
+                    });
+                }
+
+                adminSurchargeAmt = round2(adminSurchargeAmt - deficit);
+            }
+
+            if (adminSurchargeAmt < 0 || companySurchargeAmt < 0) {
+                return res.failure({
+                    message:
+                        'Invalid admin/whitelabel surcharge configuration for bank verification'
+                });
+            }
+
+            console.log('Master distributor debit (MD):', mdSurchargeAmt);
+            console.log('Company income (WU):', companySurchargeAmt);
+            console.log('Admin income (AD):', adminSurchargeAmt);
 
             const mdOpeningBalance = parseFloat(masterDistributorWallet.mainWallet || 0);
             const companyOpeningBalance = parseFloat(whitelabelUserWallet.mainWallet || 0);
@@ -476,6 +513,40 @@ const addCustomerBank = async (req, res) => {
         return res.success({ message: 'Bank details added successfully', data: customerBank });
     } catch (error) {
         console.log('Add bank details error:', error);
+        return res.internalServerError({ message: error.message || 'Internal server error' });
+    }
+};
+
+const getCustomerBankById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = req.user;
+        
+        if (!id) {
+            return res.validationError({ message: 'Bank ID is required' });
+        }
+        
+        const customerBank = await dbService.findOne(
+            model.customerBank,
+            {
+                id: id,
+                refId: user.id,
+                companyId: user.companyId,
+                isActive: true
+            }
+        );
+        
+        if (!customerBank) {
+            return res.notFound({ message: 'Customer bank not found' });
+        }
+        
+        return res.success({
+            message: 'Customer bank retrieved successfully',
+            data: customerBank
+        });
+        
+    } catch (error) {
+        console.log('Get customer bank by ID error:', error);
         return res.internalServerError({ message: error.message || 'Internal server error' });
     }
 };

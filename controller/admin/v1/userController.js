@@ -1654,6 +1654,8 @@ const getByUserProfile = async (req, res) => {
         })
       : null;
 
+    const managerId = existingUser.reportingTo || companyAdmin?.id;
+
     const [outletDetails, slabDetails, reportingToManager, companyBankDetails] = await Promise.all([
       existingUser.companyId
         ? dbService.findOne(model.outlet, {
@@ -1668,8 +1670,9 @@ const getByUserProfile = async (req, res) => {
           }, { attributes: ['id', 'slabName'] })
         : null,
       existingUser.companyId
+        && managerId
         ? dbService.findOne(model.user, {
-            id: existingUser.reportingTo || companyAdmin?.id,
+            id: managerId,
             companyId: existingUser.companyId
           })
         : null,
