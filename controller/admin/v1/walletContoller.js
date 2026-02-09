@@ -98,6 +98,7 @@ const bbpsWallet = async(req, res)=>{
         }
         
         const result = await bbpsService.checkBalance();
+        console.log('result', result);
         
         if(result?.data?.responseCode !== '000'){
             const errorMessage = result?.data?.errorInfo?.[0]?.error?.errorMessage || 
