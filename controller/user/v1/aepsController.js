@@ -253,13 +253,10 @@ const aepsOnboarding = async (req, res) => {
         const retailerLatitude = pickValue(existingUser.latitude, outletDetails.latitude);
         const retailerLongitude = pickValue(existingUser.longitude, outletDetails.longitude);
         const retailerCountry = pickValue(existingUser.country, outletDetails.shopCountry, 'India');
-
-        const safeName = (existingUser.name || '').trim();
         const retailerFirstName = existingUser.name;
-        console.log("existingiUser", existingUser.aadharDetails);
         const payload = {
             retailerFirstName,
-            retailerMiddleName,
+            retailerMiddleName:"",
             retailerLastName:"",
             retailerEmail: existingUser.email,
             phone: existingUser.mobileNo,
