@@ -294,7 +294,7 @@ const checkBalance = async () => {
       fromDate: todayFormatted,
       toDate: todayFormatted,
       transType: '',
-      agents: [],
+      agents: ['CC01CC01513515340681'],
       transactionId: '',
       requestId: ''
     };
