@@ -11,6 +11,6 @@ router.post('/setMPIN', authentication, userController.setMPIN);
 router.post('/resetMPIN', authentication, userController.resetMPIN);
 router.post('/getUserProfile', authentication, userController.getUserProfile);
 router.post('/reportToUsersList', authentication, userController.findAllTheirDownlineUsers);
-router.post('/:id/profile', authentication, userController.getByUserProfile);
+router.post('/profile/:id', authentication, userController.getByUserProfile);
 
 module.exports = router;
