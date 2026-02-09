@@ -112,7 +112,7 @@ const payout = async (req, res) => {
                     isActive: true
                 });
                 console.log('customerBank', customerBank);
-            } else if (accountNumber?.toString().trim() && ifscCode?.toString().trim()) {
+            } else if (accountNumber && ifscCode) {
                 // Find by account number and IFSC
                 customerBank = await dbService.findOne(model.customerBank, {
                     accountNumber: accountNumber,
