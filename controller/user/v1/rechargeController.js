@@ -2,6 +2,7 @@ const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
 const inspayService = require('../../../services/inspayService');
 const { Op, Sequelize } = require('sequelize');
+const { generateTransactionID } = require('../../../utils/transactionID');
 
 // Helper function for rounding
 const round2 = (num) => {
@@ -43,9 +44,10 @@ const recharge = async (req, res) => {
         const amountNumber = round2(parseFloat(amount));
         const user = req.user;
 
-        const [existingUser, operator] = await Promise.all([
+        const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
-            dbService.findOne(model.operator, { operatorCode: opcode })
+            dbService.findOne(model.operator, { operatorCode: opcode }),
+            dbService.findOne(model.company, { id: user.companyId })
         ]);
 
         if (!existingUser) {
@@ -57,6 +59,9 @@ const recharge = async (req, res) => {
         }
 
         const operatorType = operator.operatorType || 'RECHARGE';
+
+        // Our own custom transaction ID (separate from provider orderid / txid)
+        const transactionId = generateTransactionID(existingCompany?.companyName);
 
         const [response, wallet] = await Promise.all([
             inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4),
@@ -578,7 +583,7 @@ const recharge = async (req, res) => {
                             closingAmt: distClosingBalance,
                             credit: distributorComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: distributor.id,
                             updatedBy: distributor.id
@@ -596,7 +601,7 @@ const recharge = async (req, res) => {
                             closingAmt: companyClosingBalance,
                             credit: companyComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: companyAdmin.id,
                             updatedBy: companyAdmin.id
@@ -614,7 +619,7 @@ const recharge = async (req, res) => {
                             closingAmt: adminClosingBalance,
                             credit: superAdminComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
@@ -689,7 +694,7 @@ const recharge = async (req, res) => {
                             closingAmt: distClosingBalance,
                             credit: distributorComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: distributor.id,
                             updatedBy: distributor.id
@@ -707,7 +712,7 @@ const recharge = async (req, res) => {
                             closingAmt: mdClosingBalance,
                             credit: masterDistributorComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: masterDistributor.id,
                             updatedBy: masterDistributor.id
@@ -725,7 +730,7 @@ const recharge = async (req, res) => {
                             closingAmt: companyClosingBalance,
                             credit: companyComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: companyAdmin.id,
                             updatedBy: companyAdmin.id
@@ -743,7 +748,7 @@ const recharge = async (req, res) => {
                             closingAmt: adminClosingBalance,
                             credit: superAdminComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
@@ -809,7 +814,7 @@ const recharge = async (req, res) => {
                             closingAmt: retailerClosingBalance,
                             credit: retailerComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: retailer.id,
                             updatedBy: retailer.id
@@ -827,7 +832,7 @@ const recharge = async (req, res) => {
                             closingAmt: companyClosingBalance,
                             credit: companyComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: companyAdmin.id,
                             updatedBy: companyAdmin.id
@@ -845,7 +850,7 @@ const recharge = async (req, res) => {
                             closingAmt: adminClosingBalance,
                             credit: superAdminComm,
                             debit: 0,
-                            transactionId: orderid,
+                            transactionId,
                             paymentStatus: 'SUCCESS',
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
@@ -925,9 +930,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: retailerOpeningBalance,
                                 closingAmt: retailerClosingBalance,
-                                credit: retailerComm,
-                                debit: 0,
-                                transactionId: orderid,
+                            credit: retailerComm,
+                            debit: 0,
+                            transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: retailer.id,
                                 updatedBy: retailer.id
@@ -943,9 +948,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: mdOpeningBalance,
                                 closingAmt: mdClosingBalance,
-                                credit: masterDistributorComm,
-                                debit: 0,
-                                transactionId: orderid,
+                            credit: masterDistributorComm,
+                            debit: 0,
+                            transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: masterDistributor.id,
                                 updatedBy: masterDistributor.id
@@ -961,9 +966,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: companyOpeningBalance,
                                 closingAmt: companyClosingBalance,
-                                credit: companyComm,
-                                debit: 0,
-                                transactionId: orderid,
+                            credit: companyComm,
+                            debit: 0,
+                            transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: companyAdmin.id,
                                 updatedBy: companyAdmin.id
@@ -979,9 +984,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: adminOpeningBalance,
                                 closingAmt: adminClosingBalance,
-                                credit: superAdminComm,
-                                debit: 0,
-                                transactionId: orderid,
+                            credit: superAdminComm,
+                            debit: 0,
+                            transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: superAdmin.id,
                                 updatedBy: superAdmin.id
@@ -1054,9 +1059,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: retailerOpeningBalance,
                                         closingAmt: retailerClosingBalance,
-                                        credit: retailerComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: retailerComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: retailer.id,
                                         updatedBy: retailer.id
@@ -1072,9 +1077,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: distOpeningBalance,
                                         closingAmt: distClosingBalance,
-                                        credit: distributorComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: distributorComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: distributor.id,
                                         updatedBy: distributor.id
@@ -1108,9 +1113,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: companyOpeningBalance,
                                         closingAmt: companyClosingBalance,
-                                        credit: companyComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: companyComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: companyAdmin.id,
                                         updatedBy: companyAdmin.id
@@ -1126,9 +1131,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: adminOpeningBalance,
                                         closingAmt: adminClosingBalance,
-                                        credit: superAdminComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: superAdminComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: superAdmin.id,
                                         updatedBy: superAdmin.id
@@ -1185,9 +1190,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: retailerOpeningBalance,
                                         closingAmt: retailerClosingBalance,
-                                        credit: retailerComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: retailerComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: retailer.id,
                                         updatedBy: retailer.id
@@ -1203,9 +1208,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: distOpeningBalance,
                                         closingAmt: distClosingBalance,
-                                        credit: distributorComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: distributorComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: distributor.id,
                                         updatedBy: distributor.id
@@ -1221,9 +1226,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: companyOpeningBalance,
                                         closingAmt: companyClosingBalance,
-                                        credit: companyComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: companyComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: companyAdmin.id,
                                         updatedBy: companyAdmin.id
@@ -1239,9 +1244,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: adminOpeningBalance,
                                         closingAmt: adminClosingBalance,
-                                        credit: superAdminComm,
-                                        debit: 0,
-                                        transactionId: orderid,
+                            credit: superAdminComm,
+                            debit: 0,
+                            transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: superAdmin.id,
                                         updatedBy: superAdmin.id
@@ -1396,6 +1401,7 @@ const recharge = async (req, res) => {
             circle: circle || null,
             amount: amountNumber,
             orderid,
+            transactionId,
             txid: response.txid || null,
             status: paymentStatus,
             opid: response.opid || null,
@@ -1431,6 +1437,7 @@ const recharge = async (req, res) => {
 
         const responseData = {
             orderid,
+            transactionId,
             apiResponse: response
         };
 
