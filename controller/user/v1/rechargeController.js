@@ -1367,7 +1367,24 @@ const recharge = async (req, res) => {
             }
         }
 
-        const closingMainWallet = isSuccess ? round2(openingMainWallet + retailerNetCredit) : openingMainWallet;
+        // Log final commission breakup used for wallet impact
+        console.log('Recharge commission summary', {
+            userId: user.id,
+            userRole: user.userRole,
+            orderid,
+            amount: amountNumber,
+            retailerComm,
+            distributorComm,
+            masterDistributorComm,
+            companyComm,
+            superAdminComm,
+            retailerNetCredit
+        });
+
+        // Deduct recharge amount from payer wallet and then add net commission
+        const totalDebitAmount = isSuccess ? amountNumber : 0;
+        const netWalletChange = isSuccess ? round2(-totalDebitAmount + retailerNetCredit) : 0;
+        const closingMainWallet = round2(openingMainWallet + netWalletChange);
         if(isSuccess) response.operatorName = operator?.operatorName;
         
         const serviceTransactionData = {

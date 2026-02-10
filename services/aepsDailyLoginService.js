@@ -1,15 +1,8 @@
-/**
- * aepsDailyLoginService.js
- * @description :: Service for AEPS daily login and logout operations
- */
 
 const dbService = require('../utils/dbService');
 const model = require('../models');
 const { Op } = require('sequelize');
-/**
- * Get current date in Indian timezone (IST) as YYYY-MM-DD
- * Works regardless of server location
- */
+
 const getIndianDateOnly = () => {
     const now = new Date();
     const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -21,10 +14,6 @@ const getIndianDateOnly = () => {
     return formatter.format(now);
 };
 
-/**
- * Get current time in IST (returns Date object representing current IST time)
- * Works regardless of server location
- */
 const getCurrentISTTime = () => {
     const now = new Date();
     const istFormatter = new Intl.DateTimeFormat('en-US', {
@@ -50,10 +39,7 @@ const getCurrentISTTime = () => {
     return new Date(istDateStr);
 };
 
-/**
- * Calculate logout time as midnight IST of next day
- * Works regardless of server location
- */
+
 const getNextMidnightIST = () => {
     const todayIST = getIndianDateOnly();
     const todayISTMidnight = new Date(`${todayIST}T00:00:00+05:30`);
@@ -62,12 +48,6 @@ const getNextMidnightIST = () => {
 };
 
 
-/**
- * Logout all users from previous days (midnight IST reset)
- * @param {number} userId - User ID (optional, if provided only logout this user)
- * @param {number} companyId - Company ID (optional, if provided only logout this company)
- * @returns {Promise<number>} - Number of users logged out
- */
 const logoutPreviousDaySessions = async (userId = null, companyId = null) => {
     const todayDateStr = getIndianDateOnly();
     const now = getCurrentISTTime();
