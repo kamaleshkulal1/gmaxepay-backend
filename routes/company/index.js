@@ -12,4 +12,5 @@ router.use('/wallet', require('./v1/walletRoutes'));
 router.use('/subscription', require('./v1/subscriptionRoutes'));
 router.use('/bank', require('./v1/bankRoutes'));
 router.use('/payout', require('./v1/payoutRoutes'));
+router.use('/dashboard', require('./v1/dashboardRoutes'));
 module.exports = router;
