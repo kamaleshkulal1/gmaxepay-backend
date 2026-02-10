@@ -33,10 +33,10 @@ const getDashboard = async (req, res) => {
     };
 
     // Optional company scope (if admin is tied to a company)
-    const companyFilter =
-      req.user && req.user.companyId
-        ? { companyId: req.user.companyId }
-        : {};
+    // const companyFilter =
+    //   req.user && req.user.companyId
+    //     ? { companyId: req.user.companyId }
+    //     : {};
 
     // --- Helper to normalize options.sort into Sequelize order array ---
     const buildOrder = (opt) => {
@@ -69,14 +69,14 @@ const getDashboard = async (req, res) => {
     // --- AEPS1 (ASL) stats from aepsHistory ---
     const aeps1SuccessWhere = {
       ...dateWhere,
-      ...companyFilter,
+    //   ...companyFilter,
       status: 'SUCCESS'
     };
 
     // --- AEPS2 (Practomind) stats from practomindAepsHistory ---
     const practomindSuccessWhere = {
       ...dateWhere,
-      ...companyFilter,
+    //   ...companyFilter,
       // Treat truthy status / successful transactionStatus as success; filter basic status=true here
       status: true
     };
@@ -84,7 +84,6 @@ const getDashboard = async (req, res) => {
     // --- BBPS stats from billPaymentHistory ---
     const bbpsSuccessWhere = {
       ...dateWhere,
-      ...companyFilter,
       transactionType: 'BBPS',
       paymentStatus: 'Success'
     };
@@ -92,21 +91,18 @@ const getDashboard = async (req, res) => {
     // --- Inspay (Mobile/DTH/PAN) stats from serviceTransaction ---
     const inspayMobileWhere = {
       ...dateWhere,
-      ...companyFilter,
       serviceType: 'MobileRecharge',
       status: 'SUCCESS'
     };
 
     const inspayDthWhere = {
       ...dateWhere,
-      ...companyFilter,
       serviceType: 'DTHRecharge',
       status: 'SUCCESS'
     };
 
     const inspayPanWhere = {
       ...dateWhere,
-      ...companyFilter,
       serviceType: 'Pan',
       status: 'SUCCESS'
     };
@@ -114,14 +110,12 @@ const getDashboard = async (req, res) => {
     // --- AEPS payouts from payoutHistory (bank payouts from AEPS wallets) ---
     const aeps1PayoutWhere = {
       ...dateWhere,
-      ...companyFilter,
       walletType: 'apes1Wallet',
       status: 'SUCCESS'
     };
 
     const aeps2PayoutWhere = {
       ...dateWhere,
-      ...companyFilter,
       walletType: 'apes2Wallet',
       status: 'SUCCESS'
     };
