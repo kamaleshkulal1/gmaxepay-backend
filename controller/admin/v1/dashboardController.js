@@ -138,9 +138,7 @@ const getDashboard = async (req, res) => {
       // Inspay PAN
       inspayPanTotalAmount,
       inspayPanTotalSuperadminComm,
-      inspayPanSuccessCount,
-      // Optional: paginated walletHistory for the given range
-      walletPaginated
+      inspayPanSuccessCount
     ] = await Promise.all([
       // walletHistory aggregates (commission based on credited amount)
       model.walletHistory.sum('credit', { where: walletWhere }),
@@ -191,14 +189,7 @@ const getDashboard = async (req, res) => {
       model.serviceTransaction.sum('superadminComm', {
         where: inspayPanWhere
       }),
-      model.serviceTransaction.count({ where: inspayPanWhere }),
-
-      // Paginated walletHistory list scoped by date (initially filtered by today's date)
-      dbService.paginate(
-        model.walletHistory,
-        walletWhere,
-        options || { page: 1, paginate: 10, order: [['createdAt', 'DESC']] }
-      )
+      model.serviceTransaction.count({ where: inspayPanWhere })
     ]);
 
     return res.success({
@@ -210,8 +201,7 @@ const getDashboard = async (req, res) => {
         },
         wallet: {
           totalSuperadminCommission: Number(walletTotalSuperadminComm || 0),
-          totalSuccessAmount: Number(walletTotalSuccessAmount || 0),
-          list: walletPaginated || null
+          totalSuccessAmount: Number(walletTotalSuccessAmount || 0)
         },
         modules: {
           // AEPS1 -> ASL
