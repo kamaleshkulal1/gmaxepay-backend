@@ -321,7 +321,7 @@ const deleteCustomerBank = async (req, res) => {
     }
     const { id } = req.params;
     const user = req.user;
-    const customerBank = await dbService.deleteOne(model.customerBank, {
+    const customerBank = await dbService.findOne(model.customerBank, {
       id: id,
       refId: user.id,
       companyId: user.companyId
