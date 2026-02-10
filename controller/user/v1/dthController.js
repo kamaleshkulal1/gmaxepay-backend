@@ -1,6 +1,7 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const inspayService = require('../../../services/inspayService');
+const { generateTransactionID } = require('../../../utils/transactionID');
 
 const dthPlanFetch = async (req, res) => {
     try {
@@ -71,10 +72,11 @@ const dthRecharge = async (req, res) => {
 
         const amountNumber = round2(parseFloat(amount));
 
-        // Parallel database queries for user and operator
-        const [existingUser, operator] = await Promise.all([
+        // Parallel database queries for user, operator and company
+        const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId }),
-            dbService.findOne(model.operator, { operatorCode: opcode })
+            dbService.findOne(model.operator, { operatorCode: opcode }),
+            dbService.findOne(model.company, { id: req.user.companyId })
         ]);
 
         if (!existingUser) {
@@ -84,6 +86,9 @@ const dthRecharge = async (req, res) => {
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
+
+        // Our own custom transaction ID (separate from provider orderid / txid)
+        const transactionId = generateTransactionID(existingCompany?.companyName);
 
         // Calculate commissions with optimized function
         const calcCommByAmtType = (base) => {
@@ -159,6 +164,7 @@ const dthRecharge = async (req, res) => {
             opcode,
             amount: amountNumber,
             orderid,
+            transactionId,
             txid: response.txid || null,
             status: paymentStatus,
             opid: response.opid || null,
@@ -190,10 +196,15 @@ const dthRecharge = async (req, res) => {
 
         const [dthRechargeRecord] = await Promise.all(updates);
 
-        // Prepare response data (only orderid and apiResponse)
+        // Prepare response data (orderid, transactionId and apiResponse)
         const responseData = {
-            orderid,
-            apiResponse: response
+            transactionId,
+            amount: response.amount,
+            status: paymentStatus,
+            opid: response.opid || null,
+            message: response.message || null,
+            refernceId: response.txid || null,
+            opid: response.opid || null,
         };
 
         if (isSuccess) {

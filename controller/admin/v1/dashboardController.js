@@ -23,12 +23,28 @@ const getDashboard = async (req, res) => {
       if (!toDay && fromDay) toDay = fromDay;
     }
 
-    const startDate = moment(fromDay, 'YYYY-MM-DD').startOf('day').toDate();
-    const endDate = moment(toDay, 'YYYY-MM-DD').endOf('day').toDate();
+    const fromMoment = moment(fromDay, 'YYYY-MM-DD');
+    const toMoment = moment(toDay, 'YYYY-MM-DD');
+
+    const startDate = fromMoment.startOf('day').toDate();
+    const endDate = toMoment.endOf('day').toDate();
 
     const dateWhere = {
       createdAt: {
         [Op.between]: [startDate, endDate]
+      }
+    };
+
+    // Previous period (same length) for day-back comparison
+    const daysDiff = toMoment.diff(fromMoment, 'days') + 1;
+    const prevFromMoment = fromMoment.clone().subtract(daysDiff, 'days');
+    const prevToMoment = fromMoment.clone().subtract(1, 'days');
+    const prevStartDate = prevFromMoment.startOf('day').toDate();
+    const prevEndDate = prevToMoment.endOf('day').toDate();
+
+    const prevDateWhere = {
+      createdAt: {
+        [Op.between]: [prevStartDate, prevEndDate]
       }
     };
 
@@ -153,6 +169,9 @@ const getDashboard = async (req, res) => {
       inspayPanTotalAmount,
       inspayPanTotalSuperadminComm,
       inspayPanSuccessCount,
+      // Previous period wallet totals (for comparison)
+      prevWalletTotalSuperadminComm,
+      prevWalletTotalSuccessAmount,
       // Global status counts (FAILED / PENDING)
       aeps1FailedCount,
       aeps1PendingCount,
@@ -223,6 +242,20 @@ const getDashboard = async (req, res) => {
         where: inspayPanWhere
       }),
       model.serviceTransaction.count({ where: inspayPanWhere }),
+
+      // Previous period wallet aggregates
+      model.walletHistory.sum('credit', {
+        where: {
+          ...walletWhere,
+          createdAt: prevDateWhere.createdAt
+        }
+      }),
+      model.walletHistory.sum('amount', {
+        where: {
+          ...walletSuccessWhere,
+          createdAt: prevDateWhere.createdAt
+        }
+      }),
 
       // --- FAILED / PENDING status counts across all services ---
 
@@ -298,6 +331,15 @@ const getDashboard = async (req, res) => {
       (inspayPendingCount || 0) +
       (payoutPendingCount || 0);
 
+    const currentWalletAmount = Number(walletTotalSuccessAmount || 0);
+    const previousWalletAmount = Number(prevWalletTotalSuccessAmount || 0);
+    const walletChangeAmount = currentWalletAmount - previousWalletAmount;
+    const walletChangePercent =
+      previousWalletAmount > 0
+        ? Math.round(((walletChangeAmount / previousWalletAmount) * 100 + Number.EPSILON) * 100) /
+          100
+        : null;
+
     return res.success({
       message: 'Dashboard statistics fetched successfully',
       data: {
@@ -307,7 +349,10 @@ const getDashboard = async (req, res) => {
         },
         wallet: {
           totalSuperadminCommission: Number(walletTotalSuperadminComm || 0),
-          totalSuccessAmount: Number(walletTotalSuccessAmount || 0)
+          totalSuccessAmount: currentWalletAmount,
+          previousTotalSuccessAmount: previousWalletAmount,
+          changeAmount: walletChangeAmount,
+          changePercent: walletChangePercent
         },
         statusSummary: {
           totalSuccessCount,
