@@ -123,7 +123,61 @@ const getDashboard = async (req, res) => {
       status: 'SUCCESS'
     };
 
-    // --- AEPS payouts from payoutHistory (bank payouts from AEPS wallets) ---
+    const inspayMobileVolumeWhere = {
+      ...dateWhere,
+      serviceType: 'MobileRecharge',
+      status: { [Op.in]: ['SUCCESS', 'PENDING'] }
+    };
+
+    const inspayDthVolumeWhere = {
+      ...dateWhere,
+      serviceType: 'DTHRecharge',
+      status: { [Op.in]: ['SUCCESS', 'PENDING'] }
+    };
+
+    const inspayPanVolumeWhere = {
+      ...dateWhere,
+      serviceType: 'Pan',
+      status: { [Op.in]: ['SUCCESS', 'PENDING'] }
+    };
+
+    const aeps1VolumeWhere = {
+      ...dateWhere,
+      status: { [Op.in]: ['SUCCESS', 'PENDING'] }
+    };
+
+    const aeps2VolumeWhere = {
+      ...dateWhere,
+      transactionType: 'CW',
+      [Op.or]: [
+        {
+          status: true,
+          transactionStatus: { [Op.iLike]: 'success%' }
+        },
+        {
+          transactionStatus: { [Op.iLike]: 'pending%' }
+        }
+      ]
+    };
+
+    const bbpsVolumeWhere = {
+      ...dateWhere,
+      transactionType: 'BBPS',
+      paymentStatus: { [Op.in]: ['Success', 'Pending'] }
+    };
+
+    const aeps1PayoutVolumeWhere = {
+      ...dateWhere,
+      walletType: 'apes1Wallet',
+      status: { [Op.in]: ['SUCCESS', 'PENDING'] }
+    };
+
+    const aeps2PayoutVolumeWhere = {
+      ...dateWhere,
+      walletType: 'apes2Wallet',
+      status: { [Op.in]: ['SUCCESS', 'PENDING'] }
+    };
+
     const aeps1PayoutWhere = {
       ...dateWhere,
       walletType: 'apes1Wallet',
@@ -188,17 +242,12 @@ const getDashboard = async (req, res) => {
       model.walletHistory.sum('credit', { where: walletWhere }),
       model.walletHistory.sum('amount', { where: walletSuccessWhere }),
 
-      // AEPS1 (ASL) from aepsHistory
-      model.aepsHistory.sum('amount', { where: aeps1SuccessWhere }),
+      model.aepsHistory.sum('amount', { where: aeps1VolumeWhere }),
       model.aepsHistory.sum('superadminComm', { where: aeps1SuccessWhere }),
       model.aepsHistory.count({ where: aeps1SuccessWhere }),
 
-      // AEPS2 (Practomind) from practomindAepsHistory
       model.practomindAepsHistory.sum('transactionAmount', {
-        where: {
-          ...practomindSuccessWhere,
-          transactionType: 'CW'
-        }
+        where: aeps2VolumeWhere
       }),
       model.practomindAepsHistory.count({
         where: {
@@ -207,37 +256,31 @@ const getDashboard = async (req, res) => {
         }
       }),
 
-      // AEPS1 payouts (ASL) from payoutHistory using apes1Wallet
-      model.payoutHistory.sum('amount', { where: aeps1PayoutWhere }),
+      model.payoutHistory.sum('amount', { where: aeps1PayoutVolumeWhere }),
       model.payoutHistory.count({ where: aeps1PayoutWhere }),
 
-      // AEPS2 payouts (Practomind) from payoutHistory using apes2Wallet
-      model.payoutHistory.sum('amount', { where: aeps2PayoutWhere }),
+      model.payoutHistory.sum('amount', { where: aeps2PayoutVolumeWhere }),
       model.payoutHistory.count({ where: aeps2PayoutWhere }),
 
-      // BBPS
-      model.billPaymentHistory.sum('amount', { where: bbpsSuccessWhere }),
+      model.billPaymentHistory.sum('amount', { where: bbpsVolumeWhere }),
       model.billPaymentHistory.sum('superadminComm', {
         where: bbpsSuccessWhere
       }),
       model.billPaymentHistory.count({ where: bbpsSuccessWhere }),
 
-      // Inspay Mobile
-      model.serviceTransaction.sum('amount', { where: inspayMobileWhere }),
+      model.serviceTransaction.sum('amount', { where: inspayMobileVolumeWhere }),
       model.serviceTransaction.sum('superadminComm', {
         where: inspayMobileWhere
       }),
       model.serviceTransaction.count({ where: inspayMobileWhere }),
 
-      // Inspay DTH
-      model.serviceTransaction.sum('amount', { where: inspayDthWhere }),
+      model.serviceTransaction.sum('amount', { where: inspayDthVolumeWhere }),
       model.serviceTransaction.sum('superadminComm', {
         where: inspayDthWhere
       }),
       model.serviceTransaction.count({ where: inspayDthWhere }),
 
-      // Inspay PAN
-      model.serviceTransaction.sum('amount', { where: inspayPanWhere }),
+      model.serviceTransaction.sum('amount', { where: inspayPanVolumeWhere }),
       model.serviceTransaction.sum('superadminComm', {
         where: inspayPanWhere
       }),
@@ -257,9 +300,6 @@ const getDashboard = async (req, res) => {
         }
       }),
 
-      // --- FAILED / PENDING status counts across all services ---
-
-      // AEPS1 (ASL) failures & pendings from aepsHistory
       model.aepsHistory.count({
         where: { ...dateWhere, status: 'FAILED' }
       }),
