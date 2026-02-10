@@ -27,7 +27,6 @@ const recharge = async (req, res) => {
     try {
         const { mobileNumber, opcode, amount, circle, value1, value2, value3, value4 } = req.body;
         
-        // Validate required fields
         if (!mobileNumber) {
             return res.failure({ message: 'Mobile number is required' });
         }
@@ -44,7 +43,6 @@ const recharge = async (req, res) => {
         const amountNumber = round2(parseFloat(amount));
         const user = req.user;
 
-        // Parallel database queries for user and operator
         const [existingUser, operator] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
             dbService.findOne(model.operator, { operatorCode: opcode })
@@ -58,10 +56,8 @@ const recharge = async (req, res) => {
             return res.failure({ message: 'Operator not found' });
         }
 
-        // Get operatorType for slab queries (use operator's operatorType or default to 'RECHARGE')
         const operatorType = operator.operatorType || 'RECHARGE';
 
-        // Start wallet lookup and recharge service in parallel
         const [response, wallet] = await Promise.all([
             inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4),
             model.wallet.findOne({
@@ -92,7 +88,6 @@ const recharge = async (req, res) => {
 
         const openingMainWallet = round2(currentWallet.mainWallet || 0);
         
-        // Initialize commission variables
         let retailerComm = 0;
         let distributorComm = 0;
         let masterDistributorComm = 0;
@@ -100,7 +95,6 @@ const recharge = async (req, res) => {
         let superAdminComm = 0;
         let retailerNetCredit = 0;
 
-        // Process commission/surcharge only if recharge is successful and user is distributor or retailer
         if (isSuccess && [4, 5].includes(user.userRole)) {
             let distributor;
             let companyAdmin;
@@ -118,7 +112,6 @@ const recharge = async (req, res) => {
             let retailerWallet;
 
             if (user.userRole === 4) {
-                // Distributor logic
                 [
                     distributor,
                     companyAdmin,
@@ -152,9 +145,7 @@ const recharge = async (req, res) => {
                     return res.failure({ message: 'Super admin not found' });
                 }
 
-                // Check if distributor reports to company admin directly or has no reporting (null)
                 if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
-                    // Scenario 1: Distributor reports directly to company admin (no master distributor)
                     [
                         SuperAdminSlabComm,
                         companySlabComm
@@ -269,7 +260,6 @@ const recharge = async (req, res) => {
                     return res.failure({ message: 'Invalid distributor reporting structure' });
                 }
             } else if (user.userRole === 5) {
-                // Retailer logic
                 [retailer, companyAdmin, superAdmin] = await Promise.all([
                     dbService.findOne(model.user, {
                         id: user.id,
@@ -292,7 +282,6 @@ const recharge = async (req, res) => {
                     return res.failure({ message: 'Retailer, company admin or super admin not found' });
                 }
                 if (retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
-                    // Scenario 1: Retailer reports directly to company admin (no master distributor or distributor)
                     [
                         SuperAdminSlabComm,
                         companySlabComm
@@ -331,7 +320,6 @@ const recharge = async (req, res) => {
                     if (!retailerWallet)
                         return res.failure({ message: 'Retailer wallet not found' });
                 } else if (retailer.reportingTo && retailer.reportingTo !== null) {
-                    // Find the reporting user to determine if it's master distributor or distributor
                     const reportingUser = await dbService.findOne(model.user, {
                         id: retailer.reportingTo,
                         companyId: user.companyId,
@@ -343,7 +331,6 @@ const recharge = async (req, res) => {
                     }
 
                     if (reportingUser.userRole === 3) {
-                        // Scenario 2: Retailer reports to master distributor
                         masterDistributor = reportingUser;
                         [
                             SuperAdminSlabComm,
@@ -385,9 +372,7 @@ const recharge = async (req, res) => {
                         if (!superAdminWallet || !companyWallet || !retailerWallet || !masterDistributorWallet)
                             return res.failure({ message: 'Super admin, company admin, retailer or master distributor wallet not found' });
                     } else if (reportingUser.userRole === 4) {
-                        // Scenario 3: Retailer reports to distributor
                         distributor = reportingUser;
-                        // Check if distributor reports to master distributor
                         if (distributor.reportingTo && distributor.reportingTo !== null && distributor.reportingTo !== companyAdmin.id) {
                             masterDistributor = await dbService.findOne(model.user, {
                                 id: distributor.reportingTo,
@@ -395,7 +380,6 @@ const recharge = async (req, res) => {
                                 isActive: true
                             });
                             if (masterDistributor && masterDistributor.userRole === 3) {
-                                // Scenario 4: Retailer -> Distributor -> Master Distributor (all in chain)
                                 [
                                     SuperAdminSlabComm,
                                     companySlabComm,
@@ -445,7 +429,6 @@ const recharge = async (req, res) => {
                                 if (!superAdminWallet || !companyWallet || !retailerWallet || !masterDistributorWallet || !distributorWallet)
                                     return res.failure({ message: 'Super admin, company admin, retailer, master distributor or distributor wallet not found' });
                             } else {
-                                // Distributor reports to company admin, so only distributor in chain
                                 [
                                     SuperAdminSlabComm,
                                     companySlabComm,
@@ -487,7 +470,6 @@ const recharge = async (req, res) => {
                                     return res.failure({ message: 'Super admin, company admin, retailer or distributor wallet not found' });
                             }
                         } else {
-                            // Scenario 3: Retailer reports to distributor (distributor reports to company admin)
                             [
                                 SuperAdminSlabComm,
                                 companySlabComm,
@@ -534,14 +516,11 @@ const recharge = async (req, res) => {
                 }
             }
 
-            // Calculate commissions based on slabs
             const operatorName = operator.operatorName || 'Recharge';
             const remarkText = `Recharge commission`;
 
             if (user.userRole === 4) {
-                // Distributor commission logic
                 if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
-                    // Scenario 1: Distributor reports directly to company admin
                     const distSlab = companySlabComm?.find(
                         (c) => c.roleType === 4 || c.roleName === 'DI'
                     );
@@ -557,7 +536,6 @@ const recharge = async (req, res) => {
                     companyComm = calcSlabAmount(companySlab, distributorComm);
                     superAdminComm = calcSlabAmount(adminSlab, distributorComm);
 
-                    // Distributor gets the commission
                     retailerNetCredit = distributorComm;
 
                     const distOpeningBalance = parseFloat(distributorWallet.mainWallet || 0);
@@ -568,7 +546,6 @@ const recharge = async (req, res) => {
                     const companyClosingBalance = parseFloat((companyOpeningBalance + companyComm).toFixed(2));
                     const adminClosingBalance = parseFloat((adminOpeningBalance + superAdminComm).toFixed(2));
 
-                    // Update wallets
                     await Promise.all([
                         dbService.update(
                             model.wallet,
@@ -587,7 +564,6 @@ const recharge = async (req, res) => {
                         )
                     ]);
 
-                    // Create wallet history records
                     await Promise.all([
                         dbService.createOne(model.walletHistory, {
                             refId: distributor.id,
@@ -645,7 +621,6 @@ const recharge = async (req, res) => {
                         })
                     ]);
                 } else if (distributor.reportingTo && distributor.reportingTo !== null) {
-                    // Scenario 2: Distributor reports to master distributor
                     const distSlab = masterDistributorCommSlab?.find(
                         (c) => c.roleType === 4 || c.roleName === 'DI'
                     );
@@ -665,7 +640,6 @@ const recharge = async (req, res) => {
                     companyComm = calcSlabAmount(companySlab, masterDistributorComm);
                     superAdminComm = calcSlabAmount(adminSlab, masterDistributorComm);
 
-                    // Distributor gets the commission
                     retailerNetCredit = distributorComm;
 
                     const distOpeningBalance = parseFloat(distributorWallet.mainWallet || 0);
@@ -678,7 +652,6 @@ const recharge = async (req, res) => {
                     const companyClosingBalance = parseFloat((companyOpeningBalance + companyComm).toFixed(2));
                     const adminClosingBalance = parseFloat((adminOpeningBalance + superAdminComm).toFixed(2));
 
-                    // Update wallets
                     await Promise.all([
                         dbService.update(
                             model.wallet,
@@ -702,7 +675,6 @@ const recharge = async (req, res) => {
                         )
                     ]);
 
-                    // Create wallet history records
                     await Promise.all([
                         dbService.createOne(model.walletHistory, {
                             refId: distributor.id,
@@ -779,9 +751,7 @@ const recharge = async (req, res) => {
                     ]);
                 }
             } else if (user.userRole === 5) {
-                // Retailer commission logic
                 if (retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
-                    // Scenario 1: Retailer reports directly to company admin
                     const retailerSlab = companySlabComm?.find(
                         (c) => c.roleType === 5 || c.roleName === 'RT'
                     );
@@ -797,7 +767,6 @@ const recharge = async (req, res) => {
                     companyComm = calcSlabAmount(companySlab, retailerComm);
                     superAdminComm = calcSlabAmount(adminSlab, retailerComm);
 
-                    // Retailer gets the commission
                     retailerNetCredit = retailerComm;
 
                     const retailerOpeningBalance = parseFloat(retailerWallet.mainWallet || 0);
@@ -808,7 +777,6 @@ const recharge = async (req, res) => {
                     const companyClosingBalance = parseFloat((companyOpeningBalance + companyComm).toFixed(2));
                     const adminClosingBalance = parseFloat((adminOpeningBalance + superAdminComm).toFixed(2));
 
-                    // Update wallets
                     await Promise.all([
                         dbService.update(
                             model.wallet,
@@ -827,7 +795,6 @@ const recharge = async (req, res) => {
                         )
                     ]);
 
-                    // Create wallet history records
                     await Promise.all([
                         dbService.createOne(model.walletHistory, {
                             refId: retailer.id,
@@ -892,7 +859,6 @@ const recharge = async (req, res) => {
                     });
 
                     if (reportingUser.userRole === 3) {
-                        // Scenario 2: Retailer reports to master distributor
                         const retailerSlab = masterDistributorCommSlab?.find(
                             (c) => c.roleType === 5 || c.roleName === 'RT'
                         );
@@ -912,7 +878,6 @@ const recharge = async (req, res) => {
                         companyComm = calcSlabAmount(companySlab, masterDistributorComm);
                         superAdminComm = calcSlabAmount(adminSlab, masterDistributorComm);
 
-                        // Retailer gets the commission
                         retailerNetCredit = retailerComm;
 
                         const retailerOpeningBalance = parseFloat(retailerWallet.mainWallet || 0);
@@ -925,7 +890,6 @@ const recharge = async (req, res) => {
                         const companyClosingBalance = parseFloat((companyOpeningBalance + companyComm).toFixed(2));
                         const adminClosingBalance = parseFloat((adminOpeningBalance + superAdminComm).toFixed(2));
 
-                        // Update wallets
                         await Promise.all([
                             dbService.update(
                                 model.wallet,
@@ -949,7 +913,6 @@ const recharge = async (req, res) => {
                             )
                         ]);
 
-                        // Create wallet history records
                         await Promise.all([
                             dbService.createOne(model.walletHistory, {
                                 refId: retailer.id,
@@ -1025,9 +988,7 @@ const recharge = async (req, res) => {
                             })
                         ]);
                     } else if (reportingUser.userRole === 4) {
-                        // Retailer reports to distributor
                         if (distributor.reportingTo && distributor.reportingTo !== null && distributor.reportingTo !== companyAdmin.id) {
-                            // Check if masterDistributor was already fetched, if not fetch it
                             if (!masterDistributor || masterDistributor.id !== distributor.reportingTo) {
                                 masterDistributor = await dbService.findOne(model.user, {
                                     id: distributor.reportingTo,
@@ -1036,7 +997,6 @@ const recharge = async (req, res) => {
                                 });
                             }
                             if (masterDistributor && masterDistributor.userRole === 3) {
-                                // Scenario 4: Retailer -> Distributor -> Master Distributor
                                 const retailerSlab = distributorCommSlab?.find(
                                     (c) => c.roleType === 5 || c.roleName === 'RT'
                                 );
@@ -1060,7 +1020,6 @@ const recharge = async (req, res) => {
                                 companyComm = calcSlabAmount(companySlab, masterDistributorComm);
                                 superAdminComm = calcSlabAmount(adminSlab, masterDistributorComm);
 
-                                // Retailer gets the commission
                                 retailerNetCredit = retailerComm;
 
                                 const retailerOpeningBalance = parseFloat(retailerWallet.mainWallet || 0);
@@ -1075,7 +1034,6 @@ const recharge = async (req, res) => {
                                 const companyClosingBalance = parseFloat((companyOpeningBalance + companyComm).toFixed(2));
                                 const adminClosingBalance = parseFloat((adminOpeningBalance + superAdminComm).toFixed(2));
 
-                                // Update wallets and create wallet history
                                 await Promise.all([
                                     dbService.update(model.wallet, { id: retailerWallet.id }, { mainWallet: retailerClosingBalance, updatedBy: retailer.id }),
                                     dbService.update(model.wallet, { id: distributorWallet.id }, { mainWallet: distClosingBalance, updatedBy: distributor.id }),
@@ -1084,7 +1042,6 @@ const recharge = async (req, res) => {
                                     dbService.update(model.wallet, { id: superAdminWallet.id }, { mainWallet: adminClosingBalance, updatedBy: superAdmin.id })
                                 ]);
 
-                                // Create wallet history records
                                 await Promise.all([
                                     dbService.createOne(model.walletHistory, {
                                         refId: retailer.id,
@@ -1178,7 +1135,6 @@ const recharge = async (req, res) => {
                                     })
                                 ]);
                             } else {
-                                // Distributor reports to company admin, so only distributor in chain
                                 const retailerSlab = distributorCommSlab?.find(
                                     (c) => c.roleType === 5 || c.roleName === 'RT'
                                 );
@@ -1198,7 +1154,6 @@ const recharge = async (req, res) => {
                                 companyComm = calcSlabAmount(companySlab, distributorComm);
                                 superAdminComm = calcSlabAmount(adminSlab, distributorComm);
 
-                                // Retailer gets the commission
                                 retailerNetCredit = retailerComm;
 
                                 const retailerOpeningBalance = parseFloat(retailerWallet.mainWallet || 0);
@@ -1211,7 +1166,6 @@ const recharge = async (req, res) => {
                                 const companyClosingBalance = parseFloat((companyOpeningBalance + companyComm).toFixed(2));
                                 const adminClosingBalance = parseFloat((adminOpeningBalance + superAdminComm).toFixed(2));
 
-                                // Update wallets and create wallet history
                                 await Promise.all([
                                     dbService.update(model.wallet, { id: retailerWallet.id }, { mainWallet: retailerClosingBalance, updatedBy: retailer.id }),
                                     dbService.update(model.wallet, { id: distributorWallet.id }, { mainWallet: distClosingBalance, updatedBy: distributor.id }),
@@ -1219,7 +1173,6 @@ const recharge = async (req, res) => {
                                     dbService.update(model.wallet, { id: superAdminWallet.id }, { mainWallet: adminClosingBalance, updatedBy: superAdmin.id })
                                 ]);
 
-                                // Create wallet history records
                                 await Promise.all([
                                     dbService.createOne(model.walletHistory, {
                                         refId: retailer.id,
@@ -1296,7 +1249,6 @@ const recharge = async (req, res) => {
                                 ]);
                             }
                         } else {
-                            // Scenario 3: Retailer reports to distributor (distributor reports to company admin)
                             const retailerSlab = distributorCommSlab?.find(
                                 (c) => c.roleType === 5 || c.roleName === 'RT'
                             );
@@ -1316,7 +1268,6 @@ const recharge = async (req, res) => {
                             companyComm = calcSlabAmount(companySlab, distributorComm);
                             superAdminComm = calcSlabAmount(adminSlab, distributorComm);
 
-                            // Retailer gets the commission
                             retailerNetCredit = retailerComm;
 
                             const retailerOpeningBalance = parseFloat(retailerWallet.mainWallet || 0);
@@ -1329,7 +1280,6 @@ const recharge = async (req, res) => {
                             const companyClosingBalance = parseFloat((companyOpeningBalance + companyComm).toFixed(2));
                             const adminClosingBalance = parseFloat((adminOpeningBalance + superAdminComm).toFixed(2));
 
-                            // Update wallets and create wallet history
                             await Promise.all([
                                 dbService.update(model.wallet, { id: retailerWallet.id }, { mainWallet: retailerClosingBalance, updatedBy: retailer.id }),
                                 dbService.update(model.wallet, { id: distributorWallet.id }, { mainWallet: distClosingBalance, updatedBy: distributor.id }),
@@ -1337,7 +1287,6 @@ const recharge = async (req, res) => {
                                 dbService.update(model.wallet, { id: superAdminWallet.id }, { mainWallet: adminClosingBalance, updatedBy: superAdmin.id })
                             ]);
 
-                            // Create wallet history records
                             await Promise.all([
                                 dbService.createOne(model.walletHistory, {
                                     refId: retailer.id,
@@ -1421,7 +1370,6 @@ const recharge = async (req, res) => {
         const closingMainWallet = isSuccess ? round2(openingMainWallet + retailerNetCredit) : openingMainWallet;
         if(isSuccess) response.operatorName = operator?.operatorName;
         
-        // Prepare service transaction data
         const serviceTransactionData = {
             refId: user.id,
             companyId: user.companyId,
@@ -1449,7 +1397,6 @@ const recharge = async (req, res) => {
             addedBy: user.id
         };
 
-        // Execute wallet update and service transaction creation in parallel
         const updates = [
             dbService.createOne(model.serviceTransaction, serviceTransactionData)
         ];
@@ -1465,7 +1412,6 @@ const recharge = async (req, res) => {
 
         const [rechargeRecord] = await Promise.all(updates);
 
-        // Prepare response data (only orderid and apiResponse)
         const responseData = {
             orderid,
             apiResponse: response
@@ -1502,8 +1448,6 @@ const findMobileNumberOperator = async (req, res) => {
         const response = await inspayService.operatorFetch(mobileNumber);
 
         console.log('response', response);
-
-        // Check if response exists
         if (!response) {
             return res.failure({ message: 'Failed to fetch operator information' });
         }
