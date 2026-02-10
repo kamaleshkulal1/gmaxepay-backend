@@ -90,11 +90,13 @@ const getDashboard = async (req, res) => {
         nsdlPanSuccessCount,
         nsdlPanPendingCount,
         nsdlPanFailedCount,
+        nsdlPanRetailerComm,
         aeps1TotalVolume,
         aeps1TotalCount,
         aeps1SuccessCount,
         aeps1PendingCount,
         aeps1FailedCount,
+        aeps1RetailerComm,
         aeps2TotalVolume,
         aeps2TotalCount,
         aeps2SuccessCount,
@@ -105,11 +107,13 @@ const getDashboard = async (req, res) => {
         mobileSuccessCount,
         mobilePendingCount,
         mobileFailedCount,
+        mobileRetailerComm,
         dthTotalVolume,
         dthTotalCount,
         dthSuccessCount,
         dthPendingCount,
         dthFailedCount,
+        dthRetailerComm,
         payoutTotalVolume,
         payoutTotalCount,
         payoutSuccessCount,
@@ -128,6 +132,9 @@ const getDashboard = async (req, res) => {
         model.serviceTransaction.count({
           where: { ...nsdlPanWhere, status: 'FAILURE' }
         }),
+        model.serviceTransaction.sum('retailerCom', {
+          where: { ...nsdlPanWhere, status: 'SUCCESS' }
+        }),
 
         // AEPS 1
         model.aepsHistory.sum('amount', { where: aeps1Where }),
@@ -140,6 +147,9 @@ const getDashboard = async (req, res) => {
         }),
         model.aepsHistory.count({
           where: { ...aeps1Where, status: 'FAILED' }
+        }),
+        model.aepsHistory.sum('retailerCom', {
+          where: { ...aeps1Where, status: 'SUCCESS' }
         }),
 
         // AEPS 2 (Practomind)
@@ -179,6 +189,9 @@ const getDashboard = async (req, res) => {
         model.serviceTransaction.count({
           where: { ...mobileWhere, status: 'FAILURE' }
         }),
+        model.serviceTransaction.sum('retailerCom', {
+          where: { ...mobileWhere, status: 'SUCCESS' }
+        }),
 
         // DTH
         model.serviceTransaction.sum('amount', { where: dthWhere }),
@@ -191,6 +204,9 @@ const getDashboard = async (req, res) => {
         }),
         model.serviceTransaction.count({
           where: { ...dthWhere, status: 'FAILURE' }
+        }),
+        model.serviceTransaction.sum('retailerCom', {
+          where: { ...dthWhere, status: 'SUCCESS' }
         }),
 
         // Payout
@@ -207,6 +223,14 @@ const getDashboard = async (req, res) => {
         })
       ]);
 
+      // Calculate total retailer commission from all services
+      const retailerCommission = roundToTwo(
+        (nsdlPanRetailerComm || 0) +
+        (aeps1RetailerComm || 0) +
+        (mobileRetailerComm || 0) +
+        (dthRetailerComm || 0)
+      );
+
       return res.success({
         message: 'Dashboard statistics fetched successfully',
         data: {
@@ -216,7 +240,10 @@ const getDashboard = async (req, res) => {
             companyId,
             userId
           },
-          role: userRole,
+          commissions: {
+            retailerCommission,
+            totalCommission: retailerCommission
+          },
           services: {
             nsdlPan: {
               label: 'NSDL Pan',
@@ -493,7 +520,6 @@ const getDashboard = async (req, res) => {
             companyId,
             userId
           },
-          role: userRole,
           downlineCount: downlineUserIds.length,
           todayJoinedDownlineCount,
           commissions: {
@@ -811,7 +837,6 @@ const getDashboard = async (req, res) => {
             companyId,
             userId
           },
-          role: userRole,
           downline: {
             distributorCount: distributorIds.length,
             retailerCount: retailerIds.length,
