@@ -111,6 +111,21 @@ const getDashboard = async (req, res) => {
       status: 'SUCCESS'
     };
 
+    // --- AEPS payouts from payoutHistory (bank payouts from AEPS wallets) ---
+    const aeps1PayoutWhere = {
+      ...dateWhere,
+      ...companyFilter,
+      walletType: 'apes1Wallet',
+      status: 'SUCCESS'
+    };
+
+    const aeps2PayoutWhere = {
+      ...dateWhere,
+      ...companyFilter,
+      walletType: 'apes2Wallet',
+      status: 'SUCCESS'
+    };
+
     // --- Execute all aggregates in parallel for performance ---
     const [
       // Global walletHistory
@@ -123,6 +138,11 @@ const getDashboard = async (req, res) => {
       // AEPS2 (Practomind)
       practomindTotalAmount,
       practomindSuccessCount,
+      // AEPS payouts (bank) from payoutHistory
+      aeps1PayoutTotalAmount,
+      aeps1PayoutSuccessCount,
+      aeps2PayoutTotalAmount,
+      aeps2PayoutSuccessCount,
       // BBPS
       bbpsTotalAmount,
       bbpsTotalSuperadminComm,
@@ -162,6 +182,14 @@ const getDashboard = async (req, res) => {
           transactionType: 'CW'
         }
       }),
+
+      // AEPS1 payouts (ASL) from payoutHistory using apes1Wallet
+      model.payoutHistory.sum('amount', { where: aeps1PayoutWhere }),
+      model.payoutHistory.count({ where: aeps1PayoutWhere }),
+
+      // AEPS2 payouts (Practomind) from payoutHistory using apes2Wallet
+      model.payoutHistory.sum('amount', { where: aeps2PayoutWhere }),
+      model.payoutHistory.count({ where: aeps2PayoutWhere }),
 
       // BBPS
       model.billPaymentHistory.sum('amount', { where: bbpsSuccessWhere }),
@@ -204,17 +232,25 @@ const getDashboard = async (req, res) => {
           totalSuccessAmount: Number(walletTotalSuccessAmount || 0)
         },
         modules: {
-          // Combined AEPS (ASL + Practomind)
-          aeps: {
-            label: 'AEPS',
-            // Sum of AEPS1 (ASL) and AEPS2 (Practomind) successful amounts
+          // ASL (AEPS1) - CW + Payouts
+          asl: {
+            label: 'ASL',
             totalAmountSuccess:
               Number(aeps1TotalAmount || 0) +
-              Number(practomindTotalAmount || 0),
-            // Currently only AEPS1 (ASL) persists superadminComm explicitly
+              Number(aeps1PayoutTotalAmount || 0),
             totalSuperadminCommission: Number(aeps1TotalSuperadminComm || 0),
-            // Combined success count
-            successCount: (aeps1SuccessCount || 0) + (practomindSuccessCount || 0)
+            successCount: (aeps1SuccessCount || 0) + (aeps1PayoutSuccessCount || 0)
+          },
+          // Practomind (AEPS2) - CW + Payouts
+          practomind: {
+            label: 'Practomind',
+            totalAmountSuccess:
+              Number(practomindTotalAmount || 0) +
+              Number(aeps2PayoutTotalAmount || 0),
+            // No explicit superadminComm field persisted for practomind; keep 0 for now
+            totalSuperadminCommission: 0,
+            successCount:
+              (practomindSuccessCount || 0) + (aeps2PayoutSuccessCount || 0)
           },
           // BBPS
           bbps: {
@@ -225,6 +261,22 @@ const getDashboard = async (req, res) => {
           },
           // Inspay grouped by service
           inspay: {
+            // Combined Inspay (Mobile + DTH + PAN)
+            total: {
+              label: 'Inspay',
+              totalAmountSuccess:
+                Number(inspayMobileTotalAmount || 0) +
+                Number(inspayDthTotalAmount || 0) +
+                Number(inspayPanTotalAmount || 0),
+              totalSuperadminCommission:
+                Number(inspayMobileTotalSuperadminComm || 0) +
+                Number(inspayDthTotalSuperadminComm || 0) +
+                Number(inspayPanTotalSuperadminComm || 0),
+              successCount:
+                (inspayMobileSuccessCount || 0) +
+                (inspayDthSuccessCount || 0) +
+                (inspayPanSuccessCount || 0)
+            },
             mobile: {
               label: 'Inspay Mobile',
               totalAmountSuccess: Number(inspayMobileTotalAmount || 0),
