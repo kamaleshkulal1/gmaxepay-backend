@@ -204,18 +204,17 @@ const getDashboard = async (req, res) => {
           totalSuccessAmount: Number(walletTotalSuccessAmount || 0)
         },
         modules: {
-          // AEPS1 -> ASL
-          aeps1: {
-            label: 'AEPS1 (ASL)',
-            totalAmountSuccess: Number(aeps1TotalAmount || 0),
+          // Combined AEPS (ASL + Practomind)
+          aeps: {
+            label: 'AEPS',
+            // Sum of AEPS1 (ASL) and AEPS2 (Practomind) successful amounts
+            totalAmountSuccess:
+              Number(aeps1TotalAmount || 0) +
+              Number(practomindTotalAmount || 0),
+            // Currently only AEPS1 (ASL) persists superadminComm explicitly
             totalSuperadminCommission: Number(aeps1TotalSuperadminComm || 0),
-            successCount: aeps1SuccessCount || 0
-          },
-          // AEPS2 -> Practomind
-          aeps2: {
-            label: 'AEPS2 (Practomind)',
-            totalAmountSuccess: Number(practomindTotalAmount || 0),
-            successCount: practomindSuccessCount || 0
+            // Combined success count
+            successCount: (aeps1SuccessCount || 0) + (practomindSuccessCount || 0)
           },
           // BBPS
           bbps: {
