@@ -1776,7 +1776,7 @@ const payout = async (req, res) => {
         const responseData = {
             transactionID: transactionID,
             status: payoutHistoryData?.status || aslResponse?.status,
-            orderId: aslResponse?.orderId || payoutHistoryData?.orderId,
+            orderId: aslResponse?.orderid,
             bankref: aslResponse.referenceId,
             aepsType: normalizedAepsType,
             remark: aslResponse?.remark,
