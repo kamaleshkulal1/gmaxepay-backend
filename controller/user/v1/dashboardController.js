@@ -12,9 +12,9 @@ const roundToTwo = (num) => {
 
 const getDashboard = async (req, res) => {
   try {
-    const userId = req.user && req.user.id;
-    const companyId = req.user && req.user.companyId;
-    const userRole = req.user && req.user.userRole;
+    const userId =  req.user.id;
+    const companyId =  req.user.companyId;
+    const userRole = req.user.userRole;
 
     if (!userId) {
       return res.failure({ message: 'User ID is required' });
