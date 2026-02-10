@@ -152,7 +152,18 @@ const getDashboard = async (req, res) => {
       // Inspay PAN
       inspayPanTotalAmount,
       inspayPanTotalSuperadminComm,
-      inspayPanSuccessCount
+      inspayPanSuccessCount,
+      // Global status counts (FAILED / PENDING)
+      aeps1FailedCount,
+      aeps1PendingCount,
+      practomindFailedCount,
+      practomindPendingCount,
+      bbpsFailedCount,
+      bbpsPendingCount,
+      inspayFailedCount,
+      inspayPendingCount,
+      payoutFailedCount,
+      payoutPendingCount
     ] = await Promise.all([
       // walletHistory aggregates (commission based on credited amount)
       model.walletHistory.sum('credit', { where: walletWhere }),
@@ -211,8 +222,81 @@ const getDashboard = async (req, res) => {
       model.serviceTransaction.sum('superadminComm', {
         where: inspayPanWhere
       }),
-      model.serviceTransaction.count({ where: inspayPanWhere })
+      model.serviceTransaction.count({ where: inspayPanWhere }),
+
+      // --- FAILED / PENDING status counts across all services ---
+
+      // AEPS1 (ASL) failures & pendings from aepsHistory
+      model.aepsHistory.count({
+        where: { ...dateWhere, status: 'FAILED' }
+      }),
+      model.aepsHistory.count({
+        where: { ...dateWhere, status: 'PENDING' }
+      }),
+
+      // AEPS2 (Practomind) failures & pendings from practomindAepsHistory
+      model.practomindAepsHistory.count({
+        where: {
+          ...dateWhere,
+          transactionStatus: { [Op.iLike]: 'failed%' }
+        }
+      }),
+      model.practomindAepsHistory.count({
+        where: {
+          ...dateWhere,
+          transactionStatus: { [Op.iLike]: 'pending%' }
+        }
+      }),
+
+      // BBPS failures & pendings from billPaymentHistory
+      model.billPaymentHistory.count({
+        where: { ...dateWhere, paymentStatus: 'Failed' }
+      }),
+      model.billPaymentHistory.count({
+        where: { ...dateWhere, paymentStatus: 'Pending' }
+      }),
+
+      // Inspay (Mobile/DTH/PAN) failures & pendings from serviceTransaction
+      model.serviceTransaction.count({
+        where: { ...dateWhere, status: 'FAILURE' }
+      }),
+      model.serviceTransaction.count({
+        where: { ...dateWhere, status: 'PENDING' }
+      }),
+
+      // Payout failures & pendings from payoutHistory
+      model.payoutHistory.count({
+        where: { ...dateWhere, status: 'FAILED' }
+      }),
+      model.payoutHistory.count({
+        where: { ...dateWhere, status: 'PENDING' }
+      })
     ]);
+
+    // Aggregate overall status counts
+    const totalSuccessCount =
+      (aeps1SuccessCount || 0) +
+      (practomindSuccessCount || 0) +
+      (aeps1PayoutSuccessCount || 0) +
+      (aeps2PayoutSuccessCount || 0) +
+      (bbpsSuccessCount || 0) +
+      (inspayMobileSuccessCount || 0) +
+      (inspayDthSuccessCount || 0) +
+      (inspayPanSuccessCount || 0);
+
+    const totalFailedCount =
+      (aeps1FailedCount || 0) +
+      (practomindFailedCount || 0) +
+      (bbpsFailedCount || 0) +
+      (inspayFailedCount || 0) +
+      (payoutFailedCount || 0);
+
+    const totalPendingCount =
+      (aeps1PendingCount || 0) +
+      (practomindPendingCount || 0) +
+      (bbpsPendingCount || 0) +
+      (inspayPendingCount || 0) +
+      (payoutPendingCount || 0);
 
     return res.success({
       message: 'Dashboard statistics fetched successfully',
@@ -224,6 +308,11 @@ const getDashboard = async (req, res) => {
         wallet: {
           totalSuperadminCommission: Number(walletTotalSuperadminComm || 0),
           totalSuccessAmount: Number(walletTotalSuccessAmount || 0)
+        },
+        statusSummary: {
+          totalSuccessCount,
+          totalFailedCount,
+          totalPendingCount
         },
         modules: {
           // ASL (AEPS1) - CW + Payouts

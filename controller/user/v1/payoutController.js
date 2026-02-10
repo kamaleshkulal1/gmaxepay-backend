@@ -1775,8 +1775,11 @@ const payout = async (req, res) => {
         // Prepare response data (without payoutHistory object)
         const responseData = {
             transactionID: transactionID,
-            status: payoutHistoryData.status,
+            status: payoutHistoryData?.status || aslResponse?.status,
+            orderId: aslResponse?.orderId,
+            bankref: aslResponse?.referenceId || aslResponse?.orderId,
             aepsType: normalizedAepsType,
+            remark: aslResponse?.remark,
             [normalizedAepsType.toLowerCase()]: {
                 openingBalance: aepsOpeningBalance,
                 closingBalance: aepsClosingBalance
