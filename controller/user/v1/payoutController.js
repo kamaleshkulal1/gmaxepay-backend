@@ -62,7 +62,6 @@ const payout = async (req, res) => {
             return res.failure({ message: 'Latitude and longitude are required' });
         }
         
-        // Normalize AEPS type
         const normalizedAepsType = aepsType.toUpperCase();
         const walletType = normalizedAepsType === 'AEPS1' ? 'apes1Wallet' : 'apes2Wallet';
         
@@ -99,7 +98,9 @@ const payout = async (req, res) => {
             type: mode === 'wallet' ? 'internal' : 'external',
             transactionID: transactionID,
             amount: payoutAmount,
-            walletType: walletType,
+            // For bank payout, record which AEPS wallet was used (apes1Wallet / apes2Wallet).
+            // For internal wallet transfers, we keep this null (no specific single wallet).
+            walletType: mode === 'bank' ? walletType : null,
             aepsType: normalizedAepsType,
             openingBalance: aepsOpeningBalance,
             closingBalance: aepsClosingBalance,
@@ -691,7 +692,7 @@ const payout = async (req, res) => {
                             await dbService.createOne(model.walletHistory, {
                                 refId: distributor.id,
                                 companyId: user.companyId,
-                                walletType: 'mainWallet',
+                                walletType: walletType,
                                 operator: operatorName,
                                 remark: remarkText,
                                 amount: totalDebitFromDistributor,
@@ -844,11 +845,35 @@ const payout = async (req, res) => {
                                 { mainWallet: adminClosingBalance, updatedBy: superAdmin.id }
                             );
 
-                            // Wallet history for Distributor (debit)
+                            // Wallet history for Distributor (debit from AEPS wallet)
                             await dbService.createOne(model.walletHistory, {
                                 refId: distributor.id,
                                 companyId: user.companyId,
-                                walletType: 'mainWallet',
+                                walletType: walletType,
+                                operator: operatorName,
+                                remark: remarkText,
+                                amount: totalDebitFromDistributor,
+                                comm: 0,
+                                surcharge: totalDebitFromDistributor,
+                                openingAmt: distOpeningBalance,
+                                closingAmt: distClosingBalance,
+                                credit: 0,
+                                debit: totalDebitFromDistributor,
+                                transactionId: transactionID,
+                                paymentStatus: 'SUCCESS',
+                                beneficiaryName: customerBank.beneficiaryName || null,
+                                beneficiaryAccountNumber: customerBank.accountNumber,
+                                beneficiaryBankName: customerBank.bankName || null,
+                                beneficiaryIfsc: customerBank.ifsc,
+                                paymentMode: paymentMode,
+                                addedBy: distributor.id,
+                                updatedBy: distributor.id
+                            });
+                            // Wallet history for Distributor (debit from AEPS wallet)
+                            await dbService.createOne(model.walletHistory, {
+                                refId: distributor.id,
+                                companyId: user.companyId,
+                                walletType: walletType,
                                 operator: operatorName,
                                 remark: remarkText,
                                 amount: totalDebitFromDistributor,
@@ -1017,11 +1042,11 @@ const payout = async (req, res) => {
                                 { mainWallet: adminClosingBalance, updatedBy: superAdmin.id }
                             );
 
-                            // Wallet history for Retailer (debit)
+                            // Wallet history for Retailer (debit from AEPS wallet)
                             await dbService.createOne(model.walletHistory, {
                                 refId: retailer.id,
                                 companyId: user.companyId,
-                                walletType: 'mainWallet',
+                                walletType: walletType,
                                 operator: operatorName,
                                 remark: remarkText,
                                 amount: totalDebitFromRetailer,
@@ -1185,7 +1210,7 @@ const payout = async (req, res) => {
                                 await dbService.createOne(model.walletHistory, {
                                     refId: retailer.id,
                                     companyId: user.companyId,
-                                    walletType: 'mainWallet',
+                                    walletType: walletType,
                                     operator: operatorName,
                                     remark: remarkText,
                                     amount: totalDebitFromRetailer,
@@ -1366,7 +1391,7 @@ const payout = async (req, res) => {
                                         dbService.createOne(model.walletHistory, {
                                             refId: retailer.id,
                                             companyId: user.companyId,
-                                            walletType: 'mainWallet',
+                                            walletType: walletType,
                                             operator: operatorName,
                                             remark: remarkText,
                                             amount: totalDebitFromRetailer,
@@ -1550,7 +1575,7 @@ const payout = async (req, res) => {
                                         dbService.createOne(model.walletHistory, {
                                             refId: retailer.id,
                                             companyId: user.companyId,
-                                            walletType: 'mainWallet',
+                                            walletType: walletType,
                                             operator: operatorName,
                                             remark: remarkText,
                                             amount: totalDebitFromRetailer,
