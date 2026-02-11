@@ -2882,7 +2882,7 @@ const resendMPINOTP = async (mobileNo, companyId, req) => {
     );
 
     // Send SMS for MPIN reset
-    const msg = `Dear user, your OTP for MPIN reset is ${code}. Team Gmaxepay`;
+    const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;;
     const smsResult = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
 
     // Build dataToken for OTP verification & MPIN reset flow

@@ -19,5 +19,4 @@ router.post('/recent-banks', authentication, aepsController.recentBanks);
 router.post('/transaction-history', authentication, aepsController.aepsTransactionHistory);
 
 
-
 module.exports = router;
