@@ -11,5 +11,6 @@ router.post('/recharge-history', authentication, rechargeController.getRechargeH
 router.post('/rechargeReports', authentication, rechargeController.getRechargeReports);
 router.post('/getUserRechargeReports', authentication, rechargeController.getDownlineRechargeReports);
 router.post('/recent-history', authentication, rechargeController.recentRechargeHistory);
+router.delete('/delete-recharge-plan', authentication, rechargeController.deleteOldRechargePlan);
 
 module.exports = router;

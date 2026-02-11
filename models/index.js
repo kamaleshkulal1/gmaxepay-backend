@@ -42,6 +42,9 @@ db.serviceCharge = require('./serviceCharge');
 db.operator = require('./operatorMaster');
 db.operatorType = require('./operatorTypeList');
 db.category = require('./category');
+db.findMobileOperators = require('./findMobileOperators');
+db.rechargePlanFetch = require('./rechargePlanFetch');
+db.rechargeOfferFetch = require('./rechargeOfferFetch');
 
 // Location Models
 db.state = require('./state');
