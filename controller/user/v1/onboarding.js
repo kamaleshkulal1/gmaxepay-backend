@@ -263,20 +263,20 @@ const getPendingSteps = (ctx) => {
   const panUpload = !!(user.isPanUploaded);
   
   // Check if verification is done via user flags (for manual verification)
-  const aadharVerifyFlag = !!(user.isAadharUploaded);
-  const panVerifyFlag = !!(user.isPanUploaded);
+  const aadharVerifyFlag = !!(user.isAadharUploaded || userDetails.isAadharUploaded);
+  const panVerifyFlag = !!(user.isPanUploaded || userDetails.isPanUploaded);
   
   // If verification flag is set, mark all sub-steps as done
   const aadhaarSubSteps = [
     { key: 'connect', label: 'Connect Aadhaar', done: aadharVerifyFlag || aadhaarConnect },
-    { key: 'download', label: 'Download Aadhaar', done: aadharVerifyFlag },
-    { key: 'upload', label: 'Upload Aadhaar Images', done: aadharVerifyFlag }
+    { key: 'download', label: 'Download Aadhaar', done: aadharVerifyFlag || aadhaarDownload },
+    { key: 'upload', label: 'Upload Aadhaar Images', done: aadharVerifyFlag || aadhaarUpload }
   ];
   
   const panSubSteps = [
     { key: 'connect', label: 'Connect PAN', done: panVerifyFlag || panConnect },
     { key: 'download', label: 'Download PAN', done: panVerifyFlag || panDownload },
-    { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag}
+    { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag || panUpload }
   ];
   
   // Aadhaar is done if: verification flag is set OR all Digilocker steps are complete
