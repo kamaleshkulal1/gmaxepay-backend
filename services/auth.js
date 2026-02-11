@@ -1837,8 +1837,8 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
     }
 
     // Check if user already has an MPIN set up
-    if (user.secureKey && user.isMpinEnabled === true) {
-      return {
+    if (user.secureKey && !user.isMpinSetup && user.isMpinEnabled === true) {
+      return { 
         flag: true,
         msg: 'MPIN already set. Please use verify MPIN to login.'
       };
@@ -3050,7 +3050,9 @@ const verifyForgetMPINOTP = async (token, otp, companyId) => {
     await dbService.update(
       model.user,
       { id: user.id },
-      { isMpinSetup: true }
+      { isMpinSetup: true,
+        secureKey: null
+      }
     );
 
     // Generate a new token for MPIN setup (can reuse same structure; different purpose)
