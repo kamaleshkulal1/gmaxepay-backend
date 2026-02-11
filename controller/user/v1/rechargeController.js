@@ -1468,128 +1468,25 @@ const findMobileNumberOperator = async (req, res) => {
             return res.failure({ message: 'Mobile number is required' });
         }
 
-        // Check if mobile number exists in database
         let existingRecord = await dbService.findOne(model.findMobileOperators, { mobileNumber });
         
-        // If record exists in DB, check if we need to update
         if (existingRecord) {
-            // Check if latest recharge was successful for this mobile number
-            const latestRecharge = await dbService.findOne(
-                model.serviceTransaction,
-                { mobileNumber, serviceType: 'MobileRecharge' },
-                { order: [['createdAt', 'DESC']] }
-            );
-            const latestRechargeSuccess = latestRecharge && 
-                (latestRecharge.status === 'SUCCESS' || latestRecharge.status === 'Success');
+            const response = existingRecord.response;
+            const operatorName = response?.company || response?.operatorName;
             
-            // Only hit API if latest recharge was successful (to check for operator changes)
-            if (latestRechargeSuccess) {
-                // Fetch from API to check for operator changes
-                const response = await inspayService.operatorFetch(mobileNumber);
-                
-                console.log('response', response);
-                if (!response) {
-                    // API failed, return existing record
-                    const oldResponse = existingRecord.response;
-                    const oldOperatorName = oldResponse?.company || oldResponse?.operatorName;
-                    if (oldOperatorName) {
-                        const oldOperatorNameUpper = oldOperatorName.toUpperCase();
-                        if (oldOperatorNameUpper !== 'BSNL') {
-                            const operator = await dbService.findOne(model.operator, { operatorName: oldOperatorNameUpper });
-                            if (operator) {
-                                oldResponse.operatorCode = operator.operatorCode;
-                            }
-                        }
-                    }
-                    return res.success({ message: 'Operator retrieved successfully (from cache)', data: oldResponse });
-                }
-                
-                const operatorName = response?.company || response?.operatorName;
-                if (!operatorName) {
-                    // API response invalid, return existing record
-                    const oldResponse = existingRecord.response;
-                    const oldOperatorName = oldResponse?.company || oldResponse?.operatorName;
-                    if (oldOperatorName) {
-                        const oldOperatorNameUpper = oldOperatorName.toUpperCase();
-                        if (oldOperatorNameUpper !== 'BSNL') {
-                            const operator = await dbService.findOne(model.operator, { operatorName: oldOperatorNameUpper });
-                            if (operator) {
-                                oldResponse.operatorCode = operator.operatorCode;
-                            }
-                        }
-                    }
-                    return res.success({ message: 'Operator retrieved successfully (from cache)', data: oldResponse });
-                }
-                
+            if (operatorName) {
                 const operatorNameUpper = operatorName.toUpperCase();
                 if (operatorNameUpper !== 'BSNL') {
                     const operator = await dbService.findOne(model.operator, { operatorName: operatorNameUpper });
-                    if (!operator) {
-                        // Operator not found, return existing record
-                        const oldResponse = existingRecord.response;
-                        const oldOperatorName = oldResponse?.company || oldResponse?.operatorName;
-                        if (oldOperatorName) {
-                            const oldOperatorNameUpper2 = oldOperatorName.toUpperCase();
-                            if (oldOperatorNameUpper2 !== 'BSNL') {
-                                const operator2 = await dbService.findOne(model.operator, { operatorName: oldOperatorNameUpper2 });
-                                if (operator2) {
-                                    oldResponse.operatorCode = operator2.operatorCode;
-                                }
-                            }
-                        }
-                        return res.success({ message: 'Operator retrieved successfully (from cache)', data: oldResponse });
-                    }
-                    response.operatorCode = operator.operatorCode;
-                }
-                
-                // Check if operator has changed
-                const oldOperatorName = existingRecord.response?.company || existingRecord.response?.operatorName;
-                const operatorChanged = oldOperatorName && oldOperatorName.toUpperCase() !== operatorNameUpper;
-                
-                // Update only if operator changed
-                if (operatorChanged) {
-                    await dbService.update(
-                        model.findMobileOperators,
-                        { mobileNumber },
-                        { response, updatedAt: new Date() }
-                    );
-                }
-                
-                if (response.status === 'Success' || response.status.toUpperCase() === 'SUCCESS') {
-                    return res.success({ message: 'Operator retrieved successfully', data: response });
-                } else {
-                    // API response not success, return existing record
-                    const oldResponse = existingRecord.response;
-                    const oldOperatorName2 = oldResponse?.company || oldResponse?.operatorName;
-                    if (oldOperatorName2) {
-                        const oldOperatorNameUpper2 = oldOperatorName2.toUpperCase();
-                        if (oldOperatorNameUpper2 !== 'BSNL') {
-                            const operator2 = await dbService.findOne(model.operator, { operatorName: oldOperatorNameUpper2 });
-                            if (operator2) {
-                                oldResponse.operatorCode = operator2.operatorCode;
-                            }
-                        }
-                    }
-                    return res.success({ message: 'Operator retrieved successfully (from cache)', data: oldResponse });
-                }
-            } else {
-                // Latest recharge was not successful, return existing record from DB
-                const oldResponse = existingRecord.response;
-                const oldOperatorName = oldResponse?.company || oldResponse?.operatorName;
-                if (oldOperatorName) {
-                    const oldOperatorNameUpper = oldOperatorName.toUpperCase();
-                    if (oldOperatorNameUpper !== 'BSNL') {
-                        const operator = await dbService.findOne(model.operator, { operatorName: oldOperatorNameUpper });
-                        if (operator) {
-                            oldResponse.operatorCode = operator.operatorCode;
-                        }
+                    if (operator) {
+                        response.operatorCode = operator.operatorCode;
                     }
                 }
-                return res.success({ message: 'Operator retrieved successfully (from cache)', data: oldResponse });
             }
+            
+            return res.success({ message: 'Operator retrieved successfully', data: response });
         }
 
-        // No existing record, fetch from API
         const response = await inspayService.operatorFetch(mobileNumber);
 
         console.log('response', response);
