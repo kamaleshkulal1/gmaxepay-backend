@@ -518,6 +518,14 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true
     },
+    isAadharUploaded: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    isPanUploaded: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     resetPan: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

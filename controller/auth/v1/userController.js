@@ -587,5 +587,5 @@ module.exports = {
     resendTemporaryPassword,
     verifyForgotPasswordOTP,
     requestResendTemporaryPassword,
-    verifyResendTemporaryPasswordOTP
+    verifyResendTemporaryPasswordOTP,
 };

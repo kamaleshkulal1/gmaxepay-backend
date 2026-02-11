@@ -197,6 +197,8 @@ const loadContextByToken = async (token) => {
     emailVerify: user.emailVerify,
     aadharVerify: user.aadharVerify,
     panVerify: user.panVerify,
+    isAadharUploaded: user.isAadharUploaded,
+    isPanUploaded: user.isPanUploaded,
     shopDetailsVerify: user.shopDetailsVerify,
     bankDetailsVerify: user.bankDetailsVerify,
     profileImageWithShopVerify: user.profileImageWithShopVerify,
@@ -298,29 +300,34 @@ const getPendingSteps = (ctx) => {
   const aadhaarDownload = !!(aadhaarDoc && aadhaarDoc.name); // If name exists, document is downloaded
   const aadhaarFrontImageKey = extractS3Key(aadharFrontImage);
   const aadhaarBackImageKey = extractS3Key(aadharBackImage);
-  const aadhaarUpload = !!(aadhaarFrontImageKey && aadhaarBackImageKey);
+  const aadhaarUpload = !!(user.isAadharUploaded);
   
   // Check PAN sub-steps
   const panConnect = !!(panDoc && panDoc.verificationId);
   const panDownload = !!(panDoc && panDoc.panNumber); // If panNumber exists, document is downloaded
   const panFrontImageKey = extractS3Key(panCardFrontImage);
   const panBackImageKey = extractS3Key(panCardBackImage);
-  const panUpload = !!(panFrontImageKey && panBackImageKey);
+  const panUpload = !!(user.isPanUploaded);
+
+  // Check if verification is done via manual upload flags
+  const aadharVerifyFlag = !!(user.isAadharUploaded || userDetails.isAadharUploaded);
+  const panVerifyFlag = !!(user.isPanUploaded || userDetails.isPanUploaded);
   
   const aadhaarSubSteps = [
-    { key: 'connect', label: 'Connect Aadhaar', done: aadhaarConnect },
-    { key: 'download', label: 'Download Aadhaar', done: aadhaarDownload },
-    { key: 'upload', label: 'Upload Aadhaar Images', done: aadhaarUpload }
+    { key: 'connect', label: 'Connect Aadhaar', done: aadharVerifyFlag || aadhaarConnect },
+    { key: 'download', label: 'Download Aadhaar', done: aadharVerifyFlag || aadhaarDownload },
+    { key: 'upload', label: 'Upload Aadhaar Images', done: aadharVerifyFlag  }
   ];
   
   const panSubSteps = [
-    { key: 'connect', label: 'Connect PAN', done: panConnect },
-    { key: 'download', label: 'Download PAN', done: panDownload },
-    { key: 'upload', label: 'Upload PAN Images', done: panUpload }
+    { key: 'connect', label: 'Connect PAN', done: panVerifyFlag || panConnect },
+    { key: 'download', label: 'Download PAN', done: panVerifyFlag || panDownload },
+    { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag  }
   ];
   
-  const aadhaarAllDone = aadhaarConnect && aadhaarDownload && aadhaarUpload;
-  const panAllDone = panConnect && panDownload && panUpload;
+  // Overall done: either manual flag is set OR all digilocker/image steps are complete
+  const aadhaarAllDone = aadharVerifyFlag || (aadhaarConnect && aadhaarDownload && aadhaarUpload);
+  const panAllDone = panVerifyFlag || (panConnect && panDownload && panUpload);
   
   // Check shop details verification using shopDetailsVerify field from user
   const shopDetailsDone = !!(user.shopDetailsVerify || userDetails?.shopDetailsVerify);
@@ -2207,7 +2214,8 @@ const uploadAadharDocuments = async (req, res) => {
 
     const updateData = {
       aadharFrontImage: frontImageS3Key, 
-      aadharBackImage: backImageS3Key
+      aadharBackImage: backImageS3Key,
+      isAadharUploaded: true
     };
     
     if (aadharDetailsPayload) {
@@ -2412,7 +2420,8 @@ const uploadPanDocuments = async (req, res) => {
                 const updateData = {
                   panCardFrontImage: frontImageS3Key,
                   panCardBackImage: backImageS3Key,
-                  panVerify: true
+                  panVerify: true,
+                  isPanUploaded: true
                 };
                 
                 await dbService.update(model.user, { id: ctx.user.id }, updateData);
@@ -2785,7 +2794,8 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
 
     const updateData = {
       aadharFrontImage: frontImageS3Key, 
-      aadharBackImage: backImageS3Key
+      aadharBackImage: backImageS3Key,
+      isAadharUploaded: true
     };
     
     if (aadharDetailsPayload) {

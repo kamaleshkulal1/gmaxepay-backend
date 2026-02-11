@@ -95,7 +95,6 @@ const logoutAllUsersAtMidnight = async () => {
         const todayDateStr = getIndianDateOnly();
         const now = getCurrentISTTime();
         
-        // Get all active logins
         const activeLogins = await dbService.findAll(model.aepsDailyLogin, {
             isLoggedIn: true
         });
@@ -104,7 +103,6 @@ const logoutAllUsersAtMidnight = async () => {
         
         if (activeLogins && activeLogins.length > 0) {
             for (const login of activeLogins) {
-                // Logout all active sessions (they will be from previous day or current day)
                 await dbService.update(
                     model.aepsDailyLogin,
                     { id: login.id },
@@ -131,10 +129,7 @@ const logoutAllUsersAtMidnight = async () => {
     }
 };
 
-/**
- * Get time until next midnight IST in milliseconds
- * @returns {number} - Milliseconds until next midnight IST
- */
+
 const getTimeUntilNextMidnightIST = () => {
     const now = new Date();
     const todayIST = getIndianDateOnly();
