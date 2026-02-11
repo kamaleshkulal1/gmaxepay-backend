@@ -184,9 +184,23 @@ const getRechargeReports = async (req, res) => {
                     searchConditions.push({
                         refId: { [Op.in]: matchingUserIds }
                     });
+                } else {
+                    // If user search found no matching users, return empty result
+                    return res.status(200).send({
+                        status: 'SUCCESS',
+                        message: 'Recharge reports retrieved successfully',
+                        data: [],
+                        total: 0,
+                        paginator: {
+                            page: options.page || 1,
+                            paginate: options.paginate || 10,
+                            totalPages: 0
+                        }
+                    });
                 }
             }
 
+            // Only apply search conditions if there are any valid conditions
             if (searchConditions.length > 0) {
                 query = {
                     ...query,
@@ -194,19 +208,8 @@ const getRechargeReports = async (req, res) => {
                         { [Op.or]: searchConditions }
                     ]
                 };
-            } else {
-                return res.status(200).send({
-                    status: 'SUCCESS',
-                    message: 'Recharge reports retrieved successfully',
-                    data: [],
-                    total: 0,
-                    paginator: {
-                        page: options.page || 1,
-                        paginate: options.paginate || 10,
-                        totalPages: 0
-                    }
-                });
             }
+            // If no search conditions found, continue with base query (will return all records)
         }
 
         options.include = [
