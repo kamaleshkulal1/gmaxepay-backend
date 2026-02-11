@@ -14,6 +14,8 @@ router.post('/handle-2fa', userController.handle2FA);
 router.post('/set-mpin', userController.setMPIN);
 router.post('/verify-mpin', userController.verifyMPIN);
 router.post('/refresh-token', userController.refreshAccessToken);
+router.post('/forget-mpin-otp', userController.forgetMPINOTP);
+router.post('/verify-forget-mpin-otp', userController.verifyForgetMPINOTP);
 router.post('/resend-otp', userController.resendOTP);
 router.post('/logout', authentication, userController.logout);
 
