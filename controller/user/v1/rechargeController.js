@@ -4,13 +4,11 @@ const inspayService = require('../../../services/inspayService');
 const { Op, Sequelize } = require('sequelize');
 const { generateTransactionID } = require('../../../utils/transactionID');
 
-// Helper function for rounding
 const round2 = (num) => {
     const n = Number(num);
     return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : 0;
 };
 
-// Calculate commission amount based on slab
 const calcSlabAmount = (slab, baseAmount) => {
     if (!slab) return 0;
     const base = Number(baseAmount || 0);

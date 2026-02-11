@@ -1784,7 +1784,20 @@ const payout = async (req, res) => {
                 openingBalance: aepsOpeningBalance,
                 closingBalance: aepsClosingBalance
             }
-        };
+        }; 
+                
+        // Update payoutHistory with apiResponse if available
+        if (responseData) {
+            const updateCondition = payoutHistory?.id 
+                ? { id: payoutHistory.id } 
+                : { transactionID: transactionID };
+            
+            await dbService.update(
+                model.payoutHistory,
+                updateCondition,
+                { apiResponse: responseData, updatedBy: user.id }
+            );
+        }
         
         // Add main wallet info for internal transfers
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {

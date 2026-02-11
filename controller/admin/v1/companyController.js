@@ -16,14 +16,12 @@ const mapplesMap = require('../../../services/mapplesMap');
 const checkDomainIP = async (domain) => {
   const dns = require('dns').promises;
   
-  // Get whitelisted IPs from environment variable
   const companyCheckIp = process.env.COMPANY_CHECK_IP;
   
   if (!companyCheckIp) {
     throw new Error('COMPANY_CHECK_IP environment variable is not configured');
   }
 
-  // Parse the IP array from environment variable
   const whitelistedIPs = companyCheckIp
     .replace(/[\[\]]/g, '') // Remove brackets
     .split(',')

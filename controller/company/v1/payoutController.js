@@ -503,8 +503,6 @@ const payout = async (req, res) => {
     }
 }
 
-
-
 const getPayoutBankList = async (req, res) => {
     try {
         if(![2].includes(req.user.userRole)){
