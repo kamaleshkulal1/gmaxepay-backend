@@ -1240,6 +1240,81 @@ const bankList = async (req, res) => {
     }
 };
 
+const recentBanks = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, { 
+            id: req.user.id, 
+            companyId: req.user.companyId 
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const aepsTransactions = await dbService.findAll(
+            model.practomindAepsHistory,
+            {
+                refId: req.user.id,
+                companyId: req.user.companyId,
+                bankIin: { [Op.ne]: null }
+            },
+            {
+                attributes: ['bankIin', 'createdAt'],
+                sort: { createdAt: -1 }
+            }
+        );
+
+        const uniqueBankIINs = [];
+        const seenBankIINs = new Set();
+        
+        for (const txn of aepsTransactions) {
+            const bankIIN = txn.bankIin ? String(txn.bankIin).trim() : null;
+            if (bankIIN && !seenBankIINs.has(bankIIN)) {
+                seenBankIINs.add(bankIIN);
+                uniqueBankIINs.push(bankIIN);
+                if (uniqueBankIINs.length >= 4) break;
+            }
+        }
+
+        if (uniqueBankIINs.length === 0) {
+            return res.success({
+                message: 'Recent banks retrieved successfully',
+                data: []
+            });
+        }
+
+        const banks = await dbService.findAll(
+            model.practomindBankList,
+            {
+                iinno: { [Op.in]: uniqueBankIINs },
+                isActive: true
+            }
+        );
+
+        const bankMap = new Map();
+        banks.forEach((bank) => {
+            const bankData = bank.toJSON ? bank.toJSON() : bank;
+            bankMap.set(bankData.iinno, {
+                bankIIN: bankData.iinno,
+                bankName: bankData.bankName,
+                bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
+            });
+        });
+
+        const recentBanksData = uniqueBankIINs
+            .map((bankIIN) => bankMap.get(bankIIN))
+            .filter(Boolean);
+
+        return res.success({
+            message: 'Recent banks retrieved successfully',
+            data: recentBanksData
+        });
+    }
+    catch (err) {
+        console.error('Recent Banks error:', err);
+        return res.failure({ message: err.message || 'Failed to retrieve recent banks' });
+    }
+};
+
 module.exports = {
     getPractomindAepsOnboardingStatus,
     createPractomindAepsOnboarding,
@@ -1251,5 +1326,6 @@ module.exports = {
     cashWithdrawal,
     balanceEnquiry,
     miniStatement,
-    bankList
+    bankList,
+    recentBanks
 };
