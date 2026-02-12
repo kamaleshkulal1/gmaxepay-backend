@@ -107,10 +107,6 @@ const uploadImage = async (req, res) => {
   }
 };
 
-/**
- * Get all images
- * @description Get all images for a company with optional filters
- */
 const getAllImages = async (req, res) => {
   try {
     const { type, subtype } = req.query;
@@ -149,10 +145,7 @@ const getAllImages = async (req, res) => {
   }
 };
 
-/**
- * Get single image by ID
- * @description Get a specific image by its ID
- */
+
 const getImageById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -181,10 +174,7 @@ const getImageById = async (req, res) => {
   }
 };
 
-/**
- * Update image
- * @description Update image name or replace the image
- */
+
 const updateImage = async (req, res) => {
   try {
     const { id } = req.params;
@@ -244,10 +234,7 @@ const updateImage = async (req, res) => {
   }
 };
 
-/**
- * Delete image
- * @description Delete image from S3 and mark as inactive in database
- */
+
 const deleteImage = async (req, res) => {
   try {
     const { id } = req.params;
@@ -282,10 +269,7 @@ const deleteImage = async (req, res) => {
   }
 };
 
-/**
- * Get images by category
- * @description Get images grouped by type and subtype
- */
+
 const getImagesByCategory = async (req, res) => {
   try {
     const companyId = req.user?.companyId || null;
@@ -333,28 +317,20 @@ const getImagesByCategory = async (req, res) => {
   }
 };
 
-/**
- * Serve image from S3 (direct path - for backward compatibility)
- * @description Proxy endpoint to serve images from S3 bucket with CORS support
- * Uses streaming to avoid loading entire image into memory
- */
+
 const serveImage = async (req, res) => {
   try {
-    // Extract s3Key from the wildcard path
-    // The route is /images/*, so everything after /images/ is captured
     const s3Key = req.params[0];
     
     if (!s3Key) {
       return res.status(404).send('Image not found');
     }
 
-    // Get image stream from S3 (memory efficient)
     const { stream, contentType: s3ContentType, contentLength } = await imageService.getImageStreamFromS3(s3Key);
     
-    // Detect content type based on file extension (fallback if S3 doesn't provide it)
     const path = require('path');
     const ext = path.extname(s3Key).toLowerCase();
-    let contentType = s3ContentType || 'image/jpeg'; // Use S3 content type or default
+    let contentType = s3ContentType || 'image/jpeg';
     
     if (!s3ContentType) {
       switch (ext) {
@@ -413,11 +389,7 @@ const serveImage = async (req, res) => {
   }
 };
 
-/**
- * Serve secure image from S3 (encrypted key)
- * @description Secure proxy endpoint to serve images from S3 bucket using encrypted keys
- * Uses streaming to avoid loading entire image into memory
- */
+
 const serveSecureImage = async (req, res) => {
   try {
     // Extract encrypted key from the path

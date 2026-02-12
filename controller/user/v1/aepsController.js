@@ -547,6 +547,7 @@ const bioMetricVerification = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process Bio metric verification' });
     }
 }
+
 const bankKycSendOtp = async (req, res) => {
     try {
         const {latitude, longitude} = req.body;
@@ -625,6 +626,7 @@ const bankKycSendOtp = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to send Bank KYC OTP' });
     }
 }
+
 const bankKycValidateOtp = async (req, res) => {
     try {
         const { otp } = req.body;
@@ -803,6 +805,7 @@ const bankKycBiometricValidate= async (req, res) => {
         return res.failure({ message: error.message || 'Unable to process Bank KYC biometric validation' });
     }
 }
+
 const aeps2FaAuthentication = async (req, res) => {
     try{
         const { biometricData } = req.body;
@@ -1828,8 +1831,8 @@ const aepsTransactionHistory = async (req, res) => {
 
         // Role-based refId filtering
         if (userRole === 4 || userRole === 5) {
-            // Distributor (4) and Retailer (5): Only their own transactions
             query.refId = userId;
+            query.companyId= companyId;
         } else if (userRole === 3) {
             // Master Distributor (3): Their own transactions + transactions of users reporting to them
             const reportingUsers = await dbService.findAll(model.user, {
@@ -1841,7 +1844,6 @@ const aepsTransactionHistory = async (req, res) => {
                 attributes: ['id']
             });
             const reportingUserIds = reportingUsers.map(user => user.id);
-            // Include master distributor's own transactions + reporting users' transactions
             query.refId = { [Op.in]: [userId, ...reportingUserIds] };
         }
 

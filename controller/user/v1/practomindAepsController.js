@@ -1315,6 +1315,97 @@ const recentBanks = async (req, res) => {
     }
 };
 
+const aepsTransactionHistory = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const userRole = existingUser.userRole;
+        const userId = existingUser.id;
+        const companyId = existingUser.companyId;
+
+        if (![3, 4, 5].includes(userRole)) {
+            return res.failure({
+                message:
+                    'Access denied. Only Master Distributor, Distributor, and Retailer can access transaction history.'
+            });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { companyId: companyId };
+
+        if (userRole === 4 || userRole === 5) {
+            query.refId = userId;
+            query.companyId= companyId;
+        } else if (userRole === 3) {
+            const reportingUsers = await dbService.findAll(
+                model.user,
+                {
+                    reportingTo: userId,
+                    companyId: companyId,
+                    isDeleted: false,
+                    userRole: { [Op.in]: [4, 5] } 
+                },
+                {
+                    attributes: ['id']
+                }
+            );
+            const reportingUserIds = reportingUsers.map((user) => user.id);
+            query.refId = { [Op.in]: [userId, ...reportingUserIds] };
+        }
+
+        if (dataToFind && dataToFind.query) {
+            query = { ...query, ...dataToFind.query };
+        }
+
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+        }
+
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const keys = Object.keys(dataToFind.customSearch);
+            const orConditions = [];
+
+            keys.forEach((key) => {
+                const value = dataToFind.customSearch[key];
+                if (value === undefined || value === null || String(value).trim() === '') return;
+
+                orConditions.push({
+                    [key]: {
+                        [Op.iLike]: `%${String(value).trim()}%`
+                    }
+                });
+            });
+
+            if (orConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.or]: orConditions
+                };
+            }
+        }
+
+        const result = await dbService.paginate(model.practomindAepsHistory, query, options);
+
+        return res.success({
+            message: 'AEPS2 transaction history retrieved successfully',
+            data: result?.data || [],
+            total: result?.total || 0,
+            paginator: result?.paginator
+        });
+    } catch (error) {
+        console.error('AEPS2 transaction history error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve AEPS2 transaction history' });
+    }
+};
+
 module.exports = {
     getPractomindAepsOnboardingStatus,
     createPractomindAepsOnboarding,
@@ -1327,5 +1418,6 @@ module.exports = {
     balanceEnquiry,
     miniStatement,
     bankList,
-    recentBanks
+    recentBanks,
+    aepsTransactionHistory
 };

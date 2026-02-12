@@ -15,6 +15,7 @@ router.post('/balance-enquiry', authentication, practomindAepsController.balance
 router.post('/mini-statement', authentication, practomindAepsController.miniStatement);
 router.post('/recent-banks', authentication, practomindAepsController.recentBanks);
 router.post('/bank-list', authentication, practomindAepsController.bankList);
+router.post('/transaction-history', authentication, practomindAepsController.aepsTransactionHistory);
 
 module.exports = router;
 

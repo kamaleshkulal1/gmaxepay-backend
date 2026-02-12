@@ -344,8 +344,6 @@ const getAllBanks = async (req, res) => {
   }
 };
 
-// ==================== COMPANY CODE CONTROLLERS ====================
-
 const createCompanyCode = async (req, res) => {
   try {
     const existingUser = await dbService.findOne(model.user, {
@@ -629,7 +627,6 @@ const getAllCompanyCodes = async (req, res) => {
     return res.failure({ message: error.message });
   }
 };
-
 
 const createState = async (req, res) => {
   try {
@@ -934,19 +931,16 @@ const getAllStates = async (req, res) => {
 };
 
 module.exports = {
-  // Bank exports
   createBank,
   updateBank,
   deleteBank,
   getBankById,
   getAllBanks,
-  // Company Code exports
   createCompanyCode,
   updateCompanyCode,
   deleteCompanyCode,
   getCompanyCodeById,
   getAllCompanyCodes,
-  // State exports
   createState,
   updateState,
   deleteState,
