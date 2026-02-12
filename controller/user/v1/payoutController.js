@@ -2,6 +2,7 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const asl = require('../../../services/asl');
+const { Op } = require('sequelize');
 
 const round2 = (num) => {
     const n = Number(num);
@@ -114,30 +115,22 @@ const payout = async (req, res) => {
         let customerBank = null;
         let aslResponse = null;
         
-        // Handle bank payout mode
         if (mode === 'bank') {
-            // Validate payment mode
             if (!paymentMode || !['IMPS', 'NEFT'].includes(paymentMode)) {
                 return res.failure({ message: 'Valid paymentMode is required (IMPS or NEFT) for bank payout' });
             }
             
-            payoutHistoryData.paymentMode = paymentMode;
-            
-            // Get customer bank - support both customerBankId/bankId and accountNumber+ifscCode
+            payoutHistoryData.paymentMode = paymentMode;         
             const effectiveCustomerBankId = customerBankId || bankId;
             const parsedBankId = effectiveCustomerBankId ? parseInt(effectiveCustomerBankId, 10) : null;
-            console.log('parsedBankId', parsedBankId);
             if (parsedBankId && !isNaN(parsedBankId)) {
-                // Find by ID
                 customerBank = await dbService.findOne(model.customerBank, {
                     id: parsedBankId,
                     refId: user.id,
                     companyId: user.companyId,
                     isActive: true
                 });
-                console.log('customerBank', customerBank);
             } else if (accountNumber && ifscCode) {
-                // Find by account number and IFSC
                 customerBank = await dbService.findOne(model.customerBank, {
                     accountNumber: accountNumber,
                     ifsc: ifscCode,
@@ -155,7 +148,6 @@ const payout = async (req, res) => {
                 });
             }
             
-            // Set bank details in payout history
             payoutHistoryData.customerBankId = parseInt(customerBank.id, 10);
             payoutHistoryData.accountNumber = customerBank.accountNumber;
             payoutHistoryData.ifscCode = customerBank.ifsc;
@@ -1777,7 +1769,9 @@ const payout = async (req, res) => {
             transactionID: transactionID,
             status: payoutHistoryData?.status || aslResponse?.status,
             orderId: aslResponse?.orderid,
-            bankref: aslResponse?.bankref || aslResponse?.txid,
+            bankref: aslResponse?.bankref || aslResponse?.txid || aslResponse?.referenceId || aslResponse?.utrn,
+            bankName: customerBank?.bankName || null,
+            beneficiaryName: customerBank?.beneficiaryName || null,
             aepsType: normalizedAepsType,
             remark: aslResponse?.remark,
             [normalizedAepsType.toLowerCase()]: {
@@ -1832,7 +1826,6 @@ const payout = async (req, res) => {
         return res.failure({ message: error?.message || 'Internal server error' });
     }
 }
-
 
 const getPayoutBankList = async (req, res) => {
     try {
@@ -1929,4 +1922,154 @@ const getPayoutBankList = async (req, res) => {
     }
 };
 
-module.exports = { payout, getPayoutBankList };
+const getAllPayoutHistory = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const userRole = existingUser.userRole;
+        const userId = existingUser.id;
+        const companyId = existingUser.companyId;
+
+        // Only Master Distributor (3), Distributor (4), and Retailer (5) can access this endpoint
+        if (![3, 4, 5].includes(userRole)) {
+            return res.failure({ message: 'You are not authorized to get all payout history' });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { companyId };
+
+        // Role-based refId filtering
+        if (userRole === 4 || userRole === 5) {
+            // Distributor (4) and Retailer (5): Only their own payouts
+            query.refId = userId;
+        } else if (userRole === 3) {
+            // Master Distributor (3): Their own payouts + payouts of users reporting to them
+            const reportingUsers = await dbService.findAll(
+                model.user,
+                {
+                    reportingTo: userId,
+                    companyId,
+                    isDeleted: false,
+                    userRole: { [Op.in]: [4, 5] }
+                },
+                {
+                    attributes: ['id']
+                }
+            );
+
+            const reportingUserIds = reportingUsers.map((user) => user.id);
+            query.refId = { [Op.in]: [userId, ...reportingUserIds] };
+        }
+
+        // Build query from request body
+        if (dataToFind && dataToFind.query) {
+            const { startDate, endDate, type, walletType, aepsType, ...restQuery } = dataToFind.query;
+
+            // Merge other query filters
+            query = { ...query, ...restQuery };
+
+            // Date range (handled by dbService.paginate via startDate/endDate)
+            if (startDate) {
+                query.startDate = startDate;
+            }
+            if (endDate) {
+                query.endDate = endDate;
+            }
+
+            // Type filter (internal/external). If 'all' or not provided, do not filter.
+            if (type && typeof type === 'string' && type.toLowerCase() !== 'all') {
+                query.type = type.toLowerCase();
+            }
+
+            // Wallet type filter
+            if (walletType && typeof walletType === 'string') {
+                // Accept both direct walletType (apes1Wallet/apes2Wallet) or AEPS1/AEPS2
+                const normalizedWalletType = walletType.toUpperCase();
+                if (normalizedWalletType === 'AEPS1') {
+                    query.walletType = 'apes1Wallet';
+                } else if (normalizedWalletType === 'AEPS2') {
+                    query.walletType = 'apes2Wallet';
+                } else {
+                    query.walletType = walletType;
+                }
+            } else if (aepsType && typeof aepsType === 'string') {
+                // Map AEPS type to walletType if provided
+                const normalizedAepsType = aepsType.toUpperCase();
+                if (normalizedAepsType === 'AEPS1') {
+                    query.walletType = 'apes1Wallet';
+                } else if (normalizedAepsType === 'AEPS2') {
+                    query.walletType = 'apes2Wallet';
+                }
+            }
+        }
+
+        // Handle options (pagination, sorting)
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+            // sort will be handled by dbService.paginate via options.sort
+        }
+
+        // Handle customSearch (transactionID or beneficiaryName)
+        if (dataToFind && dataToFind.customSearch) {
+            const searchConditions = [];
+            const customSearch = dataToFind.customSearch;
+
+            if (customSearch.transactionID || customSearch.transactionId) {
+                const searchValue = String(customSearch.transactionID || customSearch.transactionId).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        transactionID: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.beneficiaryName) {
+                const searchValue = String(customSearch.beneficiaryName).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        beneficiaryName: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (searchConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.and]: [{ [Op.or]: searchConditions }]
+                };
+            }
+        }
+
+        const result = await dbService.paginate(model.payoutHistory, query, options);
+
+        return res.success({
+            message: 'Payout history retrieved successfully',
+            data: result?.data || [],
+            total: result?.total || 0,
+            paginator: result?.paginator
+        });
+    }
+    catch (error) {
+        console.log('Get all payout history error:', error);
+        return res.internalServerError({ message: error.message || 'Internal server error' });
+    }
+}
+
+module.exports = { 
+    payout, 
+    getPayoutBankList, 
+    getAllPayoutHistory 
+};
