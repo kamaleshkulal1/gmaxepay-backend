@@ -3,7 +3,7 @@ const model = require('../../../models/index');
 const { Op, fn, col } = require('sequelize');
 const imageService = require('../../../services/imageService');
 
-const getAepsReports = async (req, res) => {
+const getAeps1Reports = async (req, res) => {
     try {
         // Use userRole directly from req.user (set by authentication middleware)
         const existingUser = await dbService.findOne(model.user, {
@@ -705,7 +705,7 @@ const getRechargeReports = async (req, res) => {
 
 
 module.exports = {
-    getAepsReports,
+    getAeps1Reports,
     getAepsTransactionDetailsById,
     getRechargeReports,
     getAeps2Reports,

@@ -2,7 +2,7 @@ const dbService = require('../../../utils/dbService');
 const model = require('../../../models/index');
 const { Op, Sequelize } = require('sequelize');
 
-const getAepsReports = async (req, res) => {
+const getAeps1Reports = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, {
             id: req.user.id,
@@ -322,7 +322,7 @@ const getRechargeReports = async (req, res) => {
 };
 
 module.exports = {
-    getAepsReports,
+    getAeps1Reports,
     getRechargeReports,
     getAeps2Reports
 };

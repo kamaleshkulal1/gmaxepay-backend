@@ -3,7 +3,6 @@ const router = express.Router();
 const authentication = require('../../../middleware/authentication');
 const reportController = require('../../../controller/admin/v1/reportController');
 
-// AEPS Reports routes
 router.post('/aeps1Reports', authentication, reportController.getAeps1Reports);
 router.post('/aeps1/transactionDetails/:id', authentication, reportController.getAepsTransactionDetailsById);
 router.post('/rechargeReports', authentication, reportController.getRechargeReports);
