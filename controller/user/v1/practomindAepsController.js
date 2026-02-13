@@ -994,8 +994,13 @@ const balanceEnquiry = async (req, res) => {
         };
 
         // Call Practomind API
-        const response = await practomindService.practomindBalanceEnquiry(enquiryData);
+        const result = await practomindService.practomindBalanceEnquiry(enquiryData);
 
+        const response = {
+            ...result,
+            transactionId
+        }
+        console.log('response', response);
         // Parse response
         const isSuccess = response.status === true || response.status === 'true';
 
@@ -1404,8 +1409,7 @@ const aepsTransactionHistory = async (req, res) => {
         console.error('AEPS2 transaction history error', error);
         return res.failure({ message: error.message || 'Unable to retrieve AEPS2 transaction history' });
     }
-};
-
+}; 
 module.exports = {
     getPractomindAepsOnboardingStatus,
     createPractomindAepsOnboarding,
