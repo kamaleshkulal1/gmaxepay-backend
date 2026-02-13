@@ -848,7 +848,28 @@ const cashWithdrawal = async (req, res) => {
         };
 
         // Call Practomind API
-        const response = await practomindService.practomindCashWithdrawal(transactionData);
+        // const response = await practomindService.practomindCashWithdrawal(transactionData);
+        const response = {
+            "status": true,
+            "message": "Request Completed",
+            "result": {
+              "transactionAmount": 100,
+              "device": "MANTRA.MSIPL",
+              "requestTransactionTime": "12/02/2026 20:15:22",
+              "transactionStatus": "successful",
+              "balanceAmount": 7993.16,
+              "bankRRN": "604320340699",
+              "transactionType": "CW",
+              "fpTransactionId": "CWM75598526043201522511I",
+              "merchantTransactionId": "PUNJI29054106303369"
+            },
+            "ministatement": "",
+            "outletname": "",
+            "outletmobile": "",
+            "url": "https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16181",
+            "partnerTxnid": "ZPAY26021214454D3459"
+          }
+          
         console.log('response', response);
 
         // Parse response
@@ -994,8 +1015,25 @@ const balanceEnquiry = async (req, res) => {
         };
 
         // Call Practomind API
-        const result = await practomindService.practomindBalanceEnquiry(enquiryData);
-
+        // const result = await practomindService.practomindBalanceEnquiry(enquiryData);
+        const result = {
+            "status": true,
+            "message": "Request Completed",
+            "data": {
+              "transactionAmount": 0,
+              "terminalId": "AB076108",
+              "device": "MANTRA.MSIPL",
+              "requestTransactionTime": "13/02/2026 11:01:20",
+              "transactionStatus": "successful",
+              "balanceAmount": 7999.16,
+              "bankRRN": "604411091471",
+              "transactionType": "BE",
+              "fpTransactionId": "BEM75598526044110120925I",
+              "merchantTransactionId": "PUNJI641680656303",
+              "ministatement": "",
+              "receiptUrl": "https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16189"
+            }
+          }
         const response = {
             ...result,
             transactionId
