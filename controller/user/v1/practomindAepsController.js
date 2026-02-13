@@ -1143,7 +1143,73 @@ const miniStatement = async (req, res) => {
         };
 
         // Call Practomind API
-        const response = await practomindService.practomindMiniStatement(statementData);
+        // const response = await practomindService.practomindMiniStatement(statementData);
+        const response = {
+            "status": true,
+            "message": "Request Completed",
+            "transactionStatus": "successful",
+            "ministatement": [
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "20.0",
+                "narration": "UPI:60445011118"
+              },
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "60.0",
+                "narration": "UPI:10113977679"
+              },
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "10.0",
+                "narration": "UPI:64108299511"
+              },
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "5.0",
+                "narration": "UPI:64100599965"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Cr",
+                "amount": "100.0",
+                "narration": "IMPS/P2A-604322"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Cr",
+                "amount": "100.0",
+                "narration": "IMPS/P2A-604322"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Dr",
+                "amount": "39.0",
+                "narration": "UPI:64094138362"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Dr",
+                "amount": "60.0",
+                "narration": "UPI:20554525141"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Dr",
+                "amount": "100.0",
+                "narration": "ISOF-CW/6043203"
+              }
+            ],
+            "url": "https://v2.punjikendra.in/api/ministmtaeps_print/16191",
+            "balanceAmount": 7999.16,
+            "partnerTxnid": "ZPAY2602130537E7EE11",
+            "utr": "604411127454"
+          }
+          
 
         // Parse response
         const isSuccess = response.status === true || response.status === 'true';
