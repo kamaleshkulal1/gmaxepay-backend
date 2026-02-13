@@ -1246,7 +1246,7 @@ const bankList = async (req, res) => {
 };
 
 const recentBanks = async (req, res) => {
-    try {
+    try {        
         const existingUser = await dbService.findOne(model.user, { 
             id: req.user.id, 
             companyId: req.user.companyId 
@@ -1267,10 +1267,8 @@ const recentBanks = async (req, res) => {
                 sort: { createdAt: -1 }
             }
         );
-
         const uniqueBankIINs = [];
         const seenBankIINs = new Set();
-        
         for (const txn of aepsTransactions) {
             const bankIIN = txn.bankIin ? String(txn.bankIin).trim() : null;
             if (bankIIN && !seenBankIINs.has(bankIIN)) {
@@ -1279,6 +1277,7 @@ const recentBanks = async (req, res) => {
                 if (uniqueBankIINs.length >= 4) break;
             }
         }
+        console.log('uniqueBankIINs', uniqueBankIINs);
 
         if (uniqueBankIINs.length === 0) {
             return res.success({
@@ -1290,7 +1289,7 @@ const recentBanks = async (req, res) => {
         const banks = await dbService.findAll(
             model.practomindBankList,
             {
-                iinno: { [Op.in]: uniqueBankIINs },
+                aeps_bank_id: { [Op.in]: uniqueBankIINs },
                 isActive: true
             }
         );
@@ -1298,7 +1297,7 @@ const recentBanks = async (req, res) => {
         const bankMap = new Map();
         banks.forEach((bank) => {
             const bankData = bank.toJSON ? bank.toJSON() : bank;
-            bankMap.set(bankData.iinno, {
+            bankMap.set(bankData.aeps_bank_id, {
                 bankIIN: bankData.iinno,
                 bankName: bankData.bankName,
                 bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
@@ -1316,6 +1315,7 @@ const recentBanks = async (req, res) => {
     }
     catch (err) {
         console.error('Recent Banks error:', err);
+        console.error('Error stack:', err.stack);
         return res.failure({ message: err.message || 'Failed to retrieve recent banks' });
     }
 };
@@ -1409,7 +1409,8 @@ const aepsTransactionHistory = async (req, res) => {
         console.error('AEPS2 transaction history error', error);
         return res.failure({ message: error.message || 'Unable to retrieve AEPS2 transaction history' });
     }
-}; 
+};
+
 module.exports = {
     getPractomindAepsOnboardingStatus,
     createPractomindAepsOnboarding,
