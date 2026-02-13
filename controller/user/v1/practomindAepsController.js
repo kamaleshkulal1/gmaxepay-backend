@@ -1052,12 +1052,12 @@ const balanceEnquiry = async (req, res) => {
 
         if (isSuccess) {
             return res.success({ 
-                message: response.message || 'Balance enquiry successful', 
+                message: response.message || response?.result?.message || response?.result?.result?.message || 'Balance enquiry successful', 
                 data: response 
             });
         } else {
             return res.failure({ 
-                message: response.message || 'Balance enquiry failed', 
+                message: response.message || response?.result?.message || response?.result?.result?.message || 'Balance enquiry failed', 
                 data: response 
             });
         }

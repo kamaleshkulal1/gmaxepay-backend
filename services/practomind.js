@@ -314,7 +314,6 @@ const practomindBalanceEnquiry = async (data) => {
         'Content-Type': 'application/json'
       }
     });
-    console.log("response", response);
     console.log('Practomind balance enquiry response:', response.data);
     return response.data;
   } catch (error) {
