@@ -1002,7 +1002,7 @@ const balanceEnquiry = async (req, res) => {
         }
         console.log('response', response);
         // Parse response
-        const isSuccess = response.status === true || response.status === 'true';
+        const isSuccess = response.status === true || response.status === 'true' || response.result?.result?.status === true || response.result?.result?.status === 'true';
 
         // Save transaction to practomindAepsHistory
         const historyData = {
@@ -1011,26 +1011,26 @@ const balanceEnquiry = async (req, res) => {
             merchantLoginId: existingOnboarding.merchantLoginId,
             transactionType: 'BE',
             transactionAmount: 0,
-            balanceAmount: response?.result?.balanceAmount || null,
+            balanceAmount: response?.result?.result?.balanceAmount || response?.result?.balanceAmount || null,
             transactionId: transactionId,
-            merchantTransactionId: response?.result?.merchantTransactionId || null,
-            bankRRN: response?.result?.bankRRN || null,
-            fpTransactionId: response?.result?.fpTransactionId || null,
-            partnerTxnid: response?.partnerTxnid || null,
-            transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+            merchantTransactionId: response?.result?.merchantTransactionId || response?.result?.result?.merchantTransactionId || null,
+            bankRRN: response?.result?.bankRRN || response?.result?.result?.bankRRN || null,
+            fpTransactionId: response?.result?.fpTransactionId || response?.result?.result?.fpTransactionId || null,
+            partnerTxnid: response?.partnerTxnid || response?.result?.result?.partnerTxnid || null,
+            transactionStatus: response?.result?.transactionStatus || response?.result?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
             status: isSuccess,
-            message: response.message || '',
-            device: response?.result?.device || null,
-            requestTransactionTime: response?.result?.requestTransactionTime || null,
+            message: response.message|| response?.result?.message || response?.result?.result?.message || '',
+            device: response?.result?.device || response?.result?.result?.device || null,
+            requestTransactionTime: response?.result?.requestTransactionTime || response?.result?.result?.requestTransactionTime || null,
             consumerAadhaarNumber: aadhaarNumber,
             mobileNumber: existingUser.mobileNo,
             bankIin: practomindBank.aeps_bank_id,
             latitude: latitude || null,
             longitude: longitude || null,
-            receiptUrl: response?.url || null,
-            outletname: response?.outletname || null,
-            outletmobile: response?.outletmobile || null,
-            ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
+            receiptUrl: response?.url || response?.result?.url || response?.result?.result?.url || null,
+            outletname: response?.outletname|| response?.result?.outletname || response?.result?.result?.outletname || null,
+            outletmobile: response?.outletmobile || response?.result?.outletname || response?.result?.result?.outletmobile || null,
+            ministatement: response?.ministatement || response?.result?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
             requestPayload: {
                 mobileNumber: enquiryData.mobileNumber,
                 latitude: enquiryData.latitude,
