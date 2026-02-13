@@ -848,27 +848,27 @@ const cashWithdrawal = async (req, res) => {
         };
 
         // Call Practomind API
-        const response = await practomindService.practomindCashWithdrawal(transactionData);
-        // const response = {
-        //     "status": true,
-        //     "message": "Request Completed",
-        //     "result": {
-        //       "transactionAmount": 100,
-        //       "device": "MANTRA.MSIPL",
-        //       "requestTransactionTime": "12/02/2026 20:15:22",
-        //       "transactionStatus": "successful",
-        //       "balanceAmount": 7993.16,
-        //       "bankRRN": "604320340699",
-        //       "transactionType": "CW",
-        //       "fpTransactionId": "CWM75598526043201522511I",
-        //       "merchantTransactionId": "PUNJI29054106303369"
-        //     },
-        //     "ministatement": "",
-        //     "outletname": "",
-        //     "outletmobile": "",
-        //     "url": "https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16181",
-        //     "partnerTxnid": "ZPAY26021214454D3459"
-        //   }
+        // const response = await practomindService.practomindCashWithdrawal(transactionData);
+        const response = {
+            "status": true,
+            "message": "Request Completed",
+            "result": {
+              "transactionAmount": 100,
+              "device": "MANTRA.MSIPL",
+              "requestTransactionTime": "12/02/2026 20:15:22",
+              "transactionStatus": "successful",
+              "balanceAmount": 7993.16,
+              "bankRRN": "604320340699",
+              "transactionType": "CW",
+              "fpTransactionId": "CWM75598526043201522511I",
+              "merchantTransactionId": "PUNJI29054106303369"
+            },
+            "ministatement": "",
+            "outletname": "",
+            "outletmobile": "",
+            "url": "https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16181",
+            "partnerTxnid": "ZPAY26021214454D3459"
+          }
           
         console.log('response', response);
 
@@ -1015,25 +1015,25 @@ const balanceEnquiry = async (req, res) => {
         };
 
         // Call Practomind API
-        const result = await practomindService.practomindBalanceEnquiry(enquiryData);
-        // const result = {
-        //     "status": true,
-        //     "message": "Request Completed",
-        //     "data": {
-        //       "transactionAmount": 0,
-        //       "terminalId": "AB076108",
-        //       "device": "MANTRA.MSIPL",
-        //       "requestTransactionTime": "13/02/2026 11:01:20",
-        //       "transactionStatus": "successful",
-        //       "balanceAmount": 7999.16,
-        //       "bankRRN": "604411091471",
-        //       "transactionType": "BE",
-        //       "fpTransactionId": "BEM75598526044110120925I",
-        //       "merchantTransactionId": "PUNJI641680656303",
-        //       "ministatement": "",
-        //       "receiptUrl": "https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16189"
-        //     }
-        //   }
+        // const result = await practomindService.practomindBalanceEnquiry(enquiryData);
+        const result = {
+            "status": true,
+            "message": "Request Completed",
+            "data": {
+              "transactionAmount": 0,
+              "terminalId": "AB076108",
+              "device": "MANTRA.MSIPL",
+              "requestTransactionTime": "13/02/2026 11:01:20",
+              "transactionStatus": "successful",
+              "balanceAmount": 7999.16,
+              "bankRRN": "604411091471",
+              "transactionType": "BE",
+              "fpTransactionId": "BEM75598526044110120925I",
+              "merchantTransactionId": "PUNJI641680656303",
+              "ministatement": "",
+              "receiptUrl": "https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16189"
+            }
+          }
         const response = {
             ...result,
             transactionId
@@ -1181,72 +1181,72 @@ const miniStatement = async (req, res) => {
         };
 
         // Call Practomind API
-        const response = await practomindService.practomindMiniStatement(statementData);
-        // const response = {
-        //     "status": true,
-        //     "message": "Request Completed",
-        //     "transactionStatus": "successful",
-        //     "ministatement": [
-        //       {
-        //         "date": "13/02/2026",
-        //         "txnType": "Dr",
-        //         "amount": "20.0",
-        //         "narration": "UPI:60445011118"
-        //       },
-        //       {
-        //         "date": "13/02/2026",
-        //         "txnType": "Dr",
-        //         "amount": "60.0",
-        //         "narration": "UPI:10113977679"
-        //       },
-        //       {
-        //         "date": "13/02/2026",
-        //         "txnType": "Dr",
-        //         "amount": "10.0",
-        //         "narration": "UPI:64108299511"
-        //       },
-        //       {
-        //         "date": "13/02/2026",
-        //         "txnType": "Dr",
-        //         "amount": "5.0",
-        //         "narration": "UPI:64100599965"
-        //       },
-        //       {
-        //         "date": "12/02/2026",
-        //         "txnType": "Cr",
-        //         "amount": "100.0",
-        //         "narration": "IMPS/P2A-604322"
-        //       },
-        //       {
-        //         "date": "12/02/2026",
-        //         "txnType": "Cr",
-        //         "amount": "100.0",
-        //         "narration": "IMPS/P2A-604322"
-        //       },
-        //       {
-        //         "date": "12/02/2026",
-        //         "txnType": "Dr",
-        //         "amount": "39.0",
-        //         "narration": "UPI:64094138362"
-        //       },
-        //       {
-        //         "date": "12/02/2026",
-        //         "txnType": "Dr",
-        //         "amount": "60.0",
-        //         "narration": "UPI:20554525141"
-        //       },
-        //       {
-        //         "date": "12/02/2026",
-        //         "txnType": "Dr",
-        //         "amount": "100.0",
-        //         "narration": "ISOF-CW/6043203"
-        //       }
-        //     ],
-        //     "url": "https://v2.punjikendra.in/api/ministmtaeps_print/16191",
-        //     "balanceAmount": 7999.16,
-        //     "partnerTxnid": "ZPAY2602130537E7EE11",
-        //     "utr": "604411127454"
-        //   }
+        // const response = await practomindService.practomindMiniStatement(statementData);
+        const response = {
+            "status": true,
+            "message": "Request Completed",
+            "transactionStatus": "successful",
+            "ministatement": [
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "20.0",
+                "narration": "UPI:60445011118"
+              },
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "60.0",
+                "narration": "UPI:10113977679"
+              },
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "10.0",
+                "narration": "UPI:64108299511"
+              },
+              {
+                "date": "13/02/2026",
+                "txnType": "Dr",
+                "amount": "5.0",
+                "narration": "UPI:64100599965"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Cr",
+                "amount": "100.0",
+                "narration": "IMPS/P2A-604322"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Cr",
+                "amount": "100.0",
+                "narration": "IMPS/P2A-604322"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Dr",
+                "amount": "39.0",
+                "narration": "UPI:64094138362"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Dr",
+                "amount": "60.0",
+                "narration": "UPI:20554525141"
+              },
+              {
+                "date": "12/02/2026",
+                "txnType": "Dr",
+                "amount": "100.0",
+                "narration": "ISOF-CW/6043203"
+              }
+            ],
+            "url": "https://v2.punjikendra.in/api/ministmtaeps_print/16191",
+            "balanceAmount": 7999.16,
+            "partnerTxnid": "ZPAY2602130537E7EE11",
+            "utr": "604411127454"
+          }
           
 
         // Parse response
