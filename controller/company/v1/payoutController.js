@@ -32,7 +32,6 @@ const payout = async (req, res) => {
 
         const user = req.user;
 
-        // Validate required fields
         const payoutAmount = parseFloat(amount);
         if (!amount || isNaN(payoutAmount) || payoutAmount <= 0) {
             return res.failure({ message: 'Amount is required and must be a valid number greater than 0' });
@@ -179,7 +178,6 @@ const payout = async (req, res) => {
             if (payoutHistoryData.status === 'SUCCESS') {
                 const payoutOperator = await dbService.findOne(model.operator, {
                     operatorType: 'PAYOUT',
-                    isActive: true,
                     minValue: { [Op.lte]: payoutAmount },
                     maxValue: { [Op.gte]: payoutAmount }
                 });
