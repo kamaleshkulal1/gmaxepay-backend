@@ -151,7 +151,6 @@ const payout = async (req, res) => {
             // 1. Fetch Operator
             payoutOperator = await dbService.findOne(model.operator, {
                 operatorType: 'PAYOUT',
-                isActive: true,
                 minValue: { [Op.lte]: payoutAmount },
                 maxValue: { [Op.gte]: payoutAmount }
             });
