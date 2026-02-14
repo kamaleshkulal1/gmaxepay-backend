@@ -181,6 +181,7 @@ const payout = async (req, res) => {
                     minValue: { [Op.lte]: payoutAmount },
                     maxValue: { [Op.gte]: payoutAmount }
                 });
+                console.log("payoutOperator", payoutOperator);
 
                 if (!payoutOperator) {
                     return res.failure({ message: 'PAYOUT operator configuration not found' });
