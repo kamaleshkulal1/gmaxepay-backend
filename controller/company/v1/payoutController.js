@@ -71,7 +71,8 @@ const payout = async (req, res) => {
 
         const transactionID = generateTransactionID(company.companyName || company.name);
         const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
-        const aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount).toFixed(2));
+        // aepsClosingBalance will be updated later with surcharge/commission adjustments
+        let aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount).toFixed(2));
         const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
         const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
 
@@ -94,6 +95,17 @@ const payout = async (req, res) => {
 
         let customerBank = null;
         let aslResponse = null;
+
+        // Commercial variables declared here to be accessible in SUCCESS block
+        let payoutOperator = null;
+        let superAdmin = null;
+        let companyAdmin = null;
+        let slabComm = null;
+        let adminSlabComm = null;
+        let calculatedAmount = 0;
+        let adminCommAmount = 0;
+        let companyAdminWallet = null;
+        let superAdminWallet = null;
 
         if (mode === 'bank') {
             if (!paymentMode || !['IMPS', 'NEFT'].includes(paymentMode)) {
@@ -135,6 +147,122 @@ const payout = async (req, res) => {
             payoutHistoryData.bankName = customerBank.bankName;
             payoutHistoryData.mobile = user.mobileNo || user.mobile || user.phone;
 
+            // --- START: Commercials & Validation BEFORE API Call ---
+            // 1. Fetch Operator
+            payoutOperator = await dbService.findOne(model.operator, {
+                operatorType: 'PAYOUT',
+                isActive: true,
+                minValue: { [Op.lte]: payoutAmount },
+                maxValue: { [Op.gte]: payoutAmount }
+            });
+            console.log("payoutOperator", payoutOperator);
+
+            if (!payoutOperator) {
+                return res.failure({ message: 'PAYOUT operator configuration not found for this amount range' });
+            }
+
+            // 2. Fetch Admins
+            [superAdmin, companyAdmin] = await Promise.all([
+                dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true }),
+                dbService.findOne(model.user, { id: user.id, companyId: user.companyId, userRole: 2, isActive: true })
+            ]);
+
+            if (!superAdmin) return res.failure({ message: 'Super admin not found' });
+            if (!companyAdmin) return res.failure({ message: 'Company admin not found' });
+
+            // 3. Fetch Slabs (User & Admin)
+            [slabComm, adminSlabComm] = await Promise.all([
+                dbService.findOne(model.commSlab, {
+                    companyId: 1,
+                    addedBy: superAdmin.id,
+                    operatorId: payoutOperator.id,
+                    roleType: 2 // User's Slab
+                }),
+                dbService.findOne(model.commSlab, {
+                    companyId: 1,
+                    operatorId: payoutOperator.id,
+                    roleType: 1 // Admin's Commercial Slab
+                })
+            ]);
+            console.log("slabComm (User)", slabComm);
+            console.log("adminSlabComm (Admin)", adminSlabComm);
+
+            if (!slabComm) {
+                return res.failure({ message: 'Commission/Surcharge slab not configured for Payout' });
+            }
+
+            // 4. Calculate User Amount (Surcharge/Comm)
+            const amtType = (slabComm.amtType || 'fix').toLowerCase();
+            const rawComm = Number(slabComm.commAmt || 0);
+
+            if (amtType === 'per') {
+                calculatedAmount = round2((payoutAmount * rawComm) / 100);
+            } else {
+                calculatedAmount = round2(rawComm);
+            }
+
+            // 5. Calculate Admin Amount (For Logs/History)
+            if (adminSlabComm) {
+                const adminAmtType = (adminSlabComm.amtType || 'fix').toLowerCase();
+                const adminRawComm = Number(adminSlabComm.commAmt || 0);
+                if (adminAmtType === 'per') {
+                    adminCommAmount = round2((payoutAmount * adminRawComm) / 100);
+                } else {
+                    adminCommAmount = round2(adminRawComm);
+                }
+            }
+
+            // --- LOGS: Commercial Details ---
+            console.log("-----------------------------------------");
+            console.log("PAYOUT COMMERCIALS LOG");
+            console.log("Operator:", payoutOperator ? payoutOperator.operatorName : 'N/A');
+            console.log("Super Admin Commercial Slab:", adminSlabComm ? adminSlabComm : "None");
+            console.log("Super Admin Commercial Amount:", adminCommAmount);
+            console.log("Company Admin Commercial Slab:", slabComm ? slabComm : "None");
+            console.log("Company Admin Commercial Amount:", calculatedAmount);
+
+            let effectiveTotal = payoutAmount;
+            const effectiveCommType = (slabComm && slabComm.commType) ? slabComm.commType.toLowerCase() : 'sur';
+            if (effectiveCommType === 'sur') {
+                effectiveTotal += calculatedAmount;
+            } else {
+                effectiveTotal -= calculatedAmount;
+            }
+            console.log("Company Admin Overall Pays (Net Debit):", effectiveTotal);
+            console.log("-----------------------------------------");
+
+            // 6. Fetch Wallets & Check Balance
+            if (calculatedAmount > 0) {
+                // Fetch Super Admin Wallet (Company Admin Wallet no longer needed for Main Wallet check)
+                [superAdminWallet] = await Promise.all([
+                    dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                ]);
+
+                if (!superAdminWallet) return res.failure({ message: 'Super admin wallet not found' });
+
+                const commType = (slabComm.commType || 'sur').toLowerCase();
+                const totalRequired = payoutAmount + calculatedAmount;
+                const totalNet = payoutAmount - calculatedAmount;
+
+                if (commType === 'sur') {
+                    // Check if AEPS Wallet has enough for Payout + Surcharge
+                    if (currentAepsBalance < totalRequired) {
+                        return res.failure({
+                            message: `Insufficient wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${currentAepsBalance}`
+                        });
+                    }
+                } else if (commType === 'com') {
+                    // Check if AEPS Wallet has enough for Net Payout (Payout - Commission)? 
+                    // Typically we check against the net debit.
+                    if (currentAepsBalance < totalNet) {
+                        return res.failure({
+                            message: `Insufficient wallet balance. Required: ${totalNet}, Available: ${currentAepsBalance}`
+                        });
+                    }
+                }
+            }
+            // --- END: Commercials & Validation ---
+
             // Call ASL API for bank payout
             // aslResponse = await asl.aslAepsPayOut({
             //     mobile: user.mobileNo,
@@ -175,220 +303,135 @@ const payout = async (req, res) => {
                 if (aslResponse.remark) payoutHistoryData.statusMessage = aslResponse.remark;
             }
 
-            if (payoutHistoryData.status === 'SUCCESS') {
-                const payoutOperator = await dbService.findOne(model.operator, {
-                    operatorType: 'PAYOUT',
-                    minValue: { [Op.lte]: payoutAmount },
-                    maxValue: { [Op.gte]: payoutAmount }
-                });
-                console.log("payoutOperator", payoutOperator);
+            if (payoutHistoryData.status === 'SUCCESS' && calculatedAmount > 0) {
+                const superAdminOpeningBalance = parseFloat(superAdminWallet.mainWallet || 0);
+                const operatorName = 'Payout';
+                const remarkText = `Bank payout via ${paymentMode}`;
+                const commType = (slabComm.commType || 'sur').toLowerCase();
 
-                if (!payoutOperator) {
-                    return res.failure({ message: 'PAYOUT operator configuration not found' });
-                }
+                if (commType === 'sur') {
+                    // Surcharge: User Pays (Debit AEPS), Admin Receives (Credit Main)
 
-                const [superAdmin, companyAdmin] = await Promise.all([
-                    dbService.findOne(model.user, {
-                        id: 1,
-                        companyId: 1,
-                        userRole: 1,
-                        isActive: true
-                    }),
-                    dbService.findOne(model.user, {
-                        id: user.id,
+                    const surchargeDebit = calculatedAmount;
+                    // Update global aepsClosingBalance to reflect additional deduction
+                    aepsClosingBalance = parseFloat((aepsClosingBalance - surchargeDebit).toFixed(2));
+
+                    const superAdminClosingBalance = parseFloat((superAdminOpeningBalance + calculatedAmount).toFixed(2));
+
+                    // Update SuperAdmin Wallet
+                    await dbService.update(
+                        model.wallet,
+                        { id: superAdminWallet.id },
+                        { mainWallet: superAdminClosingBalance, updatedBy: superAdmin.id }
+                    );
+
+                    // User History for Surcharge (Debit) - WalletType: AEPS
+                    await dbService.createOne(model.walletHistory, {
+                        refId: companyAdmin.id,
                         companyId: user.companyId,
-                        userRole: 2,
-                        isActive: true
-                    })
-                ]);
+                        walletType: walletType, // AEPS Wallet
+                        operator: operatorName,
+                        remark: `${remarkText} - surcharge`,
+                        amount: calculatedAmount,
+                        comm: 0,
+                        surcharge: calculatedAmount,
+                        openingAmt: parseFloat((aepsClosingBalance + surchargeDebit).toFixed(2)),
+                        closingAmt: aepsClosingBalance,
+                        credit: 0,
+                        debit: calculatedAmount,
+                        transactionId: transactionID,
+                        paymentStatus: 'SUCCESS',
+                        beneficiaryName: customerBank.beneficiaryName || null,
+                        beneficiaryAccountNumber: customerBank.accountNumber,
+                        beneficiaryBankName: customerBank.bankName || null,
+                        beneficiaryIfsc: customerBank.ifsc,
+                        paymentMode: paymentMode,
+                        addedBy: companyAdmin.id,
+                        updatedBy: companyAdmin.id
+                    });
 
-                if (!superAdmin) {
-                    return res.failure({ message: 'Super admin not found' });
-                }
-
-                if (!companyAdmin) {
-                    return res.failure({ message: 'Company admin not found' });
-                }
-
-                const slabComm = await dbService.findOne(
-                    model.commSlab,
-                    {
+                    // Super Admin History (Credit)
+                    await dbService.createOne(model.walletHistory, {
+                        refId: superAdmin.id,
                         companyId: 1,
+                        walletType: 'mainWallet',
+                        operator: operatorName,
+                        remark: `${remarkText} - surcharge received`,
+                        amount: calculatedAmount,
+                        comm: 0,
+                        surcharge: calculatedAmount,
+                        openingAmt: superAdminOpeningBalance,
+                        closingAmt: superAdminClosingBalance,
+                        credit: calculatedAmount,
+                        debit: 0,
+                        transactionId: transactionID,
+                        paymentStatus: 'SUCCESS',
+                        paymentMode: 'WALLET',
                         addedBy: superAdmin.id,
-                        operatorId: payoutOperator.id,
-                    }
-                );
-                console.log("slabComm", slabComm);
+                        updatedBy: superAdmin.id
+                    });
 
-                if (!slabComm) {
-                    return res.failure({ message: 'Commission/Surcharge slab not configured for Payout' });
-                }
+                } else if (commType === 'com') {
+                    // Commission: User Receives (Credit AEPS), Admin Pays (Debit Main)
 
-                const amtType = (slabComm.amtType || 'fix').toLowerCase();
-                const rawComm = Number(slabComm.commAmt || 0);
-                let calculatedAmount = 0;
+                    const commissionCredit = calculatedAmount;
+                    // Update global aepsClosingBalance to reflect credit
+                    aepsClosingBalance = parseFloat((aepsClosingBalance + commissionCredit).toFixed(2));
 
-                if (amtType === 'per') {
-                    calculatedAmount = round2((payoutAmount * rawComm) / 100);
-                } else {
-                    calculatedAmount = round2(rawComm);
-                }
+                    const superAdminClosingBalance = parseFloat((superAdminOpeningBalance - calculatedAmount).toFixed(2));
 
-                if (calculatedAmount > 0) {
-                    const [companyAdminWallet, superAdminWallet] = await Promise.all([
-                        dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
-                        dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
-                    ]);
+                    // Update SuperAdmin Wallet
+                    await dbService.update(
+                        model.wallet,
+                        { id: superAdminWallet.id },
+                        { mainWallet: superAdminClosingBalance, updatedBy: superAdmin.id }
+                    );
 
-                    if (!companyAdminWallet) {
-                        return res.failure({ message: 'Company admin wallet not found' });
-                    }
+                    // User History for Commission (Credit) - WalletType: AEPS
+                    await dbService.createOne(model.walletHistory, {
+                        refId: companyAdmin.id,
+                        companyId: user.companyId,
+                        walletType: walletType, // AEPS Wallet
+                        operator: operatorName,
+                        remark: `${remarkText} - commission`,
+                        amount: calculatedAmount,
+                        comm: calculatedAmount,
+                        surcharge: 0,
+                        openingAmt: parseFloat((aepsClosingBalance - commissionCredit).toFixed(2)),
+                        closingAmt: aepsClosingBalance,
+                        credit: calculatedAmount,
+                        debit: 0,
+                        transactionId: transactionID,
+                        paymentStatus: 'SUCCESS',
+                        beneficiaryName: customerBank.beneficiaryName || null,
+                        beneficiaryAccountNumber: customerBank.accountNumber,
+                        beneficiaryBankName: customerBank.bankName || null,
+                        beneficiaryIfsc: customerBank.ifsc,
+                        paymentMode: paymentMode,
+                        addedBy: companyAdmin.id,
+                        updatedBy: companyAdmin.id
+                    });
 
-                    if (!superAdminWallet) {
-                        return res.failure({ message: 'Super admin wallet not found' });
-                    }
-
-                    const companyAdminOpeningBalance = parseFloat(companyAdminWallet.mainWallet || 0);
-                    const superAdminOpeningBalance = parseFloat(superAdminWallet.mainWallet || 0);
-
-                    const operatorName = 'Payout';
-                    const remarkText = `Bank payout via ${paymentMode}`;
-                    const commType = (slabComm.commType || 'sur').toLowerCase();
-
-                    if (commType === 'sur') {
-                        if (companyAdminOpeningBalance < calculatedAmount) {
-                            return res.failure({
-                                message: `Insufficient wallet balance for surcharge. Required: ${calculatedAmount}, Available: ${companyAdminOpeningBalance}`
-                            });
-                        }
-
-                        const companyAdminClosingBalance = parseFloat((companyAdminOpeningBalance - calculatedAmount).toFixed(2));
-                        const superAdminClosingBalance = parseFloat((superAdminOpeningBalance + calculatedAmount).toFixed(2));
-
-                        await Promise.all([
-                            dbService.update(
-                                model.wallet,
-                                { id: companyAdminWallet.id },
-                                { mainWallet: companyAdminClosingBalance, updatedBy: companyAdmin.id }
-                            ),
-                            dbService.update(
-                                model.wallet,
-                                { id: superAdminWallet.id },
-                                { mainWallet: superAdminClosingBalance, updatedBy: superAdmin.id }
-                            )
-                        ]);
-
-                        await dbService.createOne(model.walletHistory, {
-                            refId: companyAdmin.id,
-                            companyId: user.companyId,
-                            walletType: 'mainWallet',
-                            operator: operatorName,
-                            remark: `${remarkText} - surcharge`,
-                            amount: calculatedAmount,
-                            comm: 0,
-                            surcharge: calculatedAmount,
-                            openingAmt: companyAdminOpeningBalance,
-                            closingAmt: companyAdminClosingBalance,
-                            credit: 0,
-                            debit: calculatedAmount,
-                            transactionId: transactionID,
-                            paymentStatus: 'SUCCESS',
-                            beneficiaryName: customerBank.beneficiaryName || null,
-                            beneficiaryAccountNumber: customerBank.accountNumber,
-                            beneficiaryBankName: customerBank.bankName || null,
-                            beneficiaryIfsc: customerBank.ifsc,
-                            paymentMode: paymentMode,
-                            addedBy: companyAdmin.id,
-                            updatedBy: companyAdmin.id
-                        });
-
-                        await dbService.createOne(model.walletHistory, {
-                            refId: superAdmin.id,
-                            companyId: 1,
-                            walletType: 'mainWallet',
-                            operator: operatorName,
-                            remark: `${remarkText} - surcharge received`,
-                            amount: calculatedAmount,
-                            comm: 0,
-                            surcharge: calculatedAmount,
-                            openingAmt: superAdminOpeningBalance,
-                            closingAmt: superAdminClosingBalance,
-                            credit: calculatedAmount,
-                            debit: 0,
-                            transactionId: transactionID,
-                            paymentStatus: 'SUCCESS',
-                            paymentMode: 'WALLET',
-                            addedBy: superAdmin.id,
-                            updatedBy: superAdmin.id
-                        });
-
-                    } else if (commType === 'com') {
-                        if (superAdminOpeningBalance < calculatedAmount) {
-                            return res.failure({
-                                message: `Insufficient super admin wallet balance for commission.`
-                            });
-                        }
-
-                        const companyAdminClosingBalance = parseFloat((companyAdminOpeningBalance + calculatedAmount).toFixed(2));
-                        const superAdminClosingBalance = parseFloat((superAdminOpeningBalance - calculatedAmount).toFixed(2));
-
-                        await Promise.all([
-                            dbService.update(
-                                model.wallet,
-                                { id: companyAdminWallet.id },
-                                { mainWallet: companyAdminClosingBalance, updatedBy: companyAdmin.id }
-                            ),
-                            dbService.update(
-                                model.wallet,
-                                { id: superAdminWallet.id },
-                                { mainWallet: superAdminClosingBalance, updatedBy: superAdmin.id }
-                            )
-                        ]);
-
-                        await dbService.createOne(model.walletHistory, {
-                            refId: companyAdmin.id,
-                            companyId: user.companyId,
-                            walletType: 'mainWallet',
-                            operator: operatorName,
-                            remark: `${remarkText} - commission`,
-                            amount: calculatedAmount,
-                            comm: calculatedAmount,
-                            surcharge: 0,
-                            openingAmt: companyAdminOpeningBalance,
-                            closingAmt: companyAdminClosingBalance,
-                            credit: calculatedAmount,
-                            debit: 0,
-                            transactionId: transactionID,
-                            paymentStatus: 'SUCCESS',
-                            beneficiaryName: customerBank.beneficiaryName || null,
-                            beneficiaryAccountNumber: customerBank.accountNumber,
-                            beneficiaryBankName: customerBank.bankName || null,
-                            beneficiaryIfsc: customerBank.ifsc,
-                            paymentMode: paymentMode,
-                            addedBy: companyAdmin.id,
-                            updatedBy: companyAdmin.id
-                        });
-
-                        await dbService.createOne(model.walletHistory, {
-                            refId: superAdmin.id,
-                            companyId: 1,
-                            walletType: 'mainWallet',
-                            operator: operatorName,
-                            remark: `${remarkText} - commission paid`,
-                            amount: calculatedAmount,
-                            comm: calculatedAmount,
-                            surcharge: 0,
-                            openingAmt: superAdminOpeningBalance,
-                            closingAmt: superAdminClosingBalance,
-                            credit: 0,
-                            debit: calculatedAmount,
-                            transactionId: transactionID,
-                            paymentStatus: 'SUCCESS',
-                            paymentMode: 'WALLET',
-                            addedBy: superAdmin.id,
-                            updatedBy: superAdmin.id
-                        });
-                    }
+                    // Super Admin History (Debit)
+                    await dbService.createOne(model.walletHistory, {
+                        refId: superAdmin.id,
+                        companyId: 1,
+                        walletType: 'mainWallet',
+                        operator: operatorName,
+                        remark: `${remarkText} - commission paid`,
+                        amount: calculatedAmount,
+                        comm: calculatedAmount,
+                        surcharge: 0,
+                        openingAmt: superAdminOpeningBalance,
+                        closingAmt: superAdminClosingBalance,
+                        credit: 0,
+                        debit: calculatedAmount,
+                        transactionId: transactionID,
+                        paymentStatus: 'SUCCESS',
+                        paymentMode: 'WALLET',
+                        addedBy: superAdmin.id,
+                        updatedBy: superAdmin.id
+                    });
                 }
             }
         }
