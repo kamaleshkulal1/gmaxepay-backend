@@ -323,30 +323,32 @@ const payout = async (req, res) => {
                     let saRemark = `${remarkText} - surcharge profit`;
                     let saCredit = 0;
                     let saDebit = 0;
-                    let saOpen = parseFloat(superAdminOpeningBalance);
+
+                    // Use the SAME wallet type as the User (AEPS Wallet) for Super Admin
+                    // e.g., if User pays from 'apes1Wallet', SA gets profit in 'apes1Wallet'
+                    const saWalletType = walletType;
+                    let saOpen = parseFloat(superAdminWallet[saWalletType] || 0);
                     let saClose = saOpen;
 
                     if (saNet >= 0) {
-                        // Profit: Surcharge Received >= Bank Charge
-                        // Credit the NET Profit to Admin
+                        // Profit
                         saCredit = saNet;
                         saClose = parseFloat((saOpen + saCredit).toFixed(2));
                         saRemark = `${remarkText} - surcharge profit`;
                         saDebit = 0;
                     } else {
-                        // Loss: Bank Charge > Surcharge Received
-                        // Debit the NET Loss from Admin
+                        // Loss
                         saDebit = Math.abs(saNet);
                         saClose = parseFloat((saOpen - saDebit).toFixed(2));
                         saRemark = `${remarkText} - surcharge loss`;
                         saCredit = 0;
                     }
 
-                    // Update SuperAdmin Wallet (Net Change)
+                    // Update SuperAdmin Wallet (Dynamic Wallet Type)
                     await dbService.update(
                         model.wallet,
                         { id: superAdminWallet.id },
-                        { mainWallet: saClose, updatedBy: superAdmin.id }
+                        { [saWalletType]: saClose, updatedBy: superAdmin.id }
                     );
 
                     // Super Admin History (Single Entry for Net Amount)
@@ -354,7 +356,7 @@ const payout = async (req, res) => {
                         await dbService.createOne(model.walletHistory, {
                             refId: superAdmin.id,
                             companyId: 1,
-                            walletType: 'mainWallet',
+                            walletType: saWalletType, // Log against AEPS Wallet
                             operator: operatorName,
                             remark: saRemark,
                             amount: Math.abs(saNet),
