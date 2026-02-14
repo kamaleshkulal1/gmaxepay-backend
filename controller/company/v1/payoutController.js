@@ -2,6 +2,7 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const asl = require('../../../services/asl');
+const { Op } = require('sequelize');
 
 const round2 = (num) => {
     const n = Number(num);
@@ -10,89 +11,71 @@ const round2 = (num) => {
         : 0;
 };
 
-const calcSlabAmount = (slab, baseAmount) => {
-    if (!slab) return 0;
-    const base = Number(baseAmount || 0);
-    const rawComm = Number(slab.commAmt || 0);
-    if (!Number.isFinite(base) || !Number.isFinite(rawComm)) return 0;
-
-    const amtType = (slab.amtType || 'fix').toLowerCase();
-    if (amtType === 'per') {
-        return round2((base * rawComm) / 100);
-    }
-    return round2(rawComm);
-};
 
 const payout = async (req, res) => {
     try {
-        if(![2].includes(req.user.userRole)){
+        if (![2].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to do payout' });
         }
-        const { 
-            amount, 
-            mode, 
+        const {
+            amount,
+            mode,
             aepsType,
-            customerBankId, 
-            bankId, 
-            accountNumber, 
+            customerBankId,
+            bankId,
+            accountNumber,
             ifscCode,
             paymentMode,
             latitude,
             longitude
         } = req.body;
-        
+
         const user = req.user;
-        
+
         // Validate required fields
         const payoutAmount = parseFloat(amount);
         if (!amount || isNaN(payoutAmount) || payoutAmount <= 0) {
             return res.failure({ message: 'Amount is required and must be a valid number greater than 0' });
         }
-        
+
         if (!mode || !['wallet', 'bank'].includes(mode)) {
             return res.failure({ message: 'Valid mode is required (wallet or bank)' });
         }
-        
-        // Validate AEPS type
+
         if (!aepsType || !['AEPS1', 'AEPS2'].includes(aepsType.toUpperCase())) {
             return res.failure({ message: 'Invalid AEPS type' });
         }
-        
+
         if (!latitude || !longitude) {
             return res.failure({ message: 'Latitude and longitude are required' });
         }
-        
-        // Normalize AEPS type
+
         const normalizedAepsType = aepsType.toUpperCase();
         const walletType = normalizedAepsType === 'AEPS1' ? 'apes1Wallet' : 'apes2Wallet';
-        
-        // Parallel fetch: company and wallet
+
         const [company, wallet] = await Promise.all([
             dbService.findOne(model.company, { id: user.companyId }),
             dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId })
         ]);
-        
+
         if (!company) return res.failure({ message: 'Company not found' });
         if (!wallet) return res.failure({ message: 'Wallet not found' });
-        
-        // Check AEPS wallet balance based on type
+
         const currentAepsBalance = parseFloat(wallet[walletType] || 0);
         if (currentAepsBalance < payoutAmount) {
-            return res.failure({ 
+            return res.failure({
                 message: `Insufficient ${normalizedAepsType} wallet balance`,
                 currentBalance: currentAepsBalance,
                 requiredAmount: payoutAmount
             });
         }
-        
-        // Generate transaction ID and calculate balances
+
         const transactionID = generateTransactionID(company.companyName || company.name);
         const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
         const aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount).toFixed(2));
         const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
         const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
-        
-        // Initialize payout history data
+
         const payoutHistoryData = {
             refId: user.id,
             companyId: user.companyId,
@@ -109,25 +92,20 @@ const payout = async (req, res) => {
             addedBy: user.id,
             updatedBy: user.id
         };
-        
+
         let customerBank = null;
         let aslResponse = null;
-        
-        // Handle bank payout mode
+
         if (mode === 'bank') {
-            // Validate payment mode
             if (!paymentMode || !['IMPS', 'NEFT'].includes(paymentMode)) {
                 return res.failure({ message: 'Valid paymentMode is required (IMPS or NEFT) for bank payout' });
             }
-            
+
             payoutHistoryData.paymentMode = paymentMode;
-            
-            // Get customer bank - support both customerBankId/bankId and accountNumber+ifscCode
             const effectiveCustomerBankId = customerBankId || bankId;
             const parsedBankId = effectiveCustomerBankId ? parseInt(effectiveCustomerBankId, 10) : null;
-            
+
             if (parsedBankId && !isNaN(parsedBankId)) {
-                // Find by ID
                 customerBank = await dbService.findOne(model.customerBank, {
                     id: parsedBankId,
                     refId: user.id,
@@ -135,7 +113,6 @@ const payout = async (req, res) => {
                     isActive: true
                 });
             } else if (accountNumber?.toString().trim() && ifscCode?.toString().trim()) {
-                // Find by account number and IFSC
                 customerBank = await dbService.findOne(model.customerBank, {
                     accountNumber: accountNumber.toString().trim(),
                     ifsc: ifscCode.toString().trim(),
@@ -144,40 +121,47 @@ const payout = async (req, res) => {
                     isActive: true
                 });
             }
-            
+
             if (!customerBank) {
-                return res.failure({ 
+                return res.failure({
                     message: 'Customer bank not found or inactive',
                     details: { customerBankId: parsedBankId, accountNumber, ifscCode }
                 });
             }
-            
-            // Set bank details in payout history
+
             payoutHistoryData.customerBankId = parseInt(customerBank.id, 10);
             payoutHistoryData.accountNumber = customerBank.accountNumber;
             payoutHistoryData.ifscCode = customerBank.ifsc;
             payoutHistoryData.beneficiaryName = customerBank.beneficiaryName;
             payoutHistoryData.bankName = customerBank.bankName;
             payoutHistoryData.mobile = user.mobileNo || user.mobile || user.phone;
-            
+
             // Call ASL API for bank payout
-            aslResponse = await asl.aslAepsPayOut({
-                mobile: user.mobileNo,
-                accountNumber: customerBank.accountNumber,
-                beneficiaryName: customerBank.beneficiaryName,
-                bankName: customerBank.bankName,
-                ifscCode: customerBank.ifsc,
-                amount: payoutAmount.toString(),
-                paymentMode: paymentMode,
-                latitude: latitude,
-                longitude: longitude,
+            // aslResponse = await asl.aslAepsPayOut({
+            //     mobile: user.mobileNo,
+            //     accountNumber: customerBank.accountNumber,
+            //     beneficiaryName: customerBank.beneficiaryName,
+            //     bankName: customerBank.bankName,
+            //     ifscCode: customerBank.ifsc,
+            //     amount: payoutAmount.toString(),
+            //     paymentMode: paymentMode,
+            //     latitude: latitude,
+            //     longitude: longitude,
+            //     agentTransactionId: transactionID
+            // });
+
+            // Custom response for testing
+            aslResponse = {
+                status: 'SUCCESS',
+                orderid: 'PAY1723565406',
+                bankref: '604221395191',
+                remark: 'Transaction was Successfull',
                 agentTransactionId: transactionID
-            });
-            
-            // Store API response and update status
+            };
+
             payoutHistoryData.apiResponse = aslResponse;
-            payoutHistoryData.agentTransactionId = transactionID;
-            
+            payoutHistoryData.agentTransactionId = aslResponse.agentTransactionId || transactionID;
+
             if (aslResponse?.status) {
                 const responseStatus = aslResponse.status.toUpperCase();
                 if (responseStatus === 'SUCCESS' || responseStatus === 'SUCCESSFUL') {
@@ -185,193 +169,243 @@ const payout = async (req, res) => {
                 } else if (responseStatus === 'FAILED' || responseStatus === 'FAILURE') {
                     payoutHistoryData.status = 'FAILED';
                 }
-                
-                // Extract additional fields
-                if (aslResponse.utrn) payoutHistoryData.utrn = aslResponse.utrn;
-                if (aslResponse.orderId) payoutHistoryData.orderId = aslResponse.orderId;
-                if (aslResponse.referenceId) payoutHistoryData.referenceId = aslResponse.referenceId;
-                if (aslResponse.message) payoutHistoryData.statusMessage = aslResponse.message;
+
+                if (aslResponse.utrn) payoutHistoryData.utrn = aslResponse.bankref;
+                if (aslResponse.orderid) payoutHistoryData.orderId = aslResponse.orderid;
+                if (aslResponse.referenceId) payoutHistoryData.referenceId = aslResponse.bankref;
+                if (aslResponse.remark) payoutHistoryData.statusMessage = aslResponse.remark;
             }
 
-            // Handle commission/surcharge logic for successful bank payout
             if (payoutHistoryData.status === 'SUCCESS') {
-                // Get user details and reporting user
-                const [existingUser, reportingToUser] = await Promise.all([
+                const payoutOperator = await dbService.findOne(model.operator, {
+                    operatorType: 'PAYOUT',
+                    isActive: true,
+                    minValue: { [Op.lte]: payoutAmount },
+                    maxValue: { [Op.gte]: payoutAmount }
+                });
+                console.log("payoutOperator", payoutOperator);
+
+                if (!payoutOperator) {
+                    return res.failure({ message: 'PAYOUT operator configuration not found' });
+                }
+
+                const [superAdmin, companyAdmin] = await Promise.all([
                     dbService.findOne(model.user, {
-                        id: user.id,
-                        companyId: user.companyId,
+                        id: 1,
+                        companyId: 1,
+                        userRole: 1,
                         isActive: true
                     }),
                     dbService.findOne(model.user, {
-                        id: user?.reportingTo || 1,
+                        id: user.id,
+                        companyId: user.companyId,
+                        userRole: 2,
                         isActive: true
                     })
                 ]);
 
-                if (!existingUser) {
-                    return res.failure({ message: 'User not found' });
+                if (!superAdmin) {
+                    return res.failure({ message: 'Super admin not found' });
                 }
 
-                if (!reportingToUser) {
-                    return res.failure({ message: 'Reporting user not found' });
+                if (!companyAdmin) {
+                    return res.failure({ message: 'Company admin not found' });
                 }
 
-                // Get user's slab
-                const existingUserSlab = await dbService.findOne(model.slab, {
-                    id: existingUser?.slabId
-                });
-
-                if (!existingUserSlab) {
-                    return res.failure({ message: 'Slab not found' });
-                }
-
-                // Get slab commissions for PAYOUT
-                const slabComm = await dbService.findAll(
+                const slabComm = await dbService.findOne(
                     model.commSlab,
                     {
-                        slabId: existingUserSlab.id,
-                        addedBy: existingUser?.reportingTo || 1,
-                        operatorType: 'PAYOUT'
-                    },
-                    {
-                        select: ['id', 'roleType', 'commAmt', 'commType', 'amtType']
+                        companyId: 1,
+                        addedBy: superAdmin.id,
+                        operatorId: payoutOperator.id,
+                        roleType: 2
                     }
                 );
+                console.log("slabComm", slabComm);
 
-                if (!slabComm || !Array.isArray(slabComm) || slabComm.length === 0) {
-                    return res.failure({ message: 'Slab commission not found for payout' });
+                if (!slabComm) {
+                    return res.failure({ message: 'Commission/Surcharge slab not configured for Payout' });
                 }
 
-                const adminCommission = slabComm.find((c) => c.roleType === 1) || slabComm[0];
-                const userCommission = slabComm.find((c) => c.roleType === 2) || slabComm[slabComm.length - 1];
+                const amtType = (slabComm.amtType || 'fix').toLowerCase();
+                const rawComm = Number(slabComm.commAmt || 0);
+                let calculatedAmount = 0;
 
-                // Calculate surcharge amounts using calcSlabAmount (supports both percentage and fixed)
-                const userBaseAmount = payoutAmount;
-                const userSurchargeAmt = calcSlabAmount(userCommission, userBaseAmount);
-                const adminSurchargeAmt = calcSlabAmount(adminCommission, userSurchargeAmt);
-
-                if (userSurchargeAmt <= 0) {
-                    return res.failure({ message: 'Invalid user surcharge configuration for payout' });
+                if (amtType === 'per') {
+                    calculatedAmount = round2((payoutAmount * rawComm) / 100);
+                } else {
+                    calculatedAmount = round2(rawComm);
                 }
 
-                if (adminSurchargeAmt < 0) {
-                    return res.failure({ message: 'Invalid admin surcharge configuration for payout' });
+                if (calculatedAmount > 0) {
+                    const [companyAdminWallet, superAdminWallet] = await Promise.all([
+                        dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
+                        dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                    ]);
+
+                    if (!companyAdminWallet) {
+                        return res.failure({ message: 'Company admin wallet not found' });
+                    }
+
+                    if (!superAdminWallet) {
+                        return res.failure({ message: 'Super admin wallet not found' });
+                    }
+
+                    const companyAdminOpeningBalance = parseFloat(companyAdminWallet.mainWallet || 0);
+                    const superAdminOpeningBalance = parseFloat(superAdminWallet.mainWallet || 0);
+
+                    const operatorName = 'Payout';
+                    const remarkText = `Bank payout via ${paymentMode}`;
+                    const commType = (slabComm.commType || 'sur').toLowerCase();
+
+                    if (commType === 'sur') {
+                        if (companyAdminOpeningBalance < calculatedAmount) {
+                            return res.failure({
+                                message: `Insufficient wallet balance for surcharge. Required: ${calculatedAmount}, Available: ${companyAdminOpeningBalance}`
+                            });
+                        }
+
+                        const companyAdminClosingBalance = parseFloat((companyAdminOpeningBalance - calculatedAmount).toFixed(2));
+                        const superAdminClosingBalance = parseFloat((superAdminOpeningBalance + calculatedAmount).toFixed(2));
+
+                        await Promise.all([
+                            dbService.update(
+                                model.wallet,
+                                { id: companyAdminWallet.id },
+                                { mainWallet: companyAdminClosingBalance, updatedBy: companyAdmin.id }
+                            ),
+                            dbService.update(
+                                model.wallet,
+                                { id: superAdminWallet.id },
+                                { mainWallet: superAdminClosingBalance, updatedBy: superAdmin.id }
+                            )
+                        ]);
+
+                        await dbService.createOne(model.walletHistory, {
+                            refId: companyAdmin.id,
+                            companyId: user.companyId,
+                            walletType: 'mainWallet',
+                            operator: operatorName,
+                            remark: `${remarkText} - surcharge`,
+                            amount: calculatedAmount,
+                            comm: 0,
+                            surcharge: calculatedAmount,
+                            openingAmt: companyAdminOpeningBalance,
+                            closingAmt: companyAdminClosingBalance,
+                            credit: 0,
+                            debit: calculatedAmount,
+                            transactionId: transactionID,
+                            paymentStatus: 'SUCCESS',
+                            beneficiaryName: customerBank.beneficiaryName || null,
+                            beneficiaryAccountNumber: customerBank.accountNumber,
+                            beneficiaryBankName: customerBank.bankName || null,
+                            beneficiaryIfsc: customerBank.ifsc,
+                            paymentMode: paymentMode,
+                            addedBy: companyAdmin.id,
+                            updatedBy: companyAdmin.id
+                        });
+
+                        await dbService.createOne(model.walletHistory, {
+                            refId: superAdmin.id,
+                            companyId: 1,
+                            walletType: 'mainWallet',
+                            operator: operatorName,
+                            remark: `${remarkText} - surcharge received`,
+                            amount: calculatedAmount,
+                            comm: 0,
+                            surcharge: calculatedAmount,
+                            openingAmt: superAdminOpeningBalance,
+                            closingAmt: superAdminClosingBalance,
+                            credit: calculatedAmount,
+                            debit: 0,
+                            transactionId: transactionID,
+                            paymentStatus: 'SUCCESS',
+                            paymentMode: 'WALLET',
+                            addedBy: superAdmin.id,
+                            updatedBy: superAdmin.id
+                        });
+
+                    } else if (commType === 'com') {
+                        if (superAdminOpeningBalance < calculatedAmount) {
+                            return res.failure({
+                                message: `Insufficient super admin wallet balance for commission.`
+                            });
+                        }
+
+                        const companyAdminClosingBalance = parseFloat((companyAdminOpeningBalance + calculatedAmount).toFixed(2));
+                        const superAdminClosingBalance = parseFloat((superAdminOpeningBalance - calculatedAmount).toFixed(2));
+
+                        await Promise.all([
+                            dbService.update(
+                                model.wallet,
+                                { id: companyAdminWallet.id },
+                                { mainWallet: companyAdminClosingBalance, updatedBy: companyAdmin.id }
+                            ),
+                            dbService.update(
+                                model.wallet,
+                                { id: superAdminWallet.id },
+                                { mainWallet: superAdminClosingBalance, updatedBy: superAdmin.id }
+                            )
+                        ]);
+
+                        await dbService.createOne(model.walletHistory, {
+                            refId: companyAdmin.id,
+                            companyId: user.companyId,
+                            walletType: 'mainWallet',
+                            operator: operatorName,
+                            remark: `${remarkText} - commission`,
+                            amount: calculatedAmount,
+                            comm: calculatedAmount,
+                            surcharge: 0,
+                            openingAmt: companyAdminOpeningBalance,
+                            closingAmt: companyAdminClosingBalance,
+                            credit: calculatedAmount,
+                            debit: 0,
+                            transactionId: transactionID,
+                            paymentStatus: 'SUCCESS',
+                            beneficiaryName: customerBank.beneficiaryName || null,
+                            beneficiaryAccountNumber: customerBank.accountNumber,
+                            beneficiaryBankName: customerBank.bankName || null,
+                            beneficiaryIfsc: customerBank.ifsc,
+                            paymentMode: paymentMode,
+                            addedBy: companyAdmin.id,
+                            updatedBy: companyAdmin.id
+                        });
+
+                        await dbService.createOne(model.walletHistory, {
+                            refId: superAdmin.id,
+                            companyId: 1,
+                            walletType: 'mainWallet',
+                            operator: operatorName,
+                            remark: `${remarkText} - commission paid`,
+                            amount: calculatedAmount,
+                            comm: calculatedAmount,
+                            surcharge: 0,
+                            openingAmt: superAdminOpeningBalance,
+                            closingAmt: superAdminClosingBalance,
+                            credit: 0,
+                            debit: calculatedAmount,
+                            transactionId: transactionID,
+                            paymentStatus: 'SUCCESS',
+                            paymentMode: 'WALLET',
+                            addedBy: superAdmin.id,
+                            updatedBy: superAdmin.id
+                        });
+                    }
                 }
-
-                if (adminSurchargeAmt > userSurchargeAmt) {
-                    return res.failure({
-                        message: 'Invalid surcharge configuration: admin income is greater than user debit for payout'
-                    });
-                }
-
-                // Get wallets
-                const [existingUserWallet, reportingToUserWallet] = await Promise.all([
-                    dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId }),
-                    dbService.findOne(model.wallet, { refId: reportingToUser?.id || 1, companyId: reportingToUser?.companyId || user.companyId })
-                ]);
-
-                if (!existingUserWallet) {
-                    return res.failure({ message: 'User wallet not found' });
-                }
-
-                if (!reportingToUserWallet) {
-                    return res.failure({ message: 'Reporting to user wallet not found' });
-                }
-
-                const userOpeningBalance = parseFloat(existingUserWallet.mainWallet || 0);
-
-                if (userOpeningBalance < userSurchargeAmt) {
-                    return res.failure({
-                        message: `Insufficient wallet balance. Required: ${userSurchargeAmt}, Available: ${userOpeningBalance}`
-                    });
-                }
-
-                const userClosingBalance = parseFloat((userOpeningBalance - userSurchargeAmt).toFixed(2));
-                const reportingOpeningBalance = parseFloat(reportingToUserWallet.mainWallet || 0);
-                const reportingClosingBalance = parseFloat((reportingOpeningBalance + adminSurchargeAmt).toFixed(2));
-
-                const operatorName = 'Payout';
-                const remarkText = `Bank payout via ${paymentMode} charge`;
-
-                // Update wallets
-                await Promise.all([
-                    dbService.update(
-                        model.wallet,
-                        { id: existingUserWallet.id },
-                        { mainWallet: userClosingBalance, updatedBy: user.id }
-                    ),
-                    dbService.update(
-                        model.wallet,
-                        { id: reportingToUserWallet.id },
-                        { mainWallet: reportingClosingBalance, updatedBy: reportingToUser?.id || 1 }
-                    )
-                ]);
-
-                // Create wallet history for user (debit)
-                await dbService.createOne(model.walletHistory, {
-                    refId: user.id,
-                    companyId: user.companyId,
-                    walletType: 'mainWallet',
-                    operator: operatorName,
-                    remark: remarkText,
-                    amount: userSurchargeAmt,
-                    comm: 0,
-                    surcharge: userSurchargeAmt,
-                    openingAmt: userOpeningBalance,
-                    closingAmt: userClosingBalance,
-                    credit: 0,
-                    debit: userSurchargeAmt,
-                    transactionId: transactionID,
-                    paymentStatus: 'SUCCESS',
-                    beneficiaryName: customerBank.beneficiaryName || null,
-                    beneficiaryAccountNumber: customerBank.accountNumber,
-                    beneficiaryBankName: customerBank.bankName || null,
-                    beneficiaryIfsc: customerBank.ifsc,
-                    paymentMode: paymentMode,
-                    addedBy: user.id,
-                    updatedBy: user.id
-                });
-
-                // Create wallet history for reporting user (credit)
-                await dbService.createOne(model.walletHistory, {
-                    refId: reportingToUser?.id || 1,
-                    companyId: reportingToUser?.companyId || user.companyId,
-                    walletType: 'mainWallet',
-                    operator: operatorName,
-                    remark: `${remarkText} - commission`,
-                    amount: adminSurchargeAmt,
-                    comm: adminSurchargeAmt,
-                    surcharge: 0,
-                    openingAmt: reportingOpeningBalance,
-                    closingAmt: reportingClosingBalance,
-                    credit: adminSurchargeAmt,
-                    debit: 0,
-                    transactionId: transactionID,
-                    paymentStatus: 'SUCCESS',
-                    beneficiaryName: reportingToUser?.name || null,
-                    beneficiaryAccountNumber: null,
-                    beneficiaryBankName: null,
-                    beneficiaryIfsc: null,
-                    paymentMode: 'WALLET',
-                    addedBy: reportingToUser?.id || 1,
-                    updatedBy: reportingToUser?.id || 1
-                });
             }
         }
-        
-        // Create payout history record
+
         const payoutHistory = await dbService.createOne(model.payoutHistory, payoutHistoryData);
-        
-        // Update wallet balance only if payout is successful
+
         if (payoutHistoryData.status === 'SUCCESS') {
             if (mode === 'wallet') {
-                // Internal transfer: Debit from selected AEPS wallet, Credit to mainWallet
                 const walletUpdate = {
                     [walletType]: aepsClosingBalance,
                     mainWallet: mainWalletClosingBalance,
                     updatedBy: user.id
                 };
-                
+
                 const walletHistories = [
                     {
                         refId: user.id,
@@ -404,16 +438,14 @@ const payout = async (req, res) => {
                         updatedBy: user.id
                     }
                 ];
-                
-                // Parallel execution: Update wallet and create history records
+
                 await Promise.all([
                     dbService.update(model.wallet, { refId: user.id, companyId: user.companyId }, walletUpdate),
                     dbService.createOne(model.walletHistory, walletHistories[0]),
                     dbService.createOne(model.walletHistory, walletHistories[1])
                 ]);
-                
+
             } else {
-                // External bank transfer: Only debit from selected AEPS wallet
                 const walletHistoryData = {
                     refId: user.id,
                     companyId: user.companyId,
@@ -429,8 +461,7 @@ const payout = async (req, res) => {
                     addedBy: user.id,
                     updatedBy: user.id
                 };
-                
-                // Add bank details if available
+
                 if (customerBank) {
                     walletHistoryData.beneficiaryName = customerBank.beneficiaryName;
                     walletHistoryData.beneficiaryAccountNumber = customerBank.accountNumber;
@@ -439,13 +470,12 @@ const payout = async (req, res) => {
                     walletHistoryData.paymentMode = paymentMode;
                     if (payoutHistoryData.utrn) walletHistoryData.UTR = payoutHistoryData.utrn;
                 }
-                
-                // Parallel execution: Update wallet and create history
+
                 const walletUpdateData = {
                     [walletType]: aepsClosingBalance,
                     updatedBy: user.id
                 };
-                
+
                 await Promise.all([
                     dbService.update(
                         model.wallet,
@@ -456,8 +486,7 @@ const payout = async (req, res) => {
                 ]);
             }
         }
-        
-        // Prepare response data (without payoutHistory object)
+
         const responseData = {
             transactionID: transactionID,
             status: payoutHistoryData.status,
@@ -467,36 +496,33 @@ const payout = async (req, res) => {
                 closingBalance: aepsClosingBalance
             }
         };
-        
-        // Add main wallet info for internal transfers
+
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {
             responseData.mainWallet = {
                 openingBalance: mainWalletOpeningBalance,
                 closingBalance: mainWalletClosingBalance
             };
         }
-        
-        // Return failure response if payout status is FAILED
+
         if (payoutHistoryData.status === 'FAILED') {
-            const failureMessage = payoutHistoryData.apiResponse?.remark || 
-                                 payoutHistoryData.statusMessage || 
-                                 'Payout request failed';
+            const failureMessage = payoutHistoryData.apiResponse?.remark ||
+                payoutHistoryData.statusMessage ||
+                'Payout request failed';
             return res.failure({
                 message: failureMessage,
                 data: responseData
             });
         }
-        
-        // Return success response for SUCCESS or PENDING status
-        const successMessage = mode === 'wallet' 
+
+        const successMessage = mode === 'wallet'
             ? `Payout from ${normalizedAepsType} wallet to Main wallet successful`
             : `Payout request processed from ${normalizedAepsType}`;
-        
+
         return res.success({
             message: successMessage,
             data: responseData
         });
-        
+
     } catch (error) {
         console.log('Payout error:', error);
         return res.failure({ message: error.message || 'Internal server error' });
@@ -505,11 +531,11 @@ const payout = async (req, res) => {
 
 const getPayoutBankList = async (req, res) => {
     try {
-        if(![2].includes(req.user.userRole)){
+        if (![2].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to get payout bank list' });
         }
         const user = req.user;
-        
+
         const customerBanks = await dbService.findAll(
             model.customerBank,
             {
@@ -521,7 +547,7 @@ const getPayoutBankList = async (req, res) => {
                 order: [['isPrimary', 'DESC'], ['createdAt', 'DESC']]
             }
         );
-        
+
         if (!customerBanks || customerBanks.length === 0) {
             return res.success({
                 message: 'Payout bank list retrieved successfully',
@@ -532,43 +558,43 @@ const getPayoutBankList = async (req, res) => {
                 }
             });
         }
-        
+
         const uniqueBankNames = [...new Set(customerBanks.map(bank => bank.bankName).filter(Boolean))];
-        
+
         const bankLogoPromises = uniqueBankNames.map(async (bankName) => {
             const [practomindBank, aslBank] = await Promise.all([
                 dbService.findOne(model.practomindBankList, { bankName: bankName }),
                 dbService.findOne(model.aslBankList, { bankName: bankName })
             ]);
-            
+
             let bankLogo = null;
             if (practomindBank && practomindBank.bankLogo) {
                 bankLogo = practomindBank.bankLogo;
             } else if (aslBank && aslBank.bankLogo) {
                 bankLogo = aslBank.bankLogo;
             }
-            
+
             return {
                 bankName,
                 bankLogo: bankLogo || null
             };
         });
-        
+
         const bankLogoMap = await Promise.all(bankLogoPromises);
         const logoLookup = bankLogoMap.reduce((acc, item) => {
             acc[item.bankName] = item.bankLogo;
             return acc;
         }, {});
-        
+
         const banksWithLogo = customerBanks.map(bank => {
             const bankData = bank.toJSON ? bank.toJSON() : bank;
             const rawBankLogo = bankData.bankName ? (logoLookup[bankData.bankName] || null) : null;
-            
+
             let bankLogo = null;
             if (rawBankLogo) {
                 bankLogo = `${process.env.AWS_CDN_URL}/${rawBankLogo}`;
             }
-            
+
             return {
                 id: bankData.id,
                 customerBankId: bankData.id,
@@ -580,9 +606,9 @@ const getPayoutBankList = async (req, res) => {
                 isPrimary: bankData.isPrimary === true || bankData.isPrimary === 1
             };
         });
-        
+
         const primaryBankCount = banksWithLogo.filter(bank => bank.isPrimary === true).length;
-        
+
         return res.success({
             message: 'Payout bank list retrieved successfully',
             data: {
@@ -591,7 +617,7 @@ const getPayoutBankList = async (req, res) => {
                 primaryBankCount: primaryBankCount
             }
         });
-        
+
     } catch (error) {
         console.log('Get payout bank list error:', error);
         return res.internalServerError({ message: error.message || 'Internal server error' });
@@ -600,7 +626,7 @@ const getPayoutBankList = async (req, res) => {
 
 const getAllPayoutHistory = async (req, res) => {
     try {
-        if(![2].includes(req.user.userRole)){
+        if (![2].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to get all payout history' });
         }
         const user = req.user;
