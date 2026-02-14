@@ -216,7 +216,6 @@ const payout = async (req, res) => {
                         companyId: 1,
                         addedBy: superAdmin.id,
                         operatorId: payoutOperator.id,
-                        roleType: 2
                     }
                 );
                 console.log("slabComm", slabComm);
