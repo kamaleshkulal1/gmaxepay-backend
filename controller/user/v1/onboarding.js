@@ -2606,7 +2606,7 @@ const uploadAadharDocuments = async (req, res) => {
       dob: frontData.dob || null,
       aadhaar_numbers_match: aadhaar_numbers_match
     };
-
+    console.log(extractedData);
     const validationResults = {
       aadhaarLast4Match: false,
       dobMatch: false,
