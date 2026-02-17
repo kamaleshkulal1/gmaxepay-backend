@@ -13,12 +13,12 @@ const seeder = require('./seeder/seeder');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const { morganMiddleware, requestLogger, responseInterceptor, errorLogger } = require('./middleware/loggingMiddleware');
-const { 
-  sanitizeInput, 
-  preventNoSqlInjection, 
-  requestId, 
+const {
+  sanitizeInput,
+  preventNoSqlInjection,
+  requestId,
   secureErrorHandler,
-  validateContentType 
+  validateContentType
 } = require('./middleware/security');
 const aepsLogout = require('./utils/aepsLogout');
 const { generalLimit } = require('./middleware/ratelimiter');
@@ -66,7 +66,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id', 'token','x-company-id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id', 'token', 'x-company-id'],
   exposedHeaders: ['x-request-id'],
   maxAge: 86400, // Cache preflight for 24 hours
   optionsSuccessStatus: 200
@@ -126,11 +126,11 @@ app.get('/health', (req, res) => {
 
 function detectIPType(ip) {
   if (!ip || ip === 'unknown') return 'unknown';
-  
+
   const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
   const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
   const ipv6CompressedRegex = /^([0-9a-fA-F]{1,4}:)*::([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}$/;
-  
+
   if (ipv4Regex.test(ip)) return 'IPv4';
   if (ipv6Regex.test(ip) || ipv6CompressedRegex.test(ip)) return 'IPv6';
   return 'unknown';
@@ -159,16 +159,16 @@ function name() {
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  // models.sequelize
-  //   .sync({ alter: true })
-  //   .then(() => {})
-  //   .finally(() => {
-  //     app.use(routes);
-  //     // seeder();
-  //     name();
-  //     aepsLogout();
-  //   });
-  app.use(routes);
+  models.sequelize
+    .sync({ alter: true })
+    .then(() => { })
+    .finally(() => {
+      app.use(routes);
+      // seeder();
+      name();
+      aepsLogout();
+    });
+  // app.use(routes);
   httpServer.listen(process.env.PORT, () => {
     console.log(`gmaxepay is running on port ${process.env.PORT} successfully.`);
   });
