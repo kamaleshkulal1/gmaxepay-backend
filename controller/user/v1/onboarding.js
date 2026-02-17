@@ -2549,15 +2549,24 @@ const uploadAadharDocuments = async (req, res) => {
       });
     }
 
+    // Debug: Log detailed extraction data
+    console.log("=== Front Image Extraction Debug ===");
+    console.log("Front Data Success:", frontData.success);
+    console.log("Front Data Raw Aadhaar Number:", frontData.aadhaar_number);
+    console.log("Front Data Raw Text (first 500 chars):", frontData.rawText ? frontData.rawText.substring(0, 500) : 'No raw text');
+    console.log("Front Data Name:", frontData.name);
+    console.log("Front Data DOB:", frontData.dob);
+    
+    console.log("=== Back Image Extraction Debug ===");
+    console.log("Back Data Success:", backData.success);
+    console.log("Back Data Raw Aadhaar Number:", backData.aadhaar_number);
+    console.log("Back Data Raw Text (first 500 chars):", backData.rawText ? backData.rawText.substring(0, 500) : 'No raw text');
+
     const extractExact12Digits = (aadhaarValue) => {
       if (!aadhaarValue) return null;
       const digits = aadhaarValue.toString().replace(/\D/g, '');
       return digits.length === 12 ? digits : null;
     };
-
-    // Debug: Log raw extracted data before processing
-    console.log("Front Data Raw Aadhaar Number:", frontData.aadhaar_number);
-    console.log("Back Data Raw Aadhaar Number:", backData.aadhaar_number);
 
     const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
     const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);

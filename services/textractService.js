@@ -117,6 +117,10 @@ const extractAadhaarData = async (imageBuffer) => {
 
     let aadhaarNumber = null;
     
+    // Debug logging
+    console.log(`[Textract Debug] Found ${lineBlockCandidates.length} Aadhaar candidates:`, 
+      lineBlockCandidates.map(c => ({ number: c.number, source: c.source, confidence: c.confidence })));
+    
     if (lineBlockCandidates.length > 0) {
       // Filter out invalid Aadhaar numbers
       const validCandidates = lineBlockCandidates
@@ -159,6 +163,13 @@ const extractAadhaarData = async (imageBuffer) => {
           
           return true;
         });
+
+      // Debug logging
+      console.log(`[Textract Debug] After filtering: ${validCandidates.length} valid candidates out of ${lineBlockCandidates.length} total`);
+      if (lineBlockCandidates.length > validCandidates.length) {
+        const filtered = lineBlockCandidates.filter(c => !validCandidates.find(v => v.number === c.number));
+        console.log(`[Textract Debug] Filtered out ${filtered.length} candidates:`, filtered.map(c => c.number));
+      }
 
       // If we have valid candidates, score and select the best one
       if (validCandidates.length > 0) {
@@ -206,10 +217,17 @@ const extractAadhaarData = async (imageBuffer) => {
           
           // Sort by score (highest first) and take the best one
           scoredCandidates.sort((a, b) => b.score - a.score);
+          console.log(`[Textract Debug] Scored candidates:`, scoredCandidates);
           aadhaarNumber = scoredCandidates[0].candidate;
         }
+      } else {
+        console.log(`[Textract Debug] No valid candidates after filtering`);
       }
+    } else {
+      console.log(`[Textract Debug] No Aadhaar candidates found in image`);
     }
+    
+    console.log(`[Textract Debug] Final extracted Aadhaar number:`, aadhaarNumber);
 
     // Extract DOB (various formats: DD/MM/YYYY, DD-MM-YYYY, etc.)
     // Look for DOB specifically after DOB-related keywords, not Download Date or Issue Date
