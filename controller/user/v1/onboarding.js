@@ -2534,6 +2534,7 @@ const uploadAadharDocuments = async (req, res) => {
       textractService.extractAadhaarData(back_photo.buffer),
       textractService.extractAadhaarPhoto(front_photo.buffer)
     ]);
+    console.log(frontData, backData, frontPhoto);
 
     if (!frontData.success) {
       return res.failure({
@@ -2555,9 +2556,11 @@ const uploadAadharDocuments = async (req, res) => {
       return digits.length === 12 ? digits : null;
     };
 
+    console.log(frontData.aadhaar_number, backData.aadhaar_number);
     const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
     const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
-
+    console.log(frontAadhaarNumber, backAadhaarNumber);
+    console.log(aadhaar_numbers_match);
     const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber
       ? frontAadhaarNumber === backAadhaarNumber
       : false;
