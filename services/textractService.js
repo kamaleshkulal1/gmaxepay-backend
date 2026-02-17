@@ -62,12 +62,33 @@ const extractAadhaarData = async (imageBuffer) => {
       }
       
       // Try to find Aadhaar number in this line
-      const aadhaarRegexWithSpaces = /\b\d{4}\s+\d{4}\s+\d{4}\b/g;
-      const matches = lineText.match(aadhaarRegexWithSpaces);
-      if (matches) {
-        matches.forEach(match => {
-          const digits = match.replace(/\s/g, '');
+      // Handle formats: XXXX XXXX XXXX, XXXX.XXXX XXXX, XXXX.XXXX.XXXX, etc.
+      // Match 12 digits with any combination of spaces/dots anywhere - remove all dots
+      const aadhaarRegexStandard = /\b\d{4}[\s.]+\d{4}[\s.]+\d{4}\b/g;
+      const standardMatches = lineText.match(aadhaarRegexStandard);
+      if (standardMatches) {
+        standardMatches.forEach(match => {
+          // Remove all spaces and dots, extract only digits
+          const digits = match.replace(/[\s.]/g, '');
           if (digits.length === 12) {
+            lineBlockCandidates.push({
+              number: digits,
+              confidence: block.confidence,
+              source: 'line_block'
+            });
+          }
+        });
+      }
+      
+      // Also try flexible pattern for cases where dots/spaces appear in different positions
+      // Match sequences of 2-4 digits separated by spaces/dots, that could form 12 digits
+      const aadhaarRegexFlexible = /\b(?:\d{2,4}[\s.]+){2,4}\d{2,4}\b/g;
+      const flexibleMatches = lineText.match(aadhaarRegexFlexible);
+      if (flexibleMatches) {
+        flexibleMatches.forEach(match => {
+          // Remove all spaces and dots, extract only digits
+          const digits = match.replace(/[\s.]/g, '');
+          if (digits.length === 12 && !lineBlockCandidates.find(c => c.number === digits)) {
             lineBlockCandidates.push({
               number: digits,
               confidence: block.confidence,
@@ -79,26 +100,27 @@ const extractAadhaarData = async (imageBuffer) => {
     });
 
     // Also search in full text blocks
-    // First, try to find numbers in the format XXXX XXXX XXXX (with spaces) - most common format
-    const aadhaarRegexWithSpaces = /\b\d{4}\s+\d{4}\s+\d{4}\b/g;
-    let aadhaarMatches = textBlocks.match(aadhaarRegexWithSpaces);
+    // First try standard 4-4-4 pattern format (most common)
+    const aadhaarRegexStandard = /\b\d{4}[\s.]+\d{4}[\s.]+\d{4}\b/g;
+    let aadhaarMatches = textBlocks.match(aadhaarRegexStandard);
     
-    // If not found, try without spaces
+    // If not found, try flexible pattern for cases where dots/spaces appear in different positions
+    if (!aadhaarMatches || aadhaarMatches.length === 0) {
+      const aadhaarRegexFlexible = /\b(?:\d{2,4}[\s.]+){2,4}\d{2,4}\b/g;
+      aadhaarMatches = textBlocks.match(aadhaarRegexFlexible);
+    }
+    
+    // If not found, try without spaces/dots (12 consecutive digits)
     if (!aadhaarMatches || aadhaarMatches.length === 0) {
       const aadhaarRegexNoSpaces = /\b\d{12}\b/g;
       aadhaarMatches = textBlocks.match(aadhaarRegexNoSpaces);
     }
     
-    // If still not found, try flexible pattern
-    if (!aadhaarMatches || aadhaarMatches.length === 0) {
-      const aadhaarRegexFlexible = /\b\d{4}\s?\d{4}\s?\d{4}\b/g;
-      aadhaarMatches = textBlocks.match(aadhaarRegexFlexible);
-    }
-    
     // Combine line block candidates with full text matches
     if (aadhaarMatches) {
       aadhaarMatches.forEach(match => {
-        const digits = match.replace(/\s/g, '');
+        // Remove all spaces and dots, extract only digits
+        const digits = match.replace(/[\s.]/g, '');
         if (digits.length === 12 && !lineBlockCandidates.find(c => c.number === digits)) {
           lineBlockCandidates.push({
             number: digits,
@@ -117,10 +139,7 @@ const extractAadhaarData = async (imageBuffer) => {
 
     let aadhaarNumber = null;
     
-    // Debug logging
-    console.log(`[Textract Debug] Found ${lineBlockCandidates.length} Aadhaar candidates:`, 
-      lineBlockCandidates.map(c => ({ number: c.number, source: c.source, confidence: c.confidence })));
-    
+
     if (lineBlockCandidates.length > 0) {
       // Filter out invalid Aadhaar numbers
       const validCandidates = lineBlockCandidates
@@ -164,11 +183,8 @@ const extractAadhaarData = async (imageBuffer) => {
           return true;
         });
 
-      // Debug logging
-      console.log(`[Textract Debug] After filtering: ${validCandidates.length} valid candidates out of ${lineBlockCandidates.length} total`);
       if (lineBlockCandidates.length > validCandidates.length) {
         const filtered = lineBlockCandidates.filter(c => !validCandidates.find(v => v.number === c.number));
-        console.log(`[Textract Debug] Filtered out ${filtered.length} candidates:`, filtered.map(c => c.number));
       }
 
       // If we have valid candidates, score and select the best one
@@ -217,7 +233,6 @@ const extractAadhaarData = async (imageBuffer) => {
           
           // Sort by score (highest first) and take the best one
           scoredCandidates.sort((a, b) => b.score - a.score);
-          console.log(`[Textract Debug] Scored candidates:`, scoredCandidates);
           aadhaarNumber = scoredCandidates[0].candidate;
         }
       } else {
@@ -227,10 +242,7 @@ const extractAadhaarData = async (imageBuffer) => {
       console.log(`[Textract Debug] No Aadhaar candidates found in image`);
     }
     
-    console.log(`[Textract Debug] Final extracted Aadhaar number:`, aadhaarNumber);
 
-    // Extract DOB (various formats: DD/MM/YYYY, DD-MM-YYYY, etc.)
-    // Look for DOB specifically after DOB-related keywords, not Download Date or Issue Date
     let dob = null;
     const dobKeywords = ['DOB', 'dob', 'Date of Birth', 'date of birth', 'जन्म दिनांक', 'जन्मदिनांक', 'Date Of Birth'];
     const excludeDateKeywords = ['Download Date', 'download date', 'Issue Date', 'issue date', 'Download', 'Issue'];
