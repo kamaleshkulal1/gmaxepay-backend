@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bbpsController = require('../../../controller/user/v1/bbpsController');
 const authentication = require('../../../middleware/authentication');
+
 router.post('/get-all-categories', authentication, bbpsController.getAllCategories);
 router.post('/get-billerId-by-category', authentication, bbpsController.getBillerIds);
 router.post('/get-biller-info', authentication, bbpsController.getBillerInfo);

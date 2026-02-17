@@ -25,7 +25,7 @@ const calcSlabAmount = (slab, baseAmount) => {
 const recharge = async (req, res) => {
     try {
         const { mobileNumber, opcode, amount, circle, value1, value2, value3, value4 } = req.body;
-        
+
         if (!mobileNumber) {
             return res.failure({ message: 'Mobile number is required' });
         }
@@ -66,8 +66,8 @@ const recharge = async (req, res) => {
             model.wallet.findOne({
                 where: { refId: user.id, companyId: user.companyId }
             })
-        ]);   
-             
+        ]);
+
         // Extract response data
         const orderid = response.orderid;
         const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
@@ -90,7 +90,7 @@ const recharge = async (req, res) => {
         }
 
         const openingMainWallet = round2(currentWallet.mainWallet || 0);
-        
+
         let retailerComm = 0;
         let distributorComm = 0;
         let masterDistributorComm = 0;
@@ -928,9 +928,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: retailerOpeningBalance,
                                 closingAmt: retailerClosingBalance,
-                            credit: retailerComm,
-                            debit: 0,
-                            transactionId,
+                                credit: retailerComm,
+                                debit: 0,
+                                transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: retailer.id,
                                 updatedBy: retailer.id
@@ -946,9 +946,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: mdOpeningBalance,
                                 closingAmt: mdClosingBalance,
-                            credit: masterDistributorComm,
-                            debit: 0,
-                            transactionId,
+                                credit: masterDistributorComm,
+                                debit: 0,
+                                transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: masterDistributor.id,
                                 updatedBy: masterDistributor.id
@@ -964,9 +964,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: companyOpeningBalance,
                                 closingAmt: companyClosingBalance,
-                            credit: companyComm,
-                            debit: 0,
-                            transactionId,
+                                credit: companyComm,
+                                debit: 0,
+                                transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: companyAdmin.id,
                                 updatedBy: companyAdmin.id
@@ -982,9 +982,9 @@ const recharge = async (req, res) => {
                                 surcharge: 0,
                                 openingAmt: adminOpeningBalance,
                                 closingAmt: adminClosingBalance,
-                            credit: superAdminComm,
-                            debit: 0,
-                            transactionId,
+                                credit: superAdminComm,
+                                debit: 0,
+                                transactionId,
                                 paymentStatus: 'SUCCESS',
                                 addedBy: superAdmin.id,
                                 updatedBy: superAdmin.id
@@ -1057,9 +1057,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: retailerOpeningBalance,
                                         closingAmt: retailerClosingBalance,
-                            credit: retailerComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: retailerComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: retailer.id,
                                         updatedBy: retailer.id
@@ -1075,9 +1075,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: distOpeningBalance,
                                         closingAmt: distClosingBalance,
-                            credit: distributorComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: distributorComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: distributor.id,
                                         updatedBy: distributor.id
@@ -1111,9 +1111,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: companyOpeningBalance,
                                         closingAmt: companyClosingBalance,
-                            credit: companyComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: companyComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: companyAdmin.id,
                                         updatedBy: companyAdmin.id
@@ -1129,9 +1129,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: adminOpeningBalance,
                                         closingAmt: adminClosingBalance,
-                            credit: superAdminComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: superAdminComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: superAdmin.id,
                                         updatedBy: superAdmin.id
@@ -1188,9 +1188,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: retailerOpeningBalance,
                                         closingAmt: retailerClosingBalance,
-                            credit: retailerComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: retailerComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: retailer.id,
                                         updatedBy: retailer.id
@@ -1206,9 +1206,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: distOpeningBalance,
                                         closingAmt: distClosingBalance,
-                            credit: distributorComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: distributorComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: distributor.id,
                                         updatedBy: distributor.id
@@ -1224,9 +1224,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: companyOpeningBalance,
                                         closingAmt: companyClosingBalance,
-                            credit: companyComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: companyComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: companyAdmin.id,
                                         updatedBy: companyAdmin.id
@@ -1242,9 +1242,9 @@ const recharge = async (req, res) => {
                                         surcharge: 0,
                                         openingAmt: adminOpeningBalance,
                                         closingAmt: adminClosingBalance,
-                            credit: superAdminComm,
-                            debit: 0,
-                            transactionId,
+                                        credit: superAdminComm,
+                                        debit: 0,
+                                        transactionId,
                                         paymentStatus: 'SUCCESS',
                                         addedBy: superAdmin.id,
                                         updatedBy: superAdmin.id
@@ -1388,8 +1388,8 @@ const recharge = async (req, res) => {
         const totalDebitAmount = isSuccess ? amountNumber : 0;
         const netWalletChange = isSuccess ? round2(-totalDebitAmount + retailerNetCredit) : 0;
         const closingMainWallet = round2(openingMainWallet + netWalletChange);
-        if(isSuccess) response.operatorName = operator?.operatorName;
-        
+        if (isSuccess) response.operatorName = operator?.operatorName;
+
         const serviceTransactionData = {
             refId: user.id,
             companyId: user.companyId,
@@ -1440,17 +1440,17 @@ const recharge = async (req, res) => {
         };
 
         if (isSuccess) {
-            return res.success({ 
-                message: response.message || 'Recharge successful', 
+            return res.success({
+                message: response.message || 'Recharge successful',
                 data: responseData
             });
         } else if (isPending) {
-            return res.success({ 
-                message: response.message || 'Recharge in process', 
+            return res.success({
+                message: response.message || 'Recharge in process',
                 data: responseData
             });
         } else {
-            return res.failure({ 
+            return res.failure({
                 message: response.message || 'Recharge failed',
                 data: responseData
             });
@@ -1464,16 +1464,16 @@ const recharge = async (req, res) => {
 const findMobileNumberOperator = async (req, res) => {
     try {
         const { mobileNumber } = req.body;
-        if(!mobileNumber){
+        if (!mobileNumber) {
             return res.failure({ message: 'Mobile number is required' });
         }
 
         let existingRecord = await dbService.findOne(model.findMobileOperators, { mobileNumber });
-        
+
         if (existingRecord) {
             const response = existingRecord.response;
             const operatorName = response?.company || response?.operatorName;
-            
+
             if (operatorName) {
                 const operatorNameUpper = operatorName.toUpperCase();
                 if (operatorNameUpper !== 'BSNL') {
@@ -1483,7 +1483,7 @@ const findMobileNumberOperator = async (req, res) => {
                     }
                 }
             }
-            
+
             return res.success({ message: 'Operator retrieved successfully', data: response });
         }
 
@@ -1493,12 +1493,12 @@ const findMobileNumberOperator = async (req, res) => {
         if (!response) {
             return res.failure({ message: 'Failed to fetch operator information' });
         }
-        
+
         const operatorName = response?.company || response?.operatorName;
         if (!operatorName) {
             return res.failure({ message: response.message || 'Operator name not found in response' });
         }
-        
+
         const operatorNameUpper = operatorName.toUpperCase();
         if (operatorNameUpper !== 'BSNL') {
             const operator = await dbService.findOne(model.operator, { operatorName: operatorNameUpper });
@@ -1513,7 +1513,7 @@ const findMobileNumberOperator = async (req, res) => {
             mobileNumber,
             response
         });
-        
+
         if (response.status === 'Success' || response.status.toUpperCase() === 'SUCCESS') {
             return res.success({ message: 'Operator retrieved successfully', data: response });
         } else {
@@ -1525,38 +1525,38 @@ const findMobileNumberOperator = async (req, res) => {
     }
 };
 
-const  findAllRechargePlanFetch = async (req, res) => {
+const findAllRechargePlanFetch = async (req, res) => {
     try {
-        const { mobileNumber,opCode,circle } = req.body;
-        if(!mobileNumber){
+        const { mobileNumber, opCode, circle } = req.body;
+        if (!mobileNumber) {
             return res.failure({ message: 'Mobile number is required' });
         }
-        if(!opCode){
+        if (!opCode) {
             return res.failure({ message: 'Operator code is required' });
         }
-        if(!circle){
+        if (!circle) {
             return res.failure({ message: 'Circle is required' });
         }
-        const operator = await dbService.findOne(model.operator,{operatorCode:opCode});
+        const operator = await dbService.findOne(model.operator, { operatorCode: opCode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
 
         // Check if recharge plan exists in database for this opCode
         let existingPlan = await dbService.findOne(model.rechargePlanFetch, { opCode });
-        
+
         if (existingPlan) {
             // Return from database
-            return res.success({ 
-                message: 'Recharge plan retrieved successfully', 
-                data: existingPlan.response 
+            return res.success({
+                message: 'Recharge plan retrieved successfully',
+                data: existingPlan.response
             });
         }
 
         // Fetch from API if not in database
-        const response = await inspayService.rechargePlanFetch(mobileNumber,opCode,circle);
+        const response = await inspayService.rechargePlanFetch(mobileNumber, opCode, circle);
         console.log('response', response);
-        
+
         if (response.status === 'Success') {
             // Store in database
             await dbService.createOne(model.rechargePlanFetch, {
@@ -1575,40 +1575,40 @@ const  findAllRechargePlanFetch = async (req, res) => {
 
 const findRechargeOfferFetch = async (req, res) => {
     try {
-        const { mobileNumber,opCode,circle } = req.body;
+        const { mobileNumber, opCode, circle } = req.body;
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if(!mobileNumber){
+        if (!mobileNumber) {
             return res.failure({ message: 'Mobile number is required' });
         }
-        if(!opCode){
+        if (!opCode) {
             return res.failure({ message: 'Operator code is required' });
         }
-        if(!circle){
+        if (!circle) {
             return res.failure({ message: 'Circle is required' });
         }
-        const operator = await dbService.findOne(model.operator,{operatorCode:opCode});
+        const operator = await dbService.findOne(model.operator, { operatorCode: opCode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
 
         // Check if recharge offer exists in database for this opCode
         let existingOffer = await dbService.findOne(model.rechargeOfferFetch, { opCode });
-        
+
         if (existingOffer) {
             // Return from database
-            return res.success({ 
-                message: 'Recharge offer retrieved successfully', 
-                data: existingOffer.response 
+            return res.success({
+                message: 'Recharge offer retrieved successfully',
+                data: existingOffer.response
             });
         }
 
         // Fetch from API if not in database
-        const response = await inspayService.RechargeOfferFetch(mobileNumber,opCode,circle);
+        const response = await inspayService.RechargeOfferFetch(mobileNumber, opCode, circle);
         console.log('response', response);
-        
+
         if (response.status === 'Success') {
             // Store in database
             await dbService.createOne(model.rechargeOfferFetch, {
@@ -1619,7 +1619,7 @@ const findRechargeOfferFetch = async (req, res) => {
         } else {
             return res.failure({ message: response.message || 'Failed to fetch recharge offer' });
         }
-    } catch (error) {   
+    } catch (error) {
         console.log(error);
         return res.failure({ message: error.message });
     }
@@ -1627,11 +1627,11 @@ const findRechargeOfferFetch = async (req, res) => {
 
 const getRechargeHistory = async (req, res) => {
     try {
-        if(![4,5].includes(req.user.userRole)){
+        if (![4, 5].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to access this resource' });
         }
-        const rechargeHistory = await dbService.findAll(model.serviceTransaction, { 
-            refId: req.user?.id, 
+        const rechargeHistory = await dbService.findAll(model.serviceTransaction, {
+            refId: req.user?.id,
             companyId: req.user?.companyId,
             serviceType: 'MobileRecharge'
         }, {
@@ -1641,7 +1641,7 @@ const getRechargeHistory = async (req, res) => {
             return res.success({ message: 'No recharge history found', data: [] });
         }
         return res.success({ message: 'Recharge history retrieved successfully', data: rechargeHistory });
-        } catch (error) {
+    } catch (error) {
         console.log(error);
         return res.internalServerError({ message: error.message });
     }
@@ -1670,7 +1670,7 @@ const recentRechargeHistory = async (req, res) => {
 
         if (dataToFind.options !== undefined) {
             options = { ...dataToFind.options };
-            
+
             if (dataToFind.options.sort) {
                 const sortEntries = Object.entries(dataToFind.options.sort);
                 options.order = sortEntries.map(([field, direction]) => {
@@ -1779,7 +1779,9 @@ const recentRechargeHistory = async (req, res) => {
                     mobileNumber: transactionData.mobileNumber || null,
                     amount: transactionData.amount || null,
                     opcode: transactionData.opcode || null,
-                    status: transactionData.status || null
+                    status: transactionData.status || null,
+                    transactionId: transactionData.transactionId || null,
+                    createdAt: transactionData.createdAt || null,
                 };
             }
 
@@ -1788,7 +1790,9 @@ const recentRechargeHistory = async (req, res) => {
                     dthNumber: transactionData.dthNumber || null,
                     amount: transactionData.amount || null,
                     opcode: transactionData.opcode || null,
-                    status: transactionData.status || null
+                    status: transactionData.status || null,
+                    transactionId: transactionData.transactionId || null,
+                    createdAt: transactionData.createdAt || null,
                 };
             }
 
@@ -1797,7 +1801,9 @@ const recentRechargeHistory = async (req, res) => {
                     mobileNumber: transactionData.mobile_number || null,
                     redirect_url: transactionData.redirect_url || null,
                     action: transactionData.action || null,
-                    status: transactionData.status || null
+                    status: transactionData.status || null,
+                    transactionId: transactionData.transactionId || null,
+                    createdAt: transactionData.createdAt || null,
                 };
             }
 
@@ -1805,7 +1811,9 @@ const recentRechargeHistory = async (req, res) => {
                 mobileNumber: transactionData.mobileNumber || transactionData.mobile_number || null,
                 amount: transactionData.amount || null,
                 opcode: transactionData.opcode || null,
-                status: transactionData.status || null
+                status: transactionData.status || null,
+                transactionId: transactionData.transactionId || null,
+                createdAt: transactionData.createdAt || null,
             };
         });
 
@@ -1836,7 +1844,7 @@ const getDownlineRechargeReports = async (req, res) => {
             const allUserIds = new Set();
             const allowedRoles = userRole === 3 ? [4, 5] : [5];
             let currentLevelUsers = [{ id: userId, userRole }];
-            
+
             while (currentLevelUsers.length > 0) {
                 const currentLevelIds = currentLevelUsers.map(u => u.id);
                 const nextLevelUsers = await dbService.findAll(model.user, {
@@ -1893,7 +1901,7 @@ const getDownlineRechargeReports = async (req, res) => {
 
         if (dataToFind.options !== undefined) {
             options = { ...dataToFind.options };
-            
+
             if (dataToFind.options.sort) {
                 const sortEntries = Object.entries(dataToFind.options.sort);
                 options.order = sortEntries.map(([field, direction]) => {
@@ -2041,7 +2049,7 @@ const getRechargeReports = async (req, res) => {
 
         if (dataToFind.options !== undefined) {
             options = { ...dataToFind.options };
-            
+
             if (dataToFind.options.sort) {
                 const sortEntries = Object.entries(dataToFind.options.sort);
                 options.order = sortEntries.map(([field, direction]) => {
@@ -2133,14 +2141,14 @@ const getRechargeReports = async (req, res) => {
 const deleteOldRechargePlan = async (req, res) => {
     try {
         const { opCode } = req.body;
-        
+
         if (!opCode) {
             return res.failure({ message: 'Operator code is required' });
         }
 
         // Check if recharge plan exists
         const existingPlan = await dbService.findOne(model.rechargePlanFetch, { opCode });
-        
+
         if (!existingPlan) {
             return res.failure({ message: 'Recharge plan not found for this operator code' });
         }
@@ -2148,7 +2156,7 @@ const deleteOldRechargePlan = async (req, res) => {
         // Delete the recharge plan
         await dbService.destroy(model.rechargePlanFetch, { opCode });
 
-        return res.success({ 
+        return res.success({
             message: 'Old recharge plan deleted successfully',
             data: { opCode }
         });
