@@ -2555,15 +2555,20 @@ const uploadAadharDocuments = async (req, res) => {
       return digits.length === 12 ? digits : null;
     };
 
+    // Debug: Log raw extracted data before processing
+    console.log("Front Data Raw Aadhaar Number:", frontData.aadhaar_number);
+    console.log("Back Data Raw Aadhaar Number:", backData.aadhaar_number);
+
     const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
     const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
+
+    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber
+      ? frontAadhaarNumber === backAadhaarNumber
+      : false;
 
     console.log("Front Aadhaar Number", frontAadhaarNumber);
     console.log("Back Aadhaar Number", backAadhaarNumber);
     console.log("Aadhaar Numbers Match", aadhaar_numbers_match);
-    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber
-      ? frontAadhaarNumber === backAadhaarNumber
-      : false;
 
     const [frontUploadResult, backUploadResult] = await Promise.all([
       imageService.uploadImageToS3(
