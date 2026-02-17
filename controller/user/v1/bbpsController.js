@@ -21,7 +21,7 @@ const payBill = async (req, res) => {
   try {
     const userId = req.user.id;
     const companyId = req.companyId || req.user.companyId;
-    const { fetchRefId, secureKey } = req.body;
+    const { fetchRefId } = req.body;
 
     const convertRupeesToPaisa = (amount) =>
       Math.round(parseFloat(amount) * 100).toString();
@@ -44,7 +44,7 @@ const payBill = async (req, res) => {
       }
     );
     if (!user) return res.failure({ message: 'User not found' });
-    
+
     // Ensure companyId is available - use user.companyId as final fallback
     const finalCompanyId = companyId || user.companyId;
     if (!finalCompanyId) {
@@ -52,7 +52,7 @@ const payBill = async (req, res) => {
     }
     if (!fetchRefId)
       return res.failure({ message: 'Required payment parameters missing' });
-    if (!secureKey) return res.failure({ message: 'Secure key is required' });
+
 
     const fetchedBillData = await dbService.findOne(model.billFetchData, {
       fetchRefId: req.body.fetchRefId,
@@ -64,15 +64,7 @@ const payBill = async (req, res) => {
       return res.failure({
         message: 'Bill data not found or expired. Please fetch the bill again.'
       });
-    if (!user.secureKey || user.secureKey.trim() === '')
-      return res.failure({ message: 'User does not have a secure key' });
-    let isPinMatched = false;
-    try {
-      isPinMatched = await bcrypt.compare(secureKey, user.secureKey);
-    } catch (bcryptError) {
-      return res.failure({ message: 'Error validating secure key' });
-    }
-    if (!isPinMatched) return res.failure({ message: 'Invalid Pin' });
+
     const agentId = fetchedBillData.agentId;
     const billerId = fetchedBillData.billerId;
     const billerAdhoc = fetchedBillData.billerAdhoc;
@@ -111,8 +103,8 @@ const payBill = async (req, res) => {
 
     const billAmount = parseFloat(
       responseData?.amountInfo?.amount ||
-        responseData?.billDetails?.billAmount ||
-        '0'
+      responseData?.billDetails?.billAmount ||
+      '0'
     );
     if (isNaN(billAmount) || billAmount <= 0)
       return res.failure({ message: 'Invalid bill amount' });
@@ -252,8 +244,8 @@ const payBill = async (req, res) => {
       amountInfo: {
         amount: convertRupeesToPaisa(
           responseData?.amountInfo?.amount?.toString() ||
-            responseData?.billDetails?.billAmount ||
-            '0'
+          responseData?.billDetails?.billAmount ||
+          '0'
         ),
         currency: process.env.BBPS_CURRENCY_CODE || 356,
         custConvFee: foundCategory.custConvFee || 0,
@@ -325,10 +317,10 @@ const payBill = async (req, res) => {
     };
 
     const TDS_PERCENT = Number(process.env.BBPS_TDS_PERCENT || process.env.AEPS_TDS_PERCENT || 2);
-    
+
     // Use operator default commission (comm field) - default is 0.97 rupees
     const earnedCommission = foundOperator?.comm ? round2(Number(foundOperator.comm)) : 0.97;
-    
+
     // Calculate TDS on earned commission (2% of commission)
     const calculateTdsAmount = (commValue) => {
       if (commValue === null || commValue === undefined || commValue === 0) return 0;
@@ -341,11 +333,11 @@ const payBill = async (req, res) => {
     let masterDistributorCom = 0;
     let distributorCom = 0;
     let retailerCom = 0;
-    
+
     // Determine user role and set only that role's commission to 0.97
     // userRole: 1=Super Admin, 2=Whitelabel/Company Admin, 3=Master Distributor, 4=Distributor, 5=Retailer
     const userRole = user.userRole;
-    
+
     if (userRole === 1) {
       superadminComm = earnedCommission;
     } else if (userRole === 2) {
@@ -357,7 +349,7 @@ const payBill = async (req, res) => {
     } else if (userRole === 5) {
       retailerCom = earnedCommission;
     }
-    
+
     // TDS breakdown (will be calculated after success, only for user's role)
     let superadminCommTDS = 0;
     let whitelabelCommTDS = 0;
@@ -435,7 +427,7 @@ const payBill = async (req, res) => {
           billNumber: responseData?.billDetails?.billNumber || billerId,
           api: 'BBPS',
           walletType: 'MainWallet',
-          billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
+          billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
           amount: billAmount,
           debit: 0,
           comm: earnedCommission,
@@ -554,16 +546,16 @@ const payBill = async (req, res) => {
           // Credit remaining commission after TDS to wallet
           userCommissionCredit = round2(retailerCom - retailerComTDS);
         }
-        
+
         // For backward compatibility, also set retailerNetCredit
         retailerNetCredit = userCommissionCredit;
       }
 
       const respAmountInRupees =
         parsedResponse?.respAmount || billAmount.toString();
-      
+
       // Recalculate closing balance with commission credit (only for SUCCESS)
-      const closingBalance = billStatus === 'Success' 
+      const closingBalance = billStatus === 'Success'
         ? round2(balance + userCommissionCredit)
         : balance;
 
@@ -572,11 +564,11 @@ const payBill = async (req, res) => {
         companyId: finalCompanyId,
         operatorId: foundOperator.id,
         operator: foundOperator.operatorName,
-          billNumber: responseData?.billDetails?.billNumber || billerId,
-          api: 'BBPS',
-          walletType: 'MainWallet',
-          amount: billAmount,
-          debit: billStatus === 'Failed' ? 0 : debit,
+        billNumber: responseData?.billDetails?.billNumber || billerId,
+        api: 'BBPS',
+        walletType: 'MainWallet',
+        amount: billAmount,
+        debit: billStatus === 'Failed' ? 0 : debit,
         comm: earnedCommission,
         surcharge: 0,
         opening: currentWalletBalance,
@@ -591,7 +583,7 @@ const payBill = async (req, res) => {
         paymentMethod: 'Wallet',
         fetchBillId: fetchRefReqId,
         remarks: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName}`,
-        billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
+        billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
         response: parsedResponse || {},
         addedBy: userId,
         updatedBy: userId,
@@ -687,9 +679,9 @@ const payBill = async (req, res) => {
           dbService.update(
             model.wallet,
             { refId: userId, companyId: finalCompanyId },
-            { 
+            {
               mainWallet: closingBalance,
-              updatedBy: userId 
+              updatedBy: userId
             }
           )
         );
@@ -838,7 +830,7 @@ const payBill = async (req, res) => {
         companyId: finalCompanyId,
         operatorId: foundOperator.id,
         operator: foundOperator.operatorName,
-        billerName:`${bbpsOperatorName?.name || foundOperator.operatorName}`,
+        billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
         billNumber: responseData?.billDetails?.billNumber || billerId,
         api: 'BBPS',
         walletType: 'MainWallet',
@@ -926,7 +918,7 @@ const fetchBill = async (req, res) => {
 
   try {
     const {
-      customerInfo = {}, 
+      customerInfo = {},
       operatorService,
       billerId,
       inputParams = []
@@ -1282,7 +1274,7 @@ const getBillerInfo = async (req, res) => {
 };
 
 const getBillerIds = async (req, res) => {
-  try{
+  try {
     let dataToFind = req.body;
     let options = {};
     let query = {};
@@ -1295,7 +1287,7 @@ const getBillerIds = async (req, res) => {
 
     // Find operator category - also check if it's not deleted
     const operatorCategories = await dbService.findOne(
-      model.bbpsOperatorCategory, 
+      model.bbpsOperatorCategory,
       { name: operatorService, isDeleted: false }
     );
     if (!operatorCategories) {
@@ -1317,7 +1309,7 @@ const getBillerIds = async (req, res) => {
     }
 
     // Build base query with categoryId and isDeleted filter
-    query = { 
+    query = {
       categoryId: operatorCategories.id,
       isDeleted: false
     };
@@ -1415,13 +1407,13 @@ const getBillerIds = async (req, res) => {
   }
 }
 const getAllCategories = async (req, res) => {
-  try{
+  try {
     const categories = await dbService.findAll(model.bbpsOperatorCategory, { isActive: true, isDeleted: false }, { attributes: ['id', 'name'] });
     return res.success({
       message: 'Categories fetched successfully',
       data: categories
     });
-  }catch(error){
+  } catch (error) {
     console.error('BBPS getCategories error:', error);
     return res.internalServerError({
       message: error.message || 'Internal server error'
@@ -1894,7 +1886,7 @@ const recentHistory = async (req, res) => {
 
     if (dataToFind.options !== undefined) {
       options = { ...dataToFind.options };
-      
+
       if (dataToFind.options.sort) {
         const sortEntries = Object.entries(dataToFind.options.sort);
         options.order = sortEntries.map(([field, direction]) => {
