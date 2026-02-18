@@ -318,7 +318,8 @@ const payout = async (req, res) => {
                     // Super Admin Calculation: Net Profit/Loss (Surcharge - Bank Charge)
                     const saSurcharge = calculatedAmount;  // Income (Revenue)
                     const saBankCharge = adminCommAmount;  // Expense (Cost)
-                    const saNet = round2(saSurcharge - saBankCharge);
+                    // Per user request: Credit full surcharge to Super Admin (ignore bank charge deduction)
+                    const saNet = round2(saSurcharge);
 
                     let saRemark = `${remarkText} - surcharge profit`;
                     let saCredit = 0;
