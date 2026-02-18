@@ -640,6 +640,10 @@ const payout = async (req, res) => {
 
                     // SA History 2: Bank Charge
                     if (commData.amounts.saBankCharge > 0) {
+                        console.log('--- Debug: Payout Operator Charge ---');
+                        const pOpName = commData.payoutOperator?.operatorName || 'Unknown';
+                        console.log(`Operator Name: ${pOpName}`);
+
                         await createHistory(commData.users.superAdmin, walletType, `${remarkText} - operator charge`, commData.amounts.saBankCharge, 0, commData.amounts.saBankCharge, saMid, saClose, false, false);
                         await dbService.createOne(model.surRecords, {
                             refId: commData.users.superAdmin.id,
@@ -647,7 +651,7 @@ const payout = async (req, res) => {
                             transactionId: transactionID,
                             amount: payoutAmount,
                             charge: commData.amounts.saBankCharge,
-                            remark: `Payout Operator Charge (${commData.payoutOperator?.operatorName || 'Unknown'})`,
+                            remark: `Payout Operator Charge (${pOpName})`,
                             addedBy: commData.users.superAdmin.id
                         });
                     }
