@@ -315,58 +315,78 @@ const payout = async (req, res) => {
                     // Update global aepsClosingBalance to reflect additional deduction
                     aepsClosingBalance = parseFloat((aepsClosingBalance - surchargeDebit).toFixed(2));
 
-                    // Super Admin Calculation: Net Profit/Loss (Surcharge - Bank Charge)
+                    // Super Admin Calculation: Income (Surcharge Credit) & Expense (Bank Charge Debit)
                     const saSurcharge = calculatedAmount;  // Income (Revenue)
-                    const saBankCharge = adminCommAmount;  // Expense (Cost)
-                    // Per user request: Credit full surcharge to Super Admin (ignore bank charge deduction)
-                    const saNet = round2(saSurcharge);
 
-                    let saRemark = `${remarkText} - surcharge profit`;
-                    let saCredit = 0;
-                    let saDebit = 0;
-
-                    // Use the SAME wallet type as the User (AEPS Wallet) for Super Admin
-                    // e.g., if User pays from 'apes1Wallet', SA gets profit in 'apes1Wallet'
-                    const saWalletType = walletType;
-                    let saOpen = parseFloat(superAdminWallet[saWalletType] || 0);
-                    let saClose = saOpen;
-
-                    if (saNet >= 0) {
-                        // Profit
-                        saCredit = saNet;
-                        saClose = parseFloat((saOpen + saCredit).toFixed(2));
-                        saRemark = `${remarkText} - surcharge profit`;
-                        saDebit = 0;
-                    } else {
-                        // Loss
-                        saDebit = Math.abs(saNet);
-                        saClose = parseFloat((saOpen - saDebit).toFixed(2));
-                        saRemark = `${remarkText} - surcharge loss`;
-                        saCredit = 0;
+                    // Bank Charge Logic (from payoutOperator)
+                    let saBankCharge = 0;
+                    if (payoutOperator) {
+                        const opAmtType = (payoutOperator.amtType || 'fix').toLowerCase();
+                        const opRawComm = Number(payoutOperator.comm || 0);
+                        if (opAmtType === 'per') {
+                            saBankCharge = round2((payoutAmount * opRawComm) / 100);
+                        } else {
+                            saBankCharge = round2(opRawComm);
+                        }
                     }
 
-                    // Update SuperAdmin Wallet (Dynamic Wallet Type)
+                    // Use the SAME wallet type as the User (AEPS Wallet) for Super Admin
+                    const saWalletType = walletType; // 'apes1Wallet' or 'apes2Wallet'
+                    let saOpen = parseFloat(superAdminWallet[saWalletType] || 0);
+
+                    // Transaction 1: Credit Surcharge
+                    // Wallet Balance increases
+                    let saMid = parseFloat((saOpen + saSurcharge).toFixed(2));
+
+                    // Transaction 2: Debit Bank Charge
+                    // Wallet Balance decreases
+                    let saClose = parseFloat((saMid - saBankCharge).toFixed(2));
+
+                    // Update SuperAdmin Wallet (Dynamic Wallet Type) with Final Balance
                     await dbService.update(
                         model.wallet,
                         { id: superAdminWallet.id },
                         { [saWalletType]: saClose, updatedBy: superAdmin.id }
                     );
 
-                    // Super Admin History (Single Entry for Net Amount)
-                    if (saNet !== 0) {
+                    // Super Admin History 1: Surcharge Credit
+                    if (saSurcharge > 0) {
                         await dbService.createOne(model.walletHistory, {
                             refId: superAdmin.id,
                             companyId: 1,
-                            walletType: saWalletType, // Log against AEPS Wallet
+                            walletType: saWalletType,
                             operator: operatorName,
-                            remark: saRemark,
-                            amount: Math.abs(saNet),
-                            comm: saCredit > 0 ? saCredit : 0,
-                            surcharge: saSurcharge,
+                            remark: `${remarkText} - surcharge profit`,
+                            amount: saSurcharge,
+                            comm: saSurcharge, // It's a commission/profit
+                            surcharge: 0,
                             openingAmt: saOpen,
-                            closingAmt: saClose,
-                            credit: saCredit,
-                            debit: saDebit,
+                            closingAmt: saMid,
+                            credit: saSurcharge,
+                            debit: 0,
+                            transactionId: transactionID,
+                            paymentStatus: 'SUCCESS',
+                            paymentMode: 'WALLET',
+                            addedBy: superAdmin.id,
+                            updatedBy: superAdmin.id
+                        });
+                    }
+
+                    // Super Admin History 2: Bank Charge Debit (Operator Charge)
+                    if (saBankCharge > 0) {
+                        await dbService.createOne(model.walletHistory, {
+                            refId: superAdmin.id,
+                            companyId: 1,
+                            walletType: saWalletType,
+                            operator: operatorName,
+                            remark: `${remarkText} - operator charge`,
+                            amount: saBankCharge,
+                            comm: 0,
+                            surcharge: 0,
+                            openingAmt: saMid,
+                            closingAmt: saClose, // Final Balance
+                            credit: 0,
+                            debit: saBankCharge,
                             transactionId: transactionID,
                             paymentStatus: 'SUCCESS',
                             paymentMode: 'WALLET',
@@ -386,7 +406,17 @@ const payout = async (req, res) => {
                     // Debit: User Commission (calculatedAmount)
                     // Debit: Bank Charge (adminCommAmount)
                     const saDebitComm = calculatedAmount;
-                    const saDebitCharge = adminCommAmount;
+                    // Bank Charge Logic (from payoutOperator)
+                    let saDebitCharge = 0;
+                    if (payoutOperator) {
+                        const opAmtType = (payoutOperator.amtType || 'fix').toLowerCase();
+                        const opRawComm = Number(payoutOperator.comm || 0);
+                        if (opAmtType === 'per') {
+                            saDebitCharge = round2((payoutAmount * opRawComm) / 100);
+                        } else {
+                            saDebitCharge = round2(opRawComm);
+                        }
+                    }
                     const totalSaDebit = saDebitComm + saDebitCharge;
 
                     const superAdminClosingBalance = parseFloat((superAdminOpeningBalance - totalSaDebit).toFixed(2));
