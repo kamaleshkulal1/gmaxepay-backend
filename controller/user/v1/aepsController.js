@@ -1463,7 +1463,12 @@ const aepsTransaction = async (req, res) => {
                 normalizedGatewayResponse?.merchantTransactionId ||
                 payload.transactionId)
             : null;
-
+        const transactionType = isSuccess
+            ? (innerData?.transactionType ||
+                innerData?.transactionType ||
+                normalizedGatewayResponse?.transactionType ||
+                normalizedGatewayResponse?.transactionType)
+            : null;
         // Prepare request payload for persistence (mask biometric)
         const safeRequest = {
             ...payload,
@@ -1695,6 +1700,7 @@ const aepsTransaction = async (req, res) => {
         // Extract remaining balance from gateway response
         const remainingBalance = innerData?.balanceAmount ||
             normalizedGatewayResponse?.data?.balanceAmount ||
+            normalizedGatewayResponse?.balanceAmount ||
             null;
 
         // Extract client_transaction_id for transactionId
@@ -1712,6 +1718,7 @@ const aepsTransaction = async (req, res) => {
             service: 'AEPS',
             transactionId: clientTransactionId,
             referenceId: merchantTransactionId,
+            transactionType: transactionType,
             transactionDate: transactionDateTime,
             transactionTime: transactionTime,
             amount: amountNumber,
