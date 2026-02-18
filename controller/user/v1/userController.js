@@ -875,7 +875,7 @@ const getUserProfile = async (req, res) => {
       city: existingUser.city,
       longitude: existingUser.longitude,
       latitude: existingUser.latitude,
-      userRoleName: existingUser.userRoleName == 4 ? 'Distributor' : existingUser.userRoleName == 5 ? 'Retailer' : existingUser.userRoleName == 3 ? 'Master Distributor' : '',
+      userRoleName: existingUser.userRole == 4 ? 'Distributor' : existingUser.userRoleName == 5 ? 'Retailer' : existingUser.userRoleName == 3 ? 'Master Distributor' : '',
       kycStatus: existingUser.kycStatus,
       reportingToManager: reportingToManager?.name || null,
       reportingToManagerEmail: reportingToManager?.email || null,
