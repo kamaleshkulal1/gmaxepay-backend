@@ -368,17 +368,6 @@ const payout = async (req, res) => {
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
                         });
-
-                        // Record Surcharge Profit in surRecords
-                        await dbService.createOne(model.surRecords, {
-                            companyId: 1,
-                            refId: superAdmin.id,
-                            service: 'PAYOUT',
-                            transactionId: transactionID,
-                            amount: saSurcharge,
-                            addedBy: superAdmin.id,
-                            updatedBy: superAdmin.id
-                        });
                     }
 
                     // Super Admin History 2: Bank Charge Debit (Operator Charge)
@@ -399,6 +388,18 @@ const payout = async (req, res) => {
                             transactionId: transactionID,
                             paymentStatus: 'SUCCESS',
                             paymentMode: 'WALLET',
+                            addedBy: superAdmin.id,
+                            addedBy: superAdmin.id,
+                            updatedBy: superAdmin.id
+                        });
+
+                        // Record Operator Charge in surRecords
+                        await dbService.createOne(model.surRecords, {
+                            companyId: 1,
+                            refId: superAdmin.id,
+                            service: 'PAYOUT',
+                            transactionId: transactionID,
+                            amount: saBankCharge,
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
                         });
