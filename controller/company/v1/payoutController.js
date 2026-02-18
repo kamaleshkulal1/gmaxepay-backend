@@ -389,18 +389,6 @@ const payout = async (req, res) => {
                             paymentStatus: 'SUCCESS',
                             paymentMode: 'WALLET',
                             addedBy: superAdmin.id,
-                            addedBy: superAdmin.id,
-                            updatedBy: superAdmin.id
-                        });
-
-                        // Record Operator Charge in surRecords
-                        await dbService.createOne(model.surRecords, {
-                            companyId: 1,
-                            refId: superAdmin.id,
-                            service: 'PAYOUT',
-                            transactionId: transactionID,
-                            amount: saBankCharge,
-                            addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
                         });
                     }

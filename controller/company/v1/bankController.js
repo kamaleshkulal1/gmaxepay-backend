@@ -25,7 +25,7 @@ const addCustomerBank = async (req, res) => {
         isActive: true
       }),
       dbService.findOne(model.user, {
-        id:  1,
+        id: 1,
         isActive: true
       })
     ]);
@@ -149,7 +149,7 @@ const addCustomerBank = async (req, res) => {
             companyId: companyId || null,
             addedBy: userId
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
 
@@ -186,7 +186,7 @@ const addCustomerBank = async (req, res) => {
 
     const adminSurchargeAmt = parseFloat(adminCommission?.commAmt || 0);
     const userSurchargeAmt = parseFloat(userCommission?.commAmt || 0);
-    
+
 
     if (adminSurchargeAmt <= 0 || userSurchargeAmt <= 0) {
       return res.failure({ message: 'Invalid surcharge configuration for bank verification' });
@@ -316,7 +316,7 @@ const addCustomerBank = async (req, res) => {
 
 const deleteCustomerBank = async (req, res) => {
   try {
-    if(![2].includes(req.user.userRole)) {
+    if (![2].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to delete bank details' });
     }
     const { id } = req.params;
@@ -334,7 +334,7 @@ const deleteCustomerBank = async (req, res) => {
     }
     const updatedBank = {
       isActive: false
-    }; 
+    };
     await dbService.update(model.customerBank, {
       id: id,
       refId: user.id,
@@ -349,6 +349,6 @@ const deleteCustomerBank = async (req, res) => {
   }
 };
 module.exports = {
-    addCustomerBank,
-    deleteCustomerBank
+  addCustomerBank,
+  deleteCustomerBank
 }

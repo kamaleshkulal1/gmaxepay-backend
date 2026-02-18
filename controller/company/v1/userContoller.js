@@ -6,285 +6,285 @@ const emailService = require('../../../services/emailService');
 
 const findAllUsers = async (req, res) => {
   try {
-      let permissions = req.permission || [];
-      let hasPermission = permissions.some(
-        (permission) =>
-          permission.dataValues.permissionId === 1 &&
-          permission.dataValues.read === true
-      );
-  
-      if (!hasPermission || req.user.userRole !== 2) {
-        return res.failure({ message: "User doesn't have Permission!" });
-      }
+    let permissions = req.permission || [];
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 1 &&
+        permission.dataValues.read === true
+    );
 
-      const userRole = req.user.userRole;
-      const userId = req.user.id;
-      const userCompanyId = req.user.companyId;
-      
-      if (userRole !== 2) {
-        return res.failure({ message: "Only whitelabel users can access this endpoint!" });
-      }
+    if (!hasPermission || req.user.userRole !== 2) {
+      return res.failure({ message: "User doesn't have Permission!" });
+    }
 
-      if (!userCompanyId || userCompanyId === null || userCompanyId === undefined) {
-        return res.failure({ message: "Company ID is required!" });
-      }
+    const userRole = req.user.userRole;
+    const userId = req.user.id;
+    const userCompanyId = req.user.companyId;
 
-      let companyIds = [];
-      let companies = [];
+    if (userRole !== 2) {
+      return res.failure({ message: "Only whitelabel users can access this endpoint!" });
+    }
 
-      if (userCompanyId === 1) {
-        const whitelabelUsers = await dbService.findAll(model.user, {
-          userRole: 2,
-          companyId: { [Op.not]: null },
-          isDeleted: false
-        }, {
-          attributes: ['companyId'],
-          raw: true
-        });
+    if (!userCompanyId || userCompanyId === null || userCompanyId === undefined) {
+      return res.failure({ message: "Company ID is required!" });
+    }
 
-        companyIds = [...new Set(whitelabelUsers.map(u => u.companyId).filter(id => id !== null && id !== undefined))];
+    let companyIds = [];
+    let companies = [];
 
-        if (companyIds.length === 0) {
-          return res.success({
-            message: 'Users Retrieved Successfully',
-            data: [],
-            total: 0
-          });
-        }
-
-        companies = await dbService.findAll(model.company, {
-          id: { [Op.in]: companyIds },
-          isDeleted: false
-        }, {
-          attributes: ['id', 'companyName']
-        });
-      } else {
-        const whitelabelUser = await dbService.findOne(model.user, {
-          id: userId,
-          userRole: 2,
-          companyId: userCompanyId,
-          isDeleted: false
-        });
-
-        if (!whitelabelUser) {
-          return res.failure({ message: "Company not found or user doesn't have access!" });
-        }
-
-        const company = await dbService.findOne(model.company, {
-          id: userCompanyId,
-          isDeleted: false
-        }, {
-          attributes: ['id', 'companyName']
-        });
-
-        if (!company) {
-          return res.success({
-            message: 'Users Retrieved Successfully',
-            data: [],
-            total: 0
-          });
-        }
-
-        companyIds = [userCompanyId];
-        companies = [company];
-      }
-
-      let dataToFind = req.body || {};
-      let options = {};
-      let query = {
-        companyId: { [Op.in]: companyIds },
-        userRole: { [Op.in]: [3, 4, 5] },
+    if (userCompanyId === 1) {
+      const whitelabelUsers = await dbService.findAll(model.user, {
+        userRole: 2,
+        companyId: { [Op.not]: null },
         isDeleted: false
-      };
+      }, {
+        attributes: ['companyId'],
+        raw: true
+      });
 
-      if (dataToFind.query) {
-        if (dataToFind.query.userRole !== undefined) {
-          const requestedRole = dataToFind.query.userRole;
-          
-          if (requestedRole === 1 || requestedRole === 2) {
-            return res.failure({ message: "Access denied! You cannot filter by this user role." });
-          }
-          
-          if ([3, 4, 5].includes(requestedRole)) {
-            query.userRole = requestedRole;
-          }
-        }
+      companyIds = [...new Set(whitelabelUsers.map(u => u.companyId).filter(id => id !== null && id !== undefined))];
 
-        if (dataToFind.query.kycStatus) {
-          const kycStatusValue = dataToFind.query.kycStatus;
-          
-          if (kycStatusValue === 'pending') {
-            query.kycStatus = { [Op.in]: ['HALF_KYC', 'NO_KYC'] };
-          }
-          else if (kycStatusValue === 'completed') {
-            query.kycStatus = 'FULL_KYC';
-          }
-          else if (typeof kycStatusValue === 'string' && kycStatusValue.includes('||')) {
-            const statuses = kycStatusValue.split('||').map(s => s.trim()).filter(s => s);
-            if (statuses.length > 0) {
-              query.kycStatus = { [Op.in]: statuses };
-            }
-          }
-          else if (Array.isArray(kycStatusValue)) {
-            query.kycStatus = { [Op.in]: kycStatusValue };
-          }
-          else {
-            query.kycStatus = kycStatusValue;
-          }
-        }
-
-        Object.keys(dataToFind.query).forEach(key => {
-          if (key !== 'userRole' && key !== 'kycStatus') {
-            query[key] = dataToFind.query[key];
-          }
-        });
-      }
-
-      if (dataToFind.options !== undefined) {
-        options = { ...dataToFind.options };
-      }
-
-      if (dataToFind.customSearch) {
-        const keys = Object.keys(dataToFind.customSearch);
-        const orConditions = [];
-
-        keys.forEach((key) => {
-          if (typeof dataToFind.customSearch[key] === 'number') {
-            orConditions.push(
-              Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
-                [Op.iLike]: `%${dataToFind.customSearch[key]}%`
-              })
-            );
-          } else {
-            orConditions.push({
-              [key]: {
-                [Op.iLike]: `%${dataToFind.customSearch[key]}%`
-              }
-            });
-          }
-        });
-
-        if (orConditions.length > 0) {
-          query = {
-            ...query,
-            [Op.or]: orConditions
-          };
-        }
-      }
-
-      options.include = [
-        {
-          model: model.company,
-          as: 'company',
-          attributes: ['id', 'companyName'],
-          required: false
-        },
-        {
-          model: model.wallet,
-          as: 'wallet',
-          attributes: ['id', 'mainWallet', 'apes1Wallet', 'apes2Wallet'],
-          required: false
-        },
-        {
-          model: model.onboardingToken,
-          as: 'onboardingTokens',
-          attributes: ['id', 'expiresAt', 'isUsed', 'isDeactivated', 'createdAt'],
-          required: false,
-          where: {
-            isDeactivated: false,
-            isUsed: false
-          },
-          separate: true,
-          order: [['createdAt', 'DESC']],
-          limit: 1
-        }
-      ];
-
-      let foundUsers = await dbService.paginate(model.user, query, options);
-
-      if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
+      if (companyIds.length === 0) {
         return res.success({
           message: 'Users Retrieved Successfully',
           data: [],
-          total: 0,
-          paginator: {
-            itemCount: 0,
-            perPage: options.paginate || 25,
-            pageCount: 0,
-            currentPage: options.page || 1
-          }
+          total: 0
         });
       }
 
-      const roleMap = {
-        2: 'WL',
-        3: 'MD',
-        4: 'DI',
-        5: 'RE'
-      };
+      companies = await dbService.findAll(model.company, {
+        id: { [Op.in]: companyIds },
+        isDeleted: false
+      }, {
+        attributes: ['id', 'companyName']
+      });
+    } else {
+      const whitelabelUser = await dbService.findOne(model.user, {
+        id: userId,
+        userRole: 2,
+        companyId: userCompanyId,
+        isDeleted: false
+      });
 
-      const transformedUsers = foundUsers.data.map((user) => {
-        const userData = user.toJSON ? user.toJSON() : user;
-        const companyData = userData.company || {};
-        const walletData = userData.wallet || {};
-        const onboardingTokens = userData.onboardingTokens || [];
+      if (!whitelabelUser) {
+        return res.failure({ message: "Company not found or user doesn't have access!" });
+      }
 
-        const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
+      const company = await dbService.findOne(model.company, {
+        id: userCompanyId,
+        isDeleted: false
+      }, {
+        attributes: ['id', 'companyName']
+      });
 
-        const isLockedByStatus = !!(userData.isLocked && userData.lockUntil && new Date(userData.lockUntil) > new Date());
-        const isLockedByAttempts = (userData.loginAttempts || 0) >= 3;
-        const isLocked = isLockedByStatus || isLockedByAttempts;
+      if (!company) {
+        return res.success({
+          message: 'Users Retrieved Successfully',
+          data: [],
+          total: 0
+        });
+      }
 
-        const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0 
-          ? onboardingTokens[0] 
-          : null;
-        const onboardingTokenExpiresAt = latestOnboardingToken?.expiresAt || null;
+      companyIds = [userCompanyId];
+      companies = [company];
+    }
 
-        return {
-          id: userData.id,
-          date: userData.createdAt || null,
-          userId: userData.userId || null,
-          name: userData.name || null,
-          userRole: roleMap[userData.userRole] || `Role ${userData.userRole}`,
-          mobileNo: userData.mobileNo || null,
-          email: userData.email || null,
-          parentName: companyData.companyName || null,
-          parentRole: 'Enterprise',
-          company: companyData.companyName || null,
-          companyId: userData.companyId || null,
-          kycStatus: kycStatus,
-          kycSteps: userData.kycSteps || 0,
-          status: userData.isActive ? 'Active' : 'Inactive',
-          lock: isLocked,
-          onboardingTokenExpiresAt: onboardingTokenExpiresAt,
-          wallet: {
-            mainWallet: walletData.mainWallet || 0,
-            apes1Wallet: walletData.apes1Wallet || 0,
-            apes2Wallet: walletData.apes2Wallet || 0
+    let dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      companyId: { [Op.in]: companyIds },
+      userRole: { [Op.in]: [3, 4, 5] },
+      isDeleted: false
+    };
+
+    if (dataToFind.query) {
+      if (dataToFind.query.userRole !== undefined) {
+        const requestedRole = dataToFind.query.userRole;
+
+        if (requestedRole === 1 || requestedRole === 2) {
+          return res.failure({ message: "Access denied! You cannot filter by this user role." });
+        }
+
+        if ([3, 4, 5].includes(requestedRole)) {
+          query.userRole = requestedRole;
+        }
+      }
+
+      if (dataToFind.query.kycStatus) {
+        const kycStatusValue = dataToFind.query.kycStatus;
+
+        if (kycStatusValue === 'pending') {
+          query.kycStatus = { [Op.in]: ['HALF_KYC', 'NO_KYC'] };
+        }
+        else if (kycStatusValue === 'completed') {
+          query.kycStatus = 'FULL_KYC';
+        }
+        else if (typeof kycStatusValue === 'string' && kycStatusValue.includes('||')) {
+          const statuses = kycStatusValue.split('||').map(s => s.trim()).filter(s => s);
+          if (statuses.length > 0) {
+            query.kycStatus = { [Op.in]: statuses };
           }
-        };
+        }
+        else if (Array.isArray(kycStatusValue)) {
+          query.kycStatus = { [Op.in]: kycStatusValue };
+        }
+        else {
+          query.kycStatus = kycStatusValue;
+        }
+      }
+
+      Object.keys(dataToFind.query).forEach(key => {
+        if (key !== 'userRole' && key !== 'kycStatus') {
+          query[key] = dataToFind.query[key];
+        }
+      });
+    }
+
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+    }
+
+    if (dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
       });
 
-      const companiesWithUsers = companies.map((company) => {
-        const companyData = company.toJSON ? company.toJSON() : company;
-        const companyUsers = transformedUsers.filter(user => user.companyId === companyData.id);
-        
-        return {
-          companyId: companyData.id,
-          companyName: companyData.companyName,
-          users: companyUsers
+      if (orConditions.length > 0) {
+        query = {
+          ...query,
+          [Op.or]: orConditions
         };
-      });
+      }
+    }
 
+    options.include = [
+      {
+        model: model.company,
+        as: 'company',
+        attributes: ['id', 'companyName'],
+        required: false
+      },
+      {
+        model: model.wallet,
+        as: 'wallet',
+        attributes: ['id', 'mainWallet', 'apes1Wallet', 'apes2Wallet'],
+        required: false
+      },
+      {
+        model: model.onboardingToken,
+        as: 'onboardingTokens',
+        attributes: ['id', 'expiresAt', 'isUsed', 'isDeactivated', 'createdAt'],
+        required: false,
+        where: {
+          isDeactivated: false,
+          isUsed: false
+        },
+        separate: true,
+        order: [['createdAt', 'DESC']],
+        limit: 1
+      }
+    ];
+
+    let foundUsers = await dbService.paginate(model.user, query, options);
+
+    if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
       return res.success({
         message: 'Users Retrieved Successfully',
-        data: companiesWithUsers,
-        total: foundUsers.total,
-        paginator: foundUsers.paginator
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
       });
-    } catch (error) {
-      return res.internalServerError({ message: error.message });
     }
+
+    const roleMap = {
+      2: 'WL',
+      3: 'MD',
+      4: 'DI',
+      5: 'RE'
+    };
+
+    const transformedUsers = foundUsers.data.map((user) => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      const companyData = userData.company || {};
+      const walletData = userData.wallet || {};
+      const onboardingTokens = userData.onboardingTokens || [];
+
+      const kycStatus = userData.kycStatus === 'FULL_KYC' ? 'completed' : 'pending';
+
+      const isLockedByStatus = !!(userData.isLocked && userData.lockUntil && new Date(userData.lockUntil) > new Date());
+      const isLockedByAttempts = (userData.loginAttempts || 0) >= 3;
+      const isLocked = isLockedByStatus || isLockedByAttempts;
+
+      const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0
+        ? onboardingTokens[0]
+        : null;
+      const onboardingTokenExpiresAt = latestOnboardingToken?.expiresAt || null;
+
+      return {
+        id: userData.id,
+        date: userData.createdAt || null,
+        userId: userData.userId || null,
+        name: userData.name || null,
+        userRole: roleMap[userData.userRole] || `Role ${userData.userRole}`,
+        mobileNo: userData.mobileNo || null,
+        email: userData.email || null,
+        parentName: companyData.companyName || null,
+        parentRole: 'Enterprise',
+        company: companyData.companyName || null,
+        companyId: userData.companyId || null,
+        kycStatus: kycStatus,
+        kycSteps: userData.kycSteps || 0,
+        status: userData.isActive ? 'Active' : 'Inactive',
+        lock: isLocked,
+        onboardingTokenExpiresAt: onboardingTokenExpiresAt,
+        wallet: {
+          mainWallet: walletData.mainWallet || 0,
+          apes1Wallet: walletData.apes1Wallet || 0,
+          apes2Wallet: walletData.apes2Wallet || 0
+        }
+      };
+    });
+
+    const companiesWithUsers = companies.map((company) => {
+      const companyData = company.toJSON ? company.toJSON() : company;
+      const companyUsers = transformedUsers.filter(user => user.companyId === companyData.id);
+
+      return {
+        companyId: companyData.id,
+        companyName: companyData.companyName,
+        users: companyUsers
+      };
+    });
+
+    return res.success({
+      message: 'Users Retrieved Successfully',
+      data: companiesWithUsers,
+      total: foundUsers.total,
+      paginator: foundUsers.paginator
+    });
+  } catch (error) {
+    return res.internalServerError({ message: error.message });
+  }
 };
 
 const setMPIN = async (req, res) => {
@@ -345,7 +345,7 @@ const setMPIN = async (req, res) => {
 
     // Send email notification
     try {
-      const backendUrl = process.env.BASE_URL 
+      const backendUrl = process.env.BASE_URL
       const logoUrl = `${backendUrl}/gmaxepay.png`;
       const illustrationUrl = `${backendUrl}/setmpin.png`;
 
@@ -426,7 +426,7 @@ const resetMPIN = async (req, res) => {
 
     // Find the user whose MPIN needs to be reset
     let userToReset;
-    
+
     if (userId) {
       // Admin resetting another user's MPIN
       // If companyId is 1, can reset for any company
@@ -519,24 +519,24 @@ const getUserProfile = async (req, res) => {
     if (req.user.userRole !== 2) {
       return res.failure({ message: 'You are not authorized to get user details' });
     }
-    const existingUser = await dbService.findOne(model.user, { id: req.user.id ,companyId: req.user.companyId});
+    const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
     if (!existingUser) {
       return res.failure({ message: 'User not found' });
     }
-    
-    const companyDetails = existingUser.companyId 
+
+    const companyDetails = existingUser.companyId
       ? await dbService.findOne(model.company, { id: existingUser.companyId })
       : null;
 
     const [outletDetails, reportingToManager, companyBankDetails] = await Promise.all([
-      existingUser.companyId 
+      existingUser.companyId
         ? dbService.findOne(model.outlet, { refId: existingUser.id, companyId: existingUser.companyId })
         : null,
       existingUser.companyId
         ? dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1 })
         : null,
       existingUser.companyId
-        ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId })
+        ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId, isActive: true })
         : []
     ]);
 
@@ -607,7 +607,7 @@ const getUserProfile = async (req, res) => {
         branch: bank.branch
       }))
     };
-    
+
     return res.success({ message: 'User details retrieved successfully', data: response });
   } catch (error) {
     console.error('Error retrieving user details:', error);
@@ -622,7 +622,7 @@ const findAllCompanyReportToUser = async (req, res) => {
     }
 
     const companyId = req.user.companyId;
-    
+
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
     }
@@ -645,12 +645,12 @@ const findAllCompanyReportToUser = async (req, res) => {
       // Apply userRole filter if provided (3=MD, 4=DI, 5=RE)
       if (dataToFind.query.userRole !== undefined) {
         const requestedRole = dataToFind.query.userRole;
-        
+
         // Access denied for userRole 1 (Admin) and 2 (Whitelabel)
         if (requestedRole === 1 || requestedRole === 2) {
           return res.failure({ message: "Access denied! You cannot filter by this user role." });
         }
-        
+
         // Ensure it's one of the allowed roles (3, 4, 5)
         if ([3, 4, 5].includes(requestedRole)) {
           query.userRole = requestedRole;
@@ -699,7 +699,7 @@ const findAllCompanyReportToUser = async (req, res) => {
             { reportingTo: null }
           ]
         };
-        
+
         query = {
           companyId: query.companyId,
           userRole: query.userRole,
@@ -737,7 +737,7 @@ const findAllCompanyReportToUser = async (req, res) => {
     // Transform users data - only return id, name, userId
     const transformedUsers = foundUsers.data.map((user) => {
       const userData = user.toJSON ? user.toJSON() : user;
-      
+
       return {
         id: userData.id,
         name: userData.name || null,
@@ -786,36 +786,36 @@ const getByUserProfile = async (req, res) => {
 
     const companyAdmin = existingUser.companyId
       ? await dbService.findOne(model.user, {
-          companyId: existingUser.companyId,
-          userRole: 2,
-          isDeleted: false
-        })
+        companyId: existingUser.companyId,
+        userRole: 2,
+        isDeleted: false
+      })
       : null;
 
     const [outletDetails, slabDetails, reportingToManager, companyBankDetails] = await Promise.all([
       existingUser.companyId
         ? dbService.findOne(model.outlet, {
-            refId: existingUser.id,
-            companyId: existingUser.companyId
-          })
+          refId: existingUser.id,
+          companyId: existingUser.companyId
+        })
         : null,
       existingUser.companyId
         ? dbService.findOne(model.slab, {
-            id: existingUser.slabId,
-            isActive: true
-          }, { attributes: ['id', 'slabName'] })
+          id: existingUser.slabId,
+          isActive: true
+        }, { attributes: ['id', 'slabName'] })
         : null,
       existingUser.companyId
         ? dbService.findOne(model.user, {
-            id: existingUser.reportingTo || companyAdmin?.id,
-            companyId: existingUser.companyId
-          })
+          id: existingUser.reportingTo || companyAdmin?.id,
+          companyId: existingUser.companyId
+        })
         : null,
       existingUser.companyId
         ? dbService.findAll(model.customerBank, {
-            refId: existingUser.id,
-            companyId: existingUser.companyId
-          })
+          refId: existingUser.id,
+          companyId: existingUser.companyId
+        })
         : []
     ]);
 
@@ -862,23 +862,23 @@ const getByUserProfile = async (req, res) => {
       reportingToManagerMobile: reportingToManager?.mobileNo || null,
       companyDetails: companyDetails
         ? {
-            companyId: companyDetails.id,
-            companyName: companyDetails.companyName,
-            compnyPan: companyDetails.companyPan,
-            companyDomain: companyDetails.customDomain
-              ? `https://${companyDetails.customDomain}`
-              : null,
-            compnyGst: companyDetails.companyGst,
-            compnyLogo: getCdnImageUrl(companyDetails.logo)
-          }
+          companyId: companyDetails.id,
+          companyName: companyDetails.companyName,
+          compnyPan: companyDetails.companyPan,
+          companyDomain: companyDetails.customDomain
+            ? `https://${companyDetails.customDomain}`
+            : null,
+          compnyGst: companyDetails.companyGst,
+          compnyLogo: getCdnImageUrl(companyDetails.logo)
+        }
         : null,
       outletDetails: outletDetails
         ? {
-            shopName: outletDetails.shopName,
-            shopImage: getCdnImageUrl(outletDetails.shopImage),
-            shopAddress: outletDetails.shopAddress,
-            googleMapsLink: outletDetails.outletGoogleMapsLink
-          }
+          shopName: outletDetails.shopName,
+          shopImage: getCdnImageUrl(outletDetails.shopImage),
+          shopAddress: outletDetails.shopAddress,
+          googleMapsLink: outletDetails.outletGoogleMapsLink
+        }
         : null,
       bankDetails: (companyBankDetails || []).map((bank) => ({
         id: bank.id,
