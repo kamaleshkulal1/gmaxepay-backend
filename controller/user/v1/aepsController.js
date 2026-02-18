@@ -1298,7 +1298,7 @@ const aepsTransaction = async (req, res) => {
                 "fpkAgentId": null,
                 "additionalData": null
             }
-        } else {
+        } else if (normalizedTxnType === 'BE') {
             const aepsResponse = {
                 "terminalId": "AB076108",
                 "requestTransactionTime": "18/02/2026 15:15:44",
