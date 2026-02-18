@@ -177,8 +177,8 @@ const payout = async (req, res) => {
                 // Scenario: Master Distributor -> Company (Direct)
                 commData.scenario = 'MD_DIRECT';
                 const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                 ]);
 
                 // Correction: MD uses slab assigned by company. So we look in companySlabComm for role 3/MD.
@@ -235,8 +235,8 @@ const payout = async (req, res) => {
                     // Scenario 1: Distributor -> Company (Direct)
                     commData.scenario = 'DIST_DIRECT';
                     const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                     ]);
 
                     commData.slabs.distSlab = companySlabComm?.find(c => c.roleType === 4 || c.roleName === 'DI');
@@ -254,9 +254,9 @@ const payout = async (req, res) => {
                     commData.wallets.masterDistributorWallet = mdWallet;
 
                     const [SuperAdminSlabComm, companySlabComm, masterDistributorComm] = await Promise.all([
-                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                     ]);
 
                     commData.slabs.distSlab = masterDistributorComm?.find(c => c.roleType === 4 || c.roleName === 'DI');
@@ -314,8 +314,8 @@ const payout = async (req, res) => {
                     // Scenario 1: Retailer -> Company (Direct)
                     commData.scenario = 'RET_DIRECT';
                     const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                     ]);
                     commData.slabs.retailerSlab = companySlabComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
                     commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
@@ -328,9 +328,9 @@ const payout = async (req, res) => {
                     commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
 
                     const [SuperAdminSlabComm, companySlabComm, masterDistributorComm] = await Promise.all([
-                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                     ]);
                     commData.slabs.retailerSlab = masterDistributorComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
                     commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
@@ -359,10 +359,10 @@ const payout = async (req, res) => {
                         commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: user.companyId });
 
                         const [SuperAdminSlabComm, companySlabComm, masterDistributorComm, distributorComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
                         commData.slabs.retailerSlab = distributorComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
                         commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
@@ -374,9 +374,9 @@ const payout = async (req, res) => {
                         // Scenario 3: Retailer -> Dist -> Company
                         commData.scenario = 'RET_DIST_CO';
                         const [SuperAdminSlabComm, companySlabComm, distributorComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
                         commData.slabs.retailerSlab = distributorComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
                         commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
