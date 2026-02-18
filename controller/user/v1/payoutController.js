@@ -325,26 +325,26 @@ const payout = async (req, res) => {
                 }
 
                 // Calculate & Validate Retailer Amounts
-                const retBase = Number(commData.slabs.retailerSlab?.commAmt || 0);
-                commData.amounts.retailerSurcharge = calcSlabAmount(commData.slabs.retailerSlab, retBase);
+                // Calculate Upstream Surcharges First
+                commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
+                commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
 
-                if (commData.scenario === 'RET_DIRECT') {
-                    commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, commData.amounts.retailerSurcharge);
-                    commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.retailerSurcharge);
-                } else if (commData.scenario === 'RET_MD') {
-                    commData.amounts.mdSurcharge = calcSlabAmount(commData.slabs.mdSlab, commData.amounts.retailerSurcharge);
-                    commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, commData.amounts.mdSurcharge);
-                    commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.mdSurcharge);
-                } else if (commData.scenario === 'RET_DIST_MD') {
-                    commData.amounts.distSurcharge = calcSlabAmount(commData.slabs.distSlab, commData.amounts.retailerSurcharge);
-                    commData.amounts.mdSurcharge = calcSlabAmount(commData.slabs.mdSlab, commData.amounts.distSurcharge);
-                    commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, commData.amounts.mdSurcharge);
-                    commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.mdSurcharge);
-                } else if (commData.scenario === 'RET_DIST_CO') {
-                    commData.amounts.distSurcharge = calcSlabAmount(commData.slabs.distSlab, commData.amounts.retailerSurcharge);
-                    commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, commData.amounts.distSurcharge);
-                    commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.distSurcharge);
+                if (commData.slabs.mdSlab) {
+                    commData.amounts.mdSurcharge = calcSlabAmount(commData.slabs.mdSlab, payoutAmount);
                 }
+                if (commData.slabs.distSlab) {
+                    commData.amounts.distSurcharge = calcSlabAmount(commData.slabs.distSlab, payoutAmount);
+                }
+
+                // Calculate Retailer Surcharge as Sum of Costs (Operator Charge + Admin + Company + MD + Dist)
+                commData.amounts.retailerSurcharge =
+                    (commData.amounts.saBankCharge || 0) +
+                    (commData.amounts.adminSurcharge || 0) +
+                    (commData.amounts.companySurcharge || 0) +
+                    (commData.amounts.mdSurcharge || 0) +
+                    (commData.amounts.distSurcharge || 0);
+
+                console.log('Calculated Retailer Surcharge (Cost+):', commData.amounts.retailerSurcharge);
 
                 console.log('Retailer Scenario:', commData.scenario);
                 console.log('Calculated Surcharges:', commData.amounts);
