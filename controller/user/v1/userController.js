@@ -84,7 +84,7 @@ const generateNewUserId = async (currentUserId, newRole, companyId) => {
 
     const prefixLength = companyPrefix.length + newRolePrefix.length;
     const existingNumbers = new Set();
-    
+
     allUsersWithPattern.forEach(user => {
       if (user.userId) {
         const existingNumberPart = user.userId.slice(prefixLength);
@@ -111,40 +111,40 @@ const upgradeUserRole = async (req, res) => {
   try {
     const currentUser = req.user;
     const { userId, targetRole } = req.body || {};
-    
+
     if (!userId) {
       return res.failure({ message: 'User ID is required' });
     }
-    
+
     if (!targetRole) {
       return res.failure({ message: 'Target role is required' });
     }
-    
+
     // Only Master Distributor (userRole 3) can use this endpoint
     const currentUserRole = currentUser.userRole;
     if (currentUserRole !== 3) {
       return res.failure({ message: 'Not authorized to upgrade users' });
     }
-    
+
     // Master Distributor can only upgrade to Distributor (4)
     const targetRoleInt = parseInt(targetRole);
     if (targetRoleInt !== 4) {
       return res.failure({ message: 'Master Distributor can only upgrade to Distributor (4)' });
     }
-    
+
     // Find the user to upgrade
     const userToUpgrade = await dbService.findOne(model.user, {
       id: userId,
       companyId: currentUser.companyId,
       isDeleted: false
     });
-    
+
     if (!userToUpgrade) {
       return res.failure({ message: 'User not found' });
     }
-    
+
     const currentRole = userToUpgrade.userRole;
-    
+
     // Check if user is already at target role or higher
     if (currentRole <= targetRoleInt) {
       if (currentRole === targetRoleInt) {
@@ -153,7 +153,7 @@ const upgradeUserRole = async (req, res) => {
         return res.failure({ message: 'User role is already higher than target role' });
       }
     }
-    
+
     // Master Distributor can upgrade:
     // - Retailer (5) to Distributor (4)
     if (currentRole === 5 && targetRoleInt === 4) {
@@ -161,36 +161,36 @@ const upgradeUserRole = async (req, res) => {
     } else {
       return res.failure({ message: 'Invalid upgrade path' });
     }
-    
+
     // Generate new userId based on new role
     const newUserId = await generateNewUserId(
       userToUpgrade.userId,
       targetRoleInt,
       currentUser.companyId
     );
-    
+
     if (!newUserId) {
       return res.failure({ message: 'Failed to generate new user ID' });
     }
-    
+
     // Prepare update data
     const updateData = {
       userRole: targetRoleInt,
       userId: newUserId
     };
-    
+
     // Update user role and userId
     await dbService.update(model.user, { id: userId }, updateData);
-    
+
     // Reload updated user
     const updatedUser = await dbService.findOne(model.user, { id: userId, isDeleted: false });
-    
+
     // Generate referral code for Distributor
     let referCode = null;
     if (targetRoleInt === 4) {
       const company = await dbService.findOne(model.company, { id: currentUser.companyId, isDeleted: false });
       const companyName = company?.companyName || 'USER';
-      
+
       if (updatedUser.referCode) {
         try {
           referCode = decryptReferCode(updatedUser.referCode);
@@ -203,7 +203,7 @@ const upgradeUserRole = async (req, res) => {
         await dbService.update(model.user, { id: userId }, { referCode: referCode });
       }
     }
-    
+
     const responseData = {
       userId: userId,
       previousRole: currentRole,
@@ -212,7 +212,7 @@ const upgradeUserRole = async (req, res) => {
       newUserId: newUserId,
       ...(referCode ? { referCode } : {})
     };
-    
+
     return res.success({
       message: 'User role upgraded successfully',
       data: responseData
@@ -227,40 +227,40 @@ const degradeUserRole = async (req, res) => {
   try {
     const currentUser = req.user;
     const { userId, targetRole } = req.body || {};
-    
+
     if (!userId) {
       return res.failure({ message: 'User ID is required' });
     }
-    
+
     if (!targetRole) {
       return res.failure({ message: 'Target role is required' });
     }
-    
+
     // Only Master Distributor (userRole 3) can use this endpoint
     const currentUserRole = currentUser.userRole;
     if (currentUserRole !== 3) {
       return res.failure({ message: 'Not authorized to degrade users' });
     }
-    
+
     // Master Distributor can only degrade to Retailer (5)
     const targetRoleInt = parseInt(targetRole);
     if (targetRoleInt !== 5) {
       return res.failure({ message: 'Master Distributor can only degrade to Retailer (5)' });
     }
-    
+
     // Find the user to degrade
     const userToDegrade = await dbService.findOne(model.user, {
       id: userId,
       companyId: currentUser.companyId,
       isDeleted: false
     });
-    
+
     if (!userToDegrade) {
       return res.failure({ message: 'User not found' });
     }
-    
+
     const currentRole = userToDegrade.userRole;
-    
+
     // Check if it's actually a degradation
     if (targetRoleInt <= currentRole) {
       if (currentRole === targetRoleInt) {
@@ -269,18 +269,18 @@ const degradeUserRole = async (req, res) => {
         return res.failure({ message: 'Target role must be lower than current role' });
       }
     }
-    
+
     // Check if user has children (users with reportingTo = userId) before allowing downgrade
     const childrenCount = await dbService.count(model.user, {
       reportingTo: userId,
       companyId: currentUser.companyId,
       isDeleted: false
     });
-    
+
     if (childrenCount > 0) {
       return res.failure({ message: 'You have children so downgrade not possible' });
     }
-    
+
     // Master Distributor can degrade:
     // - Distributor (4) to Retailer (5)
     if (currentRole === 4 && targetRoleInt === 5) {
@@ -288,27 +288,27 @@ const degradeUserRole = async (req, res) => {
     } else {
       return res.failure({ message: 'Invalid degrade path' });
     }
-    
+
     // Generate new userId based on new role
     const newUserId = await generateNewUserId(
       userToDegrade.userId,
       targetRoleInt,
       currentUser.companyId
     );
-    
+
     if (!newUserId) {
       return res.failure({ message: 'Failed to generate new user ID' });
     }
-    
+
     // Prepare update data
     const updateData = {
       userRole: targetRoleInt,
       userId: newUserId
     };
-    
+
     // Update user role and userId
     await dbService.update(model.user, { id: userId }, updateData);
-    
+
     return res.success({
       message: 'User role degraded successfully',
       data: {
@@ -325,15 +325,15 @@ const degradeUserRole = async (req, res) => {
   }
 };
 
-  
+
 const findAllUsers = async (req, res) => {
   try {
     // Master Distributor (userRole 3) and Distributor (userRole 4) can access this endpoint
     const userRole = req.user.userRole;
     const userId = req.user.id;
     const userCompanyId = req.user.companyId;
-    
-    if(![3, 4].includes(userRole)) {
+
+    if (![3, 4].includes(userRole)) {
       return res.failure({ message: 'You are not authorized to access this resource' });
     }
     if (!userCompanyId) {
@@ -342,7 +342,7 @@ const findAllUsers = async (req, res) => {
 
     let dataToFind = req.body || {};
     let options = {};
-    
+
     // Determine allowed user roles based on current user's role
     let allowedRoles = [];
     if (userRole === 3) {
@@ -352,7 +352,7 @@ const findAllUsers = async (req, res) => {
       // Distributor can only see Retailers (5) that report to them
       allowedRoles = [5];
     }
-    
+
     let query = {
       reportingTo: userId, // Only users that report to the current user
       companyId: userCompanyId,
@@ -365,22 +365,22 @@ const findAllUsers = async (req, res) => {
       // Apply userRole filter if provided
       if (dataToFind.query.userRole !== undefined) {
         const requestedRole = dataToFind.query.userRole;
-        
+
         // Access denied for userRole 1 (Admin), 2 (Whitelabel), and 3 (Master Distributor)
         if (requestedRole === 1 || requestedRole === 2 || requestedRole === 3) {
           return res.failure({ message: "Access denied! You cannot filter by this user role." });
         }
-        
+
         // For Distributor (4), they can only filter by Retailer (5)
         if (userRole === 4 && requestedRole !== 5) {
           return res.failure({ message: "Access denied! Distributor can only view Retailers." });
         }
-        
+
         // For Master Distributor (3), they can filter by Distributor (4) or Retailer (5)
         if (userRole === 3 && ![4, 5].includes(requestedRole)) {
           return res.failure({ message: "Access denied! Master Distributor can only view Distributors and Retailers." });
         }
-        
+
         // Ensure it's one of the allowed roles for the current user
         if (allowedRoles.includes(requestedRole)) {
           query.userRole = requestedRole;
@@ -389,7 +389,7 @@ const findAllUsers = async (req, res) => {
 
       if (dataToFind.query.kycStatus) {
         const kycStatusValue = dataToFind.query.kycStatus;
-        
+
         if (kycStatusValue === 'pending') {
           query.kycStatus = { [Op.in]: ['HALF_KYC', 'NO_KYC'] };
         }
@@ -522,8 +522,8 @@ const findAllUsers = async (req, res) => {
       const isLocked = isLockedByStatus || isLockedByAttempts;
 
       // Get the latest active onboarding token's expiresAt
-      const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0 
-        ? onboardingTokens[0] 
+      const latestOnboardingToken = Array.isArray(onboardingTokens) && onboardingTokens.length > 0
+        ? onboardingTokens[0]
         : null;
       const onboardingTokenExpiresAt = latestOnboardingToken?.expiresAt || null;
 
@@ -626,11 +626,11 @@ const setMPIN = async (req, res) => {
 
     // Send email notification
     try {
-      const backendUrl = process.env.BASE_URL 
+      const backendUrl = process.env.BASE_URL
       const logoUrl = `${backendUrl}/gmaxepay.png`;
       const illustrationUrl = `${backendUrl}/setmpin.png`;
 
-      
+
       await emailService.sendMPINSetEmail({
         to: user.email,
         userName: user.name || 'User',
@@ -709,7 +709,7 @@ const resetMPIN = async (req, res) => {
 
     // Find the user whose MPIN needs to be reset
     let userToReset;
-    
+
     if (userId) {
       // Admin resetting another user's MPIN
       userToReset = await dbService.findOne(model.user, {
@@ -813,22 +813,22 @@ const getUserProfile = async (req, res) => {
     if (![3, 4, 5].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to get user details' });
     }
-    const existingUser = await dbService.findOne(model.user, { id: req.user.id ,companyId: req.user.companyId});
+    const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
     if (!existingUser) {
       return res.failure({ message: 'User not found' });
     }
-    
-    const companyDetails = existingUser.companyId 
+
+    const companyDetails = existingUser.companyId
       ? await dbService.findOne(model.company, { id: existingUser.companyId })
       : null;
 
-    const companyAdmin = await dbService.findOne(model.user, {  companyId: req.user.companyId, userRole: 2 });
+    const companyAdmin = await dbService.findOne(model.user, { companyId: req.user.companyId, userRole: 2 });
     if (!companyAdmin) {
       return res.failure({ message: 'Company admin not found' });
     }
 
     const [outletDetails, reportingToManager, companyBankDetails] = await Promise.all([
-      existingUser.companyId 
+      existingUser.companyId
         ? dbService.findOne(model.outlet, { refId: existingUser.id, companyId: existingUser.companyId })
         : null,
       existingUser.companyId
@@ -875,6 +875,7 @@ const getUserProfile = async (req, res) => {
       city: existingUser.city,
       longitude: existingUser.longitude,
       latitude: existingUser.latitude,
+      userRoleName: existingUser.userRoleName == 4 ? 'Distributor' : existingUser.userRoleName == 5 ? 'Retailer' : existingUser.userRoleName == 3 ? 'Master Distributor' : '',
       kycStatus: existingUser.kycStatus,
       reportingToManager: reportingToManager?.name || null,
       reportingToManagerEmail: reportingToManager?.email || null,
@@ -906,7 +907,7 @@ const getUserProfile = async (req, res) => {
         branch: bank.branch
       }))
     };
-    
+
     return res.success({ message: 'User details retrieved successfully', data: response });
   } catch (error) {
     console.error('Error retrieving user details:', error);
@@ -923,7 +924,7 @@ const findAllTheirDownlineUsers = async (req, res) => {
     const companyId = req.user.companyId;
     const currentUserId = req.user.id;
     const currentUserRole = req.user.userRole;
-    
+
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
     }
@@ -952,18 +953,18 @@ const findAllTheirDownlineUsers = async (req, res) => {
       // Apply userRole filter if provided (must be within allowed roles)
       if (dataToFind.query.userRole !== undefined) {
         const requestedRole = dataToFind.query.userRole;
-        
+
         // Access denied for userRole 1 (Admin) and 2 (Whitelabel)
         if (requestedRole === 1 || requestedRole === 2) {
           return res.failure({ message: "Access denied! You cannot filter by this user role." });
         }
-        
+
         // Ensure requested role is within allowed roles for current user
         if (allowedRoles.includes(requestedRole)) {
           query.userRole = requestedRole;
         } else {
-          return res.failure({ 
-            message: `Access denied! You can only view users with roles: ${allowedRoles.join(', ')}` 
+          return res.failure({
+            message: `Access denied! You can only view users with roles: ${allowedRoles.join(', ')}`
           });
         }
       }
@@ -1040,7 +1041,7 @@ const findAllTheirDownlineUsers = async (req, res) => {
     // Transform users data - only return id, name, userId
     const transformedUsers = foundUsers.data.map((user) => {
       const userData = user.toJSON ? user.toJSON() : user;
-      
+
       return {
         id: userData.id,
         name: userData.name || null,
@@ -1114,21 +1115,21 @@ const getByUserProfile = async (req, res) => {
     const [outletDetails, reportingToManager, companyBankDetails] = await Promise.all([
       targetUser.companyId
         ? dbService.findOne(model.outlet, {
-            refId: targetUser.id,
-            companyId: targetUser.companyId
-          })
+          refId: targetUser.id,
+          companyId: targetUser.companyId
+        })
         : null,
       targetUser.companyId
         ? dbService.findOne(model.user, {
-            id: targetUser.reportingTo || companyAdmin.id,
-            companyId: targetUser.companyId
-          })
+          id: targetUser.reportingTo || companyAdmin.id,
+          companyId: targetUser.companyId
+        })
         : null,
       targetUser.companyId
         ? dbService.findAll(model.customerBank, {
-            refId: targetUser.id,
-            companyId: targetUser.companyId
-          })
+          refId: targetUser.id,
+          companyId: targetUser.companyId
+        })
         : []
     ]);
 
@@ -1174,23 +1175,23 @@ const getByUserProfile = async (req, res) => {
       reportingToManagerMobile: reportingToManager?.mobileNo || null,
       companyDetails: companyDetails
         ? {
-            companyId: companyDetails.id,
-            companyName: companyDetails.companyName,
-            compnyPan: companyDetails.companyPan,
-            companyDomain: companyDetails.customDomain
-              ? `https://${companyDetails.customDomain}`
-              : null,
-            compnyGst: companyDetails.companyGst,
-            compnyLogo: getCdnImageUrl(companyDetails.logo)
-          }
+          companyId: companyDetails.id,
+          companyName: companyDetails.companyName,
+          compnyPan: companyDetails.companyPan,
+          companyDomain: companyDetails.customDomain
+            ? `https://${companyDetails.customDomain}`
+            : null,
+          compnyGst: companyDetails.companyGst,
+          compnyLogo: getCdnImageUrl(companyDetails.logo)
+        }
         : null,
       outletDetails: outletDetails
         ? {
-            shopName: outletDetails.shopName,
-            shopImage: getCdnImageUrl(outletDetails.shopImage),
-            shopAddress: outletDetails.shopAddress,
-            googleMapsLink: outletDetails.outletGoogleMapsLink
-          }
+          shopName: outletDetails.shopName,
+          shopImage: getCdnImageUrl(outletDetails.shopImage),
+          shopAddress: outletDetails.shopAddress,
+          googleMapsLink: outletDetails.outletGoogleMapsLink
+        }
         : null,
       bankDetails: (companyBankDetails || []).map((bank) => ({
         id: bank.id,

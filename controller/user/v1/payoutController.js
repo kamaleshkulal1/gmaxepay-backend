@@ -26,7 +26,6 @@ const calcSlabAmount = (slab, baseAmount) => {
 
 const payout = async (req, res) => {
     try {
-        console.log('--- Payout Request Started ---');
         if (![3, 4, 5].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to do payout' });
         }
