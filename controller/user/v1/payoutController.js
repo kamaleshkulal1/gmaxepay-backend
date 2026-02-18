@@ -277,6 +277,10 @@ const payout = async (req, res) => {
                     commData.slabs.companySlab = companySlabComm?.find(c => c.roleType === 2 || c.roleName === 'WU');
                     commData.slabs.mdSlab = masterDistributorComm?.find(c => c.roleType === 3 || c.roleName === 'MD');
                     console.log('Slabs:', commData.slabs);
+                    console.log('Retailer Slab:', commData.slabs.retailerSlab);
+                    console.log('Admin Slab:', commData.slabs.adminSlab);
+                    console.log('Company Slab:', commData.slabs.companySlab);
+                    console.log('MD Slab:', commData.slabs.mdSlab);
 
                 } else if (reportingUser.userRole === 4) {
                     // Retailer reports to Distributor. Need to check if Dist reports to MD or Company.
