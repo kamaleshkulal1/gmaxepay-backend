@@ -71,7 +71,6 @@ const payout = async (req, res) => {
 
         const transactionID = generateTransactionID(company.companyName || company.name);
         const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
-        // aepsClosingBalance will be updated later with surcharge/commission adjustments
         let aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount).toFixed(2));
         const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
         const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
@@ -96,7 +95,6 @@ const payout = async (req, res) => {
         let customerBank = null;
         let aslResponse = null;
 
-        // Commercial variables declared here to be accessible in SUCCESS block
         let payoutOperator = null;
         let superAdmin = null;
         let companyAdmin = null;
@@ -367,6 +365,17 @@ const payout = async (req, res) => {
                             transactionId: transactionID,
                             paymentStatus: 'SUCCESS',
                             paymentMode: 'WALLET',
+                            addedBy: superAdmin.id,
+                            updatedBy: superAdmin.id
+                        });
+
+                        // Record Surcharge Profit in surRecords
+                        await dbService.createOne(model.surRecords, {
+                            companyId: 1,
+                            refId: superAdmin.id,
+                            service: 'PAYOUT',
+                            transactionId: transactionID,
+                            amount: saSurcharge,
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
                         });

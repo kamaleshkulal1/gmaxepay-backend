@@ -74,6 +74,7 @@ db.payoutHistory = require('./payoutHistory');
 db.serviceTransaction = require('./serviceTransaction');
 db.fundRequest = require('./fundRequest');
 db.fundHistory = require('./fundHistrory');
+db.surRecords = require('./surRecords');
 
 // Commission & Slab Models
 db.slab = require('./slab');
