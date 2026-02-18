@@ -1196,7 +1196,7 @@ const aepsTransaction = async (req, res) => {
         };
         console.log('payload', payload);
         // const aepsResponse = await asl.aslAepsTransaction(payload);
-        if (normalizedTxnType === 'MS') {
+        if (normalizedTxnType == 'MS') {
             aepsResponse = {
                 "terminalId": "AB076108",
                 "requestTransactionTime": "18/02/2026 15:19:40",
@@ -1298,7 +1298,7 @@ const aepsTransaction = async (req, res) => {
                 "fpkAgentId": null,
                 "additionalData": null
             }
-        } else if (normalizedTxnType === 'BE') {
+        } else {
             aepsResponse = {
                 "terminalId": "AB076108",
                 "requestTransactionTime": "18/02/2026 15:15:44",
