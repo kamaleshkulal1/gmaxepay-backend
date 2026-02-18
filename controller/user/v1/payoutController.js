@@ -723,11 +723,15 @@ const payout = async (req, res) => {
 
                     // --- Update Master Distributor (If exists) ---
                     if (commData.users.masterDistributor) {
+                        console.log('--- Debug: Master Distributor Wallet Update ---');
+                        console.log(`Wallet Type: ${walletType}`);
                         if (user.userRole === 3) {
                             // MD is the Source (Debit) - USE AEPS WALLET
                             // Note: Payout amount is already deducted from AEPS wallet above.
                             const mdMid = aepsClosingBalance; // After payout deduction
                             const mdClose = parseFloat((mdMid - commData.amounts.mdSurcharge).toFixed(2));
+
+                            console.log(`Role 3 (Source): Opening (Post-Payout): ${mdMid}, Surcharge Debit: ${commData.amounts.mdSurcharge}, Closing: ${mdClose}`);
 
                             await dbService.update(model.wallet, { id: commData.wallets.masterDistributorWallet.id }, { [walletType]: mdClose, updatedBy: commData.users.masterDistributor.id });
                             await createHistory(commData.users.masterDistributor, walletType, remarkText, commData.amounts.mdSurcharge, 0, commData.amounts.mdSurcharge, mdMid, mdClose, true, false);
@@ -735,6 +739,9 @@ const payout = async (req, res) => {
                             // MD is an Intermediary (Income) - USE AEPS WALLET
                             const mdOpen = parseFloat(commData.wallets.masterDistributorWallet[walletType] || 0);
                             const mdClose = parseFloat((mdOpen + commData.amounts.mdSurcharge).toFixed(2));
+
+                            console.log(`Role != 3 (Intermediary): Opening: ${mdOpen}, Surcharge Income: ${commData.amounts.mdSurcharge}, Closing: ${mdClose}`);
+
                             await dbService.update(model.wallet, { id: commData.wallets.masterDistributorWallet.id }, { [walletType]: mdClose, updatedBy: commData.users.masterDistributor.id });
                             await createHistory(commData.users.masterDistributor, walletType, `${remarkText} - master distributor commission`, commData.amounts.mdSurcharge, commData.amounts.mdSurcharge, 0, mdOpen, mdClose, false, true);
                         }
