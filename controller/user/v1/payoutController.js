@@ -127,8 +127,7 @@ const payout = async (req, res) => {
             const payoutOperator = await dbService.findOne(model.operator, {
                 operatorType: 'PAYOUT',
                 minValue: { [Op.lte]: payoutAmount },
-                maxValue: { [Op.gte]: payoutAmount },
-                isActive: true
+                maxValue: { [Op.gte]: payoutAmount }
             });
             console.log('Payout Operator:', payoutOperator);
 
