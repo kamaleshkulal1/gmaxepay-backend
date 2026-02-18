@@ -126,7 +126,6 @@ const payout = async (req, res) => {
             // Fetch Payout Operator for Bank Charge Calculation
             const payoutOperator = await dbService.findOne(model.operator, {
                 operatorType: 'PAYOUT',
-                slabId: user.slabId,
                 minValue: { [Op.lte]: payoutAmount },
                 maxValue: { [Op.gte]: payoutAmount },
                 isActive: true
