@@ -645,15 +645,15 @@ const payout = async (req, res) => {
 
                     // --- Update Master Distributor (If exists) ---
                     if (commData.users.masterDistributor) {
-                        const mdOpen = parseFloat(commData.wallets.masterDistributorWallet.mainWallet || 0);
+                        const mdOpen = parseFloat(commData.wallets.masterDistributorWallet[walletType] || 0);
                         const mdClose = parseFloat((mdOpen + commData.amounts.mdSurcharge).toFixed(2));
-                        await dbService.update(model.wallet, { id: commData.wallets.masterDistributorWallet.id }, { mainWallet: mdClose, updatedBy: commData.users.masterDistributor.id });
-                        await createHistory(commData.users.masterDistributor, 'mainWallet', `${remarkText} - master distributor commission`, commData.amounts.mdSurcharge, commData.amounts.mdSurcharge, 0, mdOpen, mdClose, false, true);
+                        await dbService.update(model.wallet, { id: commData.wallets.masterDistributorWallet.id }, { [walletType]: mdClose, updatedBy: commData.users.masterDistributor.id });
+                        await createHistory(commData.users.masterDistributor, walletType, `${remarkText} - master distributor commission`, commData.amounts.mdSurcharge, commData.amounts.mdSurcharge, 0, mdOpen, mdClose, false, true);
                     }
 
                     // --- Update Distributor ---
                     if (commData.users.distributor) {
-                        // Check which wallet to use based on role. If Dist is Source (Role 4), use AEPS Wallet. If Upline, use Main.
+                        // Check which wallet to use based on role. If Dist is Source (Role 4), use AEPS Wallet. If Upline, use AEPS Wallet (as requested).
                         if (user.userRole === 4) {
                             // Dist is the Source (Debit) - USE AEPS WALLET
                             const distOpen = parseFloat(commData.wallets.distributorWallet[walletType] || 0);
@@ -666,11 +666,11 @@ const payout = async (req, res) => {
                             await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { [walletType]: distClose, updatedBy: commData.users.distributor.id });
                             await createHistory(commData.users.distributor, walletType, remarkText, commData.amounts.distSurcharge, 0, commData.amounts.distSurcharge, distMid, distClose, true, false);
                         } else {
-                            // Dist is an Intermediary (Income) - USE MAIN WALLET
-                            const distOpen = parseFloat(commData.wallets.distributorWallet.mainWallet || 0);
+                            // Dist is an Intermediary (Income) - USE AEPS WALLET (Changed from Main Wallet)
+                            const distOpen = parseFloat(commData.wallets.distributorWallet[walletType] || 0);
                             const distClose = parseFloat((distOpen + commData.amounts.distSurcharge).toFixed(2));
-                            await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { mainWallet: distClose, updatedBy: commData.users.distributor.id });
-                            await createHistory(commData.users.distributor, 'mainWallet', `${remarkText} - distributor commission`, commData.amounts.distSurcharge, commData.amounts.distSurcharge, 0, distOpen, distClose, false, true);
+                            await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { [walletType]: distClose, updatedBy: commData.users.distributor.id });
+                            await createHistory(commData.users.distributor, walletType, `${remarkText} - distributor commission`, commData.amounts.distSurcharge, commData.amounts.distSurcharge, 0, distOpen, distClose, false, true);
                         }
                     }
 

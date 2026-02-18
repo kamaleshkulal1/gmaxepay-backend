@@ -986,7 +986,7 @@ const aepsTransaction = async (req, res) => {
         const normalizedTxnType = normalizeTxnType(txnType);
         const normalizedCaptureType = normalizeCaptureType(captureType);
         const normalizedBankiin = bankiin ? String(bankiin).trim() : null;
-        const aepsResponse = null;
+        let aepsResponse = null;
         if (!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
