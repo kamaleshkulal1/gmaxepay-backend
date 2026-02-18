@@ -986,7 +986,7 @@ const aepsTransaction = async (req, res) => {
         const normalizedTxnType = normalizeTxnType(txnType);
         const normalizedCaptureType = normalizeCaptureType(captureType);
         const normalizedBankiin = bankiin ? String(bankiin).trim() : null;
-
+        const aepsResponse = null;
         if (!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
@@ -1197,7 +1197,7 @@ const aepsTransaction = async (req, res) => {
         console.log('payload', payload);
         // const aepsResponse = await asl.aslAepsTransaction(payload);
         if (normalizedTxnType === 'MS') {
-            const aepsResponse = {
+            aepsResponse = {
                 "terminalId": "AB076108",
                 "requestTransactionTime": "18/02/2026 15:19:40",
                 "transactionAmount": 0,
@@ -1299,7 +1299,7 @@ const aepsTransaction = async (req, res) => {
                 "additionalData": null
             }
         } else if (normalizedTxnType === 'BE') {
-            const aepsResponse = {
+            aepsResponse = {
                 "terminalId": "AB076108",
                 "requestTransactionTime": "18/02/2026 15:15:44",
                 "transactionAmount": 0,
