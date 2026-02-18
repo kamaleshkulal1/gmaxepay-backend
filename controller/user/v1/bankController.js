@@ -9,7 +9,7 @@ const key = Buffer.from(process.env.AES_KEY, 'hex');
 const getAllCustomerBanks = async (req, res) => {
     try {
         const user = req.user;
-        
+
         // Get all customer banks for the user
         const customerBanks = await dbService.findAll(
             model.customerBank,
@@ -22,7 +22,7 @@ const getAllCustomerBanks = async (req, res) => {
                 order: [['isPrimary', 'DESC'], ['createdAt', 'DESC']]
             }
         );
-        
+
         return res.success({
             message: 'Customer banks retrieved successfully',
             data: {
@@ -31,7 +31,7 @@ const getAllCustomerBanks = async (req, res) => {
                 primaryBank: customerBanks.find(bank => bank.isPrimary === true) || null
             }
         });
-        
+
     } catch (error) {
         console.log('Get customer banks error:', error);
         return res.internalServerError({ message: error.message || 'Internal server error' });
@@ -41,7 +41,7 @@ const getAllCustomerBanks = async (req, res) => {
 const getPrimaryCustomerBank = async (req, res) => {
     try {
         const user = req.user;
-        
+
         // Get primary customer bank
         const primaryBank = await dbService.findOne(
             model.customerBank,
@@ -52,16 +52,16 @@ const getPrimaryCustomerBank = async (req, res) => {
                 isPrimary: true
             }
         );
-        
+
         if (!primaryBank) {
             return res.notFound({ message: 'Primary bank account not found' });
         }
-        
+
         return res.success({
             message: 'Primary bank account retrieved successfully',
             data: primaryBank
         });
-        
+
     } catch (error) {
         console.log('Get primary bank error:', error);
         return res.internalServerError({ message: error.message || 'Internal server error' });
@@ -90,10 +90,13 @@ const calcSlabAmount = (slab, baseAmount) => {
 
 const addCustomerBank = async (req, res) => {
     try {
-        
-        if(![3,4,5].includes(req.user.userRole)){
+
+        if (![3, 4, 5].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to add bank details' });
         }
+        let duplicateBank;
+        let existingBanks;
+
         let masterDistributor;
         let whitelabelUser;
         let superAdmin;
@@ -111,7 +114,7 @@ const addCustomerBank = async (req, res) => {
         let retailerWallet;
         let distributorComm;
 
-        if(req.user.userRole === 3){
+        if (req.user.userRole === 3) {
             [
                 masterDistributor,
                 whitelabelUser,
@@ -136,9 +139,9 @@ const addCustomerBank = async (req, res) => {
                 }),
                 dbService.findOne(model.operator, {
                     operatorType: 'BANK VERIFICATION'
-                },{select: ['id', 'commAmt', 'amtType', 'commType']})
+                }, { select: ['id', 'commAmt', 'amtType', 'commType'] })
             ])
-            if(!masterDistributor || !whitelabelUser || !superAdmin){
+            if (!masterDistributor || !whitelabelUser || !superAdmin) {
                 return res.failure({ message: 'Master distributor, whitelabel user or super admin not found' });
             }
             [
@@ -173,10 +176,10 @@ const addCustomerBank = async (req, res) => {
                 dbService.findOne(model.wallet, { refId: whitelabelUser.id, companyId: req.user.companyId }),
                 dbService.findOne(model.wallet, { refId: 1, companyId: 1 })
             ]);
-            if(!masterDistributorWallet || !whitelabelUserWallet || !superAdminWallet){
+            if (!masterDistributorWallet || !whitelabelUserWallet || !superAdminWallet) {
                 return res.failure({ message: 'Master distributor, whitelabel user or super admin wallet not found' });
             }
-        }else if(req.user.userRole === 4){
+        } else if (req.user.userRole === 4) {
             [
                 distributor,
                 companyAdmin,
@@ -200,13 +203,13 @@ const addCustomerBank = async (req, res) => {
                 })
             ]);
 
-            if(!distributor){
+            if (!distributor) {
                 return res.failure({ message: 'Distributor not found' });
             }
-            if(!companyAdmin){
+            if (!companyAdmin) {
                 return res.failure({ message: 'Company admin not found' });
             }
-            if(!superAdmin){
+            if (!superAdmin) {
                 return res.failure({ message: 'Super admin not found' });
             }
 
@@ -321,196 +324,235 @@ const addCustomerBank = async (req, res) => {
             } else {
                 return res.failure({ message: 'Invalid distributor reporting structure' });
             }
-        } else if(req.user.userRole === 5){
-          [retailer,companyAdmin,superAdmin] = await Promise.all([
-            dbService.findOne(model.user, {
-              id: req.user.id,
-              companyId: req.user.companyId,
-              isActive: true
-            }),
-            dbService.findOne(model.user, {
-              companyId: req.user.companyId,
-              userRole: 2,
-              isActive: true
-            }),
-            dbService.findOne(model.user, {
-              id: 1,
-              companyId: 1,
-              userRole: 1,
-              isActive: true
-            })
-          ]);
-          if(!retailer || !companyAdmin || !superAdmin){
-            return res.failure({ message: 'Retailer, company admin or super admin not found' });
-          }
-          if(retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null){
-            // Scenario 1: Retailer reports directly to company admin (no master distributor or distributor)
-            [
-              SuperAdminSlabComm,
-              companySlabComm
-            ] = await Promise.all([
-              dbService.findAll(model.commSlab, { 
-                companyId: 1, 
-                addedBy: superAdmin.id, 
-                operatorType: 'BANK VERIFICATION' 
-              }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-              dbService.findAll(model.commSlab, { 
-                companyId: req.user.companyId, 
-                addedBy: companyAdmin.id, 
-                operatorType: 'BANK VERIFICATION' 
-              }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+        } else if (req.user.userRole === 5) {
+            [retailer, companyAdmin, superAdmin] = await Promise.all([
+                dbService.findOne(model.user, {
+                    id: req.user.id,
+                    companyId: req.user.companyId,
+                    isActive: true
+                }),
+                dbService.findOne(model.user, {
+                    companyId: req.user.companyId,
+                    userRole: 2,
+                    isActive: true
+                }),
+                dbService.findOne(model.user, {
+                    id: 1,
+                    companyId: 1,
+                    userRole: 1,
+                    isActive: true
+                })
             ]);
-            if(!SuperAdminSlabComm)
-                return res.failure({ message: 'Super admin slab commission not found' });
-            if(!companySlabComm)
-                return res.failure({ message: 'Company admin slab commission not found' });
-            [
-                superAdminWallet,
-                companyWallet,
-                retailerWallet
-            ] = await Promise.all([
-                dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 }),
-                dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: req.user.companyId }),
-                dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId })
-            ]);
-
-            if(!superAdminWallet)
-                return res.failure({ message: 'Super admin wallet not found' });
-            if(!companyWallet)
-                return res.failure({ message: 'Company admin wallet not found' });
-            if(!retailerWallet)
-                return res.failure({ message: 'Retailer wallet not found' });
-          } else if (retailer.reportingTo && retailer.reportingTo !== null) {
-            // Find the reporting user to determine if it's master distributor or distributor
-            const reportingUser = await dbService.findOne(model.user, {
-                id: retailer.reportingTo,
-                companyId: req.user.companyId,
-                isActive: true
-            });
-
-            if (!reportingUser) {
-                return res.failure({ message: 'Reporting user not found' });
+            if (!retailer || !companyAdmin || !superAdmin) {
+                return res.failure({ message: 'Retailer, company admin or super admin not found' });
             }
-
-            if (reportingUser.userRole === 3) {
-                // Scenario 2: Retailer reports to master distributor
-                masterDistributor = reportingUser;
+            if (retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                // Scenario 1: Retailer reports directly to company admin (no master distributor or distributor)
                 [
                     SuperAdminSlabComm,
-                    companySlabComm,
-                    masterDistributorComm
+                    companySlabComm
                 ] = await Promise.all([
-                    dbService.findAll(model.commSlab, { 
-                        companyId: 1, 
-                        addedBy: superAdmin.id, 
-                        operatorType: 'BANK VERIFICATION' 
+                    dbService.findAll(model.commSlab, {
+                        companyId: 1,
+                        addedBy: superAdmin.id,
+                        operatorType: 'BANK VERIFICATION'
                     }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                    dbService.findAll(model.commSlab, { 
-                        companyId: req.user.companyId, 
-                        addedBy: companyAdmin.id, 
-                        operatorType: 'BANK VERIFICATION' 
-                    }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                    dbService.findAll(model.commSlab, { 
-                        companyId: req.user.companyId, 
-                        addedBy: masterDistributor.id, 
-                        operatorType: 'BANK VERIFICATION' 
+                    dbService.findAll(model.commSlab, {
+                        companyId: req.user.companyId,
+                        addedBy: companyAdmin.id,
+                        operatorType: 'BANK VERIFICATION'
                     }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
                 ]);
-                if(!SuperAdminSlabComm || !companySlabComm || !masterDistributorComm)
-                    return res.failure({ message: 'Super admin, company admin or master distributor slab commission not found' });
+                if (!SuperAdminSlabComm)
+                    return res.failure({ message: 'Super admin slab commission not found' });
+                if (!companySlabComm)
+                    return res.failure({ message: 'Company admin slab commission not found' });
                 [
                     superAdminWallet,
                     companyWallet,
-                    retailerWallet,
-                    masterDistributorWallet
+                    retailerWallet
                 ] = await Promise.all([
                     dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 }),
                     dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: req.user.companyId }),
-                    dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId }),
-                    dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: req.user.companyId })
+                    dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId })
                 ]);
-                if(!superAdminWallet || !companyWallet || !retailerWallet || !masterDistributorWallet)
-                    return res.failure({ message: 'Super admin, company admin, retailer or master distributor wallet not found' });
-            } else if (reportingUser.userRole === 4) {
-                // Scenario 3: Retailer reports to distributor
-                distributor = reportingUser;
-                // Check if distributor reports to master distributor
-                if (distributor.reportingTo && distributor.reportingTo !== null && distributor.reportingTo !== companyAdmin.id) {
-                    masterDistributor = await dbService.findOne(model.user, {
-                        id: distributor.reportingTo,
-                        companyId: req.user.companyId,
-                        isActive: true
-                    });
-                    if (masterDistributor && masterDistributor.userRole === 3) {
-                        // Scenario 4: Retailer -> Distributor -> Master Distributor (all in chain)
-                        [
-                            SuperAdminSlabComm,
-                            companySlabComm,
-                            masterDistributorComm,
-                            distributorComm
-                        ] = await Promise.all([
-                            dbService.findAll(model.commSlab, { 
-                                companyId: 1, 
-                                addedBy: superAdmin.id, 
-                                operatorType: 'BANK VERIFICATION' 
-                            }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { 
-                                companyId: req.user.companyId, 
-                                addedBy: companyAdmin.id, 
-                                operatorType: 'BANK VERIFICATION' 
-                            }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { 
-                                companyId: req.user.companyId, 
-                                addedBy: masterDistributor.id, 
-                                operatorType: 'BANK VERIFICATION' 
-                            }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { 
-                                companyId: req.user.companyId, 
-                                addedBy: distributor.id, 
-                                operatorType: 'BANK VERIFICATION' 
-                            }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
-                        ]);
-                        if(!SuperAdminSlabComm || !companySlabComm || !masterDistributorComm || !distributorComm)
-                            return res.failure({ message: 'Super admin, company admin, master distributor or distributor slab commission not found' });
-                        [
-                            superAdminWallet,
-                            companyWallet,
-                            retailerWallet,
-                            masterDistributorWallet,
-                            distributorWallet
-                        ] = await Promise.all([
-                            dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 }),
-                            dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: req.user.companyId }),
-                            dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId }),
-                            dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: req.user.companyId }),
-                            dbService.findOne(model.wallet, { refId: distributor.id, companyId: req.user.companyId })
-                        ]);
-                        if(!superAdminWallet || !companyWallet || !retailerWallet || !masterDistributorWallet || !distributorWallet)
-                            return res.failure({ message: 'Super admin, company admin, retailer, master distributor or distributor wallet not found' });
+
+                if (!superAdminWallet)
+                    return res.failure({ message: 'Super admin wallet not found' });
+                if (!companyWallet)
+                    return res.failure({ message: 'Company admin wallet not found' });
+                if (!retailerWallet)
+                    return res.failure({ message: 'Retailer wallet not found' });
+            } else if (retailer.reportingTo && retailer.reportingTo !== null) {
+                // Find the reporting user to determine if it's master distributor or distributor
+                const reportingUser = await dbService.findOne(model.user, {
+                    id: retailer.reportingTo,
+                    companyId: req.user.companyId,
+                    isActive: true
+                });
+
+                if (!reportingUser) {
+                    return res.failure({ message: 'Reporting user not found' });
+                }
+
+                if (reportingUser.userRole === 3) {
+                    // Scenario 2: Retailer reports to master distributor
+                    masterDistributor = reportingUser;
+                    [
+                        SuperAdminSlabComm,
+                        companySlabComm,
+                        masterDistributorComm
+                    ] = await Promise.all([
+                        dbService.findAll(model.commSlab, {
+                            companyId: 1,
+                            addedBy: superAdmin.id,
+                            operatorType: 'BANK VERIFICATION'
+                        }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                        dbService.findAll(model.commSlab, {
+                            companyId: req.user.companyId,
+                            addedBy: companyAdmin.id,
+                            operatorType: 'BANK VERIFICATION'
+                        }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                        dbService.findAll(model.commSlab, {
+                            companyId: req.user.companyId,
+                            addedBy: masterDistributor.id,
+                            operatorType: 'BANK VERIFICATION'
+                        }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                    ]);
+                    if (!SuperAdminSlabComm || !companySlabComm || !masterDistributorComm)
+                        return res.failure({ message: 'Super admin, company admin or master distributor slab commission not found' });
+                    [
+                        superAdminWallet,
+                        companyWallet,
+                        retailerWallet,
+                        masterDistributorWallet
+                    ] = await Promise.all([
+                        dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 }),
+                        dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: req.user.companyId }),
+                        dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId }),
+                        dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: req.user.companyId })
+                    ]);
+                    if (!superAdminWallet || !companyWallet || !retailerWallet || !masterDistributorWallet)
+                        return res.failure({ message: 'Super admin, company admin, retailer or master distributor wallet not found' });
+                } else if (reportingUser.userRole === 4) {
+                    // Scenario 3: Retailer reports to distributor
+                    distributor = reportingUser;
+                    // Check if distributor reports to master distributor
+                    if (distributor.reportingTo && distributor.reportingTo !== null && distributor.reportingTo !== companyAdmin.id) {
+                        masterDistributor = await dbService.findOne(model.user, {
+                            id: distributor.reportingTo,
+                            companyId: req.user.companyId,
+                            isActive: true
+                        });
+                        if (masterDistributor && masterDistributor.userRole === 3) {
+                            // Scenario 4: Retailer -> Distributor -> Master Distributor (all in chain)
+                            [
+                                SuperAdminSlabComm,
+                                companySlabComm,
+                                masterDistributorComm,
+                                distributorComm
+                            ] = await Promise.all([
+                                dbService.findAll(model.commSlab, {
+                                    companyId: 1,
+                                    addedBy: superAdmin.id,
+                                    operatorType: 'BANK VERIFICATION'
+                                }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                                dbService.findAll(model.commSlab, {
+                                    companyId: req.user.companyId,
+                                    addedBy: companyAdmin.id,
+                                    operatorType: 'BANK VERIFICATION'
+                                }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                                dbService.findAll(model.commSlab, {
+                                    companyId: req.user.companyId,
+                                    addedBy: masterDistributor.id,
+                                    operatorType: 'BANK VERIFICATION'
+                                }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                                dbService.findAll(model.commSlab, {
+                                    companyId: req.user.companyId,
+                                    addedBy: distributor.id,
+                                    operatorType: 'BANK VERIFICATION'
+                                }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                            ]);
+                            if (!SuperAdminSlabComm || !companySlabComm || !masterDistributorComm || !distributorComm)
+                                return res.failure({ message: 'Super admin, company admin, master distributor or distributor slab commission not found' });
+                            [
+                                superAdminWallet,
+                                companyWallet,
+                                retailerWallet,
+                                masterDistributorWallet,
+                                distributorWallet
+                            ] = await Promise.all([
+                                dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 }),
+                                dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: req.user.companyId }),
+                                dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId }),
+                                dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: req.user.companyId }),
+                                dbService.findOne(model.wallet, { refId: distributor.id, companyId: req.user.companyId })
+                            ]);
+                            if (!superAdminWallet || !companyWallet || !retailerWallet || !masterDistributorWallet || !distributorWallet)
+                                return res.failure({ message: 'Super admin, company admin, retailer, master distributor or distributor wallet not found' });
+                        } else {
+                            // Distributor reports to company admin, so only distributor in chain
+                            [
+                                SuperAdminSlabComm,
+                                companySlabComm,
+                                distributorComm
+                            ] = await Promise.all([
+                                dbService.findAll(model.commSlab, {
+                                    companyId: 1,
+                                    addedBy: superAdmin.id,
+                                    operatorType: 'BANK VERIFICATION'
+                                }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                                dbService.findAll(model.commSlab, {
+                                    companyId: req.user.companyId,
+                                    addedBy: companyAdmin.id,
+                                    operatorType: 'BANK VERIFICATION'
+                                }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                                dbService.findAll(model.commSlab, {
+                                    companyId: req.user.companyId,
+                                    addedBy: distributor.id,
+                                    operatorType: 'BANK VERIFICATION'
+                                }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                            ]);
+                            if (!SuperAdminSlabComm || !companySlabComm || !distributorComm)
+                                return res.failure({ message: 'Super admin, company admin or distributor slab commission not found' });
+                            [
+                                superAdminWallet,
+                                companyWallet,
+                                retailerWallet,
+                                distributorWallet
+                            ] = await Promise.all([
+                                dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 }),
+                                dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: req.user.companyId }),
+                                dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId }),
+                                dbService.findOne(model.wallet, { refId: distributor.id, companyId: req.user.companyId })
+                            ]);
+                            if (!superAdminWallet || !companyWallet || !retailerWallet || !distributorWallet)
+                                return res.failure({ message: 'Super admin, company admin, retailer or distributor wallet not found' });
+                        }
                     } else {
-                        // Distributor reports to company admin, so only distributor in chain
+                        // Scenario 3: Retailer reports to distributor (distributor reports to company admin)
                         [
                             SuperAdminSlabComm,
                             companySlabComm,
                             distributorComm
                         ] = await Promise.all([
-                            dbService.findAll(model.commSlab, { 
-                                companyId: 1, 
-                                addedBy: superAdmin.id, 
-                                operatorType: 'BANK VERIFICATION' 
+                            dbService.findAll(model.commSlab, {
+                                companyId: 1,
+                                addedBy: superAdmin.id,
+                                operatorType: 'BANK VERIFICATION'
                             }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { 
-                                companyId: req.user.companyId, 
-                                addedBy: companyAdmin.id, 
-                                operatorType: 'BANK VERIFICATION' 
+                            dbService.findAll(model.commSlab, {
+                                companyId: req.user.companyId,
+                                addedBy: companyAdmin.id,
+                                operatorType: 'BANK VERIFICATION'
                             }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                            dbService.findAll(model.commSlab, { 
-                                companyId: req.user.companyId, 
-                                addedBy: distributor.id, 
-                                operatorType: 'BANK VERIFICATION' 
+                            dbService.findAll(model.commSlab, {
+                                companyId: req.user.companyId,
+                                addedBy: distributor.id,
+                                operatorType: 'BANK VERIFICATION'
                             }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
                         ]);
-                        if(!SuperAdminSlabComm || !companySlabComm || !distributorComm)
+                        if (!SuperAdminSlabComm || !companySlabComm || !distributorComm)
                             return res.failure({ message: 'Super admin, company admin or distributor slab commission not found' });
                         [
                             superAdminWallet,
@@ -523,62 +565,24 @@ const addCustomerBank = async (req, res) => {
                             dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId }),
                             dbService.findOne(model.wallet, { refId: distributor.id, companyId: req.user.companyId })
                         ]);
-                        if(!superAdminWallet || !companyWallet || !retailerWallet || !distributorWallet)
+                        if (!superAdminWallet || !companyWallet || !retailerWallet || !distributorWallet)
                             return res.failure({ message: 'Super admin, company admin, retailer or distributor wallet not found' });
                     }
                 } else {
-                    // Scenario 3: Retailer reports to distributor (distributor reports to company admin)
-                    [
-                        SuperAdminSlabComm,
-                        companySlabComm,
-                        distributorComm
-                    ] = await Promise.all([
-                        dbService.findAll(model.commSlab, { 
-                            companyId: 1, 
-                            addedBy: superAdmin.id, 
-                            operatorType: 'BANK VERIFICATION' 
-                        }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { 
-                            companyId: req.user.companyId, 
-                            addedBy: companyAdmin.id, 
-                            operatorType: 'BANK VERIFICATION' 
-                        }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                        dbService.findAll(model.commSlab, { 
-                            companyId: req.user.companyId, 
-                            addedBy: distributor.id, 
-                            operatorType: 'BANK VERIFICATION' 
-                        }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
-                    ]);
-                    if(!SuperAdminSlabComm || !companySlabComm || !distributorComm)
-                        return res.failure({ message: 'Super admin, company admin or distributor slab commission not found' });
-                    [
-                        superAdminWallet,
-                        companyWallet,
-                        retailerWallet,
-                        distributorWallet
-                    ] = await Promise.all([
-                        dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 }),
-                        dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: req.user.companyId }),
-                        dbService.findOne(model.wallet, { refId: retailer.id, companyId: req.user.companyId }),
-                        dbService.findOne(model.wallet, { refId: distributor.id, companyId: req.user.companyId })
-                    ]);
-                    if(!superAdminWallet || !companyWallet || !retailerWallet || !distributorWallet)
-                        return res.failure({ message: 'Super admin, company admin, retailer or distributor wallet not found' });
+                    return res.failure({ message: 'Invalid retailer reporting structure' });
                 }
-            } else {
-                return res.failure({ message: 'Invalid retailer reporting structure' });
             }
         }
         const { account_number, ifsc } = req.body;
 
         // Validate required fields
         if (!account_number || !ifsc) {
-            return res.validationError({ 
-                message: !account_number ? 'Account number is required' : 'IFSC is required' 
+            return res.validationError({
+                message: !account_number ? 'Account number is required' : 'IFSC is required'
             });
         }
 
-        const existingBanks = await dbService.findAll(
+        existingBanks = await dbService.findAll(
             model.customerBank,
             {
                 refId: req.user.id,
@@ -587,7 +591,7 @@ const addCustomerBank = async (req, res) => {
             }
         );
 
-        const duplicateBank = existingBanks.find(
+        duplicateBank = existingBanks.find(
             bank => bank.accountNumber === account_number && bank.ifsc === ifsc
         );
 
@@ -623,12 +627,12 @@ const addCustomerBank = async (req, res) => {
         let bankVerification = cachedVerification;
         if (!bankVerification) {
             bankVerification = await ekycHub.bankVerification(account_number, ifsc);
-            
+
             // Cache successful verification
             if (bankVerification && bankVerification.status === 'Success') {
                 const encryptedRequest = doubleEncrypt(JSON.stringify({ account_number, ifsc }), key);
                 const encryptedResponse = doubleEncrypt(JSON.stringify(bankVerification), key);
-                
+
                 dbService.createOne(model.ekycHub, {
                     identityNumber1: account_number,
                     identityNumber2: ifsc,
@@ -1988,7 +1992,7 @@ const addCustomerBank = async (req, res) => {
                 }
             }
         }
-        }
+
 
         if (duplicateBank) {
             return res.failure({
@@ -2051,11 +2055,11 @@ const getCustomerBankById = async (req, res) => {
     try {
         const { id } = req.params;
         const user = req.user;
-        
+
         if (!id) {
             return res.validationError({ message: 'Bank ID is required' });
         }
-        
+
         const customerBank = await dbService.findOne(
             model.customerBank,
             {
@@ -2065,16 +2069,16 @@ const getCustomerBankById = async (req, res) => {
                 isActive: true
             }
         );
-        
+
         if (!customerBank) {
             return res.notFound({ message: 'Customer bank not found' });
         }
-        
+
         return res.success({
             message: 'Customer bank retrieved successfully',
             data: customerBank
         });
-        
+
     } catch (error) {
         console.log('Get customer bank by ID error:', error);
         return res.internalServerError({ message: error.message || 'Internal server error' });
@@ -2104,7 +2108,7 @@ const deleteCustomerBank = async (req, res) => {
             refId: user.id,
             companyId: user.companyId
         }, updatedBank
-       );
+        );
         if (!updatedBank) {
             return res.failure({ message: 'Failed to delete bank details' });
         }
