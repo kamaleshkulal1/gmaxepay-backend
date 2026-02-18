@@ -191,6 +191,11 @@ const payout = async (req, res) => {
                 commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
 
                 // Calculate Upstream Surcharges First
+                console.log('--- Debug: Slabs Found ---');
+                console.log('Admin Slab:', commData.slabs.adminSlab ? { id: commData.slabs.adminSlab.id, comm: commData.slabs.adminSlab.commAmt, amtType: commData.slabs.adminSlab.amtType } : 'Not Found');
+                console.log('Company Slab:', commData.slabs.companySlab ? { id: commData.slabs.companySlab.id, comm: commData.slabs.companySlab.commAmt, amtType: commData.slabs.companySlab.amtType } : 'Not Found');
+                console.log('MD Slab (Assigned by Company):', commData.slabs.mdSlab ? { id: commData.slabs.mdSlab.id, comm: commData.slabs.mdSlab.commAmt, amtType: commData.slabs.mdSlab.amtType } : 'Not Found');
+
                 commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
                 commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
 
