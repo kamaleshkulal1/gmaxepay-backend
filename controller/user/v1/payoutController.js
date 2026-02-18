@@ -271,7 +271,6 @@ const payout = async (req, res) => {
                         dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
                         dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
                     ]);
-                    console.log('Slabs:', { SuperAdminSlabComm, companySlabComm, masterDistributorComm });
                     commData.slabs.retailerSlab = masterDistributorComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
                     commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
                     commData.slabs.companySlab = companySlabComm?.find(c => c.roleType === 2 || c.roleName === 'WU');
