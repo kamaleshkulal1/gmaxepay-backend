@@ -203,6 +203,7 @@ const payout = async (req, res) => {
 
                 console.log('Calculated MD Surcharge (Cost+):', commData.amounts.mdSurcharge);
                 console.log('MD Scenario:', commData.scenario);
+                console.log('MD Operator Charge (saBankCharge):', commData.amounts.saBankCharge);
                 console.log('Calculated Surcharges:', commData.amounts);
 
                 // Balance Check
