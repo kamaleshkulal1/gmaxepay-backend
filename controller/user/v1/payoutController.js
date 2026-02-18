@@ -368,6 +368,15 @@ const payout = async (req, res) => {
 
             console.log('Total Upstream Income:', totalIncomes, 'Debit Amount:', debitAmount);
 
+            // Allocate any surplus surcharge (Debit - Income) to Super Admin to cover operator charges or as extra profit
+            const surplus = debitAmount - totalIncomes;
+            if (surplus > 0) {
+                console.log(`Allocating surplus surcharge (${surplus}) to Super Admin.`);
+                commData.amounts.adminSurcharge += surplus;
+                totalIncomes += surplus; // Update totalIncomes for the check below
+                console.log(`New Admin Surcharge: ${commData.amounts.adminSurcharge}`);
+            }
+
             if (totalIncomes > debitAmount) {
                 console.log('Invalid Surcharge Config (Income > Debit)');
                 return res.failure({ message: 'Invalid surcharge configuration: total upstream income exceeds user surcharge debit' });
