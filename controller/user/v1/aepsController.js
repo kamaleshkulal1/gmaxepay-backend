@@ -9,16 +9,16 @@ const { Op } = require('sequelize');
 
 
 const getOnboardingStatus = async (req, res) => {
-    try{
+    try {
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if(!existingUser) {
+        if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
             userId: existingUser.id,
             companyId: existingUser.companyId,
         });
-        
+
         // Daily 2FA status (IST date based)
         await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
@@ -29,7 +29,7 @@ const getOnboardingStatus = async (req, res) => {
         });
         const isDaily2FACompleted = Boolean(existingDaily2FA);
         const nextEligibleAt = aepsDailyLoginService.getNextMidnightIST();
-        
+
         // Handle case when onboarding doesn't exist yet (pending)
         if (!existingAepsOnboarding) {
             const statusData = {
@@ -64,13 +64,13 @@ const getOnboardingStatus = async (req, res) => {
             };
             return res.success({ message: 'AEPS onboarding status', data: statusData });
         }
-        
+
         const isAepsOnboardingComplete = Boolean(existingAepsOnboarding.merchantStatus);
         const isOtpValidated = Boolean(existingAepsOnboarding.isOtpValidated);
         const isBioMetricValidated = Boolean(existingAepsOnboarding.isBioMetricValidated);
         const isBankKycOtpValidated = Boolean(existingAepsOnboarding.isBankKycOtpValidated);
         const isBankKycBiometricValidated = Boolean(existingAepsOnboarding.isBankKycBiometricValidated);
-        
+
         // Determine current step and overall status
         let currentStep = 'aepsOnboarding';
         if (!isAepsOnboardingComplete) {
@@ -88,11 +88,11 @@ const getOnboardingStatus = async (req, res) => {
         } else {
             currentStep = 'aepsTransaction';
         }
-        
-        const isAllCompleted = isAepsOnboardingComplete && isOtpValidated && isBioMetricValidated && 
-                              isBankKycOtpValidated && isBankKycBiometricValidated;
+
+        const isAllCompleted = isAepsOnboardingComplete && isOtpValidated && isBioMetricValidated &&
+            isBankKycOtpValidated && isBankKycBiometricValidated;
         const overallStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
-        
+
         // Update onboardingStatus in database if it needs to be updated
         if (existingAepsOnboarding.onboardingStatus !== overallStatus) {
             await dbService.update(
@@ -101,7 +101,7 @@ const getOnboardingStatus = async (req, res) => {
                 { onboardingStatus: overallStatus }
             );
         }
-        
+
         const statusData = {
             ...existingAepsOnboarding.toJSON ? existingAepsOnboarding.toJSON() : existingAepsOnboarding,
             onboardingStatus: overallStatus,
@@ -133,7 +133,7 @@ const getOnboardingStatus = async (req, res) => {
                 nextEligibleAt: nextEligibleAt ? nextEligibleAt.toISOString() : null
             }
         };
-        
+
         return res.success({ message: 'AEPS onboarding status', data: statusData });
     }
     catch (error) {
@@ -245,7 +245,7 @@ const aepsOnboarding = async (req, res) => {
         if (!customerBankDetails) {
             return res.failure({ message: 'Customer bank not found' });
         }
-        if(existingAepsOnboarding && existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
+        if (existingAepsOnboarding && existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
             return res.failure({ message: 'AEPS onboarding already completed' });
         }
 
@@ -255,8 +255,8 @@ const aepsOnboarding = async (req, res) => {
         const retailerFirstName = existingUser.name;
         const payload = {
             retailerFirstName,
-            retailerMiddleName:"",
-            retailerLastName:"",
+            retailerMiddleName: "",
+            retailerLastName: "",
             retailerEmail: existingUser.email,
             phone: existingUser.mobileNo,
             retailerDob: formatDob(existingUser.dob),
@@ -298,7 +298,7 @@ const aepsOnboarding = async (req, res) => {
 
         const aepsOnboardingDetails = await asl.aslAepsOnboarding(payload);
 
-        console.log("aepsOnboardingDetails",aepsOnboardingDetails);
+        console.log("aepsOnboardingDetails", aepsOnboardingDetails);
 
         const normalizedStatus = aepsOnboardingDetails?.status ? String(aepsOnboardingDetails.status).toLowerCase() : null;
         const nestedStatus = aepsOnboardingDetails?.data?.status ? String(aepsOnboardingDetails.data.status).toLowerCase() : null;
@@ -341,56 +341,10 @@ const aepsOnboarding = async (req, res) => {
 };
 
 const validateAgentOtp = async (req, res) => {
-   try{
-    const { otp } = req.body;
-    const  existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-    if(!existingUser) {
-        return res.failure({ message: 'User not found' });
-    }
-    const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
-        userId: req.user.id,
-        companyId: req.user.companyId,
-        merchantStatus: true
-    });
-    if(!existingAepsOnboarding) {
-        return res.failure({ message: 'AEPS onboarding not found' });
-    }
-    
-    if(existingAepsOnboarding.isOtpValidated) {
-        return res.failure({ message: 'AEPS OTP already validated' });
-    }
-    const payload = {
-        uniqueID: existingAepsOnboarding.uniqueID,
-        aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
-        otpReferenceID: existingAepsOnboarding.otpReferenceId,
-        otp,
-        hash: existingAepsOnboarding.hash,
-        merchantLoginId: existingAepsOnboarding.merchantLoginId,
-    }
-    const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
-
-    const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
-    const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
-    if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
-        // Don't mark as COMPLETED yet - need to complete all steps including bank eKYC
-        await dbService.update(
-            model.aepsOnboarding,
-            { id: existingAepsOnboarding.id },
-            { isOtpValidated: true, otp: otp }
-        );
-        return res.success({ message: 'AEPS OTP validation successful', data: aepsResponse });
-    }
-    return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'AEPS OTP validation failed', data: aepsResponse });
-   } catch (error) {
-    console.error('AEPS OTP validation error', error);
-    return res.failure({ message: error.message || 'Unable to process AEPS OTP validation' });
-   }
-};
-
-const resendAgentOtp = async (req, res) => {
-    try{
+    try {
+        const { otp } = req.body;
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if(!existingUser) {
+        if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
@@ -398,7 +352,53 @@ const resendAgentOtp = async (req, res) => {
             companyId: req.user.companyId,
             merchantStatus: true
         });
-        if(!existingAepsOnboarding) {
+        if (!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
+
+        if (existingAepsOnboarding.isOtpValidated) {
+            return res.failure({ message: 'AEPS OTP already validated' });
+        }
+        const payload = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
+            otpReferenceID: existingAepsOnboarding.otpReferenceId,
+            otp,
+            hash: existingAepsOnboarding.hash,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+        }
+        const aepsResponse = await asl.aslAepsValidateAgentOtp(payload);
+
+        const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
+        const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
+        if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+            // Don't mark as COMPLETED yet - need to complete all steps including bank eKYC
+            await dbService.update(
+                model.aepsOnboarding,
+                { id: existingAepsOnboarding.id },
+                { isOtpValidated: true, otp: otp }
+            );
+            return res.success({ message: 'AEPS OTP validation successful', data: aepsResponse });
+        }
+        return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'AEPS OTP validation failed', data: aepsResponse });
+    } catch (error) {
+        console.error('AEPS OTP validation error', error);
+        return res.failure({ message: error.message || 'Unable to process AEPS OTP validation' });
+    }
+};
+
+const resendAgentOtp = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+        if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
         const payload = {
@@ -411,7 +411,7 @@ const resendAgentOtp = async (req, res) => {
         console.log('aepsResponse', aepsResponse);
         const status = aepsResponse?.status ? String(aepsResponse.status).toUpperCase() : null;
         const nestedStatus = aepsResponse?.data?.status ? String(aepsResponse.data.status).toUpperCase() : null;
-        if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+        if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
             return res.success({ message: 'AEPS OTP resend successful', data: aepsResponse });
         }
     }
@@ -422,21 +422,21 @@ const resendAgentOtp = async (req, res) => {
 }
 
 const bioMetricVerification = async (req, res) => {
-    try{
+    try {
         const { biometricData } = req.body;
         let { captureType } = req.body;
-        
-        if(!biometricData) {
+
+        if (!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
 
         captureType = captureType ? String(captureType).trim().toUpperCase() : null;
-        if(!captureType || !['FACE', 'FINGER'].includes(captureType)) {
+        if (!captureType || !['FACE', 'FINGER'].includes(captureType)) {
             return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
         }
 
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if(!existingUser) {
+        if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
@@ -444,21 +444,21 @@ const bioMetricVerification = async (req, res) => {
             companyId: req.user.companyId,
             merchantStatus: true
         });
-        if(!existingAepsOnboarding) {
+        if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
-        if(existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
+        if (existingAepsOnboarding.onboardingStatus === 'COMPLETED') {
             return res.failure({ message: 'AEPS onboarding already completed' });
         }
-        if(existingAepsOnboarding.isBioMetricValidated) {
+        if (existingAepsOnboarding.isBioMetricValidated) {
             return res.failure({ message: 'Bio metric verification already validated' });
         }
-        
+
         // Validate that biometricData is a string (PID XML)
         if (typeof biometricData !== 'string' || biometricData.trim() === '') {
             return res.failure({ message: 'Biometric data must be a valid PID XML string' });
         }
-        if(!existingAepsOnboarding.otp) {
+        if (!existingAepsOnboarding.otp) {
             return res.failure({ message: 'AEPS OTP is required before bio metric verification' });
         }
         // Ensure biometricData is properly formatted (trim whitespace)
@@ -504,7 +504,7 @@ const bioMetricVerification = async (req, res) => {
             updatedBy: req.user.id
         });
 
-        if(status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+        if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
             // Don't mark as COMPLETED yet - need to complete bank eKYC steps too
             await dbService.update(
                 model.aepsOnboarding,
@@ -513,19 +513,19 @@ const bioMetricVerification = async (req, res) => {
             );
             return res.success({ message: 'Bio metric verification successful', data: aepsResponse });
         }
-        
+
         // Update isOtpValidated to false on error
         await dbService.update(
             model.aepsOnboarding,
             { id: existingAepsOnboarding.id },
             { isOtpValidated: false }
         );
-        
+
         return res.failure({ message: aepsResponse?.message || aepsResponse?.data?.message || 'Bio metric verification failed', data: aepsResponse });
     }
     catch (error) {
         console.error('Bio metric verification error', error);
-        
+
         // Update isOtpValidated to false on exception
         try {
             const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
@@ -533,7 +533,7 @@ const bioMetricVerification = async (req, res) => {
                 companyId: req.user.companyId,
                 merchantStatus: true
             });
-            if(existingAepsOnboarding) {
+            if (existingAepsOnboarding) {
                 await dbService.update(
                     model.aepsOnboarding,
                     { id: existingAepsOnboarding.id },
@@ -543,50 +543,50 @@ const bioMetricVerification = async (req, res) => {
         } catch (updateError) {
             console.error('Error updating aepsOnboarding on exception:', updateError);
         }
-        
+
         return res.failure({ message: error.message || 'Unable to process Bio metric verification' });
     }
 }
 
 const bankKycSendOtp = async (req, res) => {
     try {
-        const {latitude, longitude} = req.body;
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const { latitude, longitude } = req.body;
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
             userId: req.user.id,
             companyId: req.user.companyId,
             merchantStatus: true
         });
-        
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        
+
         if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
-        
+
         // Validate that eKYC biometric is completed
         if (!existingAepsOnboarding.isBioMetricValidated) {
             return res.failure({ message: 'Please complete eKYC biometric verification before bank eKYC' });
         }
-        
+
         const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
-        
+
         const payload = {
             latitude: latitude,
             longitude: longitude,
             uniqueID: existingAepsOnboarding.uniqueID,
             mobileNumber: existingUser.mobileNo,
-            aadharNumber:  existingUser.aadharDetails?.aadhaarNumber || '829763289274',
+            aadharNumber: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
             panNumber: existingUser.panDetails?.data?.pan_number || existingCompany.companyPan,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
         }
         const bankKycSendOtpResponse = await asl.aslAepsBankKycSendOtp(payload);
-        
+
         // Store Bank KYC OTP reference & hash from latest response
         // ASL sometimes returns key as `otpReferneceId` (note the spelling) inside `data`
         const bankKycOtpRef =
@@ -616,7 +616,7 @@ const bankKycSendOtp = async (req, res) => {
                 updateData
             );
         }
-        
+
         return res.success({
             message: 'Bank KYC send OTP successful',
             data: bankKycSendOtpResponse
@@ -630,13 +630,13 @@ const bankKycSendOtp = async (req, res) => {
 const bankKycValidateOtp = async (req, res) => {
     try {
         const { otp } = req.body;
-        
+
         if (!otp) {
             return res.failure({ message: 'OTP is required' });
         }
-        
+
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if(!existingUser) {
+        if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
@@ -644,15 +644,15 @@ const bankKycValidateOtp = async (req, res) => {
             companyId: req.user.companyId,
             merchantStatus: true
         });
-        if(!existingAepsOnboarding) {
+        if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
-        
+
         // Validate that eKYC biometric is completed
         if (!existingAepsOnboarding.isBioMetricValidated) {
             return res.failure({ message: 'Please complete eKYC biometric verification before bank eKYC' });
         }
-        
+
         if (existingAepsOnboarding.isBankKycOtpValidated) {
             return res.failure({ message: 'Bank eKYC OTP already validated' });
         }
@@ -666,10 +666,10 @@ const bankKycValidateOtp = async (req, res) => {
         }
         console.log('payload', payload);
         const bankKycValidateOtpResponse = await asl.aslAepsBankKycValidateOtp(payload);
-        
+
         const status = bankKycValidateOtpResponse?.status ? String(bankKycValidateOtpResponse.status).toUpperCase() : null;
         const nestedStatus = bankKycValidateOtpResponse?.data?.status ? String(bankKycValidateOtpResponse.data.status).toUpperCase() : null;
-        
+
         if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
             await dbService.update(
                 model.aepsOnboarding,
@@ -681,10 +681,10 @@ const bankKycValidateOtp = async (req, res) => {
                 data: bankKycValidateOtpResponse
             });
         }
-        
-        return res.failure({ 
-            message: bankKycValidateOtpResponse?.message || bankKycValidateOtpResponse?.data?.message || 'Bank KYC OTP validation failed', 
-            data: bankKycValidateOtpResponse 
+
+        return res.failure({
+            message: bankKycValidateOtpResponse?.message || bankKycValidateOtpResponse?.data?.message || 'Bank KYC OTP validation failed',
+            data: bankKycValidateOtpResponse
         });
     } catch (error) {
         console.error('Bank KYC validate OTP error', error);
@@ -692,22 +692,22 @@ const bankKycValidateOtp = async (req, res) => {
     }
 }
 
-const bankKycBiometricValidate= async (req, res) => {
+const bankKycBiometricValidate = async (req, res) => {
     try {
         const { biometricData } = req.body;
         let { captureType } = req.body;
-        
+
         if (!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
-        
+
         captureType = captureType ? String(captureType).trim().toUpperCase() : null;
         if (!captureType || !['FACE', 'FINGER'].includes(captureType)) {
             return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
         }
-        
+
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if(!existingUser) {
+        if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
@@ -715,26 +715,26 @@ const bankKycBiometricValidate= async (req, res) => {
             companyId: req.user.companyId,
             merchantStatus: true
         });
-        if(!existingAepsOnboarding) {
+        if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
-        
+
         // Validate that bank eKYC OTP is completed
         if (!existingAepsOnboarding.isBankKycOtpValidated) {
             return res.failure({ message: 'Please complete bank eKYC OTP validation before biometric verification' });
         }
-        
+
         if (existingAepsOnboarding.isBankKycBiometricValidated) {
             return res.failure({ message: 'Bank eKYC biometric already validated' });
         }
-        
+
         // Validate that biometricData is a string (PID XML)
         if (typeof biometricData !== 'string' || biometricData.trim() === '') {
             return res.failure({ message: 'Biometric data must be a valid PID XML string' });
         }
-        
+
         const formattedBiometricData = biometricData.trim();
-        
+
         const payload = {
             uniqueID: existingAepsOnboarding.uniqueID,
             aadhaarNo: existingUser.aadharDetails?.aadhaarNumber || '829763289274',
@@ -746,10 +746,10 @@ const bankKycBiometricValidate= async (req, res) => {
             biometricData: formattedBiometricData
         }
         const bankKycBiometricValidateResponse = await asl.aslAepsBankKycBiometricValidate(payload);
-        
+
         const status = bankKycBiometricValidateResponse?.status ? String(bankKycBiometricValidateResponse.status).toUpperCase() : null;
         const nestedStatus = bankKycBiometricValidateResponse?.data?.status ? String(bankKycBiometricValidateResponse.data.status).toUpperCase() : null;
-        
+
         // Store biometric attempt in bioMetric table
         const normalizedStatus = status || nestedStatus;
         const sanitizedRequestPayload = {
@@ -760,7 +760,7 @@ const bankKycBiometricValidate= async (req, res) => {
             merchantLoginId: payload.merchantLoginId,
             captureType: captureType
         };
-        
+
         await dbService.createOne(model.bioMetric, {
             refId: existingUser.id,
             companyId: existingUser.companyId,
@@ -776,15 +776,15 @@ const bankKycBiometricValidate= async (req, res) => {
             addedBy: req.user.id,
             updatedBy: req.user.id
         });
-        
+
         if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
             // Update onboarding status to COMPLETED if all steps are done
-            const isAllCompleted = existingAepsOnboarding.merchantStatus && 
-                                  existingAepsOnboarding.isOtpValidated && 
-                                  existingAepsOnboarding.isBioMetricValidated && 
-                                  existingAepsOnboarding.isBankKycOtpValidated;
+            const isAllCompleted = existingAepsOnboarding.merchantStatus &&
+                existingAepsOnboarding.isOtpValidated &&
+                existingAepsOnboarding.isBioMetricValidated &&
+                existingAepsOnboarding.isBankKycOtpValidated;
             const onboardingStatus = isAllCompleted ? 'COMPLETED' : 'PENDING';
-            
+
             await dbService.update(
                 model.aepsOnboarding,
                 { id: existingAepsOnboarding.id },
@@ -795,10 +795,10 @@ const bankKycBiometricValidate= async (req, res) => {
                 data: bankKycBiometricValidateResponse
             });
         }
-        
-        return res.failure({ 
-            message: bankKycBiometricValidateResponse?.message || bankKycBiometricValidateResponse?.data?.message || 'Bank KYC biometric validation failed', 
-            data: bankKycBiometricValidateResponse 
+
+        return res.failure({
+            message: bankKycBiometricValidateResponse?.message || bankKycBiometricValidateResponse?.data?.message || 'Bank KYC biometric validation failed',
+            data: bankKycBiometricValidateResponse
         });
     } catch (error) {
         console.error('Bank KYC biometric validate error', error);
@@ -807,18 +807,18 @@ const bankKycBiometricValidate= async (req, res) => {
 }
 
 const aeps2FaAuthentication = async (req, res) => {
-    try{
+    try {
         const { biometricData } = req.body;
         let { captureType } = req.body;
-        if(!biometricData) {
+        if (!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
         captureType = captureType ? String(captureType).trim().toUpperCase() : null;
-        if(!captureType || !['FACE', 'FINGER'].includes(captureType)) {
+        if (!captureType || !['FACE', 'FINGER'].includes(captureType)) {
             return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
         }
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if(!existingUser) {
+        if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
         const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
@@ -830,7 +830,7 @@ const aeps2FaAuthentication = async (req, res) => {
         if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
-        
+
         // Validate that bank eKYC biometric is completed before 2FA
         if (!existingAepsOnboarding.isBankKycBiometricValidated) {
             return res.failure({ message: 'Please complete bank eKYC biometric verification before 2FA authentication' });
@@ -842,7 +842,7 @@ const aeps2FaAuthentication = async (req, res) => {
             captureType: captureType
         });
 
-        if(!existingBioMetric){
+        if (!existingBioMetric) {
             return res.failure({ message: 'Biometric data is required' });
         }
 
@@ -863,7 +863,7 @@ const aeps2FaAuthentication = async (req, res) => {
                 loginDate: todayDateStr,
                 nextEligibleAt: aepsDailyLoginService.getNextMidnightIST()?.toISOString?.() || null
             }
-            return res.success({ message: 'Already logged in today. You can login again after midnight (IST).',  data });
+            return res.success({ message: 'Already logged in today. You can login again after midnight (IST).', data });
         }
 
         // Fetch company to get company name for transaction ID generation
@@ -884,7 +884,7 @@ const aeps2FaAuthentication = async (req, res) => {
         }
         const aepsResponse = await asl.aslAeps2FA(payload);
         console.log('aepsResponse', aepsResponse);
-        
+
         // Parse response if it's a string (handles trailing commas and newlines)
         let parsedResponse = aepsResponse;
         if (typeof aepsResponse === 'string') {
@@ -918,18 +918,18 @@ const aeps2FaAuthentication = async (req, res) => {
         const nestedStatus = parsedResponse?.data?.status ? String(parsedResponse.data.status).toUpperCase() : null;
         const responseCode = parsedResponse?.data?.responseCode;
         const responseMessage = parsedResponse?.data?.responseMessage;
-        
+
         // Check for success
-        const isSuccess = status === 'SUCCESS' || 
-                         nestedStatus === 'SUCCESS' || 
-                         responseCode === '00' ||
-                         (responseMessage && responseMessage.toLowerCase().includes('completed'));
-        
-        if(isSuccess) {
+        const isSuccess = status === 'SUCCESS' ||
+            nestedStatus === 'SUCCESS' ||
+            responseCode === '00' ||
+            (responseMessage && responseMessage.toLowerCase().includes('completed'));
+
+        if (isSuccess) {
             // Create daily login record in database - done in controller
             const newLoginTime = new Date();
             const logoutTime = aepsDailyLoginService.getNextMidnightIST();
-            
+
             await dbService.createOne(model.aepsDailyLogin, {
                 refId: req.user.id,
                 companyId: req.user.companyId,
@@ -943,10 +943,10 @@ const aeps2FaAuthentication = async (req, res) => {
 
             return res.success({ message: 'AEPS 2FA authentication successful', data: parsedResponse });
         }
-        
-        return res.failure({ 
-            message: parsedResponse?.message || parsedResponse?.data?.message || 'AEPS 2FA authentication failed', 
-            data: parsedResponse 
+
+        return res.failure({
+            message: parsedResponse?.message || parsedResponse?.data?.message || 'AEPS 2FA authentication failed',
+            data: parsedResponse
         });
     }
     catch (error) {
@@ -956,7 +956,7 @@ const aeps2FaAuthentication = async (req, res) => {
 }
 
 const aepsTransaction = async (req, res) => {
-    try{
+    try {
         const {
             amount,
             txnType,
@@ -987,16 +987,16 @@ const aepsTransaction = async (req, res) => {
         const normalizedCaptureType = normalizeCaptureType(captureType);
         const normalizedBankiin = bankiin ? String(bankiin).trim() : null;
 
-        if(!biometricData) {
+        if (!biometricData) {
             return res.failure({ message: 'Biometric data is required' });
         }
-        if(!normalizedCaptureType || !['FACE', 'FINGER'].includes(normalizedCaptureType)) {
+        if (!normalizedCaptureType || !['FACE', 'FINGER'].includes(normalizedCaptureType)) {
             return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
         }
-        if(!normalizedTxnType || !['CW', 'BE', 'MS'].includes(normalizedTxnType)) {
+        if (!normalizedTxnType || !['CW', 'BE', 'MS'].includes(normalizedTxnType)) {
             return res.failure({ message: 'Invalid transaction type. Allowed values are CW, BE or MS' });
         }
-        if(!normalizedBankiin) {
+        if (!normalizedBankiin) {
             return res.failure({ message: 'bankiin is required' });
         }
 
@@ -1010,16 +1010,16 @@ const aepsTransaction = async (req, res) => {
             return res.failure({ message: 'Bank Name not found' });
         }
 
-        if(!ipAddress){
+        if (!ipAddress) {
             return res.failure({ message: 'ipAddress is required' });
         }
-        if(!aadharNumber){
+        if (!aadharNumber) {
             return res.failure({ message: 'aadharNumber is required' });
         }
-        if(!consumerNumber){
+        if (!consumerNumber) {
             return res.failure({ message: 'consumerNumber is required' });
         }
-        if(!latitude || !longitude){
+        if (!latitude || !longitude) {
             return res.failure({ message: 'latitude and longitude are required' });
         }
 
@@ -1041,11 +1041,11 @@ const aepsTransaction = async (req, res) => {
         }
 
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if(!existingUser) {
+        if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
 
-        if(!existingUser.latitude || !existingUser.longitude) {
+        if (!existingUser.latitude || !existingUser.longitude) {
             return res.failure({ message: 'User latitude/longitude is required' });
         }
 
@@ -1054,22 +1054,22 @@ const aepsTransaction = async (req, res) => {
             companyId: req.user.companyId,
             merchantStatus: true
         });
-        if(!existingAepsOnboarding) {
+        if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not completed' });
         }
-        if(!existingAepsOnboarding.merchantLoginId) {
+        if (!existingAepsOnboarding.merchantLoginId) {
             return res.failure({ message: 'AEPS merchantLoginId not found' });
         }
-        if(!existingAepsOnboarding.isOtpValidated) {
+        if (!existingAepsOnboarding.isOtpValidated) {
             return res.failure({ message: 'AEPS eKYC OTP validation is required before transaction' });
         }
-        if(!existingAepsOnboarding.isBioMetricValidated) {
+        if (!existingAepsOnboarding.isBioMetricValidated) {
             return res.failure({ message: 'AEPS eKYC biometric validation is required before transaction' });
         }
-        if(!existingAepsOnboarding.isBankKycOtpValidated) {
+        if (!existingAepsOnboarding.isBankKycOtpValidated) {
             return res.failure({ message: 'Bank eKYC OTP validation is required before transaction' });
         }
-        if(!existingAepsOnboarding.isBankKycBiometricValidated) {
+        if (!existingAepsOnboarding.isBankKycBiometricValidated) {
             return res.failure({ message: 'Bank eKYC biometric validation is required before transaction' });
         }
 
@@ -1078,7 +1078,7 @@ const aepsTransaction = async (req, res) => {
             companyId: req.user.companyId,
             captureType: normalizedCaptureType
         });
-        if(!existingBioMetric) {
+        if (!existingBioMetric) {
             return res.failure({ message: 'Biometric data is required' });
         }
 
@@ -1187,7 +1187,7 @@ const aepsTransaction = async (req, res) => {
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
             bankiin: normalizedBankiin,
             mobile: consumerNumber,
-            amount: amountNumber, 
+            amount: amountNumber,
             latitude: txLatitude,
             longitude: txLongitude,
             transactionId: generatedTxnId,
@@ -1195,7 +1195,157 @@ const aepsTransaction = async (req, res) => {
             biometricData: biometricData
         };
         console.log('payload', payload);
-        const aepsResponse = await asl.aslAepsTransaction(payload);
+        // const aepsResponse = await asl.aslAepsTransaction(payload);
+        if (normalizedTxnType === 'MS') {
+            const aepsResponse = {
+                "terminalId": "AB076108",
+                "requestTransactionTime": "18/02/2026 15:19:40",
+                "transactionAmount": 0,
+                "transactionStatus": "successful",
+                "balanceAmount": 2366.94,
+                "miniStatementBalance": "2366.94",
+                "bankRRN": "604915609381",
+                "transactionType": "MS",
+                "fpTransactionId": "MSM76190226049151940716I",
+                "merchantTxnId": null,
+                "errorCode": null,
+                "errorMessage": null,
+                "merchantTransactionId": null,
+                "bankAccountNumber": null,
+                "ifscCode": null,
+                "bcName": null,
+                "transactionTime": null,
+                "agentId": 0,
+                "issuerBank": null,
+                "customerAadhaarNumber": null,
+                "customerName": null,
+                "stan": null,
+                "rrn": null,
+                "uidaiAuthCode": null,
+                "bcLocation": null,
+                "demandSheetId": null,
+                "mobileNumber": null,
+                "urnId": null,
+                "miniStatementStructureModel": [
+                    {
+                        "date": "18/02/2026",
+                        "txnType": "Dr",
+                        "amount": "535.0",
+                        "narration": " UPI:60498570817 "
+                    },
+                    {
+                        "date": "18/02/2026",
+                        "txnType": "Dr",
+                        "amount": "60.0",
+                        "narration": " UPI:10020851867 "
+                    },
+                    {
+                        "date": "18/02/2026",
+                        "txnType": "Dr",
+                        "amount": "186.0",
+                        "narration": " UPI:64159156691 "
+                    },
+                    {
+                        "date": "18/02/2026",
+                        "txnType": "Cr",
+                        "amount": "186.0",
+                        "narration": " UPI:88199064049 "
+                    },
+                    {
+                        "date": "18/02/2026",
+                        "txnType": "Cr",
+                        "amount": "250.0",
+                        "narration": " UPI:06354130139 "
+                    },
+                    {
+                        "date": "17/02/2026",
+                        "txnType": "Dr",
+                        "amount": "172.0",
+                        "narration": " UPI:22301451296 "
+                    },
+                    {
+                        "date": "17/02/2026",
+                        "txnType": "Dr",
+                        "amount": "49.0",
+                        "narration": " UPI:64147216147 "
+                    },
+                    {
+                        "date": "17/02/2026",
+                        "txnType": "Cr",
+                        "amount": "50.0",
+                        "narration": " UPI:64145345217 "
+                    },
+                    {
+                        "date": "17/02/2026",
+                        "txnType": "Dr",
+                        "amount": "60.0",
+                        "narration": " UPI:19502485749 "
+                    }
+                ],
+                "miniOffusStatementStructureModel": null,
+                "miniOffusFlag": false,
+                "transactionRemark": null,
+                "bankName": null,
+                "prospectNumber": null,
+                "internalReferenceNumber": null,
+                "biTxnType": null,
+                "subVillageName": null,
+                "virtualId": null,
+                "userProfileResponseModel": null,
+                "hindiErrorMessage": null,
+                "loanAccNo": null,
+                "responseCode": "00",
+                "fpkAgentId": null,
+                "additionalData": null
+            }
+        } else {
+            const aepsResponse = {
+                "terminalId": "AB076108",
+                "requestTransactionTime": "18/02/2026 15:15:44",
+                "transactionAmount": 0,
+                "transactionStatus": "successful",
+                "balanceAmount": 2366.94,
+                "miniStatementBalance": null,
+                "bankRRN": "604915597959",
+                "transactionType": "BE",
+                "fpTransactionId": "BEB76190226049151544385I",
+                "merchantTxnId": null,
+                "errorCode": null,
+                "errorMessage": null,
+                "merchantTransactionId": "1771407944481",
+                "bankAccountNumber": null,
+                "ifscCode": null,
+                "bcName": null,
+                "transactionTime": null,
+                "agentId": 0,
+                "issuerBank": null,
+                "customerAadhaarNumber": null,
+                "customerName": null,
+                "stan": null,
+                "rrn": null,
+                "uidaiAuthCode": null,
+                "bcLocation": null,
+                "demandSheetId": null,
+                "mobileNumber": null,
+                "urnId": null,
+                "miniStatementStructureModel": null,
+                "miniOffusStatementStructureModel": null,
+                "miniOffusFlag": false,
+                "transactionRemark": null,
+                "bankName": null,
+                "prospectNumber": null,
+                "internalReferenceNumber": null,
+                "biTxnType": null,
+                "subVillageName": null,
+                "virtualId": null,
+                "userProfileResponseModel": null,
+                "hindiErrorMessage": null,
+                "loanAccNo": null,
+                "responseCode": "00",
+                "fpkAgentId": null,
+                "additionalData": null
+            }
+        }
         const safeJsonStringify = (value) => {
             try {
                 const seen = new WeakSet();
@@ -1292,7 +1442,7 @@ const aepsTransaction = async (req, res) => {
             const masterDistributorNet = (masterDistributorCom === null ? 0 : Number(masterDistributorCom || 0)) - (masterDistributorComTDS || 0);
             const distributorNet = (distributorCom === null ? 0 : Number(distributorCom || 0)) - (distributorComTDS || 0);
             const retailerNet = (retailerCom === null ? 0 : Number(retailerCom || 0)) - (retailerComTDS || 0);
-            
+
             // Total commission credit = sum of all commissions after TDS
             retailerNetCredit = round2(superadminNet + whitelabelNet + masterDistributorNet + distributorNet + retailerNet);
         }
@@ -1308,10 +1458,10 @@ const aepsTransaction = async (req, res) => {
         // For FAILED/PENDING, it should be null
         const merchantTransactionId = isSuccess
             ? (innerData?.merchantTxnId ||
-               innerData?.merchantTransactionId ||
-               normalizedGatewayResponse?.merchantTxnId ||
-               normalizedGatewayResponse?.merchantTransactionId ||
-               payload.transactionId)
+                innerData?.merchantTransactionId ||
+                normalizedGatewayResponse?.merchantTxnId ||
+                normalizedGatewayResponse?.merchantTransactionId ||
+                payload.transactionId)
             : null;
 
         // Prepare request payload for persistence (mask biometric)
@@ -1516,10 +1666,10 @@ const aepsTransaction = async (req, res) => {
         }
 
         // Extract transaction date/time from gateway response
-        const transactionDateTimeRaw = innerData?.requestTransactionTime || 
-                                      normalizedGatewayResponse?.data?.requestTransactionTime ||
-                                      null;
-        
+        const transactionDateTimeRaw = innerData?.requestTransactionTime ||
+            normalizedGatewayResponse?.data?.requestTransactionTime ||
+            null;
+
         // Format transaction date/time (if from gateway, use as-is; otherwise use current time)
         let transactionDateTime = transactionDateTimeRaw;
         let transactionTime = transactionDateTimeRaw;
@@ -1543,18 +1693,18 @@ const aepsTransaction = async (req, res) => {
         }
 
         // Extract remaining balance from gateway response
-        const remainingBalance = innerData?.balanceAmount || 
-                                 normalizedGatewayResponse?.data?.balanceAmount || 
-                                 null;
+        const remainingBalance = innerData?.balanceAmount ||
+            normalizedGatewayResponse?.data?.balanceAmount ||
+            null;
 
         // Extract client_transaction_id for transactionId
-        const clientTransactionId = normalizedGatewayResponse?.client_transaction_id || 
-                                    payload.transactionId;
+        const clientTransactionId = normalizedGatewayResponse?.client_transaction_id ||
+            payload.transactionId;
 
         // Extract mini statement data for MS transactions
-        const miniStatement = innerData?.miniStatementStructureModel || 
-                             normalizedGatewayResponse?.data?.miniStatementStructureModel ||
-                             null;
+        const miniStatement = innerData?.miniStatementStructureModel ||
+            normalizedGatewayResponse?.data?.miniStatementStructureModel ||
+            null;
 
         // Format response with all required fields
         const responseData = {
@@ -1590,14 +1740,14 @@ const aepsTransaction = async (req, res) => {
 
 const checkStatus = async (req, res) => {
     try {
-        const {txnId} = req.body;
+        const { txnId } = req.body;
         if (!txnId) {
             return res.failure({ message: 'Transaction ID is required' });
         }
         const existingUser = await dbService.findOne(model.user, {
-            id: req.user.id,    
+            id: req.user.id,
             companyId: req.user.companyId,
-            isActive: true  
+            isActive: true
         });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -1615,10 +1765,10 @@ const checkStatus = async (req, res) => {
             uniqueID: existingAepsOnboarding.uniqueID,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
             txnId: txnId,
-        }   
+        }
         const response = await asl.aslAepsCheckStatus(statusData);
-        console.log("response",response);
-        if (response.status === 'SUCCESS') {    
+        console.log("response", response);
+        if (response.status === 'SUCCESS') {
             return res.success({ message: 'AEPS transaction status', data: response.data });
         } else {
             return res.failure({ message: 'AEPS transaction status', data: response.data });
@@ -1632,9 +1782,9 @@ const checkStatus = async (req, res) => {
 
 const recentBanks = async (req, res) => {
     try {
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -1653,7 +1803,7 @@ const recentBanks = async (req, res) => {
         // Extract unique bankIINs (first occurrence = most recent)
         const uniqueBankIINs = [];
         const seenBankIINs = new Set();
-        
+
         for (const txn of aepsTransactions) {
             const bankIIN = txn.bankiin ? String(txn.bankiin).trim() : null;
             if (bankIIN && !seenBankIINs.has(bankIIN)) {
@@ -1725,7 +1875,7 @@ const getAllBankDetails = async (req, res) => {
     try {
         const dataToFind = req.body || {};
         let options = {};
-        let query = { 
+        let query = {
             isActive: true,
             isDeleted: false
         };
@@ -1788,7 +1938,7 @@ const getAllBankDetails = async (req, res) => {
         // Process data to add CDN URLs for bank logos
         const processedData = processBankData(result?.data || []);
 
-        return res.status(200).json({ 
+        return res.status(200).json({
             message: 'All bank details retrieved successfully',
             data: processedData,
             total: result?.total || 0,
@@ -1832,7 +1982,7 @@ const aepsTransactionHistory = async (req, res) => {
         // Role-based refId filtering
         if (userRole === 4 || userRole === 5) {
             query.refId = userId;
-            query.companyId= companyId;
+            query.companyId = companyId;
         } else if (userRole === 3) {
             // Master Distributor (3): Their own transactions + transactions of users reporting to them
             const reportingUsers = await dbService.findAll(model.user, {
@@ -1896,16 +2046,16 @@ const aepsTransactionHistory = async (req, res) => {
     }
 }
 
-module.exports = { 
-    getOnboardingStatus, 
-    aepsOnboarding, 
-    validateAgentOtp, 
-    resendAgentOtp, 
-    bioMetricVerification, 
+module.exports = {
+    getOnboardingStatus,
+    aepsOnboarding,
+    validateAgentOtp,
+    resendAgentOtp,
+    bioMetricVerification,
     bankKycSendOtp,
     bankKycValidateOtp,
     bankKycBiometricValidate,
-    aeps2FaAuthentication ,
+    aeps2FaAuthentication,
     aepsTransaction,
     checkStatus,
     recentBanks,

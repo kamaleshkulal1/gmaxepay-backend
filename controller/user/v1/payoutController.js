@@ -121,9 +121,12 @@ const payout = async (req, res) => {
         // Only process for Distributor (4) and Retailer (5)
         if ([4, 5].includes(user.userRole)) {
             console.log('--- Starting Commercial Calculation ---');
+            console.log(`Fetching Payout Operator for Slab ID: ${user.slabId}`);
+
             // Fetch Payout Operator for Bank Charge Calculation
             const payoutOperator = await dbService.findOne(model.operator, {
                 operatorType: 'PAYOUT',
+                slabId: user.slabId,
                 minValue: { [Op.lte]: payoutAmount },
                 maxValue: { [Op.gte]: payoutAmount },
                 isActive: true
