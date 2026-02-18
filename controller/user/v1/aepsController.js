@@ -1703,14 +1703,14 @@ const aepsTransaction = async (req, res) => {
             normalizedGatewayResponse?.balanceAmount ||
             null;
 
+        const miniStatement = innerData?.miniStatementStructureModel ||
+            normalizedGatewayResponse?.data?.miniStatementStructureModel ||
+            aepsResponse?.miniStatementStructureModel ||
+            null;
+
         // Extract client_transaction_id for transactionId
         const clientTransactionId = normalizedGatewayResponse?.client_transaction_id ||
             payload.transactionId;
-
-        // Extract mini statement data for MS transactions
-        const miniStatement = innerData?.miniStatementStructureModel ||
-            normalizedGatewayResponse?.data?.miniStatementStructureModel ||
-            null;
 
         // Format response with all required fields
         const responseData = {
@@ -1723,6 +1723,7 @@ const aepsTransaction = async (req, res) => {
             transactionTime: transactionTime,
             amount: amountNumber,
             remainingBalance: remainingBalance,
+            miniStatement: miniStatement,
             bankName: bankName,
             bankLogo: bankLogo,
             response: aepsResponse,
@@ -1732,7 +1733,7 @@ const aepsTransaction = async (req, res) => {
 
         // Add mini statement data for MS transactions
         if (normalizedTxnType === 'MS' && miniStatement && Array.isArray(miniStatement)) {
-            responseData.miniStatement = miniStatement;
+            responseData.response.miniStatement = miniStatement;
         }
 
         return res.success({
