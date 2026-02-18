@@ -130,6 +130,7 @@ const payout = async (req, res) => {
                 maxValue: { [Op.gte]: payoutAmount },
                 isActive: true
             });
+            console.log('Payout Operator:', payoutOperator);
 
             if (payoutOperator) {
                 const opAmtType = (payoutOperator.amtType || 'fix').toLowerCase();
