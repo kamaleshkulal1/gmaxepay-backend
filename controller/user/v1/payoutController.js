@@ -117,8 +117,8 @@ const payout = async (req, res) => {
             scenario: null // 'DIST_DIRECT', 'DIST_MD', 'RET_DIRECT', 'RET_MD', 'RET_DIST_MD', 'RET_DIST_CO'
         };
 
-        // Only process for Distributor (4) and Retailer (5)
-        if ([4, 5].includes(user.userRole)) {
+        // Only process for MasterDistributor (3), Distributor (4) and Retailer (5)
+        if ([3, 4, 5].includes(user.userRole)) {
             console.log('--- Starting Commercial Calculation ---');
             console.log(`Fetching Payout Operator for Slab ID: ${user.slabId}`);
 
@@ -126,7 +126,8 @@ const payout = async (req, res) => {
             const payoutOperator = await dbService.findOne(model.operator, {
                 operatorType: 'PAYOUT',
                 minValue: { [Op.lte]: payoutAmount },
-                maxValue: { [Op.gte]: payoutAmount }
+                maxValue: { [Op.gte]: payoutAmount },
+                isActive: true
             });
             console.log('Payout Operator:', payoutOperator);
 
@@ -165,8 +166,57 @@ const payout = async (req, res) => {
             commData.wallets.companyWallet = companyWallet;
             commData.wallets.superAdminWallet = superAdminWallet;
 
-            // Distributor Logic
-            if (user.userRole === 4) {
+            // Master Distributor Logic
+            if (user.userRole === 3) {
+                const masterDistributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                if (!masterDistributor) return res.failure({ message: 'Master Distributor not found' });
+                commData.users.masterDistributor = masterDistributor;
+
+                const mdWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: user.companyId });
+                commData.wallets.masterDistributorWallet = mdWallet;
+
+                // Scenario: Master Distributor -> Company (Direct)
+                commData.scenario = 'MD_DIRECT';
+                const [SuperAdminSlabComm, companySlabComm, masterDistributorComm] = await Promise.all([
+                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }) // Fetch MD's own added slabs? No, MD uses slab assigned to them.
+                ]);
+
+                // Correction: MD uses slab assigned by company. So we look in companySlabComm for role 3/MD.
+                // Wait, MD assigns slab to itself? No. MD has a slab assigned by Company.
+                // Re-fetching slabs correctly:
+                // adminSlab (Role 1), companySlab (Role 2), mdSlab (Role 3 - this is the slab for MD)
+
+                commData.slabs.mdSlab = companySlabComm?.find(c => (c.roleType === 3 || c.roleName === 'MD') && c.operatorId === commData.payoutOperator?.id);
+                commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD') && c.operatorId === commData.payoutOperator?.id);
+                commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+
+                // Calculate Upstream Surcharges First
+                commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
+                commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
+
+                // Calculate MD Surcharge as Sum of Costs (Operator Charge + Admin + Company)
+                commData.amounts.mdSurcharge =
+                    (commData.amounts.saBankCharge || 0) +
+                    (commData.amounts.adminSurcharge || 0) +
+                    (commData.amounts.companySurcharge || 0);
+
+                console.log('Calculated MD Surcharge (Cost+):', commData.amounts.mdSurcharge);
+                console.log('MD Scenario:', commData.scenario);
+                console.log('Calculated Surcharges:', commData.amounts);
+
+                // Balance Check
+                const totalRequired = payoutAmount + commData.amounts.mdSurcharge;
+                const mdBalance = parseFloat(commData.wallets.masterDistributorWallet[walletType] || 0);
+                console.log(`MD Balance Check (${walletType}): Required ${totalRequired}, Available ${mdBalance}`);
+
+                if (mdBalance < totalRequired) {
+                    return res.failure({ message: `Insufficient MD wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${mdBalance}` });
+                }
+
+            } else if (user.userRole === 4) {
+                // Distributor Logic
                 const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
                 if (!distributor) return res.failure({ message: 'Distributor not found' });
                 commData.users.distributor = distributor;
@@ -365,14 +415,18 @@ const payout = async (req, res) => {
             }
 
             // Common Validation for Surcharges validation
-            const debitAmount = (user.userRole === 4) ? commData.amounts.distSurcharge : commData.amounts.retailerSurcharge;
+            let debitAmount = 0;
+            if (user.userRole === 3) debitAmount = commData.amounts.mdSurcharge;
+            else if (user.userRole === 4) debitAmount = commData.amounts.distSurcharge;
+            else if (user.userRole === 5) debitAmount = commData.amounts.retailerSurcharge;
+
             if (debitAmount <= 0) {
                 console.log('Invalid Surcharge Config (<=0)');
                 return res.failure({ message: 'Invalid surcharge configuration' });
             }
 
             let totalIncomes = commData.amounts.adminSurcharge + commData.amounts.companySurcharge;
-            if (commData.users.masterDistributor) totalIncomes += commData.amounts.mdSurcharge;
+            if (commData.users.masterDistributor && user.userRole !== 3) totalIncomes += commData.amounts.mdSurcharge;
             if (commData.users.distributor && user.userRole === 5) totalIncomes += commData.amounts.distSurcharge;
 
             console.log('Total Upstream Income:', totalIncomes, 'Debit Amount:', debitAmount);
