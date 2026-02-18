@@ -177,8 +177,8 @@ const payout = async (req, res) => {
                 // Scenario: Master Distributor -> Company (Direct)
                 commData.scenario = 'MD_DIRECT';
                 const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
                 ]);
 
                 // Correction: MD uses slab assigned by company. So we look in companySlabComm for role 3/MD.
@@ -192,6 +192,9 @@ const payout = async (req, res) => {
 
                 // Calculate Upstream Surcharges First
                 console.log('--- Debug: Slabs Found ---');
+                console.log('Super Admin Slab:', SuperAdminSlabComm);
+                console.log('Company Slab:', companySlabComm);
+
                 console.log('Admin Slab:', commData.slabs.adminSlab ? { id: commData.slabs.adminSlab.id, comm: commData.slabs.adminSlab.commAmt, amtType: commData.slabs.adminSlab.amtType } : 'Not Found');
                 console.log('Company Slab:', commData.slabs.companySlab ? { id: commData.slabs.companySlab.id, comm: commData.slabs.companySlab.commAmt, amtType: commData.slabs.companySlab.amtType } : 'Not Found');
                 console.log('MD Slab (Assigned by Company):', commData.slabs.mdSlab ? { id: commData.slabs.mdSlab.id, comm: commData.slabs.mdSlab.commAmt, amtType: commData.slabs.mdSlab.amtType } : 'Not Found');
