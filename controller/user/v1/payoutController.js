@@ -601,15 +601,24 @@ const payout = async (req, res) => {
                     };
 
                     // --- Update Company Admin ---
-                    const coOpen = parseFloat(commData.wallets.companyWallet.mainWallet || 0);
+                    const coOpen = parseFloat(commData.wallets.companyWallet[walletType] || 0);
                     const coClose = parseFloat((coOpen + commData.amounts.companySurcharge).toFixed(2));
-                    await dbService.update(model.wallet, { id: commData.wallets.companyWallet.id }, { mainWallet: coClose, updatedBy: commData.users.companyAdmin.id });
-                    await createHistory(commData.users.companyAdmin, 'mainWallet', `${remarkText} - company commission`, commData.amounts.companySurcharge, commData.amounts.companySurcharge, 0, coOpen, coClose, false, true);
+
+                    console.log('--- Debug: Company Admin Wallet Update ---');
+                    console.log(`Wallet Type: ${walletType}`);
+                    console.log(`Opening Balance: ${coOpen}, Amount: ${commData.amounts.companySurcharge}, Closing: ${coClose}`);
+
+                    await dbService.update(model.wallet, { id: commData.wallets.companyWallet.id }, { [walletType]: coClose, updatedBy: commData.users.companyAdmin.id });
+                    await createHistory(commData.users.companyAdmin, walletType, `${remarkText} - company commission`, commData.amounts.companySurcharge, commData.amounts.companySurcharge, 0, coOpen, coClose, false, true);
 
                     // --- Update Super Admin (Income First) ---
                     const saOpen = parseFloat(commData.wallets.superAdminWallet[walletType] || 0);
                     const saMid = parseFloat((saOpen + commData.amounts.adminSurcharge).toFixed(2));
                     const saClose = parseFloat((saMid - commData.amounts.saBankCharge).toFixed(2));
+
+                    console.log('--- Debug: Super Admin Wallet Update ---');
+                    console.log(`Wallet Type: ${walletType}`);
+                    console.log(`Opening: ${saOpen}, Surcharge Income: ${commData.amounts.adminSurcharge}, Operator Charge: ${commData.amounts.saBankCharge}, Closing: ${saClose}`);
 
                     // Update SA Wallet Final
                     await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { [walletType]: saClose, updatedBy: commData.users.superAdmin.id });
