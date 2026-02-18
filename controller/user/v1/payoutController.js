@@ -210,17 +210,22 @@ const payout = async (req, res) => {
                 }
 
                 // Calculate & Validate Distributor Amounts
-                const distBase = Number(commData.slabs.distSlab?.commAmt || 0);
-                commData.amounts.distSurcharge = calcSlabAmount(commData.slabs.distSlab, distBase);
+                // Calculate Upstream Surcharges First
+                commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
+                commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
 
-                if (commData.scenario === 'DIST_DIRECT') {
-                    commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, commData.amounts.distSurcharge);
-                    commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.distSurcharge);
-                } else if (commData.scenario === 'DIST_MD') {
-                    commData.amounts.mdSurcharge = calcSlabAmount(commData.slabs.mdSlab, commData.amounts.distSurcharge);
-                    commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, commData.amounts.mdSurcharge);
-                    commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.mdSurcharge);
+                if (commData.slabs.mdSlab) {
+                    commData.amounts.mdSurcharge = calcSlabAmount(commData.slabs.mdSlab, payoutAmount);
                 }
+
+                // Calculate Distributor Surcharge as Sum of Costs (Operator Charge + Admin + Company + MD)
+                commData.amounts.distSurcharge =
+                    (commData.amounts.saBankCharge || 0) +
+                    (commData.amounts.adminSurcharge || 0) +
+                    (commData.amounts.companySurcharge || 0) +
+                    (commData.amounts.mdSurcharge || 0);
+
+                console.log('Calculated Distributor Surcharge (Cost+):', commData.amounts.distSurcharge);
 
                 console.log('Distributor Scenario:', commData.scenario);
                 console.log('Calculated Surcharges:', commData.amounts);
