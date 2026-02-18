@@ -26,6 +26,7 @@ const calcSlabAmount = (slab, baseAmount) => {
 
 const payout = async (req, res) => {
     try {
+        console.log('--- Payout Request Started ---');
         if (![3, 4, 5].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to do payout' });
         }
@@ -43,6 +44,14 @@ const payout = async (req, res) => {
         } = req.body;
 
         const user = req.user;
+        console.log('Request Details:', {
+            userId: user.id,
+            role: user.userRole,
+            amount,
+            mode,
+            aepsType,
+            paymentMode
+        });
 
         // Validate required fields
         const payoutAmount = parseFloat(amount);
@@ -65,6 +74,7 @@ const payout = async (req, res) => {
 
         const normalizedAepsType = aepsType.toUpperCase();
         const walletType = normalizedAepsType === 'AEPS1' ? 'apes1Wallet' : 'apes2Wallet';
+        console.log('Wallet Type:', walletType);
 
         // Parallel fetch: company and wallet
         const [company, wallet] = await Promise.all([
@@ -77,7 +87,10 @@ const payout = async (req, res) => {
 
         // Check AEPS wallet balance based on type
         const currentAepsBalance = parseFloat(wallet[walletType] || 0);
+        console.log(`Current ${normalizedAepsType} Balance:`, currentAepsBalance);
+
         if (currentAepsBalance < payoutAmount) {
+            console.log('Insufficient Main Balance Check Failed');
             return res.failure({
                 message: `Insufficient ${normalizedAepsType} wallet balance`,
                 currentBalance: currentAepsBalance,
@@ -107,6 +120,7 @@ const payout = async (req, res) => {
 
         // Only process for Distributor (4) and Retailer (5)
         if ([4, 5].includes(user.userRole)) {
+            console.log('--- Starting Commercial Calculation ---');
             // Fetch Payout Operator for Bank Charge Calculation
             const payoutOperator = await dbService.findOne(model.operator, {
                 operatorType: 'PAYOUT',
@@ -123,6 +137,9 @@ const payout = async (req, res) => {
                 } else {
                     commData.amounts.saBankCharge = round2(opRawComm);
                 }
+                console.log('Payout Operator Found:', { name: payoutOperator.operatorName, charge: commData.amounts.saBankCharge });
+            } else {
+                console.log('No Payout Operator Found for amount:', payoutAmount);
             }
             commData.payoutOperator = payoutOperator;
 
@@ -203,10 +220,17 @@ const payout = async (req, res) => {
                     commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.mdSurcharge);
                 }
 
-                // Balance Check
-                const distBalance = parseFloat(commData.wallets.distributorWallet?.mainWallet || 0);
-                if (distBalance < commData.amounts.distSurcharge) {
-                    return res.failure({ message: `Insufficient distributor wallet balance for surcharge. Required: ${commData.amounts.distSurcharge}, Available: ${distBalance}` });
+                console.log('Distributor Scenario:', commData.scenario);
+                console.log('Calculated Surcharges:', commData.amounts);
+
+                // Balance Check (From AEPS Wallet for Source)
+                // Source: Payout Amount + Surcharge must be available
+                const totalRequired = payoutAmount + commData.amounts.distSurcharge;
+                const distBalance = parseFloat(commData.wallets.distributorWallet[walletType] || 0); // AEPS Wallet Check
+                console.log(`Distributor Balance Check (${walletType}): Required ${totalRequired}, Available ${distBalance}`);
+
+                if (distBalance < totalRequired) {
+                    return res.failure({ message: `Insufficient distributor wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${distBalance}` });
                 }
 
             } else if (user.userRole === 5) {
@@ -315,22 +339,35 @@ const payout = async (req, res) => {
                     commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, commData.amounts.distSurcharge);
                 }
 
-                // Balance Check
-                const retBalance = parseFloat(commData.wallets.retailerWallet?.mainWallet || 0);
-                if (retBalance < commData.amounts.retailerSurcharge) {
-                    return res.failure({ message: `Insufficient retailer wallet balance for surcharge. Required: ${commData.amounts.retailerSurcharge}, Available: ${retBalance}` });
+                console.log('Retailer Scenario:', commData.scenario);
+                console.log('Calculated Surcharges:', commData.amounts);
+
+                // Balance Check (From AEPS Wallet for Source)
+                // Source: Payout Amount + Surcharge must be available
+                const totalRequired = payoutAmount + commData.amounts.retailerSurcharge;
+                const retBalance = parseFloat(commData.wallets.retailerWallet[walletType] || 0); // AEPS Wallet Check
+                console.log(`Retailer Balance Check (${walletType}): Required ${totalRequired}, Available ${retBalance}`);
+
+                if (retBalance < totalRequired) {
+                    return res.failure({ message: `Insufficient retailer wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${retBalance}` });
                 }
             }
 
             // Common Validation for Surcharges validation
             const debitAmount = (user.userRole === 4) ? commData.amounts.distSurcharge : commData.amounts.retailerSurcharge;
-            if (debitAmount <= 0) return res.failure({ message: 'Invalid surcharge configuration' });
+            if (debitAmount <= 0) {
+                console.log('Invalid Surcharge Config (<=0)');
+                return res.failure({ message: 'Invalid surcharge configuration' });
+            }
 
             let totalIncomes = commData.amounts.adminSurcharge + commData.amounts.companySurcharge;
             if (commData.users.masterDistributor) totalIncomes += commData.amounts.mdSurcharge;
             if (commData.users.distributor && user.userRole === 5) totalIncomes += commData.amounts.distSurcharge;
 
+            console.log('Total Upstream Income:', totalIncomes, 'Debit Amount:', debitAmount);
+
             if (totalIncomes > debitAmount) {
+                console.log('Invalid Surcharge Config (Income > Debit)');
                 return res.failure({ message: 'Invalid surcharge configuration: total upstream income exceeds user surcharge debit' });
             }
 
@@ -408,19 +445,22 @@ const payout = async (req, res) => {
             payoutHistoryData.bankName = customerBank.bankName;
             payoutHistoryData.mobile = user.mobileNo || user.mobile || user.phone;
 
+            console.log('Sending Request to ASL API (MOCKED)');
             // Call ASL API for bank payout
-            // aslResponse = await asl.aslAepsPayOut({
-            //     mobile: user.mobileNo,
-            //     accountNumber: customerBank.accountNumber,
-            //     beneficiaryName: customerBank.beneficiaryName,
-            //     bankName: customerBank.bankName,
-            //     ifscCode: customerBank.ifsc,
-            //     amount: payoutAmount.toString(),
-            //     paymentMode: paymentMode,
-            //     latitude: latitude,
-            //     longitude: longitude,
-            //     agentTransactionId: transactionID
-            // });
+            /*
+            aslResponse = await asl.aslAepsPayOut({
+                mobile: user.mobileNo,
+                accountNumber: customerBank.accountNumber,
+                beneficiaryName: customerBank.beneficiaryName,
+                bankName: customerBank.bankName,
+                ifscCode: customerBank.ifsc,
+                amount: payoutAmount.toString(),
+                paymentMode: paymentMode,
+                latitude: latitude,
+                longitude: longitude,
+                agentTransactionId: transactionID
+            });
+            */
             aslResponse = {
                 status: 'SUCCESS',
                 orderid: 'PAY1723565406',
@@ -428,6 +468,7 @@ const payout = async (req, res) => {
                 remark: 'Transaction was Successfull',
                 agentTransactionId: transactionID
             };
+            console.log('ASL API Response:', aslResponse);
 
             // Store API response and update status
             payoutHistoryData.apiResponse = aslResponse;
@@ -600,17 +641,22 @@ const payout = async (req, res) => {
 
                     // --- Update Distributor ---
                     if (commData.users.distributor) {
-                        const distOpen = parseFloat(commData.wallets.distributorWallet.mainWallet || 0);
-                        let distClose = distOpen;
-
+                        // Check which wallet to use based on role. If Dist is Source (Role 4), use AEPS Wallet. If Upline, use Main.
                         if (user.userRole === 4) {
-                            // Dist is the Source (Debit)
-                            distClose = parseFloat((distOpen - commData.amounts.distSurcharge).toFixed(2));
-                            await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { mainWallet: distClose, updatedBy: commData.users.distributor.id });
-                            await createHistory(commData.users.distributor, walletType, remarkText, commData.amounts.distSurcharge, 0, commData.amounts.distSurcharge, distOpen, distClose, true, false);
+                            // Dist is the Source (Debit) - USE AEPS WALLET
+                            const distOpen = parseFloat(commData.wallets.distributorWallet[walletType] || 0);
+                            // Note: Payout amount is already deducted from AEPS wallet above. We only deduct Surcharge here from AEPS wallet.
+                            // But wait, the AEPS deduction above set aepsClosingBalance = aepsOpeningBalance - payoutAmount.
+                            // We need to deduct surcharge from the closing balance of the previous step.
+                            const distMid = aepsClosingBalance; // After payout deduction
+                            const distClose = parseFloat((distMid - commData.amounts.distSurcharge).toFixed(2));
+
+                            await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { [walletType]: distClose, updatedBy: commData.users.distributor.id });
+                            await createHistory(commData.users.distributor, walletType, remarkText, commData.amounts.distSurcharge, 0, commData.amounts.distSurcharge, distMid, distClose, true, false);
                         } else {
-                            // Dist is an Intermediary (Income)
-                            distClose = parseFloat((distOpen + commData.amounts.distSurcharge).toFixed(2));
+                            // Dist is an Intermediary (Income) - USE MAIN WALLET
+                            const distOpen = parseFloat(commData.wallets.distributorWallet.mainWallet || 0);
+                            const distClose = parseFloat((distOpen + commData.amounts.distSurcharge).toFixed(2));
                             await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { mainWallet: distClose, updatedBy: commData.users.distributor.id });
                             await createHistory(commData.users.distributor, 'mainWallet', `${remarkText} - distributor commission`, commData.amounts.distSurcharge, commData.amounts.distSurcharge, 0, distOpen, distClose, false, true);
                         }
@@ -618,10 +664,13 @@ const payout = async (req, res) => {
 
                     // --- Update Retailer (If Source) ---
                     if (user.userRole === 5) {
-                        const retOpen = parseFloat(commData.wallets.retailerWallet.mainWallet || 0);
-                        const retClose = parseFloat((retOpen - commData.amounts.retailerSurcharge).toFixed(2));
-                        await dbService.update(model.wallet, { id: commData.wallets.retailerWallet.id }, { mainWallet: retClose, updatedBy: commData.users.retailer.id });
-                        await createHistory(commData.users.retailer, walletType, remarkText, commData.amounts.retailerSurcharge, 0, commData.amounts.retailerSurcharge, retOpen, retClose, true, false);
+                        // Ret is the Source (Debit) - USE AEPS WALLET
+                        // Note: Payout amount is already deducted from AEPS wallet above.
+                        const retMid = aepsClosingBalance; // After payout deduction
+                        const retClose = parseFloat((retMid - commData.amounts.retailerSurcharge).toFixed(2));
+
+                        await dbService.update(model.wallet, { id: commData.wallets.retailerWallet.id }, { [walletType]: retClose, updatedBy: commData.users.retailer.id });
+                        await createHistory(commData.users.retailer, walletType, remarkText, commData.amounts.retailerSurcharge, 0, commData.amounts.retailerSurcharge, retMid, retClose, true, false);
                     }
                 }
             }
