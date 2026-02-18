@@ -64,6 +64,7 @@ db.practomindState = require('./practomindState');
 // Financial Models
 db.wallet = require('./wallet');
 db.walletHistory = require('./walletHistory');
+db.surRecords = require('./surRecords');
 db.aepsHistory = require('./aepsHistory');
 db.practomindAepsHistory = require('./practomindAepsHistory');
 db.ledger = require('./ledger');
