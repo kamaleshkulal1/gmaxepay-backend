@@ -1725,6 +1725,7 @@ const aepsTransaction = async (req, res) => {
             remainingBalance: remainingBalance,
             bankName: bankName,
             bankLogo: bankLogo,
+            response: aepsResponse,
             companyName: existingCompany?.companyName || null,
             companyLogo: companyLogo,
         };
