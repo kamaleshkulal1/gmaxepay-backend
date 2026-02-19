@@ -211,11 +211,13 @@ const payout = async (req, res) => {
                     }
                 }
 
-                // Calculate MD Surcharge as Sum of Costs (Operator Charge + Admin + Company)
+                // Calculate MD Surcharge using MD Slab + Operator Charge
+                // We use the slab assigned to MD by WL (Role 3)
+                const mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, payoutAmount) : 0;
+
                 commData.amounts.mdSurcharge =
                     (commData.amounts.saBankCharge || 0) +
-                    (commData.amounts.adminSurcharge || 0) +
-                    (commData.amounts.companySurcharge || 0);
+                    mdSlabAmount;
 
                 console.log('Calculated MD Surcharge (Cost+):', commData.amounts.mdSurcharge);
                 console.log('MD Scenario:', commData.scenario);
