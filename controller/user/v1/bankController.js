@@ -928,7 +928,7 @@ const updateCustomerBank = async (req, res) => {
             return res.failure({ message: 'You are not authorized to update bank details' });
         }
         const { id } = req.params;
-        const { isActive, isPayout } = req.body;
+        const { isFundTransfer, isPayout } = req.body;
         const user = req.user;
 
         const customerBank = await dbService.findOne(model.customerBank, {
@@ -942,7 +942,7 @@ const updateCustomerBank = async (req, res) => {
         }
 
         const updateData = {};
-        if (isActive !== undefined) updateData.isActive = isActive;
+        if (isFundTransfer !== undefined) updateData.isFundTransfer = isFundTransfer;
         if (isPayout !== undefined) updateData.isPayout = isPayout;
 
         if (Object.keys(updateData).length === 0) {
