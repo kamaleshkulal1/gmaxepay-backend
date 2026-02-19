@@ -663,15 +663,22 @@ const addCustomerBank = async (req, res) => {
         }
 
         // 5. Credit Super Admin
+        // 5. Credit Super Admin (Net Income = Surcharge - Bank Charge)
         const saWallet = commData.wallets.superAdminWallet;
         const saBal = parseFloat(saWallet.mainWallet || 0);
         let saCredit = commData.amounts.adminSurcharge;
         saCredit += (commData.amounts.wlShortfall || 0);
 
-        const saNewBal = parseFloat((saBal + saCredit).toFixed(2));
+        // Calculate Mid Balance (After Income)
+        const saMid = parseFloat((saBal + saCredit).toFixed(2));
+
+        // Calculate Final Balance (After Bank Charge Deduction)
+        const saNewBal = parseFloat((saMid - commData.amounts.saBankCharge).toFixed(2));
+
+        // Update Wallet ONCE with Final Balance
+        await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { mainWallet: saNewBal, updatedBy: commData.users.superAdmin.id });
 
         if (saCredit > 0) {
-            await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { mainWallet: saNewBal, updatedBy: commData.users.superAdmin.id });
             await dbService.createOne(model.walletHistory, {
                 refId: superAdmin.id,
                 companyId: 1,
@@ -682,7 +689,7 @@ const addCustomerBank = async (req, res) => {
                 comm: saCredit,
                 surcharge: 0,
                 openingAmt: saBal,
-                closingAmt: saNewBal,
+                closingAmt: saMid,
                 credit: saCredit,
                 debit: 0,
                 transactionId,
@@ -695,13 +702,9 @@ const addCustomerBank = async (req, res) => {
 
         // 6. Handle SA Bank Charge (Debit Super Admin) & Create SurRecords
         if (commData.amounts.saBankCharge > 0) {
-            const saWalletLatest = await dbService.findOne(model.wallet, { id: commData.wallets.superAdminWallet.id });
-            const saBalLatest = parseFloat(saWalletLatest.mainWallet || 0);
-            const saNewBalLatest = parseFloat((saBalLatest - commData.amounts.saBankCharge).toFixed(2));
+            // Wallet Update already done in Step 5 (Net Calculation)
 
             const pOpName = commData.payoutOperator?.operatorName || 'Unknown';
-
-            await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { mainWallet: saNewBalLatest, updatedBy: commData.users.superAdmin.id });
 
             // History for Operator Charge
             await dbService.createOne(model.walletHistory, {
@@ -713,8 +716,8 @@ const addCustomerBank = async (req, res) => {
                 amount: commData.amounts.saBankCharge,
                 comm: 0,
                 surcharge: 0,
-                openingAmt: saBalLatest,
-                closingAmt: saNewBalLatest,
+                openingAmt: saMid,
+                closingAmt: saNewBal,
                 credit: 0,
                 debit: commData.amounts.saBankCharge,
                 transactionId,
@@ -730,7 +733,7 @@ const addCustomerBank = async (req, res) => {
                 companyId: 1,
                 transactionId: transactionId,
                 amount: commData.amounts.saBankCharge,
-                service: 'PAYOUT',
+                service: 'BANK VERIFICATION',
                 operatorType: pOpName,
                 addedBy: commData.users.superAdmin.id
             });
