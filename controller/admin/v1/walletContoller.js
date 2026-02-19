@@ -186,7 +186,7 @@ const walletHistory = async (req, res) => {
                 {
                     model: model.user,
                     as: 'user',
-                    attributes: ['firstName', 'lastName', 'username', 'userCode']
+                    attributes: ['name', 'mobile']
                 },
                 {
                     model: model.company,
