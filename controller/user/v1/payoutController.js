@@ -279,7 +279,7 @@ const payout = async (req, res) => {
                     commData.amounts.companySurcharge = Math.max(0, distSlabAmount - saToWlAmount); // WL Margin
                     commData.amounts.distSurcharge = distSlabAmount; // Dist Debit
 
-                    // 3. Handle Shortfall
+                    // 3. Handle Shortfall 
                     if (saToWlAmount > distSlabAmount) {
                         commData.amounts.wlShortfall = parseFloat((saToWlAmount - distSlabAmount).toFixed(2));
                         console.log(`Shortfall Detected (DIST_DIRECT): ${commData.amounts.wlShortfall}. Debited from WL, Credited to SA.`);
@@ -390,9 +390,29 @@ const payout = async (req, res) => {
                         dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                         dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                     ]);
-                    commData.slabs.retailerSlab = companySlabComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
-                    commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
-                    commData.slabs.companySlab = companySlabComm?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                    commData.slabs.retailerSlab = companySlabComm?.find(c => (c.roleType === 5 || c.roleName === 'RT') && c.operatorId === commData.payoutOperator?.id);
+                    commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD') && c.operatorId === commData.payoutOperator?.id);
+                    commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+
+                    // --- Margin Calc (RET_DIRECT) ---
+                    const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                    const retSlab = commData.slabs.retailerSlab;
+
+                    const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, payoutAmount) : 0;
+                    const retSlabAmount = retSlab ? calcSlabAmount(retSlab, payoutAmount) : 0;
+
+                    console.log(`Margin Calc (RET_DIRECT): SA->WL (${saToWlAmount}) vs WL->Ret (${retSlabAmount})`);
+
+                    commData.amounts.adminSurcharge = saToWlAmount;
+                    commData.amounts.companySurcharge = Math.max(0, retSlabAmount - saToWlAmount);
+                    commData.amounts.retailerSurcharge = retSlabAmount;
+
+                    if (saToWlAmount > retSlabAmount) {
+                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - retSlabAmount).toFixed(2));
+                    } else {
+                        commData.amounts.wlShortfall = 0;
+                    }
+
 
                 } else if (reportingUser.userRole === 3) {
                     // Scenario 2: Retailer -> Master Distributor
@@ -405,10 +425,37 @@ const payout = async (req, res) => {
                         dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                         dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                     ]);
-                    commData.slabs.retailerSlab = masterDistributorComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
-                    commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
-                    commData.slabs.companySlab = companySlabComm?.find(c => c.roleType === 2 || c.roleName === 'WU');
-                    commData.slabs.mdSlab = masterDistributorComm?.find(c => c.roleType === 3 || c.roleName === 'MD');
+                    commData.slabs.retailerSlab = masterDistributorComm?.find(c => (c.roleType === 5 || c.roleName === 'RT') && c.operatorId === commData.payoutOperator?.id);
+                    commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD') && c.operatorId === commData.payoutOperator?.id);
+                    commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                    commData.slabs.mdSlab = masterDistributorComm?.find(c => (c.roleType === 3 || c.roleName === 'MD') && c.operatorId === commData.payoutOperator?.id);
+
+                    // --- Margin Calc (RET_MD) ---
+                    const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                    const wlToMdSlab = companySlabComm?.find(c => (c.roleType === 3 || c.roleName === 'MD') && c.operatorId === commData.payoutOperator?.id);
+                    const retSlab = commData.slabs.retailerSlab; // MD -> Ret
+
+                    const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, payoutAmount) : 0;
+                    const wlToMdAmount = wlToMdSlab ? calcSlabAmount(wlToMdSlab, payoutAmount) : 0;
+                    const retSlabAmount = retSlab ? calcSlabAmount(retSlab, payoutAmount) : 0;
+
+                    console.log(`Margin Calc (RET_MD): SA->WL (${saToWlAmount}) vs WL->MD (${wlToMdAmount}) vs MD->Ret (${retSlabAmount})`);
+
+                    commData.amounts.adminSurcharge = saToWlAmount;
+                    commData.amounts.companySurcharge = Math.max(0, wlToMdAmount - saToWlAmount);
+                    commData.amounts.mdSurcharge = Math.max(0, retSlabAmount - wlToMdAmount);
+                    commData.amounts.retailerSurcharge = retSlabAmount;
+
+                    if (saToWlAmount > wlToMdAmount) {
+                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
+                    } else {
+                        commData.amounts.wlShortfall = 0;
+                    }
+                    if (wlToMdAmount > retSlabAmount) {
+                        commData.amounts.mdShortfall = parseFloat((wlToMdAmount - retSlabAmount).toFixed(2));
+                    } else {
+                        commData.amounts.mdShortfall = 0;
+                    }
 
 
                 } else if (reportingUser.userRole === 4) {
@@ -433,11 +480,42 @@ const payout = async (req, res) => {
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
-                        commData.slabs.retailerSlab = distributorComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
-                        commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
-                        commData.slabs.companySlab = companySlabComm?.find(c => c.roleType === 2 || c.roleName === 'WU');
-                        commData.slabs.mdSlab = masterDistributorComm?.find(c => c.roleType === 3 || c.roleName === 'MD');
-                        commData.slabs.distSlab = distributorComm?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                        commData.slabs.retailerSlab = distributorComm?.find(c => (c.roleType === 5 || c.roleName === 'RT') && c.operatorId === commData.payoutOperator?.id);
+                        commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD') && c.operatorId === commData.payoutOperator?.id);
+                        commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                        commData.slabs.mdSlab = masterDistributorComm?.find(c => (c.roleType === 3 || c.roleName === 'MD') && c.operatorId === commData.payoutOperator?.id);
+                        commData.slabs.distSlab = distributorComm?.find(c => (c.roleType === 4 || c.roleName === 'DI') && c.operatorId === commData.payoutOperator?.id);
+
+                        // --- Margin Calc (RET_DIST_MD) ---
+                        const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                        const wlToMdSlab = companySlabComm?.find(c => (c.roleType === 3 || c.roleName === 'MD') && c.operatorId === commData.payoutOperator?.id);
+                        const mdToDistSlab = masterDistributorComm?.find(c => (c.roleType === 4 || c.roleName === 'DI') && c.operatorId === commData.payoutOperator?.id);
+                        const retSlab = commData.slabs.retailerSlab; // Dist -> Ret
+
+                        const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, payoutAmount) : 0;
+                        const wlToMdAmount = wlToMdSlab ? calcSlabAmount(wlToMdSlab, payoutAmount) : 0;
+                        const mdToDistAmount = mdToDistSlab ? calcSlabAmount(mdToDistSlab, payoutAmount) : 0;
+                        const retSlabAmount = retSlab ? calcSlabAmount(retSlab, payoutAmount) : 0;
+
+                        console.log(`Margin Calc (RET_DIST_MD): SA->WL (${saToWlAmount}) vs WL->MD (${wlToMdAmount}) vs MD->Dist (${mdToDistAmount}) vs Dist->Ret (${retSlabAmount})`);
+
+                        commData.amounts.adminSurcharge = saToWlAmount;
+                        commData.amounts.companySurcharge = Math.max(0, wlToMdAmount - saToWlAmount);
+                        commData.amounts.mdSurcharge = Math.max(0, mdToDistAmount - wlToMdAmount);
+                        commData.amounts.distSurcharge = Math.max(0, retSlabAmount - mdToDistAmount);
+                        commData.amounts.retailerSurcharge = retSlabAmount;
+
+                        if (saToWlAmount > wlToMdAmount) commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
+                        else commData.amounts.wlShortfall = 0;
+
+                        if (wlToMdAmount > mdToDistAmount) commData.amounts.mdShortfall = parseFloat((wlToMdAmount - mdToDistAmount).toFixed(2));
+                        else commData.amounts.mdShortfall = 0;
+
+                        if (mdToDistAmount > retSlabAmount) {
+                            commData.amounts.distShortfall = parseFloat((mdToDistAmount - retSlabAmount).toFixed(2));
+                        } else {
+                            commData.amounts.distShortfall = 0;
+                        }
 
                     } else {
                         // Scenario 3: Retailer -> Dist -> Company
@@ -447,37 +525,40 @@ const payout = async (req, res) => {
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: 'PAYOUT' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
-                        commData.slabs.retailerSlab = distributorComm?.find(c => c.roleType === 5 || c.roleName === 'RT');
-                        commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
-                        commData.slabs.companySlab = companySlabComm?.find(c => c.roleType === 2 || c.roleName === 'WU');
-                        commData.slabs.distSlab = distributorComm?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                        commData.slabs.retailerSlab = distributorComm?.find(c => (c.roleType === 5 || c.roleName === 'RT') && c.operatorId === commData.payoutOperator?.id);
+                        commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD') && c.operatorId === commData.payoutOperator?.id);
+                        commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                        commData.slabs.distSlab = distributorComm?.find(c => (c.roleType === 4 || c.roleName === 'DI') && c.operatorId === commData.payoutOperator?.id);
+
+                        // --- Margin Calc (RET_DIST_CO) ---
+                        const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                        const wlToDistSlab = companySlabComm?.find(c => (c.roleType === 4 || c.roleName === 'DI') && c.operatorId === commData.payoutOperator?.id);
+                        const retSlab = commData.slabs.retailerSlab; // Dist -> Ret
+
+                        const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, payoutAmount) : 0;
+                        const wlToDistAmount = wlToDistSlab ? calcSlabAmount(wlToDistSlab, payoutAmount) : 0;
+                        const retSlabAmount = retSlab ? calcSlabAmount(retSlab, payoutAmount) : 0;
+
+                        console.log(`Margin Calc (RET_DIST_CO): SA->WL (${saToWlAmount}) vs WL->Dist (${wlToDistAmount}) vs Dist->Ret (${retSlabAmount})`);
+
+                        commData.amounts.adminSurcharge = saToWlAmount;
+                        commData.amounts.companySurcharge = Math.max(0, wlToDistAmount - saToWlAmount);
+                        commData.amounts.distSurcharge = Math.max(0, retSlabAmount - wlToDistAmount);
+                        commData.amounts.retailerSurcharge = retSlabAmount;
+
+                        if (saToWlAmount > wlToDistAmount) commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToDistAmount).toFixed(2));
+                        else commData.amounts.wlShortfall = 0;
+
+                        if (wlToDistAmount > retSlabAmount) {
+                            commData.amounts.distShortfall = parseFloat((wlToDistAmount - retSlabAmount).toFixed(2));
+                        } else {
+                            commData.amounts.distShortfall = 0;
+                        }
                     }
                 }
 
-                // Calculate & Validate Retailer Amounts
-                // Calculate Upstream Surcharges First
-                commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
-                commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
-
-                if (commData.slabs.mdSlab) {
-                    commData.amounts.mdSurcharge = calcSlabAmount(commData.slabs.mdSlab, payoutAmount);
-                }
-                if (commData.slabs.distSlab) {
-                    commData.amounts.distSurcharge = calcSlabAmount(commData.slabs.distSlab, payoutAmount);
-                }
-
-                // Calculate Retailer Surcharge as Sum of Costs (Operator Charge + Admin + Company + MD + Dist)
-                commData.amounts.retailerSurcharge =
-                    (commData.amounts.saBankCharge || 0) +
-                    (commData.amounts.adminSurcharge || 0) +
-                    (commData.amounts.companySurcharge || 0) +
-                    (commData.amounts.mdSurcharge || 0) +
-                    (commData.amounts.distSurcharge || 0);
-
-                console.log('Calculated Retailer Surcharge (Cost+):', commData.amounts.retailerSurcharge);
-
                 console.log('Retailer Scenario:', commData.scenario);
-                console.log('Calculated Surcharges:', commData.amounts);
+                console.log('Calculated Surcharges (Margin Based):', commData.amounts);
 
                 // Balance Check (From AEPS Wallet for Source)
                 // Source: Payout Amount + Surcharge must be available
@@ -516,9 +597,9 @@ const payout = async (req, res) => {
                 console.log(`New Admin Surcharge: ${commData.amounts.adminSurcharge}`);
             }
 
-            if (totalIncomes > (debitAmount + (commData.amounts.wlShortfall || 0) + (commData.amounts.mdShortfall || 0))) {
+            if (totalIncomes > (debitAmount + (commData.amounts.wlShortfall || 0) + (commData.amounts.mdShortfall || 0) + (commData.amounts.distShortfall || 0))) {
                 console.log('Invalid Surcharge Config (Income > Debit + Shortfall)');
-                return res.failure({ message: `Invalid surcharge configuration: total upstream income exceeds user surcharge debit. Income: ${totalIncomes}, Debit: ${debitAmount}, WL Shortfall: ${commData.amounts.wlShortfall}, MD Shortfall: ${commData.amounts.mdShortfall}` });
+                return res.failure({ message: `Invalid surcharge configuration: total upstream income exceeds user surcharge debit. Income: ${totalIncomes}, Debit: ${debitAmount}, WL Shortfall: ${commData.amounts.wlShortfall}, MD Shortfall: ${commData.amounts.mdShortfall}, Dist Shortfall: ${commData.amounts.distShortfall}` });
             }
 
             commData.isValid = true;
@@ -869,6 +950,20 @@ const payout = async (req, res) => {
                             const distClose = parseFloat((distOpen + commData.amounts.distSurcharge).toFixed(2));
                             await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { [walletType]: distClose, updatedBy: commData.users.distributor.id });
                             await createHistory(commData.users.distributor, walletType, `${remarkText} - distributor commission`, commData.amounts.distSurcharge, commData.amounts.distSurcharge, 0, distOpen, distClose, false, true);
+
+                            // Handle Dist Shortfall (Debit Dist)
+                            // This happens in RET_DIST_MD or RET_DIST_CO scenarios where MD/WL charges Dist > Dist charges Retailer
+                            if (commData.amounts.distShortfall > 0) {
+                                const shortFall = commData.amounts.distShortfall;
+                                const distOpenSF = distClose;
+                                const distCloseSF = parseFloat((distOpenSF - shortFall).toFixed(2));
+
+                                console.log(`--- Debug: Deducting Dist Shortfall from Distributor ---`);
+                                console.log(`Opening: ${distOpenSF}, Shortfall Debit: ${shortFall}, Closing: ${distCloseSF}`);
+
+                                await dbService.update(model.wallet, { id: commData.wallets.distributorWallet.id }, { [walletType]: distCloseSF, updatedBy: commData.users.distributor.id });
+                                await createHistory(commData.users.distributor, walletType, `${remarkText} - shortfall penalty (Upline charge > Dist charge)`, shortFall, 0, shortFall, distOpenSF, distCloseSF, true, false);
+                            }
                         }
                     }
 
