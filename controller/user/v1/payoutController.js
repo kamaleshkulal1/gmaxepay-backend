@@ -191,41 +191,47 @@ const payout = async (req, res) => {
                 commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD') && c.operatorId === commData.payoutOperator?.id);
                 commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
 
-                commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
-                commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
+                // --- Commercial Logic Refactor (Margin Separation) ---
+                // We determine what each upstream party EARNS based on the slabs they assigned.
 
-                // Validation: Check if SA->WL surcharge > WL->MD surcharge
-                // If yes, WL is undercharging MD compared to SA's charge to WL. Shortfall must be paid by WL.
+                // 1. Identify Slabs
+                // saToWlSlab: What Super Admin Charges White Label (Role 2)
                 const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
-                // Note: commData.slabs.mdSlab is the slab WL assigned to MD (Role 3)
+                // mdSlab: What White Label Charges Master Distributor (Role 3)
+                const mdSlab = commData.slabs.mdSlab;
 
-                if (saToWlSlab && commData.slabs.mdSlab) {
-                    const saToWlAmount = calcSlabAmount(saToWlSlab, payoutAmount);
-                    const wlToMdAmount = calcSlabAmount(commData.slabs.mdSlab, payoutAmount);
+                // 2. Calculate Amounts
+                const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, payoutAmount) : 0;
+                const mdSlabAmount = mdSlab ? calcSlabAmount(mdSlab, payoutAmount) : 0;
 
-                    console.log(`Validation Check: SA->WL (${saToWlAmount}) vs WL->MD (${wlToMdAmount})`);
+                console.log(`Margin Calc: SA->WL Cost (${saToWlAmount}) vs WL->MD Cost (${mdSlabAmount})`);
 
-                    if (saToWlAmount > wlToMdAmount) {
-                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
-                        console.log(`Shortfall Detected: ${commData.amounts.wlShortfall}. This amount will be debited from WL and credited to SA.`);
+                // 3. Determine Margins (Surcharges/Revenue)
 
-                        // Adjust Company Surcharge: Reduce by shortfall amount (as WL pays shortfall separately)
-                        // This prevents double counting revenue for WL and ensures MD pays correct amount (4+1 etc)
-                        if (commData.amounts.companySurcharge >= commData.amounts.wlShortfall) {
-                            commData.amounts.companySurcharge = parseFloat((commData.amounts.companySurcharge - commData.amounts.wlShortfall).toFixed(2));
-                            console.log(`Adjusted Company Surcharge (after shortfall): ${commData.amounts.companySurcharge}`);
-                        }
-                    }
+                // Admin Surcharge = What SA collects from WL (Total SA Revenue)
+                commData.amounts.adminSurcharge = saToWlAmount;
+
+                // Company Surcharge = What WL collects from MD - What WL pays to SA (WL Margin)
+                // If WL charges MD less than SA charges WL (Shortfall), Margin is 0 (Shortfall handled separately)
+                commData.amounts.companySurcharge = Math.max(0, mdSlabAmount - saToWlAmount);
+
+                // MD Surcharge = What MD pays to WL
+                commData.amounts.mdSurcharge = mdSlabAmount;
+
+                // 4. Handle Shortfall
+                if (saToWlAmount > mdSlabAmount) {
+                    commData.amounts.wlShortfall = parseFloat((saToWlAmount - mdSlabAmount).toFixed(2));
+                    console.log(`Shortfall Detected: ${commData.amounts.wlShortfall}. Debited from WL, Credited to SA.`);
+                } else {
+                    commData.amounts.wlShortfall = 0;
                 }
 
-                // Calculate MD Surcharge using MD Slab only (User Request: "debit only incoming from the whitelabel")
-                // Note: companySurcharge is now adjusted for shortfall
-                const mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, payoutAmount) : 0;
-                commData.amounts.mdSurcharge = mdSlabAmount;
-                console.log('Calculated MD Surcharge (Cost+):', commData.amounts.mdSurcharge);
-                console.log('MD Scenario:', commData.scenario);
-                console.log('MD Operator Charge (saBankCharge):', commData.amounts.saBankCharge);
-                console.log('Calculated Surcharges:', commData.amounts);
+                console.log('--- Final Commercial Breakdown ---');
+                console.log(`MD Pays (Debit): ${commData.amounts.mdSurcharge}`);
+                console.log(`WL Margin (Credit): ${commData.amounts.companySurcharge}`);
+                console.log(`SA Revenue (Credit): ${commData.amounts.adminSurcharge}`);
+                console.log(`WL Shortfall (Debit WL/Credit SA): ${commData.amounts.wlShortfall}`);
+                console.log(`Operator Charge (Cost to SA): ${commData.amounts.saBankCharge}`);
 
                 // Balance Check
                 const totalRequired = payoutAmount + commData.amounts.mdSurcharge;
