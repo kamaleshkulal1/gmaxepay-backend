@@ -61,27 +61,36 @@ const recharge = async (req, res) => {
         // Our own custom transaction ID (separate from provider orderid / txid)
         const transactionId = generateTransactionID(existingCompany?.companyName);
 
-        // const [response, wallet] = await Promise.all([
-        //     inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4),
-        //     model.wallet.findOne({
-        //         where: { refId: user.id, companyId: user.companyId }
-        //     })
-        // ]);
+        // Use Dummy Response for Testing - Using transactionId as orderid to prevent duplicates
         const response = {
             txid: 54028212,
             status: 'Success',
             opid: '346451228',
-            number: '9071138349',
-            amount: '22',
+            number: mobileNumber,
+            amount: amount,
             dr_amount: 21.78,
-            orderid: 'ARAMS19648'
-        }
+            orderid: transactionId, // Use generated transactionId to ensure uniqueness
+            operatorName: operator.operatorName
+        };
+
         const wallet = await model.wallet.findOne({
             where: { refId: user.id, companyId: user.companyId }
         });
 
-        // Extract response data
-        const orderid = response.orderid;
+        // const [response, wallet] = await Promise.all([
+        //     inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4, transactionId), // Passing transactionId if supported/needed
+        //     model.wallet.findOne({
+        //         where: { refId: user.id, companyId: user.companyId }
+        //     })
+        // ]);
+
+        // DEBUG: Log the full response to understand what we are getting
+        console.log('Recharge API Response:', JSON.stringify(response, null, 2));
+
+        // Use response.orderid if present, otherwise fallback to our transactionId if response doesn't provide a unique order ref
+        // adapting to prevent NULL unique violation if API fails to return orderid
+        const orderid = response.orderid || transactionId;
+
         const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
         const isPending = response.status === 'Pending' || response.status === 'PENDING';
         const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILURE');
@@ -108,14 +117,15 @@ const recharge = async (req, res) => {
         let masterDistributorComm = 0;
         let companyComm = 0;
         let superAdminComm = 0;
-        let retailerNetCredit = 0;
 
-        // Initialize outer scope variables for response/logging if needed
-        retailerComm = 0;
-        distributorComm = 0;
-        masterDistributorComm = 0;
-        companyComm = 0;
-        superAdminComm = 0;
+        // Log Inputs for Commission Calculation
+        console.log('Commission Input:', {
+            userRole: user.userRole,
+            companyId: user.companyId,
+            operatorId: operator.id,
+            operatorType,
+            amount: amountNumber
+        });
 
         if (isSuccess && [4, 5].includes(user.userRole)) {
             // New Margin-Based Commission Logic
@@ -269,6 +279,16 @@ const recharge = async (req, res) => {
                         }
                     }
                 }
+
+                // DEBUG: Log Fetched Slabs
+                console.log('Fetched Slabs:', {
+                    scenario: commData.scenario,
+                    saSlab: commData.slabs.saSlab ? { id: commData.slabs.saSlab.id, comm: commData.slabs.saSlab.commAmt, type: commData.slabs.saSlab.amtType } : 'MISSING',
+                    wlSlab: commData.slabs.wlSlab ? { id: commData.slabs.wlSlab.id, comm: commData.slabs.wlSlab.commAmt, type: commData.slabs.wlSlab.amtType } : 'MISSING',
+                    mdSlab: commData.slabs.mdSlab ? { id: commData.slabs.mdSlab.id, comm: commData.slabs.mdSlab.commAmt, type: commData.slabs.mdSlab.amtType } : 'MISSING',
+                    distSlab: commData.slabs.distSlab ? { id: commData.slabs.distSlab.id, comm: commData.slabs.distSlab.commAmt, type: commData.slabs.distSlab.amtType } : 'MISSING',
+                    retSlab: commData.slabs.retSlab ? { id: commData.slabs.retSlab.id, comm: commData.slabs.retSlab.commAmt, type: commData.slabs.retSlab.amtType } : 'MISSING'
+                });
 
                 // 4. Calculate Amounts & Margins
                 const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
