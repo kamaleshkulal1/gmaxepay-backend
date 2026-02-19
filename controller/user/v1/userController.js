@@ -835,7 +835,7 @@ const getUserProfile = async (req, res) => {
         ? dbService.findOne(model.user, { id: existingUser?.reportingTo || companyAdmin?.id, companyId: existingUser.companyId })
         : null,
       existingUser.companyId
-        ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId })
+        ? dbService.findAll(model.customerBank, { refId: existingUser.id, companyId: existingUser.companyId, isActive: true })
         : []
     ]);
 
