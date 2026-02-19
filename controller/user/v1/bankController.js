@@ -104,6 +104,8 @@ const addCustomerBank = async (req, res) => {
                 companySurcharge: 0,
                 adminSurcharge: 0,
                 retailerSurcharge: 0,
+                saComm: 0,
+                saSurcharge: 0,
                 wlShortfall: 0,
                 mdShortfall: 0,
                 distShortfall: 0
@@ -169,12 +171,17 @@ const addCustomerBank = async (req, res) => {
 
             // SA->WL Slab
             const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+            const saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'SA')); // SA Comm Slab
+
             const mdSlab = commData.slabs.mdSlab;
 
             const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, 0) : 0;
+            const saCommAmount = saSlab ? calcSlabAmount(saSlab, 0) : 0;
             const mdSlabAmount = mdSlab ? calcSlabAmount(mdSlab, 0) : 0;
 
             commData.amounts.adminSurcharge = saToWlAmount;
+            commData.amounts.saComm = saCommAmount;
+            commData.amounts.saSurcharge = Math.max(0, saToWlAmount - saCommAmount);
             commData.amounts.companySurcharge = Math.max(0, mdSlabAmount - saToWlAmount);
             commData.amounts.mdSurcharge = mdSlabAmount;
 
@@ -198,12 +205,16 @@ const addCustomerBank = async (req, res) => {
                 commData.slabs.distSlab = companySlabComm?.find(c => (c.roleType === 4 || c.roleName === 'DI'));
 
                 const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                const saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'SA'));
                 const distSlab = commData.slabs.distSlab;
 
                 const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, 0) : 0;
+                const saCommAmount = saSlab ? calcSlabAmount(saSlab, 0) : 0;
                 const distSlabAmount = distSlab ? calcSlabAmount(distSlab, 0) : 0;
 
                 commData.amounts.adminSurcharge = saToWlAmount;
+                commData.amounts.saComm = saCommAmount;
+                commData.amounts.saSurcharge = Math.max(0, saToWlAmount - saCommAmount);
                 commData.amounts.companySurcharge = Math.max(0, distSlabAmount - saToWlAmount);
                 commData.amounts.distSurcharge = distSlabAmount;
 
@@ -227,13 +238,17 @@ const addCustomerBank = async (req, res) => {
 
                 commData.slabs.distSlab = masterDistributorComm?.find(c => (c.roleType === 4 || c.roleName === 'DI'));
                 const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                const saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'SA'));
                 const wlToMdSlab = companySlabComm?.find(c => (c.roleType === 3 || c.roleName === 'MD'));
 
                 const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, 0) : 0;
+                const saCommAmount = saSlab ? calcSlabAmount(saSlab, 0) : 0;
                 const wlToMdAmount = wlToMdSlab ? calcSlabAmount(wlToMdSlab, 0) : 0;
                 const distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, 0) : 0;
 
                 commData.amounts.adminSurcharge = saToWlAmount;
+                commData.amounts.saComm = saCommAmount;
+                commData.amounts.saSurcharge = Math.max(0, saToWlAmount - saCommAmount);
                 commData.amounts.companySurcharge = Math.max(0, wlToMdAmount - saToWlAmount);
                 commData.amounts.mdSurcharge = Math.max(0, distSlabAmount - wlToMdAmount);
                 commData.amounts.distSurcharge = distSlabAmount;
@@ -262,11 +277,15 @@ const addCustomerBank = async (req, res) => {
 
                 commData.slabs.retailerSlab = companySlabComm?.find(c => (c.roleType === 5 || c.roleName === 'RT'));
                 const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                const saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'SA'));
 
                 const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, 0) : 0;
+                const saCommAmount = saSlab ? calcSlabAmount(saSlab, 0) : 0;
                 const retSlabAmount = commData.slabs.retailerSlab ? calcSlabAmount(commData.slabs.retailerSlab, 0) : 0;
 
                 commData.amounts.adminSurcharge = saToWlAmount;
+                commData.amounts.saComm = saCommAmount;
+                commData.amounts.saSurcharge = Math.max(0, saToWlAmount - saCommAmount);
                 commData.amounts.companySurcharge = Math.max(0, retSlabAmount - saToWlAmount);
                 commData.amounts.retailerSurcharge = retSlabAmount;
 
@@ -285,13 +304,17 @@ const addCustomerBank = async (req, res) => {
 
                 commData.slabs.retailerSlab = masterDistributorComm?.find(c => (c.roleType === 5 || c.roleName === 'RT'));
                 const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                const saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'SA'));
                 const wlToMdSlab = companySlabComm?.find(c => (c.roleType === 3 || c.roleName === 'MD'));
 
                 const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, 0) : 0;
+                const saCommAmount = saSlab ? calcSlabAmount(saSlab, 0) : 0;
                 const wlToMdAmount = wlToMdSlab ? calcSlabAmount(wlToMdSlab, 0) : 0;
                 const retSlabAmount = commData.slabs.retailerSlab ? calcSlabAmount(commData.slabs.retailerSlab, 0) : 0;
 
                 commData.amounts.adminSurcharge = saToWlAmount;
+                commData.amounts.saComm = saCommAmount;
+                commData.amounts.saSurcharge = Math.max(0, saToWlAmount - saCommAmount);
                 commData.amounts.companySurcharge = Math.max(0, wlToMdAmount - saToWlAmount);
                 commData.amounts.mdSurcharge = Math.max(0, retSlabAmount - wlToMdAmount);
                 commData.amounts.retailerSurcharge = retSlabAmount;
@@ -324,15 +347,19 @@ const addCustomerBank = async (req, res) => {
 
                     commData.slabs.retailerSlab = distributorComm?.find(c => (c.roleType === 5 || c.roleName === 'RT'));
                     const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                    const saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'SA'));
                     const wlToMdSlab = companySlabComm?.find(c => (c.roleType === 3 || c.roleName === 'MD'));
                     const mdToDistSlab = masterDistributorComm?.find(c => (c.roleType === 4 || c.roleName === 'DI'));
 
                     const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, 0) : 0;
+                    const saCommAmount = saSlab ? calcSlabAmount(saSlab, 0) : 0;
                     const wlToMdAmount = wlToMdSlab ? calcSlabAmount(wlToMdSlab, 0) : 0;
                     const mdToDistAmount = mdToDistSlab ? calcSlabAmount(mdToDistSlab, 0) : 0;
                     const retSlabAmount = commData.slabs.retailerSlab ? calcSlabAmount(commData.slabs.retailerSlab, 0) : 0;
 
                     commData.amounts.adminSurcharge = saToWlAmount;
+                    commData.amounts.saComm = saCommAmount;
+                    commData.amounts.saSurcharge = Math.max(0, saToWlAmount - saCommAmount);
                     commData.amounts.companySurcharge = Math.max(0, wlToMdAmount - saToWlAmount);
                     commData.amounts.mdSurcharge = Math.max(0, mdToDistAmount - wlToMdAmount);
                     commData.amounts.distSurcharge = Math.max(0, retSlabAmount - mdToDistAmount);
@@ -353,13 +380,17 @@ const addCustomerBank = async (req, res) => {
 
                     commData.slabs.retailerSlab = distributorComm?.find(c => (c.roleType === 5 || c.roleName === 'RT'));
                     const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                    const saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'SA'));
                     const wlToDistSlab = companySlabComm?.find(c => (c.roleType === 4 || c.roleName === 'DI'));
 
                     const saToWlAmount = saToWlSlab ? calcSlabAmount(saToWlSlab, 0) : 0;
+                    const saCommAmount = saSlab ? calcSlabAmount(saSlab, 0) : 0;
                     const wlToDistAmount = wlToDistSlab ? calcSlabAmount(wlToDistSlab, 0) : 0;
                     const retSlabAmount = commData.slabs.retailerSlab ? calcSlabAmount(commData.slabs.retailerSlab, 0) : 0;
 
                     commData.amounts.adminSurcharge = saToWlAmount;
+                    commData.amounts.saComm = saCommAmount;
+                    commData.amounts.saSurcharge = Math.max(0, saToWlAmount - saCommAmount);
                     commData.amounts.companySurcharge = Math.max(0, wlToDistAmount - saToWlAmount);
                     commData.amounts.distSurcharge = Math.max(0, retSlabAmount - wlToDistAmount);
                     commData.amounts.retailerSurcharge = retSlabAmount;
@@ -662,11 +693,12 @@ const addCustomerBank = async (req, res) => {
             });
         }
 
-        // 5. Credit Super Admin
-        // 5. Credit Super Admin (Net Income = Surcharge - Bank Charge)
+        // 5. Credit Super Admin (Net Income = Comm - Bank Charge)
+        // Note: New requirement - only 'saComm' goes to wallet, 'saSurcharge' goes to surRecords
         const saWallet = commData.wallets.superAdminWallet;
         const saBal = parseFloat(saWallet.mainWallet || 0);
-        let saCredit = commData.amounts.adminSurcharge;
+
+        let saCredit = (commData.amounts.saComm || 0);
         saCredit += (commData.amounts.wlShortfall || 0);
 
         // Calculate Mid Balance (After Income)
