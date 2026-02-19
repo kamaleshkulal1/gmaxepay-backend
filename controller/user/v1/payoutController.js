@@ -112,7 +112,8 @@ const payout = async (req, res) => {
                 mdSurcharge: 0,
                 companySurcharge: 0,
                 adminSurcharge: 0,
-                retailerSurcharge: 0
+                retailerSurcharge: 0,
+                wlShortfall: 0
             },
             scenario: null // 'DIST_DIRECT', 'DIST_MD', 'RET_DIRECT', 'RET_MD', 'RET_DIST_MD', 'RET_DIST_CO'
         };
@@ -201,6 +202,23 @@ const payout = async (req, res) => {
 
                 commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
                 commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
+
+                // Validation: Check if SA->WL surcharge > WL->MD surcharge
+                // If yes, WL is undercharging MD compared to SA's charge to WL. Shortfall must be paid by WL.
+                const saToWlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
+                // Note: commData.slabs.mdSlab is the slab WL assigned to MD (Role 3)
+
+                if (saToWlSlab && commData.slabs.mdSlab) {
+                    const saToWlAmount = calcSlabAmount(saToWlSlab, payoutAmount);
+                    const wlToMdAmount = calcSlabAmount(commData.slabs.mdSlab, payoutAmount);
+
+                    console.log(`Validation Check: SA->WL (${saToWlAmount}) vs WL->MD (${wlToMdAmount})`);
+
+                    if (saToWlAmount > wlToMdAmount) {
+                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
+                        console.log(`Shortfall Detected: ${commData.amounts.wlShortfall}. This amount will be debited from WL and credited to SA.`);
+                    }
+                }
 
                 // Calculate MD Surcharge as Sum of Costs (Operator Charge + Admin + Company)
                 commData.amounts.mdSurcharge =
@@ -692,6 +710,19 @@ const payout = async (req, res) => {
                     await dbService.update(model.wallet, { id: commData.wallets.companyWallet.id }, { [walletType]: coClose, updatedBy: commData.users.companyAdmin.id });
                     await createHistory(commData.users.companyAdmin, walletType, `${remarkText} - company commission`, commData.amounts.companySurcharge, commData.amounts.companySurcharge, 0, coOpen, coClose, false, true);
 
+                    // Handle WL Shortfall (Debit WL)
+                    if (commData.amounts.wlShortfall > 0) {
+                        const shortFall = commData.amounts.wlShortfall;
+                        const coOpenSF = coClose;
+                        const coCloseSF = parseFloat((coOpenSF - shortFall).toFixed(2));
+
+                        console.log(`--- Debug: Dedcuting WL Shortfall from Company Admin ---`);
+                        console.log(`Opening: ${coOpenSF}, Shortfall Debit: ${shortFall}, Closing: ${coCloseSF}`);
+
+                        await dbService.update(model.wallet, { id: commData.wallets.companyWallet.id }, { [walletType]: coCloseSF, updatedBy: commData.users.companyAdmin.id });
+                        await createHistory(commData.users.companyAdmin, walletType, `${remarkText} - shortfall penalty (SA charge > MD charge)`, shortFall, 0, shortFall, coOpenSF, coCloseSF, true, false);
+                    }
+
                     // --- Update Super Admin (Income First) ---
                     const saOpen = parseFloat(commData.wallets.superAdminWallet[walletType] || 0);
                     const saMid = parseFloat((saOpen + commData.amounts.adminSurcharge).toFixed(2));
@@ -722,6 +753,19 @@ const payout = async (req, res) => {
                             service: `Payout Operator Charge (${pOpName})`, // Store description here since remark was missing
                             addedBy: commData.users.superAdmin.id
                         });
+                    }
+
+                    // Handle WL Shortfall (Credit SA)
+                    if (commData.amounts.wlShortfall > 0) {
+                        const shortFall = commData.amounts.wlShortfall;
+                        const saOpenSF = saClose;
+                        const saCloseSF = parseFloat((saOpenSF + shortFall).toFixed(2));
+
+                        console.log(`--- Debug: Crediting WL Shortfall to Super Admin ---`);
+                        console.log(`Opening: ${saOpenSF}, Shortfall Credit: ${shortFall}, Closing: ${saCloseSF}`);
+
+                        await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { [walletType]: saCloseSF, updatedBy: commData.users.superAdmin.id });
+                        await createHistory(commData.users.superAdmin, walletType, `${remarkText} - shortfall recovery`, shortFall, shortFall, 0, saOpenSF, saCloseSF, false, true);
                     }
 
                     // --- Update Master Distributor (If exists) ---
