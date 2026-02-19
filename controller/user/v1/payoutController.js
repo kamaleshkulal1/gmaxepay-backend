@@ -208,17 +208,22 @@ const payout = async (req, res) => {
                     if (saToWlAmount > wlToMdAmount) {
                         commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
                         console.log(`Shortfall Detected: ${commData.amounts.wlShortfall}. This amount will be debited from WL and credited to SA.`);
+
+                        // Adjust Company Surcharge: Reduce by shortfall amount (as WL pays shortfall separately)
+                        // This prevents double counting revenue for WL and ensures MD pays correct amount (4+1 etc)
+                        if (commData.amounts.companySurcharge >= commData.amounts.wlShortfall) {
+                            commData.amounts.companySurcharge = parseFloat((commData.amounts.companySurcharge - commData.amounts.wlShortfall).toFixed(2));
+                            console.log(`Adjusted Company Surcharge (after shortfall): ${commData.amounts.companySurcharge}`);
+                        }
                     }
                 }
 
-                // Calculate MD Surcharge using MD Slab + Operator Charge
-                // We use the slab assigned to MD by WL (Role 3)
-                const mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, payoutAmount) : 0;
-
+                // Calculate MD Surcharge as Sum of Costs (Operator Charge + Admin + Company)
+                // Note: companySurcharge is now adjusted for shortfall
                 commData.amounts.mdSurcharge =
                     (commData.amounts.saBankCharge || 0) +
-                    mdSlabAmount;
-
+                    (commData.amounts.adminSurcharge || 0) +
+                    (commData.amounts.companySurcharge || 0);
                 console.log('Calculated MD Surcharge (Cost+):', commData.amounts.mdSurcharge);
                 console.log('MD Scenario:', commData.scenario);
                 console.log('MD Operator Charge (saBankCharge):', commData.amounts.saBankCharge);
