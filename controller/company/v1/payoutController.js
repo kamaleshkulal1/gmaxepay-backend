@@ -391,6 +391,17 @@ const payout = async (req, res) => {
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
                         });
+
+                        const pOpName = payoutOperator?.operatorName || 'Unknown';
+                        await dbService.createOne(model.surRecords, {
+                            refId: superAdmin.id,
+                            companyId: 1,
+                            transactionId: transactionID,
+                            amount: saBankCharge,
+                            service: 'PAYOUT',
+                            operatorType: pOpName,
+                            addedBy: superAdmin.id
+                        });
                     }
 
                 } else if (commType === 'com') {
@@ -492,6 +503,17 @@ const payout = async (req, res) => {
                             paymentMode: 'WALLET',
                             addedBy: superAdmin.id,
                             updatedBy: superAdmin.id
+                        });
+
+                        const pOpName = payoutOperator?.operatorName || 'Unknown';
+                        await dbService.createOne(model.surRecords, {
+                            refId: superAdmin.id,
+                            companyId: 1,
+                            transactionId: transactionID,
+                            amount: saDebitCharge,
+                            service: 'PAYOUT',
+                            operatorType: pOpName,
+                            addedBy: superAdmin.id
                         });
                     }
                 }

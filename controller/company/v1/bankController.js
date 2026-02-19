@@ -42,7 +42,7 @@ const addCustomerBank = async (req, res) => {
     }
 
     if (!reportingToUser) {
-      return res.failure({ message: 'User not found' });
+      return res.failure({ message: 'Super Admin not found' });
     }
 
     const { account_number, ifsc, isPayout, isFundTransfer } = req.body;
@@ -96,6 +96,74 @@ const addCustomerBank = async (req, res) => {
         }
       });
     }
+
+    // --- COMMERCIALS & VALIDATION (Pre-API Call) ---
+
+    // 1. Fetch Payout Operator (Bank Verification)
+    const payoutOperator = await dbService.findOne(model.operator, {
+      operatorType: 'BANK VERIFICATION',
+      isActive: true
+    });
+
+    // 2. Fetch Commercial Slabs (SuperAdmin -> Company)
+    const slabComm = await dbService.findOne(model.commSlab, {
+      companyId: 1,
+      addedBy: reportingToUser.id, // Super Admin
+      operatorType: 'BANK VERIFICATION',
+      roleType: 2 // User's role (Company Admin)
+    });
+
+    if (!slabComm) {
+      return res.failure({ message: 'Commission/Surcharge slab not configured for Bank Verification' });
+    }
+
+    const round2 = (num) => {
+      return Math.round((Number(num) + Number.EPSILON) * 100) / 100;
+    };
+
+    const calcSlabAmount = (slab, baseAmount) => {
+      if (!slab) return 0;
+      const base = Number(baseAmount || 0);
+      const rawComm = Number(slab.commAmt || 0);
+      const amtType = (slab.amtType || 'fix').toLowerCase();
+      if (amtType === 'per') {
+        return round2((base * rawComm) / 100);
+      }
+      return round2(rawComm);
+    };
+
+    // 3. Calculate Amounts
+    // Assumes fixed charge for verification, so baseAmount = 0
+    const adminSurchargeAmt = calcSlabAmount(slabComm, 0);
+
+    // Calculate SA Bank Charge (Cost) from Operator
+    let saBankCharge = 0;
+    if (payoutOperator) {
+      // Operator charge usually fixed, but support % if needed
+      saBankCharge = calcSlabAmount({ ...payoutOperator, commAmt: payoutOperator.comm, amtType: payoutOperator.amtType }, 0);
+    }
+
+    if (adminSurchargeAmt <= 0) {
+      // It's possible for SA to charge 0 to Company, but usually not. Warning/Error?
+      // Proceeding, but logging could be good.
+    }
+
+    // 4. Validate Company Wallet Balance
+    if (!reportingToUserWallet) {
+      return res.failure({ message: 'Super Admin wallet not found' });
+    }
+
+    const userOpeningBalance = parseFloat(existingUserWallet.mainWallet || 0);
+
+    // Company pays 'adminSurchargeAmt' to Super Admin
+    if (userOpeningBalance < adminSurchargeAmt) {
+      return res.failure({
+        message: `Insufficient wallet balance. Required: ${adminSurchargeAmt}, Available: ${userOpeningBalance}`
+      });
+    }
+
+    // --- END COMMERCIALS ---
+
 
     const [cachedVerification, razorpayBankData] = await Promise.all([
       (async () => {
@@ -157,74 +225,21 @@ const addCustomerBank = async (req, res) => {
       return res.failure({ message: 'Bank verification failed' });
     }
 
-    const existingUserSlab = await dbService.findOne(model.slab, {
-      id: existingUser?.slabId
-    });
-
-    if (!existingUserSlab) {
-      return res.failure({ message: 'Slab not found' });
-    }
-
-    const slabComm = await dbService.findAll(
-      model.commSlab,
-      {
-        slabId: existingUserSlab.id,
-        addedBy: existingUser?.reportingTo || 1,
-        operatorType: 'BANK VERIFICATION'
-      },
-      {
-        select: ['id', 'roleType', 'commAmt', 'commType', 'amtType']
-      }
-    );
-
-    if (!slabComm || !Array.isArray(slabComm) || slabComm.length === 0) {
-      return res.failure({ message: 'Slab commission not found' });
-    }
-
-    const adminCommission = slabComm.find((c) => c.roleType === 1) || slabComm[0];
-    const userCommission = slabComm.find((c) => c.roleType === 2) || slabComm[slabComm.length - 1];
-
-    const adminSurchargeAmt = parseFloat(adminCommission?.commAmt || 0);
-    const userSurchargeAmt = parseFloat(userCommission?.commAmt || 0);
-
-
-    if (adminSurchargeAmt <= 0 || userSurchargeAmt <= 0) {
-      return res.failure({ message: 'Invalid surcharge configuration for bank verification' });
-    }
-
-    if (!reportingToUserWallet) {
-      return res.failure({ message: 'Reporting to user wallet not found' });
-    }
-
-    const userOpeningBalance = parseFloat(existingUserWallet.mainWallet || 0);
-
-    if (userOpeningBalance < userSurchargeAmt) {
-      return res.failure({
-        message: `Insufficient wallet balance. Required: ${userSurchargeAmt}, Available: ${userOpeningBalance}`
-      });
-    }
-
-    const userClosingBalance = parseFloat((userOpeningBalance - userSurchargeAmt).toFixed(2));
-    const reportingOpeningBalance = parseFloat(reportingToUserWallet.mainWallet || 0);
-    const reportingClosingBalance = parseFloat((reportingOpeningBalance + adminSurchargeAmt).toFixed(2));
+    // --- WALLET EXECUTION ---
 
     const companyDetails = await dbService.findOne(model.company, { id: companyId });
     const transactionId = generateTransactionID(companyDetails?.companyName || 'BANK_VERIFY');
+    const operatorName = 'Bank Verification';
+    const remarkText = 'Bank verification charge';
+
+    // 1. Debit Company Admin
+    const userClosingBalance = parseFloat((userOpeningBalance - adminSurchargeAmt).toFixed(2));
 
     await dbService.update(
       model.wallet,
       { id: existingUserWallet.id },
       { mainWallet: userClosingBalance, updatedBy: userId }
     );
-
-    await dbService.update(
-      model.wallet,
-      { id: reportingToUserWallet.id },
-      { mainWallet: reportingClosingBalance, updatedBy: reportingToUser?.id || 1 }
-    );
-
-    const operatorName = 'Bank Verification';
-    const remarkText = 'Bank verification charge';
 
     const beneficiaryNameFromVerification =
       bankVerification.nameAtBank ||
@@ -245,13 +260,13 @@ const addCustomerBank = async (req, res) => {
       walletType: 'mainWallet',
       operator: operatorName,
       remark: remarkText,
-      amount: userSurchargeAmt,
+      amount: adminSurchargeAmt,
       comm: 0,
-      surcharge: userSurchargeAmt,
+      surcharge: adminSurchargeAmt,
       openingAmt: userOpeningBalance,
       closingAmt: userClosingBalance,
       credit: 0,
-      debit: userSurchargeAmt,
+      debit: adminSurchargeAmt,
       transactionId,
       paymentStatus: 'SUCCESS',
       beneficiaryName: beneficiaryNameFromVerification,
@@ -263,29 +278,74 @@ const addCustomerBank = async (req, res) => {
       updatedBy: userId
     });
 
+    // 2. Credit Super Admin (Income First)
+    const saOpeningBalance = parseFloat(reportingToUserWallet.mainWallet || 0);
+    // SA Balance increases by what Company pays
+    const saMidBalance = parseFloat((saOpeningBalance + adminSurchargeAmt).toFixed(2));
+
+    // 3. Debit Super Admin (Operator Charge)
+    const saClosingBalance = parseFloat((saMidBalance - saBankCharge).toFixed(2));
+
+    await dbService.update(
+      model.wallet,
+      { id: reportingToUserWallet.id },
+      { mainWallet: saClosingBalance, updatedBy: reportingToUser?.id || 1 }
+    );
+
+    // SA History 1: Surcharge/Comm Income
     await dbService.createOne(model.walletHistory, {
       refId: reportingToUser?.id || 1,
       companyId: reportingToUser?.companyId || companyId,
       walletType: 'mainWallet',
       operator: operatorName,
-      remark: `${remarkText} - commission`,
+      remark: `${remarkText} - surcharge profit`,
       amount: adminSurchargeAmt,
-      comm: adminSurchargeAmt,
+      comm: adminSurchargeAmt, // Treated as profit/comm
       surcharge: 0,
-      openingAmt: reportingOpeningBalance,
-      closingAmt: reportingClosingBalance,
+      openingAmt: saOpeningBalance,
+      closingAmt: saMidBalance,
       credit: adminSurchargeAmt,
       debit: 0,
       transactionId,
       paymentStatus: 'SUCCESS',
-      beneficiaryName: reportingToUser?.name || null,
-      beneficiaryAccountNumber: null,
-      beneficiaryBankName: null,
-      beneficiaryIfsc: null,
       paymentMode: 'WALLET',
       addedBy: reportingToUser?.id || 1,
       updatedBy: reportingToUser?.id || 1
     });
+
+    // SA History 2: Operator Charge (Debit) & SurRecords
+    if (saBankCharge > 0) {
+      await dbService.createOne(model.walletHistory, {
+        refId: reportingToUser?.id || 1,
+        companyId: reportingToUser?.companyId || companyId,
+        walletType: 'mainWallet',
+        operator: operatorName,
+        remark: `${remarkText} - operator charge`,
+        amount: saBankCharge,
+        comm: 0,
+        surcharge: 0,
+        openingAmt: saMidBalance,
+        closingAmt: saClosingBalance,
+        credit: 0,
+        debit: saBankCharge,
+        transactionId,
+        paymentStatus: 'SUCCESS',
+        paymentMode: 'WALLET',
+        addedBy: reportingToUser?.id || 1,
+        updatedBy: reportingToUser?.id || 1
+      });
+
+      const pOpName = payoutOperator?.operatorName || 'Unknown';
+      await dbService.createOne(model.surRecords, {
+        refId: reportingToUser?.id || 1,
+        companyId: 1,
+        transactionId: transactionId,
+        amount: saBankCharge,
+        service: 'BANK VERIFICATION',
+        operatorType: pOpName,
+        addedBy: reportingToUser?.id || 1
+      });
+    }
 
     const city = razorpayBankData?.CITY || bankVerification.city || null;
     const branch = razorpayBankData?.BRANCH || bankVerification.branch || null;
