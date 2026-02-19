@@ -1,52 +1,52 @@
-const  model = require('../../../models/index');
+const model = require('../../../models/index');
 const dbService = require('../../../utils/dbService');
 const { Op } = require('sequelize');
 
 const getAllSubscriptions = async (req, res) => {
   try {
-    if(![3,4,5].includes(req.user.userRole)) {
+    if (![3, 4, 5].includes(req.user.userRole)) {
       return res.failure({ message: 'You are not authorized to access this resource' });
     }
-    
+
     const companyId = req.companyId ?? req.user?.companyId ?? null;
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
     }
 
     const existingUser = await dbService.findOne(model.user, { id: req.user.id, isActive: true, companyId: companyId });
-    if(!existingUser) {
-        return res.failure({ message: 'User not found' });
+    if (!existingUser) {
+      return res.failure({ message: 'User not found' });
     }
-    
+
     const userId = req.user.id;
-    
+
     let addedByUserId = existingUser.reportingTo;
     if (!addedByUserId) {
       const companyAdmin = await dbService.findOne(model.user, {
         companyId: companyId,
-        userRole: 2, 
+        userRole: 2,
         isActive: true,
         isDeleted: false
       });
-      
+
       if (!companyAdmin) {
         return res.failure({ message: 'Company admin not found' });
       }
-      
+
       addedByUserId = companyAdmin.id;
     }
-    
+
     // Fetch all slabs with views field
-    const allSlabs = await dbService.findAll(model.slab, { 
-      companyId: companyId, 
-      isActive: true, 
-      addedBy: addedByUserId 
+    const allSlabs = await dbService.findAll(model.slab, {
+      companyId: companyId,
+      isActive: true,
+      addedBy: addedByUserId
     }, {
       attributes: ['id', 'slabName', 'subscriptionAmount', 'schemaMode', 'schemaType', 'views']
     });
-    
-    if(!allSlabs || allSlabs.length === 0) {
-        return res.failure({ message: 'No slabs found' });
+
+    if (!allSlabs || allSlabs.length === 0) {
+      return res.failure({ message: 'No slabs found' });
     }
 
     // Filter slabs based on visibility:
@@ -54,18 +54,18 @@ const getAllSubscriptions = async (req, res) => {
     // 2. If schemaMode is 'private' and user ID is in views array - show it
     const visibleSlabs = allSlabs.filter(slab => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
-      
+
       // Global slabs are visible to everyone
       if (slabData.schemaMode === 'global') {
         return true;
       }
-      
+
       // Private slabs are only visible if user is in views array
       if (slabData.schemaMode === 'private') {
         const views = slabData.views || [];
         return Array.isArray(views) && views.includes(userId);
       }
-      
+
       // Default: not visible
       return false;
     });
@@ -78,7 +78,7 @@ const getAllSubscriptions = async (req, res) => {
       const slabData = s.toJSON ? s.toJSON() : s;
       return slabData.id;
     }).filter(Boolean);
-    
+
     if (!slabIds.length) {
       return res.failure({ message: 'No visible slabs found' });
     }
@@ -111,11 +111,11 @@ const getAllSubscriptions = async (req, res) => {
       allSlabCommissions.forEach((commission) => {
         const commData = commission.toJSON ? commission.toJSON() : commission;
         const slabId = commData.slabId;
-        
+
         if (!commissionsBySlab.has(slabId)) {
           commissionsBySlab.set(slabId, []);
         }
-        
+
         commissionsBySlab.get(slabId).push({
           id: commData.id,
           operatorId: commData.operatorId,
@@ -160,7 +160,7 @@ const getAllSubscriptions = async (req, res) => {
       const hasSubscription = subscribedSlabs.has(slabData.id);
       const isCurrentSlab = slabData.id === currentSlabId;
       const alreadySubscribed = (isFree && hasSubscription) || isCurrentSlab;
-      
+
       return {
         id: slabData.id,
         slabName: slabData.slabName,
@@ -176,8 +176,8 @@ const getAllSubscriptions = async (req, res) => {
       };
     });
 
-    return res.success({ 
-      message: 'Subscriptions retrieved successfully', 
+    return res.success({
+      message: 'Subscriptions retrieved successfully',
       data: subscriptions,
       total: subscriptions.length,
       currentSlabId: currentSlabId

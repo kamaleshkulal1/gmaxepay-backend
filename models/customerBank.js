@@ -37,7 +37,7 @@ let CustomerBank = sequelize.define('customerBank', {
     },
     allowNull: false
   },
-  
+
   bankName: {
     type: DataTypes.STRING,
     allowNull: true
@@ -77,6 +77,16 @@ let CustomerBank = sequelize.define('customerBank', {
     type: DataTypes.BOOLEAN
   },
   isPrimary: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false
+  },
+  isPayout: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    allowNull: false
+  },
+  isFundTransfer: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
     allowNull: false

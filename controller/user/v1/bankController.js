@@ -24,7 +24,7 @@ const calcSlabAmount = (slab, baseAmount) => {
 
 const addCustomerBank = async (req, res) => {
     try {
-        const { account_number, ifsc } = req.body;
+        const { account_number, ifsc, isPayout, isFundTransfer } = req.body;
         const key = process.env.AES_KEY;
 
         // 1. Initial Checks & Validation
@@ -745,7 +745,9 @@ const addCustomerBank = async (req, res) => {
             companyId: req.user.companyId,
             refId: req.user.id,
             isActive: true,
-            isPrimary: false
+            isPrimary: false,
+            isPayout: req.body.isPayout,
+            isFundTransfer: req.body.isFundTransfer
         });
 
         return res.success({ message: 'Bank details added successfully', data: customerBank });
@@ -880,10 +882,51 @@ const getPrimaryCustomerBank = async (req, res) => {
     }
 };
 
+const updateCustomerBank = async (req, res) => {
+    try {
+        if (![3, 4, 5].includes(req.user.userRole)) {
+            return res.failure({ message: 'You are not authorized to update bank details' });
+        }
+        const { id } = req.params;
+        const { isActive, isPayout } = req.body;
+        const user = req.user;
+
+        const customerBank = await dbService.findOne(model.customerBank, {
+            id: id,
+            refId: user.id,
+            companyId: user.companyId
+        });
+
+        if (!customerBank) {
+            return res.notFound({ message: 'Customer bank not found' });
+        }
+
+        const updateData = {};
+        if (isActive !== undefined) updateData.isActive = isActive;
+        if (isPayout !== undefined) updateData.isPayout = isPayout;
+
+        if (Object.keys(updateData).length === 0) {
+            return res.failure({ message: 'No fields to update' });
+        }
+
+        await dbService.update(model.customerBank, {
+            id: id,
+            refId: user.id,
+            companyId: user.companyId
+        }, updateData);
+
+        return res.success({ message: 'Bank details updated successfully' });
+
+    } catch (error) {
+        return res.internalServerError({ message: error.message || 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCustomerBanks,
     getPrimaryCustomerBank,
     getCustomerBankById,
     addCustomerBank,
-    deleteCustomerBank
+    deleteCustomerBank,
+    updateCustomerBank
 };

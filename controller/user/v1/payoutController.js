@@ -1044,7 +1044,8 @@ const getPayoutBankList = async (req, res) => {
             {
                 refId: user.id,
                 companyId: user.companyId,
-                isActive: true
+                isActive: true,
+                isPayout: true
             },
             {
                 order: [['isPrimary', 'DESC'], ['createdAt', 'DESC']]
