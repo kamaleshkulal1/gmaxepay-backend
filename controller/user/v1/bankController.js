@@ -49,9 +49,12 @@ const addCustomerBank = async (req, res) => {
             }
         );
 
-        let duplicateBank = existingBanks.find(
-            bank => bank.accountNumber === account_number && bank.ifsc === ifsc
-        );
+        let duplicateBank = null;
+        if (isPayout) {
+            duplicateBank = existingBanks.find(
+                bank => bank.accountNumber === account_number && bank.ifsc === ifsc && bank.isPayout === true
+            );
+        }
 
         if (duplicateBank) {
             return res.failure({
@@ -668,6 +671,7 @@ const addCustomerBank = async (req, res) => {
         const saNewBal = parseFloat((saBal + saCredit).toFixed(2));
 
         if (saCredit > 0) {
+            await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { mainWallet: saNewBal, updatedBy: commData.users.superAdmin.id });
             await dbService.createOne(model.walletHistory, {
                 refId: superAdmin.id,
                 companyId: 1,

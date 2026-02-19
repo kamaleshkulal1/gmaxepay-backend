@@ -290,7 +290,7 @@ const recharge = async (req, res) => {
             number: mobileNumber,
             amount: amount,
             dr_amount: 21.78,
-            orderid: transactionId, // Use generated transactionId to ensure uniqueness
+            orderid: transactionId,
             operatorName: operator.operatorName
         };
 
