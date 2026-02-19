@@ -318,7 +318,7 @@ const getUser = async (req, res) => {
       }, {
         attributes: ['companyId']
       });
-      
+
       if (tempUser) {
         companyId = tempUser.companyId;
       } else {
@@ -371,7 +371,7 @@ const updateUser = async (req, res) => {
       }, {
         attributes: ['companyId']
       });
-      
+
       if (tempUser) {
         companyId = tempUser.companyId;
       } else {
@@ -449,7 +449,7 @@ const deleteUser = async (req, res) => {
       }, {
         attributes: ['companyId']
       });
-      
+
       if (tempUser) {
         companyId = tempUser.companyId;
       } else {
@@ -494,43 +494,43 @@ const extractS3Key = (imageData) => {
 
 const calculateKycStatus = (user, outlet, customerBank, aadhaarDoc, panDoc) => {
   const steps = [];
-  
+
   // Mobile verification
   steps.push({ key: 'mobileVerification', done: !!user.mobileVerify });
-  
+
   // Email verification
   steps.push({ key: 'emailVerification', done: !!user.emailVerify });
-  
+
   // Aadhaar verification
   const aadhaarDone = !!user.aadharVerify || (aadhaarDoc && aadhaarDoc.verificationId && aadhaarDoc.name);
   steps.push({ key: 'aadharVerification', done: aadhaarDone });
-  
+
   // PAN verification
   const panDone = !!user.panVerify || (panDoc && panDoc.verificationId && panDoc.panNumber);
   steps.push({ key: 'panVerification', done: panDone });
-  
+
   // Shop details
   steps.push({ key: 'shopDetails', done: !!user.shopDetailsVerify });
-  
+
   // Bank verification
   const bankDone = !!user.bankDetailsVerify || !!(customerBank && customerBank.accountNumber && customerBank.ifsc);
   steps.push({ key: 'bankVerification', done: bankDone });
-  
+
   // Profile
   steps.push({ key: 'profile', done: !!user.profileImageWithShopVerify });
-  
+
   const completedSteps = steps.filter(s => s.done).length;
   const totalSteps = 7;
-  
+
   let kycStatus = 'NO_KYC';
   let kycSteps = completedSteps;
-  
+
   if (completedSteps >= 4 && completedSteps < totalSteps) {
     kycStatus = 'HALF_KYC';
   } else if (completedSteps === totalSteps) {
     kycStatus = 'FULL_KYC';
   }
-  
+
   return { kycStatus, kycSteps, completedSteps, totalSteps };
 };
 
@@ -559,23 +559,23 @@ const unlockAccount = async (req, res) => {
     if (currentUserRole === 1) {
       // No companyId filter needed for superadmin
       companyId = null;
-    } 
+    }
     // If whitelabel/company admin (userRole 2), require companyId
     else if (currentUserRole === 2) {
       // Get companyId from req.user.companyId
       companyId = currentUser?.companyId;
-      
+
       if (!companyId) {
         return res.failure({ message: 'Company ID is required for whitelabel users!' });
       }
-      
+
       // Add companyId to query
       query.companyId = companyId;
-    } 
+    }
     // For other roles, require companyId
     else {
       companyId = currentUser?.companyId || req.companyId;
-      
+
       if (!companyId) {
         // Try to get it from the user record being unlocked
         const tempUser = await dbService.findOne(model.user, {
@@ -584,14 +584,14 @@ const unlockAccount = async (req, res) => {
         }, {
           attributes: ['companyId']
         });
-        
+
         if (tempUser) {
           companyId = tempUser.companyId;
         } else {
           return res.failure({ message: 'User not found or Company ID is required!' });
         }
       }
-      
+
       query.companyId = companyId;
     }
 
@@ -642,7 +642,7 @@ const unlockAccount = async (req, res) => {
     // Send unlock email if user has email
     if (updatedUser.email) {
       try {
-        const backendUrl = process.env.BASE_URL|| 'https://api-dev.gmaxepay.in';
+        const backendUrl = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
         const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
         const unlockIllustrationUrl = `${backendUrl}/unlockuser.png`;
 
@@ -703,7 +703,7 @@ const getKycVerificationStatus = async (req, res) => {
       }, {
         attributes: ['companyId']
       });
-      
+
       if (tempUser) {
         companyId = tempUser.companyId;
       } else {
@@ -808,19 +808,19 @@ const getCompleteKycData = async (req, res) => {
     // Get companyId from req.companyId (set by hostCheck) or req.user.companyId (set by authentication)
     let companyId = req.companyId || req.user?.companyId;
 
-    if(req.user.userRole !== 1){
-      return res.failure({message:"don't have permission to get complete KYC data"})
+    if (req.user.userRole !== 1) {
+      return res.failure({ message: "don't have permission to get complete KYC data" })
     }
     // If companyId is still not available, get it from the user record
     const tempUser = await dbService.findOne(model.user, {
-        id,
-        isDeleted: false
+      id,
+      isDeleted: false
     });
-   
+
     if (tempUser) {
-        companyId = tempUser.companyId;
-      } else {
-        return res.failure({ message: 'User not found' });
+      companyId = tempUser.companyId;
+    } else {
+      return res.failure({ message: 'User not found' });
     }
     // Find user
     let foundUser = await dbService.findOne(model.user, {
@@ -896,7 +896,7 @@ const getCompleteKycData = async (req, res) => {
     };
 
     const shopCategory = await dbService.findOne(model.practomindCompanyCode, {
-      id: outlet?.shopCategoryId||1,
+      id: outlet?.shopCategoryId || 1,
       isDeleted: false
     });
 
@@ -992,19 +992,19 @@ const revertKycData = async (req, res) => {
     let companyId = req.companyId || req.user?.companyId;
     const { pan, aadhar, shopImage, bankVerification } = req.body || {};
 
-    if(req.user.userRole !== 1){
-      return res.failure({message:"don't have permission to get complete KYC data"})
+    if (req.user.userRole !== 1) {
+      return res.failure({ message: "don't have permission to get complete KYC data" })
     }
     // If companyId is still not available, get it from the user record
     const tempUser = await dbService.findOne(model.user, {
-        id,
-        isDeleted: false
+      id,
+      isDeleted: false
     });
-   
+
     if (tempUser) {
-        companyId = tempUser.companyId;
-      } else {
-        return res.failure({ message: 'User not found' });
+      companyId = tempUser.companyId;
+    } else {
+      return res.failure({ message: 'User not found' });
     }
 
     // Find user
@@ -1035,8 +1035,8 @@ const revertKycData = async (req, res) => {
 
     // Check if any revert operation was requested
     if (!isTrue(pan) && !isTrue(aadhar) && !isTrue(shopImage) && !isTrue(bankVerification)) {
-      return res.failure({ 
-        message: 'No KYC data specified to revert. Please provide at least one of: pan, aadhar, shopImage, bankVerification with value true or "true"' 
+      return res.failure({
+        message: 'No KYC data specified to revert. Please provide at least one of: pan, aadhar, shopImage, bankVerification with value true or "true"'
       });
     }
 
@@ -1046,17 +1046,17 @@ const revertKycData = async (req, res) => {
       // Delete PAN images from S3
       const panFrontKey = extractS3Key(foundUser.panCardFrontImage);
       const panBackKey = extractS3Key(foundUser.panCardBackImage);
-      
+
       if (panFrontKey) {
         revertOperations.push(
-          imageService.deleteImageFromS3(panFrontKey).catch(err => 
+          imageService.deleteImageFromS3(panFrontKey).catch(err =>
             console.error('Error deleting PAN front image:', err)
           )
         );
       }
       if (panBackKey) {
         revertOperations.push(
-          imageService.deleteImageFromS3(panBackKey).catch(err => 
+          imageService.deleteImageFromS3(panBackKey).catch(err =>
             console.error('Error deleting PAN back image:', err)
           )
         );
@@ -1082,7 +1082,7 @@ const revertKycData = async (req, res) => {
           companyId: companyId
         });
       }
-      
+
       revertMessages.push('PAN verification has been reverted');
     }
 
@@ -1092,17 +1092,17 @@ const revertKycData = async (req, res) => {
       // Delete Aadhaar images from S3
       const aadharFrontKey = extractS3Key(foundUser.aadharFrontImage);
       const aadharBackKey = extractS3Key(foundUser.aadharBackImage);
-      
+
       if (aadharFrontKey) {
         revertOperations.push(
-          imageService.deleteImageFromS3(aadharFrontKey).catch(err => 
+          imageService.deleteImageFromS3(aadharFrontKey).catch(err =>
             console.error('Error deleting Aadhaar front image:', err)
           )
         );
       }
       if (aadharBackKey) {
         revertOperations.push(
-          imageService.deleteImageFromS3(aadharBackKey).catch(err => 
+          imageService.deleteImageFromS3(aadharBackKey).catch(err =>
             console.error('Error deleting Aadhaar back image:', err)
           )
         );
@@ -1128,7 +1128,7 @@ const revertKycData = async (req, res) => {
           companyId: companyId
         });
       }
-      
+
       revertMessages.push('Aadhaar verification has been reverted');
     }
 
@@ -1143,10 +1143,10 @@ const revertKycData = async (req, res) => {
 
       if (outlet && outlet.shopImage) {
         const shopImageKey = extractS3Key(outlet.shopImage);
-        
+
         if (shopImageKey) {
           revertOperations.push(
-            imageService.deleteImageFromS3(shopImageKey).catch(err => 
+            imageService.deleteImageFromS3(shopImageKey).catch(err =>
               console.error('Error deleting shop image:', err)
             )
           );
@@ -1162,7 +1162,7 @@ const revertKycData = async (req, res) => {
 
       // Update user fields
       updateData.shopDetailsVerify = false;
-      
+
       revertMessages.push('Shop image has been reverted');
     }
 
@@ -1199,7 +1199,7 @@ const revertKycData = async (req, res) => {
       // Update user fields
       updateData.bankDetailsVerify = false;
       updateData.nameSimilarity = null;
-      
+
       revertMessages.push('Bank verification has been reverted');
     }
 
@@ -1209,7 +1209,7 @@ const revertKycData = async (req, res) => {
     // Update user if any fields need to be reverted
     if (Object.keys(updateData).length > 0) {
       updateData.updatedBy = req.user.id;
-      
+
       await dbService.update(
         model.user,
         { id, companyId },
@@ -1289,7 +1289,7 @@ const revertKycData = async (req, res) => {
       if (userForEmail && userForEmail.email) {
         const backendUrl = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
         const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
-        
+
         try {
           // Send email for PAN revert
           if (isTrue(pan)) {
@@ -1379,7 +1379,7 @@ const uploadBankDetailsForUser = async (req, res) => {
       return res.failure({ message: 'Only super admin can upload bank details for users' });
     }
 
-    const {  account_number, ifsc } = req.body || {};
+    const { account_number, ifsc } = req.body || {};
 
     if (!userId) {
       return res.failure({ message: 'User ID is required' });
@@ -1538,10 +1538,10 @@ const uploadBankDetailsForUser = async (req, res) => {
 const getCompanyAdminById = async (req, res) => {
   try {
     const { id } = req.params;
-    if(req.user.userRole !== 1 && req.user.companyId !== 1){
+    if (req.user.userRole !== 1 && req.user.companyId !== 1) {
       return res.failure({ message: 'Access Denied due to insufficient permissions' });
     }
-    const existingUser = await dbService.findOne(model.user, { id,  userRole: 2 });
+    const existingUser = await dbService.findOne(model.user, { id, userRole: 2 });
     if (!existingUser) {
       return res.failure({ message: 'Company admin not found' });
     }
@@ -1648,10 +1648,10 @@ const getByUserProfile = async (req, res) => {
 
     const companyAdmin = existingUser.companyId
       ? await dbService.findOne(model.user, {
-          companyId: existingUser.companyId,
-          userRole: 2,
-          isDeleted: false
-        })
+        companyId: existingUser.companyId,
+        userRole: 2,
+        isDeleted: false
+      })
       : null;
 
     const managerId = existingUser.reportingTo || companyAdmin?.id;
@@ -1659,28 +1659,28 @@ const getByUserProfile = async (req, res) => {
     const [outletDetails, slabDetails, reportingToManager, companyBankDetails] = await Promise.all([
       existingUser.companyId
         ? dbService.findOne(model.outlet, {
-            refId: existingUser.id,
-            companyId: existingUser.companyId
-          })
+          refId: existingUser.id,
+          companyId: existingUser.companyId
+        })
         : null,
       existingUser.companyId
         ? dbService.findOne(model.slab, {
-            id: existingUser.slabId,
-            isActive: true
-          }, { attributes: ['id', 'slabName'] })
+          id: existingUser.slabId,
+          isActive: true
+        }, { attributes: ['id', 'slabName'] })
         : null,
       existingUser.companyId
         && managerId
         ? dbService.findOne(model.user, {
-            id: managerId,
-            companyId: existingUser.companyId
-          })
+          id: managerId,
+          companyId: existingUser.companyId
+        })
         : null,
       existingUser.companyId
         ? dbService.findAll(model.customerBank, {
-            refId: existingUser.id,
-            companyId: existingUser.companyId
-          })
+          refId: existingUser.id,
+          companyId: existingUser.companyId
+        })
         : []
     ]);
 
@@ -1727,27 +1727,28 @@ const getByUserProfile = async (req, res) => {
       reportingToManagerMobile: reportingToManager?.mobileNo || null,
       companyDetails: companyDetails
         ? {
-            companyId: companyDetails.id,
-            companyName: companyDetails.companyName,
-            compnyPan: companyDetails.companyPan,
-            companyDomain: companyDetails.customDomain
-              ? `https://${companyDetails.customDomain}`
-              : null,
-            compnyGst: companyDetails.companyGst,
-            compnyLogo: getCdnImageUrl(companyDetails.logo)
-          }
+          companyId: companyDetails.id,
+          companyName: companyDetails.companyName,
+          compnyPan: companyDetails.companyPan,
+          companyDomain: companyDetails.customDomain
+            ? `https://${companyDetails.customDomain}`
+            : null,
+          compnyGst: companyDetails.companyGst,
+          compnyLogo: getCdnImageUrl(companyDetails.logo)
+        }
         : null,
       outletDetails: outletDetails
         ? {
-            shopName: outletDetails.shopName,
-            shopImage: getCdnImageUrl(outletDetails.shopImage),
-            shopAddress: outletDetails.shopAddress,
-            googleMapsLink: outletDetails.outletGoogleMapsLink
-          }
+          shopName: outletDetails.shopName,
+          shopImage: getCdnImageUrl(outletDetails.shopImage),
+          shopAddress: outletDetails.shopAddress,
+          googleMapsLink: outletDetails.outletGoogleMapsLink
+        }
         : null,
       bankDetails: (companyBankDetails || []).map((bank) => ({
         id: bank.id,
         bankName: bank.bankName,
+        beneficiaryName: bank.beneficiaryName,
         accountNumber: bank.accountNumber,
         ifsc: bank.ifsc,
         city: bank.city,
@@ -1768,10 +1769,10 @@ const getByUserProfile = async (req, res) => {
 
 const getProfile = async (req, res) => {
   try {
-    if(req.user.userRole !== 1 && req.user.companyId !== 1){
+    if (req.user.userRole !== 1 && req.user.companyId !== 1) {
       return res.failure({ message: 'Access Denied due to insufficient permissions' });
     }
-    
+
     const existingUser = await dbService.findOne(model.user, {
       id: req.user.id,
       isDeleted: false
@@ -1788,15 +1789,15 @@ const getProfile = async (req, res) => {
     const [outletDetails, companyBankDetails] = await Promise.all([
       existingUser.companyId
         ? dbService.findOne(model.outlet, {
-            refId: existingUser.id,
-            companyId: existingUser.companyId
-          })
+          refId: existingUser.id,
+          companyId: existingUser.companyId
+        })
         : null,
       existingUser.companyId
         ? dbService.findAll(model.customerBank, {
-            refId: existingUser.id,
-            companyId: existingUser.companyId
-          }).catch(() => [])
+          refId: existingUser.id,
+          companyId: existingUser.companyId
+        }).catch(() => [])
         : Promise.resolve([])
     ]);
 
@@ -1840,23 +1841,23 @@ const getProfile = async (req, res) => {
       kycStatus: existingUser.kycStatus,
       companyDetails: companyDetails
         ? {
-            companyId: companyDetails.id,
-            companyName: companyDetails.companyName,
-            compnyPan: companyDetails.companyPan,
-            companyDomain: companyDetails.customDomain
-              ? `https://${companyDetails.customDomain}`
-              : null,
-            compnyGst: companyDetails.companyGst,
-            compnyLogo: getCdnImageUrl(companyDetails.logo)
-          }
+          companyId: companyDetails.id,
+          companyName: companyDetails.companyName,
+          compnyPan: companyDetails.companyPan,
+          companyDomain: companyDetails.customDomain
+            ? `https://${companyDetails.customDomain}`
+            : null,
+          compnyGst: companyDetails.companyGst,
+          compnyLogo: getCdnImageUrl(companyDetails.logo)
+        }
         : null,
       outletDetails: outletDetails
         ? {
-            shopName: outletDetails.shopName,
-            shopImage: getCdnImageUrl(outletDetails.shopImage),
-            shopAddress: outletDetails.shopAddress,
-            googleMapsLink: outletDetails.outletGoogleMapsLink
-          }
+          shopName: outletDetails.shopName,
+          shopImage: getCdnImageUrl(outletDetails.shopImage),
+          shopAddress: outletDetails.shopAddress,
+          googleMapsLink: outletDetails.outletGoogleMapsLink
+        }
         : null,
       bankDetails: bankDetailsArray.map((bank) => ({
         id: bank.id,

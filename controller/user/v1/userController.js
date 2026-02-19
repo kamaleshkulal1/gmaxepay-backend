@@ -903,6 +903,7 @@ const getUserProfile = async (req, res) => {
         bankName: bank.bankName,
         accountNumber: bank.accountNumber,
         ifsc: bank.ifsc,
+        beneficiaryName: bank.beneficiaryName,
         city: bank.city,
         branch: bank.branch
       }))

@@ -601,6 +601,7 @@ const getUserProfile = async (req, res) => {
       bankDetails: (companyBankDetails || []).map(bank => ({
         id: bank.id,
         bankName: bank.bankName,
+        beneficiaryName: bank.beneficiaryName,
         accountNumber: bank.accountNumber,
         ifsc: bank.ifsc,
         city: bank.city,
