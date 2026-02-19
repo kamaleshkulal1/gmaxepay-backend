@@ -172,8 +172,6 @@ const recharge = async (req, res) => {
                             dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
-                        console.log("SuperAdminSlabComm", SuperAdminSlabComm);
-                        console.log("companySlabComm", companySlabComm);
 
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
