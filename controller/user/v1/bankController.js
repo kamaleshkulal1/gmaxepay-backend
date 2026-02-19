@@ -732,6 +732,20 @@ const addCustomerBank = async (req, res) => {
             });
         }
 
+        // NEW: Log Surcharge Profit to SurRecords (Detailed Tracking - Not added to Wallet)
+        if (commData.amounts.saSurcharge > 0) {
+            const pOpName = commData.payoutOperator?.operatorName || 'Unknown';
+            await dbService.createOne(model.surRecords, {
+                refId: commData.users.superAdmin.id,
+                companyId: 1,
+                transactionId: transactionId,
+                amount: commData.amounts.saSurcharge,
+                service: 'BANK VERIFICATION',
+                operatorType: pOpName,
+                addedBy: commData.users.superAdmin.id
+            });
+        }
+
         // 6. Handle SA Bank Charge (Debit Super Admin) & Create SurRecords
         if (commData.amounts.saBankCharge > 0) {
             // Wallet Update already done in Step 5 (Net Calculation)
