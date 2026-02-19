@@ -747,6 +747,19 @@ const payout = async (req, res) => {
                         });
                     }
 
+                    // Handle WL Shortfall (Credit SA) - RESTORED
+                    if (commData.amounts.wlShortfall > 0) {
+                        const shortFall = commData.amounts.wlShortfall;
+                        const saOpenSF = saClose;
+                        const saCloseSF = parseFloat((saOpenSF + shortFall).toFixed(2));
+
+                        console.log(`--- Debug: Crediting WL Shortfall to Super Admin ---`);
+                        console.log(`Opening: ${saOpenSF}, Shortfall Credit: ${shortFall}, Closing: ${saCloseSF}`);
+
+                        await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { [walletType]: saCloseSF, updatedBy: commData.users.superAdmin.id });
+                        await createHistory(commData.users.superAdmin, walletType, `${remarkText} - shortfall recovery`, shortFall, shortFall, 0, saOpenSF, saCloseSF, false, true);
+                    }
+
 
 
                     // --- Update Master Distributor (If exists) ---
