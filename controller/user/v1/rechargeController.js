@@ -230,13 +230,16 @@ const recharge = async (req, res) => {
                 }
 
                 // D. Calculate Amounts
+                console.log(`[Recharge] Scenario: ${commData.scenario} | Amount: ${amountNumber} | Operator: ${operatorType}`);
+                console.log(`[Recharge] Slabs Found -> SA: ${!!commData.slabs.saSlab}, WL: ${!!commData.slabs.wlSlab}, MD: ${!!commData.slabs.mdSlab}, Dist: ${!!commData.slabs.distSlab}, Ret: ${!!commData.slabs.retSlab}`);
+
                 const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
                 const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
                 let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
                 let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, amountNumber) : 0;
                 let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, amountNumber) : 0;
 
-                console.log(`Commission Calculation Pre-Flight [${commData.scenario}]: SA(${saSlabAmount}) -> WL(${wlSlabAmount}) -> MD(${mdSlabAmount}) -> Dist(${distSlabAmount}) -> Ret(${retSlabAmount})`);
+                console.log(`[Recharge] Raw Slab Calcs -> SA: ${saSlabAmount}, WL: ${wlSlabAmount}, MD: ${mdSlabAmount}, Dist: ${distSlabAmount}, Ret: ${retSlabAmount}`);
 
                 // Margins & Shortfalls
 
@@ -276,6 +279,8 @@ const recharge = async (req, res) => {
 
                 // Retailer (User)
                 commData.amounts.retailerComm = retSlabAmount;
+
+                console.log('[Recharge] Final Distribution Amounts:', JSON.stringify(commData.amounts, null, 2));
             }
         }
 
@@ -295,7 +300,7 @@ const recharge = async (req, res) => {
         };
 
         // DEBUG: Log the full response to understand what we are getting
-        console.log('Recharge API Response:', JSON.stringify(response, null, 2));
+        // console.log('Recharge API Response:', JSON.stringify(response, null, 2));
 
         // Use response.orderid if present, otherwise fallback to our transactionId if response doesn't provide a unique order ref
         // adapting to prevent NULL unique violation if API fails to return orderid
@@ -653,7 +658,7 @@ const findMobileNumberOperator = async (req, res) => {
 
         const response = await inspayService.operatorFetch(mobileNumber);
 
-        console.log('response', response);
+        // console.log('response', response);
         if (!response) {
             return res.failure({ message: 'Failed to fetch operator information' });
         }
@@ -719,7 +724,7 @@ const findAllRechargePlanFetch = async (req, res) => {
 
         // Fetch from API if not in database
         const response = await inspayService.rechargePlanFetch(mobileNumber, opCode, circle);
-        console.log('response', response);
+        // console.log('response', response);
 
         if (response.status === 'Success') {
             // Store in database
@@ -771,7 +776,7 @@ const findRechargeOfferFetch = async (req, res) => {
 
         // Fetch from API if not in database
         const response = await inspayService.RechargeOfferFetch(mobileNumber, opCode, circle);
-        console.log('response', response);
+        // console.log('response', response);
 
         if (response.status === 'Success') {
             // Store in database
@@ -784,7 +789,7 @@ const findRechargeOfferFetch = async (req, res) => {
             return res.failure({ message: response.message || 'Failed to fetch recharge offer' });
         }
     } catch (error) {
-        console.log(error);
+        // console.log(error);
         return res.failure({ message: error.message });
     }
 };
