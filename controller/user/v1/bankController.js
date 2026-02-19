@@ -408,11 +408,11 @@ const addCustomerBank = async (req, res) => {
                         const encryptedData = JSON.parse(existingBank.response);
                         if (encryptedData && encryptedData.encrypted) {
                             const decryptedResponse = decrypt(encryptedData, key);
-                            return decryptedResponse ? JSON.parse(decryptedResponse) : encryptedData;
+                            return decryptedResponse ? JSON.parse(decryptedResponse) : null;
                         }
                         return JSON.parse(existingBank.response);
                     } catch (e) {
-                        return existingBank.response;
+                        return null;
                     }
                 }
                 return null;

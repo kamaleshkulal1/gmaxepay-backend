@@ -8,5 +8,6 @@ router.post('/aeps1/transactionDetails/:id', authentication, reportController.ge
 router.post('/rechargeReports', authentication, reportController.getRechargeReports);
 router.post('/aeps2Reports', authentication, reportController.getAeps2Reports);
 router.post('/aeps2/transactionDetails/:id', authentication, reportController.getAeps2TransactionDetailsById);
+router.post('/surRecReports', authentication, reportController.getSurRecReports);
 module.exports = router;
 

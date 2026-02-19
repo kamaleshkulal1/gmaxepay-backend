@@ -18,7 +18,7 @@ const getAeps1Reports = async (req, res) => {
         }
 
         const { query: queryFilter = {}, options: paginationOptions = {}, customSearch = {} } = req.body || {};
-        
+
         // Build base query
         const query = { ...queryFilter };
 
@@ -39,9 +39,9 @@ const getAeps1Reports = async (req, res) => {
                 if (value === undefined || value === null || String(value).trim() === '') {
                     return;
                 }
-                
+
                 const trimmedValue = String(value).trim();
-                
+
                 if (userFields.includes(key)) {
                     userSearch[key] = { [Op.iLike]: `%${trimmedValue}%` };
                 } else if (companyFields.includes(key)) {
@@ -60,7 +60,7 @@ const getAeps1Reports = async (req, res) => {
             const userWhereConditions = Object.entries(userSearch).map(([key, value]) => ({
                 [key]: value
             }));
-            
+
             // Find user IDs that match the search criteria
             const matchingUsers = await model.user.findAll({
                 where: {
@@ -69,9 +69,9 @@ const getAeps1Reports = async (req, res) => {
                 attributes: ['id'],
                 raw: true
             });
-            
+
             const userIds = matchingUsers.map(u => u.id);
-            
+
             if (userIds.length > 0) {
                 // Add refId filter to main query
                 // If refId already exists in queryFilter, intersect with matching userIds (AND condition)
@@ -111,7 +111,7 @@ const getAeps1Reports = async (req, res) => {
             const orConditions = Object.entries(mainTableSearch).map(([key, value]) => ({
                 [key]: value
             }));
-            
+
             // Combine with existing OR conditions if any
             if (query[Op.or]) {
                 const existingOr = Array.isArray(query[Op.or]) ? query[Op.or] : [query[Op.or]];
@@ -160,7 +160,7 @@ const getAeps1Reports = async (req, res) => {
             const companyData = company || {};
             const userData = user || {};
             const bankData = bank || {};
-            
+
             return {
                 ...restData,
                 companyName: companyData.companyName || null,
@@ -360,13 +360,13 @@ const getAeps2Reports = async (req, res) => {
                     bankName: bankData.bankName || null,
                     userDetails: userData.id
                         ? {
-                              name: userData.name || null,
-                              userRole: userData.userRole || null,
-                              profileImage: userData.profileImage
-                                  ? imageService.getImageUrl(userData.profileImage, false)
-                                  : null,
-                              mobileNo: userData.mobileNo || null
-                          }
+                            name: userData.name || null,
+                            userRole: userData.userRole || null,
+                            profileImage: userData.profileImage
+                                ? imageService.getImageUrl(userData.profileImage, false)
+                                : null,
+                            mobileNo: userData.mobileNo || null
+                        }
                         : null
                 };
             }) || [];
@@ -385,7 +385,7 @@ const getAeps2Reports = async (req, res) => {
     }
 };
 
-const getAepsTransactionDetailsById=async(req,res)=>{
+const getAepsTransactionDetailsById = async (req, res) => {
     try {
         const { id } = req.params;
         const existingUser = await dbService.findOne(model.user, {
@@ -412,17 +412,17 @@ const getAepsTransactionDetailsById=async(req,res)=>{
         const reportingUserDetails = await dbService.findOne(model.user, {
             id: existingUserDetails.reportingTo,
             isActive: true
-        });        
+        });
         const companyDetails = await dbService.findOne(model.company, {
             id: existingUserDetails.companyId,
         });
-        
+
         if (!companyDetails) {
             return res.failure({ message: 'Company details not found' });
         }
         const companyAdmin = await dbService.findOne(model.user, {
-           companyId: companyDetails.id,
-           userRole: 2
+            companyId: companyDetails.id,
+            userRole: 2
         });
         if (!companyAdmin) {
             return res.failure({ message: 'Company admin details not found' });
@@ -441,10 +441,10 @@ const getAepsTransactionDetailsById=async(req,res)=>{
                 mobileNo: existingUserDetails.mobileNo
             },
             reportingUserDetails: {
-               companyName: companyDetails.companyName,
-               parentName: reportingUserDetails?.name ||companyAdmin.name,
-               parentRole: reportingUserDetails?.userRole ||companyAdmin.userRole,
-               parentUserId: reportingUserDetails?.userId ||companyAdmin.userId
+                companyName: companyDetails.companyName,
+                parentName: reportingUserDetails?.name || companyAdmin.name,
+                parentRole: reportingUserDetails?.userRole || companyAdmin.userRole,
+                parentUserId: reportingUserDetails?.userId || companyAdmin.userId
             },
             transactionDetails: {
                 amount: transaction.amount,
@@ -452,7 +452,7 @@ const getAepsTransactionDetailsById=async(req,res)=>{
                 aadharNumber: transaction.consumerAadhaarNumber,
                 commission: transaction.credit,
             },
-            transaction:transaction
+            transaction: transaction
         }
         return res.success({ message: 'AEPS transaction details retrieved successfully', data: data });
     } catch (error) {
@@ -573,7 +573,7 @@ const getRechargeReports = async (req, res) => {
 
         if (dataToFind && dataToFind.options !== undefined) {
             options = { ...dataToFind.options };
-            
+
             if (dataToFind.options.sort) {
                 const sortEntries = Object.entries(dataToFind.options.sort);
                 options.order = sortEntries.map(([field, direction]) => {
@@ -704,11 +704,62 @@ const getRechargeReports = async (req, res) => {
 };
 
 
+const getSurRecReports = async (req, res) => {
+    try {
+        if (req.user?.userRole !== 1) {
+            return res.failure({ message: 'Unauthorized access' });
+        }
+
+        const dataToFind = req.body || {};
+        const { query: queryFilter = {}, options: paginationOptions = {}, customSearch = {} } = dataToFind;
+
+        let query = {};
+
+        // Custom Search (Transaction ID)
+        if (customSearch.transactionId) {
+            const trimmedValue = String(customSearch.transactionId).trim();
+            if (trimmedValue) {
+                query.transactionId = {
+                    [Op.iLike]: `%${trimmedValue}%`
+                };
+            }
+        }
+
+        if (queryFilter.startDate && queryFilter.endDate) {
+            query.createdAt = {
+                [Op.between]: [queryFilter.startDate, queryFilter.endDate]
+            };
+        } else if (queryFilter.startDate) {
+            query.createdAt = { [Op.gte]: queryFilter.startDate };
+        } else if (queryFilter.endDate) {
+            query.createdAt = { [Op.lte]: queryFilter.endDate };
+        }
+
+        const options = {
+            ...paginationOptions,
+            order: paginationOptions.order || [['createdAt', 'DESC']]
+        };
+
+        const result = await dbService.paginate(model.surRecords, query, options);
+
+        return res.success({
+            message: 'Surcharge reports retrieved successfully',
+            data: result.data || [],
+            total: result.total || 0,
+            paginator: result.paginator
+        });
+
+    } catch (error) {
+        console.error('SurCharge reports error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve SurCharge reports' });
+    }
+};
+
 module.exports = {
     getAeps1Reports,
     getAepsTransactionDetailsById,
     getRechargeReports,
     getAeps2Reports,
-    getAeps2TransactionDetailsById
+    getAeps2TransactionDetailsById,
+    getSurRecReports
 };
-
