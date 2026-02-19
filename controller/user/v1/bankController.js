@@ -797,10 +797,10 @@ const deleteCustomerBank = async (req, res) => {
     try {
         const { id } = req.params;
         const user = req.user;
-        const customerBank = await dbService.deleteOne(model.customerBank, {
+        const customerBank = await dbService.findOne(model.customerBank, {
             id: id,
             refId: user.id,
-            companyId: user.companyId
+            companyId: user.companyId,
         });
         if (!customerBank) {
             return res.notFound({ message: 'Customer bank not found' });
