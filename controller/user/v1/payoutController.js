@@ -191,15 +191,6 @@ const payout = async (req, res) => {
                 commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD') && c.operatorId === commData.payoutOperator?.id);
                 commData.slabs.companySlab = companySlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU') && c.operatorId === commData.payoutOperator?.id);
 
-                // Calculate Upstream Surcharges First
-                console.log('--- Debug: Slabs Found ---');
-                console.log('Super Admin Slab:', SuperAdminSlabComm);
-                console.log('Company Slab:', companySlabComm);
-
-                console.log('Admin Slab:', commData.slabs.adminSlab ? { id: commData.slabs.adminSlab.id, comm: commData.slabs.adminSlab.commAmt, amtType: commData.slabs.adminSlab.amtType } : 'Not Found');
-                console.log('Company Slab:', commData.slabs.companySlab ? { id: commData.slabs.companySlab.id, comm: commData.slabs.companySlab.commAmt, amtType: commData.slabs.companySlab.amtType } : 'Not Found');
-                console.log('MD Slab (Assigned by Company):', commData.slabs.mdSlab ? { id: commData.slabs.mdSlab.id, comm: commData.slabs.mdSlab.commAmt, amtType: commData.slabs.mdSlab.amtType } : 'Not Found');
-
                 commData.amounts.adminSurcharge = calcSlabAmount(commData.slabs.adminSlab, payoutAmount);
                 commData.amounts.companySurcharge = calcSlabAmount(commData.slabs.companySlab, payoutAmount);
 
@@ -354,11 +345,7 @@ const payout = async (req, res) => {
                     commData.slabs.adminSlab = SuperAdminSlabComm?.find(c => c.roleType === 1 || c.roleName === 'AD');
                     commData.slabs.companySlab = companySlabComm?.find(c => c.roleType === 2 || c.roleName === 'WU');
                     commData.slabs.mdSlab = masterDistributorComm?.find(c => c.roleType === 3 || c.roleName === 'MD');
-                    console.log('Slabs:', commData.slabs);
-                    console.log('Retailer Slab:', commData.slabs.retailerSlab);
-                    console.log('Admin Slab:', commData.slabs.adminSlab);
-                    console.log('Company Slab:', commData.slabs.companySlab);
-                    console.log('MD Slab:', commData.slabs.mdSlab);
+
 
                 } else if (reportingUser.userRole === 4) {
                     // Retailer reports to Distributor. Need to check if Dist reports to MD or Company.
@@ -755,18 +742,7 @@ const payout = async (req, res) => {
                         });
                     }
 
-                    // Handle WL Shortfall (Credit SA)
-                    if (commData.amounts.wlShortfall > 0) {
-                        const shortFall = commData.amounts.wlShortfall;
-                        const saOpenSF = saClose;
-                        const saCloseSF = parseFloat((saOpenSF + shortFall).toFixed(2));
 
-                        console.log(`--- Debug: Crediting WL Shortfall to Super Admin ---`);
-                        console.log(`Opening: ${saOpenSF}, Shortfall Credit: ${shortFall}, Closing: ${saCloseSF}`);
-
-                        await dbService.update(model.wallet, { id: commData.wallets.superAdminWallet.id }, { [walletType]: saCloseSF, updatedBy: commData.users.superAdmin.id });
-                        await createHistory(commData.users.superAdmin, walletType, `${remarkText} - shortfall recovery`, shortFall, shortFall, 0, saOpenSF, saCloseSF, false, true);
-                    }
 
                     // --- Update Master Distributor (If exists) ---
                     if (commData.users.masterDistributor) {
