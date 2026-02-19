@@ -32,6 +32,10 @@ let SurRecords = sequelize.define(
             type: DataTypes.STRING,
             allowNull: true
         },
+        operatorType: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
         transactionId: {
             type: DataTypes.STRING,
             allowNull: true

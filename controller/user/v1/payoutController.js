@@ -881,8 +881,9 @@ const payout = async (req, res) => {
                             refId: commData.users.superAdmin.id,
                             companyId: 1,
                             transactionId: transactionID,
-                            amount: commData.amounts.saBankCharge, // Store charge amount here
-                            service: `Payout Operator Charge (${pOpName})`, // Store description here since remark was missing
+                            amount: commData.amounts.saBankCharge,
+                            service: 'PAYOUT',
+                            operatorType: pOpName,
                             addedBy: commData.users.superAdmin.id
                         });
                     }
