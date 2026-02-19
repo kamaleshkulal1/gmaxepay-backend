@@ -169,8 +169,8 @@ const recharge = async (req, res) => {
                     if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
                         commData.scenario = 'RET_DIRECT';
                         const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            dbService.findAll(model.commSlab, { slabId: superAdmin.slabId, companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { slabId: companyAdmin.slabId, companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
 
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
