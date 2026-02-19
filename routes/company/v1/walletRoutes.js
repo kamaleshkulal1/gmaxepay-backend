@@ -4,5 +4,6 @@ const walletController = require('../../../controller/company/v1/walletControlle
 const authentication = require('../../../middleware/authentication');
 
 router.post('/balance', authentication, walletController.walletBalance);
+router.post('/history', authentication, walletController.walletHistory);
 
 module.exports = router;

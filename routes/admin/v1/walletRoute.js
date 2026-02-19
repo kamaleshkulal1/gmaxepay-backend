@@ -7,5 +7,6 @@ router.post('/alsWallet', authentication, walletController.alsWallet);
 router.post('/balance', authentication, walletController.walletBalance);
 router.post('/inspayWallet', authentication, walletController.inspayWallet);
 router.post('/bbpsWallet', authentication, walletController.bbpsWallet);
+router.post('/history', authentication, walletController.walletHistory);
 
 module.exports = router;
