@@ -220,6 +220,7 @@ const payout = async (req, res) => {
 
                 // Calculate MD Surcharge using MD Slab only (User Request: "debit only incoming from the whitelabel")
                 // Note: companySurcharge is now adjusted for shortfall
+                const mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, payoutAmount) : 0;
                 commData.amounts.mdSurcharge = mdSlabAmount;
                 console.log('Calculated MD Surcharge (Cost+):', commData.amounts.mdSurcharge);
                 console.log('MD Scenario:', commData.scenario);
