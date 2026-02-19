@@ -131,7 +131,8 @@ const recharge = async (req, res) => {
                     superAdminComm: 0,
                     wlShortfall: 0,
                     mdShortfall: 0,
-                    distShortfall: 0
+                    distShortfall: 0,
+                    saShortfall: 0
                 },
                 scenario: ''
             };
@@ -281,7 +282,11 @@ const recharge = async (req, res) => {
                 // Margins & Shortfalls
 
                 // Super Admin
+                // Super Admin
                 commData.amounts.superAdminComm = Math.max(0, saSlabAmount - wlSlabAmount);
+                if (wlSlabAmount > saSlabAmount) {
+                    commData.amounts.saShortfall = parseFloat((wlSlabAmount - saSlabAmount).toFixed(2));
+                }
 
                 // Company (WL)
                 let companyCost = 0;
@@ -440,7 +445,7 @@ const recharge = async (req, res) => {
                 // E. Super Admin Update
                 const saWallet = commData.wallets.superAdminWallet;
                 const saOpening = round2(saWallet.mainWallet);
-                const saNet = commData.amounts.superAdminComm;
+                const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
                 const saClosing = round2(saOpening + saNet);
 
                 walletUpdates.push(
@@ -459,7 +464,7 @@ const recharge = async (req, res) => {
                     openingAmt: saOpening,
                     closingAmt: saClosing,
                     credit: commData.amounts.superAdminComm,
-                    debit: 0,
+                    debit: commData.amounts.saShortfall,
                     transactionId: orderid,
                     paymentStatus: 'SUCCESS',
                     addedBy: superAdmin.id,
