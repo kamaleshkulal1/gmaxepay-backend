@@ -516,9 +516,9 @@ const payout = async (req, res) => {
                 console.log(`New Admin Surcharge: ${commData.amounts.adminSurcharge}`);
             }
 
-            if (totalIncomes > (debitAmount + (commData.amounts.wlShortfall || 0))) {
+            if (totalIncomes > (debitAmount + (commData.amounts.wlShortfall || 0) + (commData.amounts.mdShortfall || 0))) {
                 console.log('Invalid Surcharge Config (Income > Debit + Shortfall)');
-                return res.failure({ message: `Invalid surcharge configuration: total upstream income exceeds user surcharge debit. Income: ${totalIncomes}, Debit: ${debitAmount}, Shortfall: ${commData.amounts.wlShortfall}` });
+                return res.failure({ message: `Invalid surcharge configuration: total upstream income exceeds user surcharge debit. Income: ${totalIncomes}, Debit: ${debitAmount}, WL Shortfall: ${commData.amounts.wlShortfall}, MD Shortfall: ${commData.amounts.mdShortfall}` });
             }
 
             commData.isValid = true;
