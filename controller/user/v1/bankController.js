@@ -1,8 +1,9 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
-const { doubleEncrypt, decrypt, generateTransactionID } = require('../../../utils');
-const ekycHub = require('../../../utils/ekycHub');
-const razorpayApi = require('../../../utils/razorpay');
+const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const { generateTransactionID } = require('../../../utils/transactionID');
+const ekycHub = require('../../../services/eKycHub');
+const razorpayApi = require('../../../services/razorpayApi');
 const { Op } = require('sequelize');
 
 const round2 = (num) => {
