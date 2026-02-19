@@ -42,6 +42,7 @@ const recharge = async (req, res) => {
         const amountNumber = round2(parseFloat(amount));
         const user = req.user;
 
+        // 1. Fetch User, Operator, Company
         const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
             dbService.findOne(model.operator, { operatorCode: opcode }),
@@ -61,105 +62,53 @@ const recharge = async (req, res) => {
         // Our own custom transaction ID (separate from provider orderid / txid)
         const transactionId = generateTransactionID(existingCompany?.companyName);
 
-        // Use Dummy Response for Testing - Using transactionId as orderid to prevent duplicates
-        const response = {
-            txid: 54028212,
-            status: 'Success',
-            opid: '346451228',
-            number: mobileNumber,
-            amount: amount,
-            dr_amount: 21.78,
-            orderid: transactionId, // Use generated transactionId to ensure uniqueness
-            operatorName: operator.operatorName
+        // 2. Pre-calculate Commission Data (only for roles 4 & 5)
+        const commData = {
+            users: {},
+            wallets: {},
+            slabs: {},
+            amounts: {
+                retailerComm: 0,
+                distComm: 0,
+                mdComm: 0,
+                companyComm: 0,
+                superAdminComm: 0,
+                wlShortfall: 0,
+                mdShortfall: 0,
+                distShortfall: 0,
+                saShortfall: 0
+            },
+            scenario: ''
         };
 
-        const wallet = await model.wallet.findOne({
+        let currentWallet = null;
+
+        // Fetch User Wallet First
+        currentWallet = await model.wallet.findOne({
             where: { refId: user.id, companyId: user.companyId }
         });
 
-        // const [response, wallet] = await Promise.all([
-        //     inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4, transactionId), // Passing transactionId if supported/needed
-        //     model.wallet.findOne({
-        //         where: { refId: user.id, companyId: user.companyId }
-        //     })
-        // ]);
-
-        // DEBUG: Log the full response to understand what we are getting
-        console.log('Recharge API Response:', JSON.stringify(response, null, 2));
-
-        // Use response.orderid if present, otherwise fallback to our transactionId if response doesn't provide a unique order ref
-        // adapting to prevent NULL unique violation if API fails to return orderid
-        const orderid = response.orderid || transactionId;
-
-        const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
-        const isPending = response.status === 'Pending' || response.status === 'PENDING';
-        const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILURE');
-
-        // Create wallet if doesn't exist
-        let currentWallet = wallet;
         if (!currentWallet) {
-            currentWallet = await model.wallet.create({
-                refId: user.id,
-                companyId: user.companyId,
-                roleType: user.userType,
-                mainWallet: 0,
-                apes1Wallet: 0,
-                apes2Wallet: 0,
-                addedBy: user.id,
-                updatedBy: user.id
-            });
+            return res.failure({ message: 'Wallet not found' });
         }
 
-        const openingMainWallet = round2(currentWallet.mainWallet || 0);
+        // Initial check for balance
+        if (currentWallet.mainWallet < amountNumber) {
+            return res.failure({ message: 'Insufficient balance' });
+        }
 
-        let retailerComm = 0;
-        let distributorComm = 0;
-        let masterDistributorComm = 0;
-        let companyComm = 0;
-        let superAdminComm = 0;
-
-        // Log Inputs for Commission Calculation
-        console.log('Commission Input:', {
-            userRole: user.userRole,
-            companyId: user.companyId,
-            operatorId: operator.id,
-            operatorType,
-            amount: amountNumber
-        });
-
-        if (isSuccess && [4, 5].includes(user.userRole)) {
-            // New Margin-Based Commission Logic
-            const commData = {
-                users: {},
-                wallets: {},
-                slabs: {},
-                amounts: {
-                    retailerComm: 0,
-                    distComm: 0,
-                    mdComm: 0,
-                    companyComm: 0,
-                    superAdminComm: 0,
-                    wlShortfall: 0,
-                    mdShortfall: 0,
-                    distShortfall: 0,
-                    saShortfall: 0
-                },
-                scenario: ''
-            };
-
-            // 1. Fetch Company Admin and Super Admin
+        if ([4, 5].includes(user.userRole)) {
+            // A. Fetch Company Admin and Super Admin
             const [companyAdmin, superAdmin] = await Promise.all([
                 dbService.findOne(model.user, { companyId: user.companyId, userRole: 2, isActive: true }),
                 dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
             ]);
 
-            if (!companyAdmin || !superAdmin) {
-                console.error('CRITICAL: Company Admin or Super Admin not found for commission calculation', { userId: user.id });
-            } else {
+            if (companyAdmin && superAdmin) {
                 commData.users.companyAdmin = companyAdmin;
                 commData.users.superAdmin = superAdmin;
 
-                // 2. Fetch Common Wallets
+                // B. Fetch Common Wallets
                 const [companyWallet, superAdminWallet] = await Promise.all([
                     dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
                     dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
@@ -167,18 +116,18 @@ const recharge = async (req, res) => {
                 commData.wallets.companyWallet = companyWallet;
                 commData.wallets.superAdminWallet = superAdminWallet;
 
-                // 3. Scenario Identification & Slab Fetching
+                // C. Scenario Identification & Slab Fetching
                 if (user.userRole === 4) {
                     // Distributor
                     const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
                     commData.users.distributor = distributor;
-                    commData.wallets.distributorWallet = wallet;
+                    commData.wallets.distributorWallet = currentWallet;
 
                     if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
                         commData.scenario = 'DIST_DIRECT';
                         const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
 
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
@@ -193,9 +142,9 @@ const recharge = async (req, res) => {
                             commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: user.companyId });
 
                             const [SuperAdminSlabComm, companySlabComm, mdSlabComm] = await Promise.all([
-                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                             ]);
 
                             commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
@@ -209,7 +158,7 @@ const recharge = async (req, res) => {
                     // Retailer
                     const retailer = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
                     commData.users.retailer = retailer;
-                    commData.wallets.retailerWallet = wallet;
+                    commData.wallets.retailerWallet = currentWallet;
 
                     let reportingUser = null;
                     if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
@@ -219,8 +168,8 @@ const recharge = async (req, res) => {
                     if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
                         commData.scenario = 'RET_DIRECT';
                         const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
@@ -232,9 +181,9 @@ const recharge = async (req, res) => {
                         commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
 
                         const [SuperAdminSlabComm, companySlabComm, masterDistributorComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
@@ -248,9 +197,9 @@ const recharge = async (req, res) => {
                         if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
                             commData.scenario = 'RET_DIST_CO';
                             const [SuperAdminSlabComm, companySlabComm, distSlabComm] = await Promise.all([
-                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                             ]);
                             commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                             commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
@@ -280,28 +229,17 @@ const recharge = async (req, res) => {
                     }
                 }
 
-                // DEBUG: Log Fetched Slabs
-                console.log('Fetched Slabs:', {
-                    scenario: commData.scenario,
-                    saSlab: commData.slabs.saSlab ? { id: commData.slabs.saSlab.id, comm: commData.slabs.saSlab.commAmt, type: commData.slabs.saSlab.amtType } : 'MISSING',
-                    wlSlab: commData.slabs.wlSlab ? { id: commData.slabs.wlSlab.id, comm: commData.slabs.wlSlab.commAmt, type: commData.slabs.wlSlab.amtType } : 'MISSING',
-                    mdSlab: commData.slabs.mdSlab ? { id: commData.slabs.mdSlab.id, comm: commData.slabs.mdSlab.commAmt, type: commData.slabs.mdSlab.amtType } : 'MISSING',
-                    distSlab: commData.slabs.distSlab ? { id: commData.slabs.distSlab.id, comm: commData.slabs.distSlab.commAmt, type: commData.slabs.distSlab.amtType } : 'MISSING',
-                    retSlab: commData.slabs.retSlab ? { id: commData.slabs.retSlab.id, comm: commData.slabs.retSlab.commAmt, type: commData.slabs.retSlab.amtType } : 'MISSING'
-                });
-
-                // 4. Calculate Amounts & Margins
+                // D. Calculate Amounts
                 const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
                 const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
                 let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
                 let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, amountNumber) : 0;
                 let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, amountNumber) : 0;
 
-                console.log(`Commission Calculation [${commData.scenario}]: SA(${saSlabAmount}) -> WL(${wlSlabAmount}) -> MD(${mdSlabAmount}) -> Dist(${distSlabAmount}) -> Ret(${retSlabAmount})`);
+                console.log(`Commission Calculation Pre-Flight [${commData.scenario}]: SA(${saSlabAmount}) -> WL(${wlSlabAmount}) -> MD(${mdSlabAmount}) -> Dist(${distSlabAmount}) -> Ret(${retSlabAmount})`);
 
                 // Margins & Shortfalls
 
-                // Super Admin
                 // Super Admin
                 commData.amounts.superAdminComm = Math.max(0, saSlabAmount - wlSlabAmount);
                 if (wlSlabAmount > saSlabAmount) {
@@ -338,228 +276,326 @@ const recharge = async (req, res) => {
 
                 // Retailer (User)
                 commData.amounts.retailerComm = retSlabAmount;
+            }
+        }
 
-                // 5. Update Wallets & Create History
-                const historyPromises = [];
-                const walletUpdates = [];
-                const remarkText = `Recharge-${operator.operatorName}`;
+        // // 3. Call API
+        // console.log('Initiating Recharge API Call for TransactionID:', transactionId);
+        // const response = await inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4, transactionId);
 
-                // A. Retailer Update (User)
-                const retailerOpening = round2(commData.wallets.retailerWallet.mainWallet);
-                const retailerClosing = round2(retailerOpening - amountNumber + commData.amounts.retailerComm);
+        const response = {
+            txid: 54028212,
+            status: 'Success',
+            opid: '346451228',
+            number: mobileNumber,
+            amount: amount,
+            dr_amount: 21.78,
+            orderid: transactionId, // Use generated transactionId to ensure uniqueness
+            operatorName: operator.operatorName
+        };
 
-                walletUpdates.push(
-                    dbService.update(model.wallet, { id: commData.wallets.retailerWallet.id }, { mainWallet: retailerClosing, updatedBy: user.id })
-                );
+        // DEBUG: Log the full response to understand what we are getting
+        console.log('Recharge API Response:', JSON.stringify(response, null, 2));
 
-                historyPromises.push(dbService.createOne(model.walletHistory, {
+        // Use response.orderid if present, otherwise fallback to our transactionId if response doesn't provide a unique order ref
+        // adapting to prevent NULL unique violation if API fails to return orderid
+        const orderid = response.orderid || transactionId;
+
+        const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
+        const isPending = response.status === 'Pending' || response.status === 'PENDING';
+        const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILURE');
+
+        // 4. Update Wallets & Create History (Post-API Success/Pending)
+        let retailerComm = 0;
+        let distributorComm = 0;
+        let masterDistributorComm = 0;
+        let companyComm = 0;
+        let superAdminComm = 0;
+
+        if (isSuccess || isPending) { // Usually comm is given on success or pending (pending to hold funds) - actually purely SUCCESS for comms usually. Let's stick to SUCCESS for comm distribution to fail-safe? Actually standard is SUCCESS.
+            // However, for user wallet debit, it must happen on Success OR Pending.
+
+            // Base Debit Logic first
+            const openingMainWallet = round2(currentWallet.mainWallet || 0);
+
+            if ([4, 5].includes(user.userRole)) {
+                if (isSuccess) {
+                    // Update outer variables for response structure
+                    retailerComm = commData.amounts.retailerComm;
+                    distributorComm = commData.amounts.distComm;
+                    masterDistributorComm = commData.amounts.mdComm;
+                    companyComm = commData.amounts.companyComm;
+                    superAdminComm = commData.amounts.superAdminComm;
+
+                    const historyPromises = [];
+                    const walletUpdates = [];
+                    const remarkText = `Recharge-${operator.operatorName}`;
+
+                    // A. Retailer Update (User)
+                    const retailerOpening = round2(commData.wallets.retailerWallet.mainWallet);
+                    // Debit Amount AND Credit Commission (Net effect)
+                    // If we want separate entries, we do separate. But typically wallet is updated net.
+                    // The old code did: opening - amount + comm.
+                    const retailerClosing = round2(retailerOpening - amountNumber + commData.amounts.retailerComm);
+
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: commData.wallets.retailerWallet.id }, { mainWallet: retailerClosing, updatedBy: user.id })
+                    );
+
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: user.id,
+                        companyId: user.companyId,
+                        walletType: 'mainWallet',
+                        operator: operator.operatorName,
+                        remark: remarkText,
+                        amount: amountNumber,
+                        comm: commData.amounts.retailerComm,
+                        surcharge: 0,
+                        openingAmt: retailerOpening,
+                        closingAmt: retailerClosing,
+                        credit: commData.amounts.retailerComm,
+                        debit: amountNumber,
+                        transactionId: orderid,
+                        paymentStatus: paymentStatus,
+                        addedBy: user.id,
+                        updatedBy: user.id
+                    }));
+
+                    // B. Distributor Update
+                    if (commData.users.distributor) {
+                        const dWallet = commData.wallets.distributorWallet;
+                        const dOpening = round2(dWallet.mainWallet);
+                        const dNet = commData.amounts.distComm - commData.amounts.distShortfall;
+                        const dClosing = round2(dOpening + dNet);
+
+                        walletUpdates.push(
+                            dbService.update(model.wallet, { id: dWallet.id }, { mainWallet: dClosing, updatedBy: commData.users.distributor.id })
+                        );
+
+                        historyPromises.push(dbService.createOne(model.walletHistory, {
+                            refId: commData.users.distributor.id,
+                            companyId: user.companyId,
+                            walletType: 'mainWallet',
+                            operator: operator.operatorName,
+                            remark: `${remarkText} - dist comm`,
+                            amount: amountNumber,
+                            comm: commData.amounts.distComm,
+                            surcharge: 0,
+                            openingAmt: dOpening,
+                            closingAmt: dClosing,
+                            credit: commData.amounts.distComm,
+                            debit: commData.amounts.distShortfall,
+                            transactionId: orderid,
+                            paymentStatus: 'SUCCESS',
+                            addedBy: commData.users.distributor.id,
+                            updatedBy: commData.users.distributor.id
+                        }));
+                    }
+
+                    // C. Master Distributor Update
+                    if (commData.users.masterDistributor) {
+                        const mWallet = commData.wallets.masterDistributorWallet;
+                        const mOpening = round2(mWallet.mainWallet);
+                        const mNet = commData.amounts.mdComm - commData.amounts.mdShortfall;
+                        const mClosing = round2(mOpening + mNet);
+
+                        walletUpdates.push(
+                            dbService.update(model.wallet, { id: mWallet.id }, { mainWallet: mClosing, updatedBy: commData.users.masterDistributor.id })
+                        );
+
+                        historyPromises.push(dbService.createOne(model.walletHistory, {
+                            refId: commData.users.masterDistributor.id,
+                            companyId: user.companyId,
+                            walletType: 'mainWallet',
+                            operator: operator.operatorName,
+                            remark: `${remarkText} - md comm`,
+                            amount: amountNumber,
+                            comm: commData.amounts.mdComm,
+                            surcharge: 0,
+                            openingAmt: mOpening,
+                            closingAmt: mClosing,
+                            credit: commData.amounts.mdComm,
+                            debit: commData.amounts.mdShortfall,
+                            transactionId: orderid,
+                            paymentStatus: 'SUCCESS',
+                            addedBy: commData.users.masterDistributor.id,
+                            updatedBy: commData.users.masterDistributor.id
+                        }));
+                    }
+
+                    // D. Company Update
+                    const cWallet = commData.wallets.companyWallet;
+                    const cOpening = round2(cWallet.mainWallet);
+                    const cNet = commData.amounts.companyComm - commData.amounts.wlShortfall;
+                    const cClosing = round2(cOpening + cNet);
+
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: cWallet.id }, { mainWallet: cClosing, updatedBy: commData.users.companyAdmin.id })
+                    );
+
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.companyAdmin.id,
+                        companyId: user.companyId,
+                        walletType: 'mainWallet',
+                        operator: operator.operatorName,
+                        remark: `${remarkText} - company comm`,
+                        amount: amountNumber,
+                        comm: commData.amounts.companyComm,
+                        surcharge: 0,
+                        openingAmt: cOpening,
+                        closingAmt: cClosing,
+                        credit: commData.amounts.companyComm,
+                        debit: commData.amounts.wlShortfall,
+                        transactionId: orderid,
+                        paymentStatus: 'SUCCESS',
+                        addedBy: commData.users.companyAdmin.id,
+                        updatedBy: commData.users.companyAdmin.id
+                    }));
+
+                    // E. Super Admin Update
+                    const saWallet = commData.wallets.superAdminWallet;
+                    const saOpening = round2(saWallet.mainWallet);
+                    const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
+                    const saClosing = round2(saOpening + saNet);
+
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: saWallet.id }, { mainWallet: saClosing, updatedBy: commData.users.superAdmin.id })
+                    );
+
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.superAdmin.id,
+                        companyId: 1,
+                        walletType: 'mainWallet',
+                        operator: operator.operatorName,
+                        remark: `${remarkText} - admin comm`,
+                        amount: amountNumber,
+                        comm: commData.amounts.superAdminComm,
+                        surcharge: 0,
+                        openingAmt: saOpening,
+                        closingAmt: saClosing,
+                        credit: commData.amounts.superAdminComm,
+                        debit: commData.amounts.saShortfall,
+                        transactionId: orderid,
+                        paymentStatus: 'SUCCESS',
+                        addedBy: commData.users.superAdmin.id,
+                        updatedBy: commData.users.superAdmin.id
+                    }));
+
+                    // Execute Updates
+                    await Promise.all([...walletUpdates, ...historyPromises]);
+
+                } else if (isPending) {
+                    // Pending State: Only Deduct Amount from User. NO Commission yet.
+                    const closing = round2(openingMainWallet - amountNumber);
+                    await dbService.update(model.wallet, { id: currentWallet.id }, { mainWallet: closing, updatedBy: user.id });
+
+                    await dbService.createOne(model.walletHistory, {
+                        refId: user.id,
+                        companyId: user.companyId,
+                        walletType: 'mainWallet',
+                        operator: operator.operatorName,
+                        remark: `Recharge Pending-${operator.operatorName}`,
+                        amount: amountNumber,
+                        comm: 0,
+                        surcharge: 0,
+                        openingAmt: openingMainWallet,
+                        closingAmt: closing,
+                        credit: 0,
+                        debit: amountNumber,
+                        transactionId: orderid,
+                        paymentStatus: 'PENDING',
+                        addedBy: user.id,
+                        updatedBy: user.id
+                    });
+                }
+            } else {
+                // Non-Role 4/5 Logic (Fallback)
+                const closing = round2(openingMainWallet - amountNumber);
+                await dbService.update(model.wallet, { id: currentWallet.id }, { mainWallet: closing, updatedBy: user.id });
+
+                await dbService.createOne(model.walletHistory, {
                     refId: user.id,
                     companyId: user.companyId,
                     walletType: 'mainWallet',
                     operator: operator.operatorName,
-                    remark: remarkText,
+                    remark: `Recharge-${operator.operatorName}`,
                     amount: amountNumber,
-                    comm: commData.amounts.retailerComm,
+                    comm: 0,
                     surcharge: 0,
-                    openingAmt: retailerOpening,
-                    closingAmt: retailerClosing,
-                    credit: commData.amounts.retailerComm,
-                    debit: amountNumber, // Full Debit here, credit separate just for logic check. Actually net change is important.
+                    openingAmt: openingMainWallet,
+                    closingAmt: closing,
+                    credit: 0,
+                    debit: amountNumber,
                     transactionId: orderid,
-                    paymentStatus: 'SUCCESS',
+                    paymentStatus: paymentStatus,
                     addedBy: user.id,
                     updatedBy: user.id
-                }));
-
-                // B. Distributor Update
-                if (commData.users.distributor) {
-                    const dWallet = commData.wallets.distributorWallet;
-                    const dOpening = round2(dWallet.mainWallet);
-                    const dNet = commData.amounts.distComm - commData.amounts.distShortfall;
-                    const dClosing = round2(dOpening + dNet);
-
-                    walletUpdates.push(
-                        dbService.update(model.wallet, { id: dWallet.id }, { mainWallet: dClosing, updatedBy: commData.users.distributor.id })
-                    );
-
-                    historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.distributor.id,
-                        companyId: user.companyId,
-                        walletType: 'mainWallet',
-                        operator: operator.operatorName,
-                        remark: `${remarkText} - dist comm`,
-                        amount: amountNumber,
-                        comm: commData.amounts.distComm,
-                        surcharge: 0,
-                        openingAmt: dOpening,
-                        closingAmt: dClosing,
-                        credit: commData.amounts.distComm,
-                        debit: commData.amounts.distShortfall,
-                        transactionId: orderid,
-                        paymentStatus: 'SUCCESS',
-                        addedBy: commData.users.distributor.id,
-                        updatedBy: commData.users.distributor.id
-                    }));
-                }
-
-                // C. Master Distributor Update
-                if (commData.users.masterDistributor) {
-                    const mWallet = commData.wallets.masterDistributorWallet;
-                    const mOpening = round2(mWallet.mainWallet);
-                    const mNet = commData.amounts.mdComm - commData.amounts.mdShortfall;
-                    const mClosing = round2(mOpening + mNet);
-
-                    walletUpdates.push(
-                        dbService.update(model.wallet, { id: mWallet.id }, { mainWallet: mClosing, updatedBy: commData.users.masterDistributor.id })
-                    );
-
-                    historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.masterDistributor.id,
-                        companyId: user.companyId,
-                        walletType: 'mainWallet',
-                        operator: operator.operatorName,
-                        remark: `${remarkText} - md comm`,
-                        amount: amountNumber,
-                        comm: commData.amounts.mdComm,
-                        surcharge: 0,
-                        openingAmt: mOpening,
-                        closingAmt: mClosing,
-                        credit: commData.amounts.mdComm,
-                        debit: commData.amounts.mdShortfall,
-                        transactionId: orderid,
-                        paymentStatus: 'SUCCESS',
-                        addedBy: commData.users.masterDistributor.id,
-                        updatedBy: commData.users.masterDistributor.id
-                    }));
-                }
-
-                // D. Company Update
-                const cWallet = commData.wallets.companyWallet;
-                const cOpening = round2(cWallet.mainWallet);
-                const cNet = commData.amounts.companyComm - commData.amounts.wlShortfall;
-                const cClosing = round2(cOpening + cNet);
-
-                walletUpdates.push(
-                    dbService.update(model.wallet, { id: cWallet.id }, { mainWallet: cClosing, updatedBy: companyAdmin.id })
-                );
-
-                historyPromises.push(dbService.createOne(model.walletHistory, {
-                    refId: companyAdmin.id,
-                    companyId: user.companyId,
-                    walletType: 'mainWallet',
-                    operator: operator.operatorName,
-                    remark: `${remarkText} - company comm`,
-                    amount: amountNumber,
-                    comm: commData.amounts.companyComm,
-                    surcharge: 0,
-                    openingAmt: cOpening,
-                    closingAmt: cClosing,
-                    credit: commData.amounts.companyComm,
-                    debit: commData.amounts.wlShortfall,
-                    transactionId: orderid,
-                    paymentStatus: 'SUCCESS',
-                    addedBy: companyAdmin.id,
-                    updatedBy: companyAdmin.id
-                }));
-
-                // E. Super Admin Update
-                const saWallet = commData.wallets.superAdminWallet;
-                const saOpening = round2(saWallet.mainWallet);
-                const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
-                const saClosing = round2(saOpening + saNet);
-
-                walletUpdates.push(
-                    dbService.update(model.wallet, { id: saWallet.id }, { mainWallet: saClosing, updatedBy: superAdmin.id })
-                );
-
-                historyPromises.push(dbService.createOne(model.walletHistory, {
-                    refId: superAdmin.id,
-                    companyId: 1,
-                    walletType: 'mainWallet',
-                    operator: operator.operatorName,
-                    remark: `${remarkText} - admin comm`,
-                    amount: amountNumber,
-                    comm: commData.amounts.superAdminComm,
-                    surcharge: 0,
-                    openingAmt: saOpening,
-                    closingAmt: saClosing,
-                    credit: commData.amounts.superAdminComm,
-                    debit: commData.amounts.saShortfall,
-                    transactionId: orderid,
-                    paymentStatus: 'SUCCESS',
-                    addedBy: superAdmin.id,
-                    updatedBy: superAdmin.id
-                }));
-
-                // Execute Updates
-                await Promise.all([...walletUpdates, ...historyPromises]);
-
-                // Update outer variables for response structure if needed
-                retailerComm = commData.amounts.retailerComm;
-                distributorComm = commData.amounts.distComm;
-                masterDistributorComm = commData.amounts.mdComm;
-                companyComm = commData.amounts.companyComm;
-                superAdminComm = commData.amounts.superAdminComm;
+                });
             }
         }
 
-        // 6. Generic Logic for Non-Roles (Fallback)
-        if (isSuccess && ![4, 5].includes(user.userRole)) {
-            const opening = round2(wallet.mainWallet);
-            const closing = round2(opening - amountNumber);
-            await dbService.update(model.wallet, { id: wallet.id }, { mainWallet: closing, updatedBy: user.id });
-
-            await dbService.createOne(model.walletHistory, {
+        if (isSuccess || isPending) { // Service Transaction always created
+            const serviceTransactionData = {
                 refId: user.id,
                 companyId: user.companyId,
-                walletType: 'mainWallet',
-                operator: operator.operatorName,
-                remark: `Recharge-${operator.operatorName}`,
+                serviceType: 'MobileRecharge',
+                mobileNumber,
+                opcode,
+                circle: circle || null,
                 amount: amountNumber,
-                comm: 0,
-                surcharge: 0,
-                openingAmt: opening,
-                closingAmt: closing,
-                credit: 0,
-                debit: amountNumber,
-                transactionId: orderid,
-                paymentStatus: 'SUCCESS',
-                addedBy: user.id,
-                updatedBy: user.id
-            });
+                orderid,
+                transactionId,
+                txid: response.txid || null,
+                status: paymentStatus,
+                opid: response.opid || null,
+                message: response.message || null,
+                value1: value1 || null,
+                value2: value2 || null,
+                value3: value3 || null,
+                value4: value4 || null,
+                apiResponse: response,
+                superadminComm: paymentStatus === 'SUCCESS' ? superAdminComm : 0,
+                whitelabelComm: paymentStatus === 'SUCCESS' ? companyComm : 0,
+                masterDistributorCom: paymentStatus === 'SUCCESS' ? masterDistributorComm : 0,
+                distributorCom: paymentStatus === 'SUCCESS' ? distributorComm : 0,
+                retailerCom: paymentStatus === 'SUCCESS' ? retailerComm : 0,
+                isActive: true,
+                addedBy: user.id
+            };
+
+            await dbService.createOne(model.serviceTransaction, serviceTransactionData);
+        } else {
+            // Failed Transaction - Log it? Or just return?
+            // Usually good to log failures too, but without financial impact.
+            const serviceTransactionData = {
+                refId: user.id,
+                companyId: user.companyId,
+                serviceType: 'MobileRecharge',
+                mobileNumber,
+                opcode,
+                circle: circle || null,
+                amount: amountNumber,
+                orderid,
+                transactionId,
+                txid: response.txid || null,
+                status: 'FAILURE',
+                opid: response.opid || null,
+                message: response.message || 'Transaction Failed',
+                value1: value1 || null,
+                value2: value2 || null,
+                value3: value3 || null,
+                value4: value4 || null,
+                apiResponse: response,
+                superadminComm: 0,
+                whitelabelComm: 0,
+                masterDistributorCom: 0,
+                distributorCom: 0,
+                retailerCom: 0,
+                isActive: true,
+                addedBy: user.id
+            };
+            await dbService.createOne(model.serviceTransaction, serviceTransactionData);
         }
-
-        if (isSuccess) response.operatorName = operator?.operatorName;
-
-        const serviceTransactionData = {
-            refId: user.id,
-            companyId: user.companyId,
-            serviceType: 'MobileRecharge',
-            mobileNumber,
-            opcode,
-            circle: circle || null,
-            amount: amountNumber,
-            orderid,
-            transactionId,
-            txid: response.txid || null,
-            status: paymentStatus,
-            opid: response.opid || null,
-            message: response.message || null,
-            value1: value1 || null,
-            value2: value2 || null,
-            value3: value3 || null,
-            value4: value4 || null,
-            apiResponse: response,
-            superadminComm: paymentStatus === 'SUCCESS' ? superAdminComm : 0,
-            whitelabelComm: paymentStatus === 'SUCCESS' ? companyComm : 0,
-            masterDistributorCom: paymentStatus === 'SUCCESS' ? masterDistributorComm : 0,
-            distributorCom: paymentStatus === 'SUCCESS' ? distributorComm : 0,
-            retailerCom: paymentStatus === 'SUCCESS' ? retailerComm : 0,
-            isActive: true,
-            addedBy: user.id
-        };
-
-        const rechargeRecord = await dbService.createOne(model.serviceTransaction, serviceTransactionData);
 
         const responseData = {
             orderid,
