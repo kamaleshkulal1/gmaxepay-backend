@@ -1752,7 +1752,10 @@ const getByUserProfile = async (req, res) => {
         accountNumber: bank.accountNumber,
         ifsc: bank.ifsc,
         city: bank.city,
-        branch: bank.branch
+        branch: bank.branch,
+        isPrimary: bank.isPrimary,
+        isPayout: bank.isPayout,
+        isFundTransfer: bank.isFundTransfer
       }))
     };
 

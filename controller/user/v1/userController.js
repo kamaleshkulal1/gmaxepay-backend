@@ -905,7 +905,10 @@ const getUserProfile = async (req, res) => {
         ifsc: bank.ifsc,
         beneficiaryName: bank.beneficiaryName,
         city: bank.city,
-        branch: bank.branch
+        branch: bank.branch,
+        isPrimary: bank.isPrimary,
+        isPayout: bank.isPayout,
+        isFundTransfer: bank.isFundTransfer
       }))
     };
 
