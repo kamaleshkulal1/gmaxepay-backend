@@ -178,6 +178,9 @@ const recharge = async (req, res) => {
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
                         commData.slabs.retSlab = companySlabComm?.find(c => c.roleType === 5);
+                        console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+                        console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+                        console.log("commData.slabs.retSlab", commData.slabs.retSlab);
 
                     } else if (reportingUser.userRole === 3) {
                         commData.scenario = 'RET_MD';
