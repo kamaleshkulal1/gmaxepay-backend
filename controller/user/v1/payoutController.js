@@ -218,12 +218,9 @@ const payout = async (req, res) => {
                     }
                 }
 
-                // Calculate MD Surcharge as Sum of Costs (Operator Charge + Admin + Company)
+                // Calculate MD Surcharge using MD Slab only (User Request: "debit only incoming from the whitelabel")
                 // Note: companySurcharge is now adjusted for shortfall
-                commData.amounts.mdSurcharge =
-                    (commData.amounts.saBankCharge || 0) +
-                    (commData.amounts.adminSurcharge || 0) +
-                    (commData.amounts.companySurcharge || 0);
+                commData.amounts.mdSurcharge = mdSlabAmount;
                 console.log('Calculated MD Surcharge (Cost+):', commData.amounts.mdSurcharge);
                 console.log('MD Scenario:', commData.scenario);
                 console.log('MD Operator Charge (saBankCharge):', commData.amounts.saBankCharge);
