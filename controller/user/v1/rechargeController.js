@@ -126,8 +126,8 @@ const recharge = async (req, res) => {
                     if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
                         commData.scenario = 'DIST_DIRECT';
                         const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
 
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
@@ -142,9 +142,9 @@ const recharge = async (req, res) => {
                             commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: user.companyId });
 
                             const [SuperAdminSlabComm, companySlabComm, mdSlabComm] = await Promise.all([
-                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                             ]);
 
                             commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
@@ -168,18 +168,13 @@ const recharge = async (req, res) => {
                     if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
                         commData.scenario = 'RET_DIRECT';
                         const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
-                        console.log('SuperAdminSlabComm', SuperAdminSlabComm);
-                        console.log('companySlabComm', companySlabComm);
 
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
                         commData.slabs.retSlab = companySlabComm?.find(c => c.roleType === 5);
-                        console.log('commData.slabs', commData.slabs);
-                        console.log('commData.wlSlab', commData.wlSlab);
-                        console.log('commData.retSlab', commData.retSlab);
 
                     } else if (reportingUser.userRole === 3) {
                         commData.scenario = 'RET_MD';
@@ -187,9 +182,9 @@ const recharge = async (req, res) => {
                         commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
 
                         const [SuperAdminSlabComm, companySlabComm, masterDistributorComm] = await Promise.all([
-                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
@@ -203,9 +198,9 @@ const recharge = async (req, res) => {
                         if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
                             commData.scenario = 'RET_DIST_CO';
                             const [SuperAdminSlabComm, companySlabComm, distSlabComm] = await Promise.all([
-                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                             ]);
                             commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
                             commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
