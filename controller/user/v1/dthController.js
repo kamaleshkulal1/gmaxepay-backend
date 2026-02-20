@@ -353,207 +353,183 @@ const dthRecharge = async (req, res) => {
             const openingMainWallet = round4(currentWallet.mainWallet || 0);
 
             if ([4, 5].includes(user.userRole)) {
-                if (isSuccess) {
-                    // Update outer variables for response structure
-                    retailerComm = commData.amounts.retailerComm;
-                    distributorComm = commData.amounts.distComm;
-                    masterDistributorComm = commData.amounts.mdComm;
-                    companyComm = commData.amounts.companyComm;
-                    superAdminComm = commData.amounts.superAdminComm;
+                // Update outer variables for response structure (used in serviceTransacton)
+                retailerComm = commData.amounts.retailerComm;
+                distributorComm = commData.amounts.distComm;
+                masterDistributorComm = commData.amounts.mdComm;
+                companyComm = commData.amounts.companyComm;
+                superAdminComm = commData.amounts.superAdminComm;
 
-                    const historyPromises = [];
-                    const walletUpdates = [];
-                    const remarkText = `DTH Recharge-${operator.operatorName}`;
+                const historyPromises = [];
+                const walletUpdates = [];
+                const remarkText = `DTH Recharge-${operator.operatorName}`;
+                // Append Pending label to remark if status is pending
+                const remarkStatus = isPending ? ` Pending-${operator.operatorName}` : `-${operator.operatorName}`;
 
-                    // A. Retailer Update (User)
-                    if (commData.users.retailer && commData.wallets.retailerWallet) {
-                        const retailerOpening = round4(commData.wallets.retailerWallet.mainWallet);
-                        const retailerClosing = round4(retailerOpening - amountNumber + commData.amounts.retailerComm);
-
-                        walletUpdates.push(
-                            dbService.update(model.wallet, { id: commData.wallets.retailerWallet.id }, { mainWallet: retailerClosing, updatedBy: user.id })
-                        );
-
-                        historyPromises.push(dbService.createOne(model.walletHistory, {
-                            refId: user.id,
-                            companyId: user.companyId,
-                            walletType: 'mainWallet',
-                            operator: operator.operatorName,
-                            remark: remarkText,
-                            amount: amountNumber,
-                            comm: commData.amounts.retailerComm,
-                            surcharge: 0,
-                            openingAmt: retailerOpening,
-                            closingAmt: retailerClosing,
-                            credit: commData.amounts.retailerComm,
-                            debit: amountNumber,
-                            transactionId: orderid,
-                            paymentStatus: paymentStatus,
-                            addedBy: user.id,
-                            updatedBy: user.id
-                        }));
-                    }
-
-                    // B. Distributor Update
-                    if (commData.users.distributor && commData.wallets.distributorWallet) {
-                        const dWallet = commData.wallets.distributorWallet;
-                        const dOpening = round4(dWallet.mainWallet);
-                        let dClosing;
-                        let dDebit;
-                        let dRemark = `${remarkText} - dist comm`;
-
-                        if (user.userRole === 4) {
-                            // Distributor initiated the transaction directly
-                            dClosing = round4(dOpening - amountNumber + commData.amounts.distComm);
-                            dDebit = amountNumber;
-                            dRemark = remarkText;
-                        } else {
-                            // Retailer initiated, Distributor just gets commission
-                            const dNet = commData.amounts.distComm - commData.amounts.distShortfall;
-                            dClosing = round4(dOpening + dNet);
-                            dDebit = commData.amounts.distShortfall;
-                        }
-
-                        walletUpdates.push(
-                            dbService.update(model.wallet, { id: dWallet.id }, { mainWallet: dClosing, updatedBy: commData.users.distributor.id })
-                        );
-
-                        historyPromises.push(dbService.createOne(model.walletHistory, {
-                            refId: commData.users.distributor.id,
-                            companyId: user.companyId,
-                            walletType: 'mainWallet',
-                            operator: operator.operatorName,
-                            remark: dRemark,
-                            amount: amountNumber,
-                            comm: commData.amounts.distComm,
-                            surcharge: 0,
-                            openingAmt: dOpening,
-                            closingAmt: dClosing,
-                            credit: commData.amounts.distComm,
-                            debit: dDebit,
-                            transactionId: orderid,
-                            paymentStatus: 'SUCCESS',
-                            addedBy: commData.users.distributor.id,
-                            updatedBy: commData.users.distributor.id
-                        }));
-                    }
-
-                    // C. Master Distributor Update
-                    if (commData.users.masterDistributor) {
-                        const mWallet = commData.wallets.masterDistributorWallet;
-                        const mOpening = round4(mWallet.mainWallet);
-                        const mNet = commData.amounts.mdComm - commData.amounts.mdShortfall;
-                        const mClosing = round4(mOpening + mNet);
-
-                        walletUpdates.push(
-                            dbService.update(model.wallet, { id: mWallet.id }, { mainWallet: mClosing, updatedBy: commData.users.masterDistributor.id })
-                        );
-
-                        historyPromises.push(dbService.createOne(model.walletHistory, {
-                            refId: commData.users.masterDistributor.id,
-                            companyId: user.companyId,
-                            walletType: 'mainWallet',
-                            operator: operator.operatorName,
-                            remark: `${remarkText} - md comm`,
-                            amount: amountNumber,
-                            comm: commData.amounts.mdComm,
-                            surcharge: 0,
-                            openingAmt: mOpening,
-                            closingAmt: mClosing,
-                            credit: commData.amounts.mdComm,
-                            debit: commData.amounts.mdShortfall,
-                            transactionId: orderid,
-                            paymentStatus: 'SUCCESS',
-                            addedBy: commData.users.masterDistributor.id,
-                            updatedBy: commData.users.masterDistributor.id
-                        }));
-                    }
-
-                    // D. Company Update
-                    const cWallet = commData.wallets.companyWallet;
-                    const cOpening = round4(cWallet.mainWallet);
-                    const cNet = commData.amounts.companyComm - commData.amounts.wlShortfall;
-                    const cClosing = round4(cOpening + cNet);
+                // A. Retailer Update (User)
+                if (commData.users.retailer && commData.wallets.retailerWallet) {
+                    const retailerOpening = round4(commData.wallets.retailerWallet.mainWallet);
+                    const retailerClosing = round4(retailerOpening - amountNumber + commData.amounts.retailerComm);
 
                     walletUpdates.push(
-                        dbService.update(model.wallet, { id: cWallet.id }, { mainWallet: cClosing, updatedBy: commData.users.companyAdmin.id })
+                        dbService.update(model.wallet, { id: commData.wallets.retailerWallet.id }, { mainWallet: retailerClosing, updatedBy: user.id })
                     );
 
                     historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.companyAdmin.id,
-                        companyId: user.companyId,
-                        walletType: 'mainWallet',
-                        operator: operator.operatorName,
-                        remark: `${remarkText} - company comm`,
-                        amount: amountNumber,
-                        comm: commData.amounts.companyComm,
-                        surcharge: 0,
-                        openingAmt: cOpening,
-                        closingAmt: cClosing,
-                        credit: commData.amounts.companyComm,
-                        debit: commData.amounts.wlShortfall,
-                        transactionId: orderid,
-                        paymentStatus: 'SUCCESS',
-                        addedBy: commData.users.companyAdmin.id,
-                        updatedBy: commData.users.companyAdmin.id
-                    }));
-
-                    // E. Super Admin Update
-                    const saWallet = commData.wallets.superAdminWallet;
-                    const saOpening = round4(saWallet.mainWallet);
-                    const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
-                    const saClosing = round4(saOpening + saNet);
-
-                    walletUpdates.push(
-                        dbService.update(model.wallet, { id: saWallet.id }, { mainWallet: saClosing, updatedBy: commData.users.superAdmin.id })
-                    );
-
-                    historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.superAdmin.id,
-                        companyId: 1,
-                        walletType: 'mainWallet',
-                        operator: operator.operatorName,
-                        remark: `${remarkText} - admin comm`,
-                        amount: amountNumber,
-                        comm: commData.amounts.superAdminComm,
-                        surcharge: 0,
-                        openingAmt: saOpening,
-                        closingAmt: saClosing,
-                        credit: commData.amounts.superAdminComm,
-                        debit: commData.amounts.saShortfall,
-                        transactionId: orderid,
-                        paymentStatus: 'SUCCESS',
-                        addedBy: commData.users.superAdmin.id,
-                        updatedBy: commData.users.superAdmin.id
-                    }));
-
-                    // Execute Updates
-                    await Promise.all([...walletUpdates, ...historyPromises]);
-
-                } else if (isPending) {
-                    // Pending State: Only Deduct Amount from User. NO Commission yet.
-                    const closing = round4(openingMainWallet - amountNumber);
-                    await dbService.update(model.wallet, { id: currentWallet.id }, { mainWallet: closing, updatedBy: user.id });
-
-                    await dbService.createOne(model.walletHistory, {
                         refId: user.id,
                         companyId: user.companyId,
                         walletType: 'mainWallet',
                         operator: operator.operatorName,
-                        remark: `DTH Recharge Pending-${operator.operatorName}`,
+                        remark: `DTH Recharge${remarkStatus}`,
                         amount: amountNumber,
-                        comm: 0,
+                        comm: commData.amounts.retailerComm,
                         surcharge: 0,
-                        openingAmt: openingMainWallet,
-                        closingAmt: closing,
-                        credit: 0,
+                        openingAmt: retailerOpening,
+                        closingAmt: retailerClosing,
+                        credit: commData.amounts.retailerComm,
                         debit: amountNumber,
                         transactionId: orderid,
-                        paymentStatus: 'PENDING',
+                        paymentStatus: paymentStatus,
                         addedBy: user.id,
                         updatedBy: user.id
-                    });
+                    }));
                 }
+
+                // B. Distributor Update
+                if (commData.users.distributor && commData.wallets.distributorWallet) {
+                    const dWallet = commData.wallets.distributorWallet;
+                    const dOpening = round4(dWallet.mainWallet);
+                    let dClosing;
+                    let dDebit;
+                    let dRemark = `DTH Recharge${remarkStatus} - dist comm`;
+
+                    if (user.userRole === 4) {
+                        // Distributor initiated the transaction directly
+                        dClosing = round4(dOpening - amountNumber + commData.amounts.distComm);
+                        dDebit = amountNumber;
+                        dRemark = `DTH Recharge${remarkStatus}`;
+                    } else {
+                        // Retailer initiated, Distributor just gets commission
+                        const dNet = commData.amounts.distComm - commData.amounts.distShortfall;
+                        dClosing = round4(dOpening + dNet);
+                        dDebit = commData.amounts.distShortfall;
+                    }
+
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: dWallet.id }, { mainWallet: dClosing, updatedBy: commData.users.distributor.id })
+                    );
+
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.distributor.id,
+                        companyId: user.companyId,
+                        walletType: 'mainWallet',
+                        operator: operator.operatorName,
+                        remark: dRemark,
+                        amount: amountNumber,
+                        comm: commData.amounts.distComm,
+                        surcharge: 0,
+                        openingAmt: dOpening,
+                        closingAmt: dClosing,
+                        credit: commData.amounts.distComm,
+                        debit: dDebit,
+                        transactionId: orderid,
+                        paymentStatus: paymentStatus,
+                        addedBy: commData.users.distributor.id,
+                        updatedBy: commData.users.distributor.id
+                    }));
+                }
+
+                // C. Master Distributor Update
+                if (commData.users.masterDistributor) {
+                    const mWallet = commData.wallets.masterDistributorWallet;
+                    const mOpening = round4(mWallet.mainWallet);
+                    const mNet = commData.amounts.mdComm - commData.amounts.mdShortfall;
+                    const mClosing = round4(mOpening + mNet);
+
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: mWallet.id }, { mainWallet: mClosing, updatedBy: commData.users.masterDistributor.id })
+                    );
+
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.masterDistributor.id,
+                        companyId: user.companyId,
+                        walletType: 'mainWallet',
+                        operator: operator.operatorName,
+                        remark: `DTH Recharge${remarkStatus} - md comm`,
+                        amount: amountNumber,
+                        comm: commData.amounts.mdComm,
+                        surcharge: 0,
+                        openingAmt: mOpening,
+                        closingAmt: mClosing,
+                        credit: commData.amounts.mdComm,
+                        debit: commData.amounts.mdShortfall,
+                        transactionId: orderid,
+                        paymentStatus: paymentStatus,
+                        addedBy: commData.users.masterDistributor.id,
+                        updatedBy: commData.users.masterDistributor.id
+                    }));
+                }
+
+                // D. Company Update
+                const cWallet = commData.wallets.companyWallet;
+                const cOpening = round4(cWallet.mainWallet);
+                const cNet = commData.amounts.companyComm - commData.amounts.wlShortfall;
+                const cClosing = round4(cOpening + cNet);
+
+                walletUpdates.push(
+                    dbService.update(model.wallet, { id: cWallet.id }, { mainWallet: cClosing, updatedBy: commData.users.companyAdmin.id })
+                );
+
+                historyPromises.push(dbService.createOne(model.walletHistory, {
+                    refId: commData.users.companyAdmin.id,
+                    companyId: user.companyId,
+                    walletType: 'mainWallet',
+                    operator: operator.operatorName,
+                    remark: `DTH Recharge${remarkStatus} - company comm`,
+                    amount: amountNumber,
+                    comm: commData.amounts.companyComm,
+                    surcharge: 0,
+                    openingAmt: cOpening,
+                    closingAmt: cClosing,
+                    credit: commData.amounts.companyComm,
+                    debit: commData.amounts.wlShortfall,
+                    transactionId: orderid,
+                    paymentStatus: paymentStatus,
+                    addedBy: commData.users.companyAdmin.id,
+                    updatedBy: commData.users.companyAdmin.id
+                }));
+
+                // E. Super Admin Update
+                const saWallet = commData.wallets.superAdminWallet;
+                const saOpening = round4(saWallet.mainWallet);
+                const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
+                const saClosing = round4(saOpening + saNet);
+
+                walletUpdates.push(
+                    dbService.update(model.wallet, { id: saWallet.id }, { mainWallet: saClosing, updatedBy: commData.users.superAdmin.id })
+                );
+
+                historyPromises.push(dbService.createOne(model.walletHistory, {
+                    refId: commData.users.superAdmin.id,
+                    companyId: 1,
+                    walletType: 'mainWallet',
+                    operator: operator.operatorName,
+                    remark: `DTH Recharge${remarkStatus} - admin comm`,
+                    amount: amountNumber,
+                    comm: commData.amounts.superAdminComm,
+                    surcharge: 0,
+                    openingAmt: saOpening,
+                    closingAmt: saClosing,
+                    credit: commData.amounts.superAdminComm,
+                    debit: commData.amounts.saShortfall,
+                    transactionId: orderid,
+                    paymentStatus: paymentStatus,
+                    addedBy: commData.users.superAdmin.id,
+                    updatedBy: commData.users.superAdmin.id
+                }));
+
+                // Execute Updates
+                await Promise.all([...walletUpdates, ...historyPromises]);
             } else {
                 // Non-Role 4/5 Logic (Fallback)
                 const closing = round4(openingMainWallet - amountNumber);

@@ -718,11 +718,14 @@ const findAllCompanyReportToUser = async (req, res) => {
       }
     }
 
-    // Use pagination
-    let foundUsers = await dbService.paginate(model.user, query, {
+    // Merge query options correctly
+    const paginateOptions = {
       ...options,
       attributes: ['id', 'name', 'userId', 'userRole', 'mobileNo', 'email', 'isActive', 'createdAt']
-    });
+    };
+
+    // Use pagination
+    let foundUsers = await dbService.paginate(model.user, query, paginateOptions);
 
     if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
       return res.success({
