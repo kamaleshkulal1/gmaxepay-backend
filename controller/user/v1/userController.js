@@ -881,7 +881,7 @@ const getUserProfile = async (req, res) => {
       reportingToManagerEmail: reportingToManager?.email || null,
       reportingToManagerMobile: reportingToManager?.mobileNo || null,
       reportingToProfile: getCdnImageUrl(reportingToManager?.profileImage),
-      reportingToUserRole: reportingToManager?.userRole == 4 ? 'Distributor' : reportingToManager?.userRole == 5 ? 'Retailer' : reportingToManager?.userRole == 3 ? 'Master Distributor' : reportingToManager?.userRole == 2 ? 'Company Admin' : reportingToManager?.userRole == 1 ? 'Super Admin' : '',
+      reportingToUserRole: reportingToManager?.userRole == 4 ? 'Distributor' : reportingToManager?.userRole == 5 ? 'Retailer' : reportingToManager?.userRole == 3 ? 'Master Distributor' : reportingToManager?.userRole == 2 ? 'Admin' : reportingToManager?.userRole == 1 ? 'GmaxePay Admin' : '',
       companyDetails: companyDetails
         ? {
           companyId: companyDetails.id,
