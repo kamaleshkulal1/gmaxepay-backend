@@ -305,18 +305,18 @@ const recharge = async (req, res) => {
 
         // // 3. Call API
         // console.log('Initiating Recharge API Call for TransactionID:', transactionId);
-        // const response = await inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4, transactionId);
+        const response = await inspayService.Recharge(mobileNumber, opcode, amount, value1, value2, value3, value4, transactionId);
 
-        const response = {
-            txid: 54028212,
-            status: 'Success',
-            opid: '346451228',
-            number: mobileNumber,
-            amount: amount,
-            dr_amount: 21.78,
-            orderid: transactionId,
-            operatorName: operator.operatorName
-        };
+        // const response = {
+        //     txid: 54028212,
+        //     status: 'Success',
+        //     opid: '346451228',
+        //     number: mobileNumber,
+        //     amount: amount,
+        //     dr_amount: 21.78,
+        //     orderid: transactionId,
+        //     operatorName: operator.operatorName
+        // };
 
         // DEBUG: Log the full response to understand what we are getting
         // console.log('Recharge API Response:', JSON.stringify(response, null, 2));
@@ -336,10 +336,7 @@ const recharge = async (req, res) => {
         let companyComm = 0;
         let superAdminComm = 0;
 
-        if (isSuccess || isPending) { // Usually comm is given on success or pending (pending to hold funds) - actually purely SUCCESS for comms usually. Let's stick to SUCCESS for comm distribution to fail-safe? Actually standard is SUCCESS.
-            // However, for user wallet debit, it must happen on Success OR Pending.
-
-            // Base Debit Logic first
+        if (isSuccess || isPending) {
             const openingMainWallet = round4(currentWallet.mainWallet || 0);
 
             if ([4, 5].includes(user.userRole)) {
