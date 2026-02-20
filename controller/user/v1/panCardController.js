@@ -1,4 +1,6 @@
 const { Op, Sequelize } = require('sequelize');
+const { dbService } = require('../../../services/dbService');
+const { model } = require('../../../models');
 const { generateTransactionID } = require('../../../utils/transactionID');
 
 const round4 = (num) => {
@@ -23,7 +25,7 @@ const panCardActions = async (req, res) => {
   try {
     const userId = req.user.id;
     const companyId = req.user.companyId;
-    const { mobile_number, action, opcode, amount } = req.body;
+    const { mobile_number, action, amount } = req.body;
     const user = req.user;
 
     const mobileNumber = mobile_number;
@@ -35,10 +37,6 @@ const panCardActions = async (req, res) => {
       return res.failure({ message: 'Invalid action. Action must be either "new" or "correction"' });
     }
 
-    if (!opcode) {
-      return res.failure({ message: 'Operator code is required' });
-    }
-
     if (!amount) {
       return res.failure({ message: 'Amount is required' });
     }
@@ -47,7 +45,7 @@ const panCardActions = async (req, res) => {
 
     const [existingUser, operator, existingCompany] = await Promise.all([
       dbService.findOne(model.user, { id: userId }),
-      dbService.findOne(model.operator, { operatorCode: opcode }),
+      dbService.findOne(model.operator, { operatorType: 'PAN' }),
       dbService.findOne(model.company, { id: companyId })
     ]);
 
