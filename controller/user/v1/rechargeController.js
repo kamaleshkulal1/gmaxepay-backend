@@ -133,6 +133,9 @@ const recharge = async (req, res) => {
                         commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                         commData.slabs.distSlab = companySlabComm?.find(c => (c.roleType === 4 || c.roleName === 'DI'));
+                        console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+                        console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+                        console.log("commData.slabs.distSlab", commData.slabs.distSlab);
 
                     } else {
                         commData.scenario = 'DIST_MD';
@@ -196,6 +199,10 @@ const recharge = async (req, res) => {
                         commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                         commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
                         commData.slabs.retSlab = masterDistributorComm?.find(c => c.roleType === 5);
+                        console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+                        console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+                        console.log("commData.slabs.mdSlab", commData.slabs.mdSlab);
+                        console.log("commData.slabs.retSlab", commData.slabs.retSlab);
 
                     } else if (reportingUser.userRole === 4) {
                         commData.users.distributor = reportingUser;
@@ -212,6 +219,10 @@ const recharge = async (req, res) => {
                             commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                             commData.slabs.distSlab = companySlabComm?.find(c => c.roleType === 4);
                             commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
+                            console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+                            console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+                            console.log("commData.slabs.distSlab", commData.slabs.distSlab);
+                            console.log("commData.slabs.retSlab", commData.slabs.retSlab);
 
                         } else {
                             commData.scenario = 'RET_DIST_MD';
@@ -231,6 +242,11 @@ const recharge = async (req, res) => {
                                 commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
                                 commData.slabs.distSlab = mdSlabComm?.find(c => c.roleType === 4);
                                 commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
+                                console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+                                console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+                                console.log("commData.slabs.mdSlab", commData.slabs.mdSlab);
+                                console.log("commData.slabs.distSlab", commData.slabs.distSlab);
+                                console.log("commData.slabs.retSlab", commData.slabs.retSlab);
                             }
                         }
                     }
