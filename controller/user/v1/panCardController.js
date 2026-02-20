@@ -1,5 +1,5 @@
 const { Op, Sequelize } = require('sequelize');
-const { dbService } = require('../../../services/dbService');
+const dbService = require('../../../utils/dbService');
 const { model } = require('../../../models');
 const { generateTransactionID } = require('../../../utils/transactionID');
 
