@@ -266,7 +266,7 @@ const recharge = async (req, res) => {
                 else companyCost = retSlabAmount;
 
                 // Super Admin
-                commData.amounts.superAdminComm = Math.max(0, operatorCommissionAmount - wlSlabAmount);
+                commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
                 if (wlSlabAmount > operatorCommissionAmount) {
                     commData.amounts.saShortfall = parseFloat((wlSlabAmount - operatorCommissionAmount).toFixed(4));
                 } else {
@@ -274,7 +274,7 @@ const recharge = async (req, res) => {
                 }
 
                 // Company (WL)
-                commData.amounts.companyComm = Math.max(0, wlSlabAmount - companyCost);
+                commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
                 if (companyCost > wlSlabAmount) {
                     commData.amounts.wlShortfall = parseFloat((companyCost - wlSlabAmount).toFixed(4));
                 }
@@ -282,7 +282,7 @@ const recharge = async (req, res) => {
                 // Master Distributor
                 if (commData.users.masterDistributor) {
                     let mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
-                    commData.amounts.mdComm = Math.max(0, mdSlabAmount - mdCost);
+                    commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
                     if (mdCost > mdSlabAmount) {
                         commData.amounts.mdShortfall = parseFloat((mdCost - mdSlabAmount).toFixed(4));
                     }
@@ -290,7 +290,7 @@ const recharge = async (req, res) => {
 
                 // Distributor
                 if (commData.users.distributor) {
-                    commData.amounts.distComm = Math.max(0, distSlabAmount - retSlabAmount);
+                    commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
                     if (retSlabAmount > distSlabAmount) {
                         commData.amounts.distShortfall = parseFloat((retSlabAmount - distSlabAmount).toFixed(4));
                     }
