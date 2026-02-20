@@ -26,8 +26,9 @@ const panCardActions = async (req, res) => {
   try {
     const userId = req.user.id;
     const companyId = req.user.companyId;
-    const { mobile_number, action, amount } = req.body;
+    const { mobile_number, action, } = req.body;
     const user = req.user;
+    const amount = 107;
 
     const mobileNumber = mobile_number;
     if (!mobileNumber) {
