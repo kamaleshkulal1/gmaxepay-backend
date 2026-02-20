@@ -37,21 +37,21 @@ let Wallet = sequelize.define(
       type: DataTypes.FLOAT,
       defaultValue: 0,
       set(value) {
-        this.setDataValue('mainWallet', parseFloat(value.toFixed(2)));
+        this.setDataValue('mainWallet', parseFloat(value.toFixed(4)));
       }
     },
     apes1Wallet: {
       type: DataTypes.FLOAT,
       defaultValue: 0,
       set(value) {
-        this.setDataValue('apes1Wallet', parseFloat(value.toFixed(2)));
+        this.setDataValue('apes1Wallet', parseFloat(value.toFixed(4)));
       }
     },
     apes2Wallet: {
       type: DataTypes.FLOAT,
       defaultValue: 0,
       set(value) {
-        this.setDataValue('apes2Wallet', parseFloat(value.toFixed(2)));
+        this.setDataValue('apes2Wallet', parseFloat(value.toFixed(4)));
       }
     },
     ...reusableSMSAttribute
