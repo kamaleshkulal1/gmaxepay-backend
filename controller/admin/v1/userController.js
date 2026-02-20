@@ -973,7 +973,6 @@ const getCompleteKycData = async (req, res) => {
   }
 };
 
-
 const revertKycData = async (req, res) => {
   try {
     let permissions = req.permission;
