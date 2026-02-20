@@ -144,6 +144,9 @@ const panCardActions = async (req, res) => {
             commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
             commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
             commData.slabs.distSlab = companySlabComm?.find(c => (c.roleType === 4 || c.roleName === 'DI'));
+            console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+            console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+            console.log("commData.slabs.distSlab", commData.slabs.distSlab);
 
           } else {
             commData.scenario = 'DIST_MD';
@@ -162,6 +165,10 @@ const panCardActions = async (req, res) => {
               commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
               commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
               commData.slabs.distSlab = mdSlabComm?.find(c => c.roleType === 4);
+              console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+              console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+              console.log("commData.slabs.mdSlab", commData.slabs.mdSlab);
+              console.log("commData.slabs.distSlab", commData.slabs.distSlab);
             }
           }
 
@@ -175,9 +182,12 @@ const panCardActions = async (req, res) => {
           if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
             reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: user.companyId, isActive: true });
           }
+          console.log("operatorType", operatorType);
 
           if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
             commData.scenario = 'RET_DIRECT';
+            console.log("superAdmin.slabId", superAdmin.slabId);
+            console.log("companyAdmin.slabId", companyAdmin.slabId);
             const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
               dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: superAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
               dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
@@ -186,6 +196,9 @@ const panCardActions = async (req, res) => {
             commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
             commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
             commData.slabs.retSlab = companySlabComm?.find(c => c.roleType === 5);
+            console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+            console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+            console.log("commData.slabs.retSlab", commData.slabs.retSlab);
 
           } else if (reportingUser.userRole === 3) {
             commData.scenario = 'RET_MD';
@@ -201,6 +214,10 @@ const panCardActions = async (req, res) => {
             commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
             commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
             commData.slabs.retSlab = masterDistributorComm?.find(c => c.roleType === 5);
+            console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+            console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+            console.log("commData.slabs.mdSlab", commData.slabs.mdSlab);
+            console.log("commData.slabs.retSlab", commData.slabs.retSlab);
 
           } else if (reportingUser.userRole === 4) {
             commData.users.distributor = reportingUser;
@@ -217,6 +234,10 @@ const panCardActions = async (req, res) => {
               commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
               commData.slabs.distSlab = companySlabComm?.find(c => c.roleType === 4);
               commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
+              console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+              console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+              console.log("commData.slabs.distSlab", commData.slabs.distSlab);
+              console.log("commData.slabs.retSlab", commData.slabs.retSlab);
 
             } else {
               commData.scenario = 'RET_DIST_MD';
@@ -236,6 +257,11 @@ const panCardActions = async (req, res) => {
                 commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
                 commData.slabs.distSlab = mdSlabComm?.find(c => c.roleType === 4);
                 commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
+                console.log("commData.slabs.saSlab", commData.slabs.saSlab);
+                console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
+                console.log("commData.slabs.mdSlab", commData.slabs.mdSlab);
+                console.log("commData.slabs.distSlab", commData.slabs.distSlab);
+                console.log("commData.slabs.retSlab", commData.slabs.retSlab);
               }
             }
           }
@@ -287,15 +313,28 @@ const panCardActions = async (req, res) => {
 
         // Retailer (User)
         commData.amounts.retailerComm = retSlabAmount;
+
+        console.log('[PAN] Final Distribution Amounts:', JSON.stringify(commData.amounts, null, 2));
       }
     }
 
     const mode = 'EKYC';
-    const eKycHubPromise = action === 'correction'
-      ? ekycHub.panCardCorrection(mobileNumber, mode)
-      : ekycHub.panCardNew(mobileNumber, mode);
+    // const eKycHubPromise = action === 'correction'
+    //   ? ekycHub.panCardCorrection(mobileNumber, mode)
+    //   : ekycHub.panCardNew(mobileNumber, mode);
 
-    const response = await eKycHubPromise;
+    // const response = await eKycHubPromise;
+    const response = {
+      txid: 54036297,
+      status: 'Success',
+      response_type: 'PAN_CARD',
+      opid: 'Order is under process',
+      message: 'Pan Redirection url created',
+      url: 'https://connect.inspay.in/nsdl/pan?process_id=3024&txid=54036297&mode=K',
+      number: '9071138349',
+      amount: '107',
+      orderid: 'YZCPY51519'
+    }
 
     // Normalize status to uppercase
     const normalizeStatus = (status) => {
