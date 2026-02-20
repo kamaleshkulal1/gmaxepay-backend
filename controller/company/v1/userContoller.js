@@ -3,6 +3,7 @@ const dbService = require('../../../utils/dbService');
 const { Op, Sequelize } = require('sequelize');
 const bcrypt = require('bcrypt');
 const emailService = require('../../../services/emailService');
+const imageService = require('../../../services/imageService');
 
 const findAllUsers = async (req, res) => {
   try {
@@ -907,6 +908,594 @@ const getByUserProfile = async (req, res) => {
   }
 };
 
+const extractS3Key = (imageData) => {
+  if (!imageData) return null;
+  if (typeof imageData === 'string') {
+    try {
+      const parsed = JSON.parse(imageData);
+      return parsed.key || parsed;
+    } catch {
+      return imageData;
+    }
+  } else if (typeof imageData === 'object') {
+    return imageData.key || imageData;
+  }
+  return null;
+};
+
+const calculateKycStatus = (user, outlet, customerBank, aadhaarDoc, panDoc) => {
+  const steps = [];
+
+  // Mobile verification
+  steps.push({ key: 'mobileVerification', done: !!user.mobileVerify });
+
+  // Email verification
+  steps.push({ key: 'emailVerification', done: !!user.emailVerify });
+
+  // Aadhaar verification
+  const aadhaarDone = !!user.aadharVerify || (aadhaarDoc && aadhaarDoc.verificationId && aadhaarDoc.name);
+  steps.push({ key: 'aadharVerification', done: aadhaarDone });
+
+  // PAN verification
+  const panDone = !!user.panVerify || (panDoc && panDoc.verificationId && panDoc.panNumber);
+  steps.push({ key: 'panVerification', done: panDone });
+
+  // Shop details
+  steps.push({ key: 'shopDetails', done: !!user.shopDetailsVerify });
+
+  // Bank verification
+  const bankDone = !!user.bankDetailsVerify || !!(customerBank && customerBank.accountNumber && customerBank.ifsc);
+  steps.push({ key: 'bankVerification', done: bankDone });
+
+  // Profile
+  steps.push({ key: 'profile', done: !!user.profileImageWithShopVerify });
+
+  const completedSteps = steps.filter(s => s.done).length;
+  const totalSteps = 7;
+
+  let kycStatus = 'NO_KYC';
+  let kycSteps = completedSteps;
+
+  if (completedSteps >= 4 && completedSteps < totalSteps) {
+    kycStatus = 'HALF_KYC';
+  } else if (completedSteps === totalSteps) {
+    kycStatus = 'FULL_KYC';
+  }
+
+  return { kycStatus, kycSteps, completedSteps, totalSteps };
+};
+
+const getCompleteKycData = async (req, res) => {
+  try {
+    let permissions = req.permission || [];
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 1 &&
+        permission.dataValues.read === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: "User doesn't have Permission!" });
+    }
+
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: "You are not authorized to get complete KYC data" });
+    }
+
+    const { id } = req.params;
+    const companyId = req.user.companyId;
+
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    // Find user
+    let foundUser = await dbService.findOne(model.user, {
+      id,
+      companyId,
+      isDeleted: false
+    });
+
+    if (!foundUser) {
+      return res.failure({ message: 'User not found in your company' });
+    }
+
+    // Get image URLs helper - use CDN URLs for all images
+    const getImageUrl = (imageData) => {
+      if (!imageData) return null;
+      const plainKey = extractS3Key(imageData);
+      if (!plainKey) return null;
+      return imageService.getImageUrl(plainKey, false);
+    };
+
+    // Get outlet
+    const outlet = await dbService.findOne(model.outlet, {
+      refId: id,
+      companyId: companyId
+    });
+
+    // Get customer and customerBank
+    const customer = await dbService.findOne(model.customer, {
+      mobile: foundUser.mobileNo
+    });
+
+    let customerBank = null;
+    if (customer) {
+      customerBank = await dbService.findOne(model.customerBank, {
+        refId: customer.id,
+        companyId: companyId
+      });
+    }
+    if (!customerBank) {
+      customerBank = await dbService.findOne(model.customerBank, {
+        refId: id,
+        companyId: companyId
+      });
+    }
+
+    // Get Aadhaar and PAN documents
+    const [aadhaarDoc, panDoc] = await Promise.all([
+      dbService.findOne(model.digilockerDocument, {
+        refId: id,
+        companyId: companyId,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      }),
+      dbService.findOne(model.digilockerDocument, {
+        refId: id,
+        companyId: companyId,
+        documentType: 'PAN',
+        isDeleted: false
+      })
+    ]);
+
+    // Calculate KYC status
+    const kycInfo = calculateKycStatus(foundUser, outlet, customerBank, aadhaarDoc, panDoc);
+
+    // Get shop image URL
+    const getShopImageUrl = (shopImage) => {
+      if (!shopImage) return null;
+      const plainKey = extractS3Key(shopImage);
+      if (!plainKey) return null;
+      return imageService.getImageUrl(plainKey, false);
+    };
+
+    const shopCategory = await dbService.findOne(model.practomindCompanyCode, {
+      id: outlet?.shopCategoryId || 1,
+      isDeleted: false
+    });
+
+    const kycData = {
+      userId: foundUser.id,
+      userDetails: {
+        userId: foundUser.userId,
+        name: foundUser.name,
+        mobileNo: foundUser.mobileNo,
+        email: foundUser.email,
+        mobileVerify: !!foundUser.mobileVerify,
+        emailVerify: !!foundUser.emailVerify,
+        aadharVerify: !!foundUser.aadharVerify,
+        panVerify: !!foundUser.panVerify,
+        shopDetailsVerify: !!foundUser.shopDetailsVerify,
+        bankDetailsVerify: !!foundUser.bankDetailsVerify,
+        imageVerify: !!foundUser.imageVerify,
+        profileImageWithShopVerify: !!foundUser.profileImageWithShopVerify,
+        profileImage: getImageUrl(foundUser.profileImage),
+        aadharFrontImage: getImageUrl(foundUser.aadharFrontImage),
+        aadharBackImage: getImageUrl(foundUser.aadharBackImage),
+        panCardFrontImage: getImageUrl(foundUser.panCardFrontImage),
+        panCardBackImage: getImageUrl(foundUser.panCardBackImage)
+      },
+      outletDetails: outlet ? {
+        outletId: outlet.id,
+        shopName: outlet.shopName,
+        shopAddress: outlet.shopAddress,
+        gstNo: outlet.gstNo,
+        mobileNo: outlet.mobileNo,
+        zipCode: outlet.zipCode,
+        shopImage: getShopImageUrl(outlet.shopImage),
+        shopCategory: shopCategory ? shopCategory.description : null
+      } : null,
+      customerBankDetails: customerBank ? {
+        customerBankId: customerBank.id,
+        accountNumber: customerBank.accountNumber,
+        ifsc: customerBank.ifsc,
+        bankName: customerBank.bankName,
+        beneficiaryName: customerBank.beneficiaryName,
+        branch: customerBank.branch || null
+      } : null,
+      aadhaarDoc: aadhaarDoc ? {
+        id: aadhaarDoc.id,
+        verificationId: aadhaarDoc.verificationId,
+        referenceId: aadhaarDoc.referenceId,
+        status: aadhaarDoc.status,
+        name: aadhaarDoc.name,
+        uid: aadhaarDoc.uid,
+        dob: aadhaarDoc.dob
+      } : null,
+      panDoc: panDoc ? {
+        id: panDoc.id,
+        verificationId: panDoc.verificationId,
+        referenceId: panDoc.referenceId,
+        status: panDoc.status,
+        panNumber: panDoc.panNumber,
+        panName: panDoc.panName,
+        panDob: panDoc.panDob
+      } : null,
+      kycStatus: kycInfo.kycStatus,
+      kycSteps: kycInfo.kycSteps,
+      completedSteps: kycInfo.completedSteps,
+      totalSteps: kycInfo.totalSteps
+    };
+
+    return res.success({
+      message: 'Complete KYC Data Retrieved Successfully',
+      data: kycData
+    });
+  } catch (error) {
+    console.error('Error getting complete KYC data:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
+const revertKycData = async (req, res) => {
+  try {
+    let permissions = req.permission || [];
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 1 &&
+        permission.dataValues.write === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: "User doesn't have Permission!" });
+    }
+
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: "You don't have permission to revert KYC data" });
+    }
+
+    const { id } = req.params;
+    const companyId = req.user.companyId;
+
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    const { pan, aadhar, shopImage, bankVerification } = req.body || {};
+
+    // Find user
+    let foundUser = await dbService.findOne(model.user, {
+      id,
+      companyId,
+      isDeleted: false
+    });
+
+    if (!foundUser) {
+      return res.failure({ message: 'User not found in your company' });
+    }
+
+    const revertOperations = [];
+    const updateData = {};
+    const revertMessages = [];
+    const revertedItems = {
+      pan: false,
+      aadhar: false,
+      shopImage: false,
+      bankVerification: false
+    };
+
+    const isTrue = (value) => {
+      return value === true || value === 'true';
+    };
+
+    if (!isTrue(pan) && !isTrue(aadhar) && !isTrue(shopImage) && !isTrue(bankVerification)) {
+      return res.failure({
+        message: 'No KYC data specified to revert. Please provide at least one of: pan, aadhar, shopImage, bankVerification with value true'
+      });
+    }
+
+    // Revert PAN verification
+    if (isTrue(pan)) {
+      revertedItems.pan = true;
+      const panFrontKey = extractS3Key(foundUser.panCardFrontImage);
+      const panBackKey = extractS3Key(foundUser.panCardBackImage);
+
+      if (panFrontKey) {
+        revertOperations.push(
+          imageService.deleteImageFromS3(panFrontKey).catch(err =>
+            console.error('Error deleting PAN front image:', err)
+          )
+        );
+      }
+      if (panBackKey) {
+        revertOperations.push(
+          imageService.deleteImageFromS3(panBackKey).catch(err =>
+            console.error('Error deleting PAN back image:', err)
+          )
+        );
+      }
+
+      updateData.panVerify = false;
+      updateData.panCardFrontImage = null;
+      updateData.panCardBackImage = null;
+      updateData.panDetails = null;
+
+      const panDoc = await dbService.findOne(model.digilockerDocument, {
+        refId: id,
+        companyId: companyId,
+        documentType: 'PAN',
+        isDeleted: false
+      });
+
+      if (panDoc) {
+        await dbService.destroy(model.digilockerDocument, {
+          id: panDoc.id,
+          companyId: companyId
+        });
+      }
+
+      revertMessages.push('PAN verification has been reverted');
+    }
+
+    // Revert Aadhaar verification
+    if (isTrue(aadhar)) {
+      revertedItems.aadhar = true;
+      const aadharFrontKey = extractS3Key(foundUser.aadharFrontImage);
+      const aadharBackKey = extractS3Key(foundUser.aadharBackImage);
+
+      if (aadharFrontKey) {
+        revertOperations.push(
+          imageService.deleteImageFromS3(aadharFrontKey).catch(err =>
+            console.error('Error deleting Aadhaar front image:', err)
+          )
+        );
+      }
+      if (aadharBackKey) {
+        revertOperations.push(
+          imageService.deleteImageFromS3(aadharBackKey).catch(err =>
+            console.error('Error deleting Aadhaar back image:', err)
+          )
+        );
+      }
+
+      updateData.aadharVerify = false;
+      updateData.aadharFrontImage = null;
+      updateData.aadharBackImage = null;
+      updateData.aadharDetails = null;
+
+      const aadhaarDoc = await dbService.findOne(model.digilockerDocument, {
+        refId: id,
+        companyId: companyId,
+        documentType: 'AADHAAR',
+        isDeleted: false
+      });
+
+      if (aadhaarDoc) {
+        await dbService.destroy(model.digilockerDocument, {
+          id: aadhaarDoc.id,
+          companyId: companyId
+        });
+      }
+
+      revertMessages.push('Aadhaar verification has been reverted');
+    }
+
+    // Revert shop image
+    if (isTrue(shopImage)) {
+      revertedItems.shopImage = true;
+      const outlet = await dbService.findOne(model.outlet, {
+        refId: id,
+        companyId: companyId
+      });
+
+      if (outlet && outlet.shopImage) {
+        const shopImageKey = extractS3Key(outlet.shopImage);
+
+        if (shopImageKey) {
+          revertOperations.push(
+            imageService.deleteImageFromS3(shopImageKey).catch(err =>
+              console.error('Error deleting shop image:', err)
+            )
+          );
+        }
+
+        await dbService.update(
+          model.outlet,
+          { id: outlet.id },
+          { shopImage: null, shopImageVerify: false }
+        );
+      }
+
+      updateData.shopDetailsVerify = false;
+      revertMessages.push('Shop image has been reverted');
+    }
+
+    // Revert bank verification
+    if (isTrue(bankVerification)) {
+      revertedItems.bankVerification = true;
+      const customer = await dbService.findOne(model.customer, {
+        mobile: foundUser.mobileNo
+      });
+
+      let customerBank = null;
+      if (customer) {
+        customerBank = await dbService.findOne(model.customerBank, {
+          refId: customer.id,
+          companyId: companyId
+        });
+      }
+      if (!customerBank) {
+        customerBank = await dbService.findOne(model.customerBank, {
+          refId: id,
+          companyId: companyId
+        });
+      }
+
+      if (customerBank) {
+        await dbService.destroy(model.customerBank, {
+          id: customerBank.id,
+          companyId: companyId
+        });
+      }
+
+      updateData.bankDetailsVerify = false;
+      updateData.nameSimilarity = null;
+
+      revertMessages.push('Bank verification has been reverted');
+    }
+
+    await Promise.all(revertOperations);
+
+    if (Object.keys(updateData).length > 0) {
+      updateData.updatedBy = req.user.id;
+
+      await dbService.update(
+        model.user,
+        { id, companyId },
+        updateData
+      );
+
+      const outlet = await dbService.findOne(model.outlet, {
+        refId: id,
+        companyId: companyId
+      });
+
+      const customer = await dbService.findOne(model.customer, {
+        mobile: foundUser.mobileNo
+      });
+
+      let customerBank = null;
+      if (customer) {
+        customerBank = await dbService.findOne(model.customerBank, {
+          refId: customer.id,
+          companyId: companyId
+        });
+      }
+      if (!customerBank) {
+        customerBank = await dbService.findOne(model.customerBank, {
+          refId: id,
+          companyId: companyId
+        });
+      }
+
+      const [aadhaarDoc, panDoc] = await Promise.all([
+        dbService.findOne(model.digilockerDocument, {
+          refId: id,
+          companyId: companyId,
+          documentType: 'AADHAAR',
+          isDeleted: false
+        }),
+        dbService.findOne(model.digilockerDocument, {
+          refId: id,
+          companyId: companyId,
+          documentType: 'PAN',
+          isDeleted: false
+        })
+      ]);
+
+      const updatedUser = await dbService.findOne(model.user, {
+        id,
+        companyId
+      });
+
+      const kycInfo = calculateKycStatus(updatedUser, outlet, customerBank, aadhaarDoc, panDoc);
+
+      await dbService.update(
+        model.user,
+        { id, companyId },
+        {
+          kycStatus: kycInfo.kycStatus,
+          kycSteps: kycInfo.kycSteps
+        }
+      );
+
+      const company = await dbService.findOne(model.company, {
+        id: companyId,
+        isDeleted: false
+      });
+
+      const userForEmail = await dbService.findOne(model.user, {
+        id,
+        companyId
+      });
+
+      if (userForEmail && userForEmail.email) {
+        const backendUrl = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
+        const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
+
+        try {
+          if (isTrue(pan)) {
+            const resetPanIllustrationUrl = `${backendUrl}/resetPan.png`;
+            await emailService.sendNotificationEmail({
+              to: userForEmail.email,
+              userName: userForEmail.name || 'User',
+              subject: 'PAN Verification Reverted - Gmaxepay',
+              successMessage: 'Your PAN verification has been reverted',
+              message: 'Please connect your PAN to digilocker, upload and download your PAN document to complete the verification process.',
+              logoUrl: logoUrl,
+              illustrationUrl: resetPanIllustrationUrl
+            });
+          }
+
+          if (isTrue(aadhar)) {
+            const resetAadhaarIllustrationUrl = `${backendUrl}/resetAadhaar.png`;
+            await emailService.sendNotificationEmail({
+              to: userForEmail.email,
+              userName: userForEmail.name || 'User',
+              subject: 'Aadhaar Verification Reverted - Gmaxepay',
+              successMessage: 'Your Aadhaar verification has been reverted',
+              message: 'Please connect your Aadhaar to digilocker, upload and download your Aadhaar document to complete the verification process.',
+              logoUrl: logoUrl,
+              illustrationUrl: resetAadhaarIllustrationUrl
+            });
+          }
+
+          if (isTrue(shopImage)) {
+            const resetShopImageIllustrationUrl = `${backendUrl}/resetShopImage.png`;
+            await emailService.sendNotificationEmail({
+              to: userForEmail.email,
+              userName: userForEmail.name || 'User',
+              subject: 'Shop Image Reverted - Gmaxepay',
+              successMessage: 'Your shop image has been reverted',
+              message: 'Please upload your shop image again to complete the shop details verification process.',
+              logoUrl: logoUrl,
+              illustrationUrl: resetShopImageIllustrationUrl
+            });
+          }
+
+          if (isTrue(bankVerification)) {
+            const resetBankIllustrationUrl = `${backendUrl}/resetBank.png`;
+            await emailService.sendNotificationEmail({
+              to: userForEmail.email,
+              userName: userForEmail.name || 'User',
+              subject: 'Bank Verification Reverted - Gmaxepay',
+              successMessage: 'Your bank verification has been reverted',
+              message: 'Please provide your bank account details again to complete the bank verification process.',
+              logoUrl: logoUrl,
+              illustrationUrl: resetBankIllustrationUrl
+            });
+          }
+        } catch (emailError) {
+          console.error('Error sending KYC revert email:', emailError);
+        }
+      }
+    }
+
+    let successMessage = 'KYC data reverted successfully';
+    if (revertMessages.length > 0) {
+      successMessage = revertMessages.join('. ');
+    }
+
+    return res.success({
+      message: successMessage,
+      data: null
+    });
+  } catch (error) {
+    console.error('Error reverting KYC data:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
 
 module.exports = {
   findAllUsers,
@@ -914,5 +1503,7 @@ module.exports = {
   resetMPIN,
   getUserProfile,
   findAllCompanyReportToUser,
-  getByUserProfile
+  getByUserProfile,
+  getCompleteKycData,
+  revertKycData
 };

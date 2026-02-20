@@ -12,5 +12,7 @@ router.post('/resetMPIN', authentication, userController.resetMPIN);
 router.post('/getProfile', authentication, userController.getUserProfile);
 router.post('/reportToUserList', authentication, userController.findAllCompanyReportToUser);
 router.post('/profile/:id', authentication, userController.getByUserProfile);
+router.post('/kyc/complete/:id', authentication, userController.getCompleteKycData);
+router.post('/kyc/revert/:id', authentication, userController.revertKycData);
 
 module.exports = router;
