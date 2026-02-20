@@ -875,13 +875,13 @@ const getUserProfile = async (req, res) => {
       city: existingUser.city,
       longitude: existingUser.longitude,
       latitude: existingUser.latitude,
-      userRoleName: existingUser?.userRole == 4 ? 'Distributor' : existingUser?.userRole == 5 ? 'Retailer' : existingUser?.userRole == 3 ? 'Master Distributor' : '',
+      userRoleName: existingUser?.userRole == 4 ? 'Distributor' : existingUser?.userRole == 5 ? 'Retailer' : existingUser?.userRole == 3 ? 'Master Distributor' : existingUser?.userRole == 2 ? 'Company Admin' : existingUser?.userRole == 1 ? 'Super Admin' : '',
       kycStatus: existingUser.kycStatus,
       reportingToManager: reportingToManager?.name || null,
       reportingToManagerEmail: reportingToManager?.email || null,
       reportingToManagerMobile: reportingToManager?.mobileNo || null,
       reportingToProfile: getCdnImageUrl(reportingToManager?.profileImage),
-      reportingToUserRole: reportingToManager?.userRole == 4 ? 'Distributor' : reportingToManager?.userRole == 5 ? 'Retailer' : reportingToManager?.userRole == 3 ? 'Master Distributor' : '',
+      reportingToUserRole: reportingToManager?.userRole == 4 ? 'Distributor' : reportingToManager?.userRole == 5 ? 'Retailer' : reportingToManager?.userRole == 3 ? 'Master Distributor' : reportingToManager?.userRole == 2 ? 'Company Admin' : reportingToManager?.userRole == 1 ? 'Super Admin' : '',
       companyDetails: companyDetails
         ? {
           companyId: companyDetails.id,
