@@ -60,7 +60,7 @@ const registerOperator = async (req, res) => {
         case 1:
           return { roleTypes: [1, 2], roleNames: ['AD', 'WU'] };
         case 2:
-          return { roleTypes: [1, 2, 3, 4, 5], roleNames: ['AD', 'WU', 'MD', 'DI', 'RE'] };
+          return { roleTypes: [2, 3, 4, 5], roleNames: ['AD', 'WU', 'MD', 'DI', 'RE'] };
         case 3:
           return { roleTypes: [3, 4, 5], roleNames: ['MD', 'DI', 'RE'] };
         case 4:
