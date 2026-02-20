@@ -56,7 +56,7 @@ const registerOperator = async (req, res) => {
     // Fetch all companies to apply Admin slabs to all companies
     const allCompanies = await dbService.findAll(
       model.company,
-      { isDelete: false },
+      { isDeleted: false },
       { select: ['id'] }
     );
 
