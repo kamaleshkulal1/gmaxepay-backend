@@ -147,8 +147,8 @@ const recharge = async (req, res) => {
                                 dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                             ]);
 
-                            commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
-                            commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
+                            commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                            commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                             commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
                             commData.slabs.distSlab = mdSlabComm?.find(c => c.roleType === 4);
                         }
@@ -175,8 +175,8 @@ const recharge = async (req, res) => {
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
 
-                        commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
-                        commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
+                        commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                        commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                         commData.slabs.retSlab = companySlabComm?.find(c => c.roleType === 5);
                         console.log("commData.slabs.saSlab", commData.slabs.saSlab);
                         console.log("commData.slabs.wlSlab", commData.slabs.wlSlab);
@@ -192,8 +192,8 @@ const recharge = async (req, res) => {
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                             dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                         ]);
-                        commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
-                        commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
+                        commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                        commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                         commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
                         commData.slabs.retSlab = masterDistributorComm?.find(c => c.roleType === 5);
 
@@ -208,8 +208,8 @@ const recharge = async (req, res) => {
                                 dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                                 dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                             ]);
-                            commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
-                            commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
+                            commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                            commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                             commData.slabs.distSlab = companySlabComm?.find(c => c.roleType === 4);
                             commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
 
@@ -226,8 +226,8 @@ const recharge = async (req, res) => {
                                     dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
                                     dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
                                 ]);
-                                commData.slabs.saSlab = SuperAdminSlabComm?.find(c => c.roleType === 1);
-                                commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => c.roleType === 2);
+                                commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                                commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
                                 commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
                                 commData.slabs.distSlab = mdSlabComm?.find(c => c.roleType === 4);
                                 commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
