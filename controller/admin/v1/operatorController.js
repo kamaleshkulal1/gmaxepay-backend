@@ -84,8 +84,10 @@ const registerOperator = async (req, res) => {
 
 
       const config = getRoleConfig(addedByRole);
-      const roleTypes = config.roleTypes;
-      const roleNames = config.roleNames;
+      // Filter roles based on companyId
+      // If companyId is 1 (Super Admin), we only create AD (1) and WU (2)
+      let roleTypes = config.roleTypes;
+      let roleNames = config.roleNames;
 
       roleTypes.forEach((roleType, index) => {
         dataToInsert.push({
@@ -371,7 +373,7 @@ const findAllState = async (req, res) => {
   }
 };
 
-const operatorList = async (req, res) => { 
+const operatorList = async (req, res) => {
   try {
     let query = { ...req.body };
     const datas = await dbService.findAll(model.operator, query, {
