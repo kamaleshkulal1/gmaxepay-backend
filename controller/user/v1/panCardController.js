@@ -322,7 +322,7 @@ const panCardActions = async (req, res) => {
       const openingMainWallet = round4(currentWallet.mainWallet || 0);
 
       if ([4, 5].includes(user.userRole)) {
-        if (isSuccess) {
+        if (isSuccess || isPending) {
           // Update outer variables for response structure
           retailerComm = commData.amounts.retailerComm;
           distributorComm = commData.amounts.distComm;
@@ -332,7 +332,8 @@ const panCardActions = async (req, res) => {
 
           const historyPromises = [];
           const walletUpdates = [];
-          const remarkText = `PAN Card-${operator.operatorName}`;
+          const remarkStatus = isPending ? ` Pending-${operator.operatorName}` : `-${operator.operatorName}`;
+          const remarkText = `PAN Card${remarkStatus}`;
 
           // A. Retailer Update (User)
           if (commData.users.retailer && commData.wallets.retailerWallet) {
@@ -401,7 +402,7 @@ const panCardActions = async (req, res) => {
               credit: commData.amounts.distComm,
               debit: dDebit,
               transactionId: orderid,
-              paymentStatus: 'SUCCESS',
+              paymentStatus: paymentStatus,
               addedBy: commData.users.distributor.id,
               updatedBy: commData.users.distributor.id
             }));
@@ -432,7 +433,7 @@ const panCardActions = async (req, res) => {
               credit: commData.amounts.mdComm,
               debit: commData.amounts.mdShortfall,
               transactionId: orderid,
-              paymentStatus: 'SUCCESS',
+              paymentStatus: paymentStatus,
               addedBy: commData.users.masterDistributor.id,
               updatedBy: commData.users.masterDistributor.id
             }));
@@ -462,7 +463,7 @@ const panCardActions = async (req, res) => {
             credit: commData.amounts.companyComm,
             debit: commData.amounts.wlShortfall,
             transactionId: orderid,
-            paymentStatus: 'SUCCESS',
+            paymentStatus: paymentStatus,
             addedBy: commData.users.companyAdmin.id,
             updatedBy: commData.users.companyAdmin.id
           }));
@@ -491,7 +492,7 @@ const panCardActions = async (req, res) => {
             credit: commData.amounts.superAdminComm,
             debit: commData.amounts.saShortfall,
             transactionId: orderid,
-            paymentStatus: 'SUCCESS',
+            paymentStatus: paymentStatus,
             addedBy: commData.users.superAdmin.id,
             updatedBy: commData.users.superAdmin.id
           }));
@@ -499,41 +500,19 @@ const panCardActions = async (req, res) => {
           // Execute Updates
           await Promise.all([...walletUpdates, ...historyPromises]);
 
-        } else if (isPending) {
-          // Pending State: Only Deduct Amount from User. NO Commission yet.
-          const closing = round4(openingMainWallet - amountNumber);
-          await dbService.update(model.wallet, { id: currentWallet.id }, { mainWallet: closing, updatedBy: user.id });
-
-          await dbService.createOne(model.walletHistory, {
-            refId: user.id,
-            companyId: user.companyId,
-            walletType: 'mainWallet',
-            operator: operator.operatorName,
-            remark: `PAN Card Pending-${operator.operatorName}`,
-            amount: amountNumber,
-            comm: 0,
-            surcharge: 0,
-            openingAmt: openingMainWallet,
-            closingAmt: closing,
-            credit: 0,
-            debit: amountNumber,
-            transactionId: orderid,
-            paymentStatus: 'PENDING',
-            addedBy: user.id,
-            updatedBy: user.id
-          });
         }
       } else {
         // Non-Role 4/5 Logic (Fallback)
         const closing = round4(openingMainWallet - amountNumber);
         await dbService.update(model.wallet, { id: currentWallet.id }, { mainWallet: closing, updatedBy: user.id });
 
+        const remarkStatus = isPending ? ` Pending-${operator.operatorName}` : `-${operator.operatorName}`;
         await dbService.createOne(model.walletHistory, {
           refId: user.id,
           companyId: user.companyId,
           walletType: 'mainWallet',
           operator: operator.operatorName,
-          remark: `PAN Card-${operator.operatorName}`,
+          remark: `PAN Card${remarkStatus}`,
           amount: amountNumber,
           comm: 0,
           surcharge: 0,
@@ -569,11 +548,11 @@ const panCardActions = async (req, res) => {
         }),
         response: JSON.stringify(response),
         apiResponse: response,
-        superadminComm: paymentStatus === 'SUCCESS' ? superAdminComm : 0,
-        whitelabelComm: paymentStatus === 'SUCCESS' ? companyComm : 0,
-        masterDistributorCom: paymentStatus === 'SUCCESS' ? masterDistributorComm : 0,
-        distributorCom: paymentStatus === 'SUCCESS' ? distributorComm : 0,
-        retailerCom: paymentStatus === 'SUCCESS' ? retailerComm : 0,
+        superadminComm: superAdminComm,
+        whitelabelComm: companyComm,
+        masterDistributorCom: masterDistributorComm,
+        distributorCom: distributorComm,
+        retailerCom: retailerComm,
         addedBy: userId,
         updatedBy: userId
       };

@@ -52,7 +52,7 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
     const isMobileRecharge = serviceType === 'MobileRecharge';
     const isDTHRecharge = serviceType === 'DTHRecharge';
     const isPan = serviceType === 'Pan';
-    const isRechargeService = isMobileRecharge || isDTHRecharge;
+    const isRefundableService = isMobileRecharge || isDTHRecharge || isPan;
 
     const updateData = {
         status: newStatus,
@@ -60,7 +60,7 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
         updatedBy: existingTransaction.refId
     };
 
-    if (isRechargeService) {
+    if (isRefundableService) {
         if (newStatus === 'FAILURE' && (currentStatus === 'SUCCESS' || currentStatus === 'PENDING')) {
             // Find all wallet histories associated with this transaction in the current state
             const histories = await dbService.findAll(model.walletHistory, {
@@ -93,7 +93,7 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
                                 companyId: history.companyId,
                                 walletType: history.walletType || 'mainWallet',
                                 operator: history.operator || 'Unknown',
-                                remark: `Reversal - Recharge Failed`,
+                                remark: `Reversal - ${serviceType} Failed`,
                                 amount: history.amount || 0,
                                 comm: 0,
                                 surcharge: 0,
@@ -132,7 +132,7 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
                             companyId: existingTransaction.companyId,
                             walletType: 'mainWallet',
                             operator: 'Unknown',
-                            remark: `Reversal - Recharge Failed`,
+                            remark: `Reversal - ${serviceType} Failed`,
                             amount: amountToRefund,
                             comm: 0,
                             surcharge: 0,
