@@ -24,7 +24,7 @@ const updateWalletBalance = async (refId, companyId, amount, updatedBy) => {
     if (wallet) {
         const currentBalance = round2(wallet.mainWallet || 0);
         const newBalance = round2(Math.max(0, currentBalance + amount));
-        
+
         await wallet.update({
             mainWallet: newBalance,
             updatedBy
@@ -48,19 +48,11 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
 
     const currentStatus = existingTransaction.status;
     const serviceType = existingTransaction.serviceType;
-    
+
     const isMobileRecharge = serviceType === 'MobileRecharge';
     const isDTHRecharge = serviceType === 'DTHRecharge';
     const isPan = serviceType === 'Pan';
     const isRechargeService = isMobileRecharge || isDTHRecharge;
-    
-    const hasCommissions = isRechargeService && (
-        existingTransaction.superadminComm ||
-        existingTransaction.whitelabelComm ||
-        existingTransaction.masterDistributorCom ||
-        existingTransaction.distributorCom ||
-        existingTransaction.retailerCom
-    );
 
     const updateData = {
         status: newStatus,
@@ -68,25 +60,102 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
         updatedBy: existingTransaction.refId
     };
 
-    if (isRechargeService && hasCommissions) {
-        if (newStatus === 'FAILURE') {
+    if (isRechargeService) {
+        if (newStatus === 'FAILURE' && (currentStatus === 'SUCCESS' || currentStatus === 'PENDING')) {
+            // Find all wallet histories associated with this transaction in the current state
+            const histories = await dbService.findAll(model.walletHistory, {
+                transactionId: existingTransaction.orderid,
+                paymentStatus: currentStatus
+            });
+
+            if (histories && histories.length > 0) {
+                // Reverse all wallet impacts
+                for (const history of histories) {
+                    const refundAmount = round2((history.debit || 0) - (history.credit || 0));
+
+                    if (refundAmount !== 0) {
+                        const walletUser = await dbService.findOne(model.wallet, {
+                            refId: history.refId,
+                            companyId: history.companyId
+                        });
+
+                        if (walletUser) {
+                            const currentBalance = round2(walletUser.mainWallet || 0);
+                            const newBalance = round2(currentBalance + refundAmount);
+
+                            await dbService.update(model.wallet, { id: walletUser.id }, {
+                                mainWallet: newBalance,
+                                updatedBy: existingTransaction.refId
+                            });
+
+                            await dbService.createOne(model.walletHistory, {
+                                refId: history.refId,
+                                companyId: history.companyId,
+                                walletType: history.walletType || 'mainWallet',
+                                operator: history.operator || 'Unknown',
+                                remark: `Reversal - Recharge Failed`,
+                                amount: history.amount || 0,
+                                comm: 0,
+                                surcharge: 0,
+                                openingAmt: currentBalance,
+                                closingAmt: newBalance,
+                                credit: history.debit || 0,
+                                debit: history.credit || 0,
+                                transactionId: existingTransaction.orderid,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: existingTransaction.refId,
+                                updatedBy: existingTransaction.refId
+                            });
+                        }
+                    }
+                }
+            } else {
+                // Fallback: If no history is found, refund the base amount to the initiator
+                const amountToRefund = existingTransaction.amount || 0;
+                if (amountToRefund > 0) {
+                    const walletUser = await dbService.findOne(model.wallet, {
+                        refId: existingTransaction.refId,
+                        companyId: existingTransaction.companyId
+                    });
+
+                    if (walletUser) {
+                        const currentBalance = round2(walletUser.mainWallet || 0);
+                        const newBalance = round2(currentBalance + amountToRefund);
+
+                        await dbService.update(model.wallet, { id: walletUser.id }, {
+                            mainWallet: newBalance,
+                            updatedBy: existingTransaction.refId
+                        });
+
+                        await dbService.createOne(model.walletHistory, {
+                            refId: existingTransaction.refId,
+                            companyId: existingTransaction.companyId,
+                            walletType: 'mainWallet',
+                            operator: 'Unknown',
+                            remark: `Reversal - Recharge Failed`,
+                            amount: amountToRefund,
+                            comm: 0,
+                            surcharge: 0,
+                            openingAmt: currentBalance,
+                            closingAmt: newBalance,
+                            credit: amountToRefund,
+                            debit: 0,
+                            transactionId: existingTransaction.orderid,
+                            paymentStatus: 'REFUNDED',
+                            addedBy: existingTransaction.refId,
+                            updatedBy: existingTransaction.refId
+                        });
+                    }
+                }
+            }
+
+            // Zero out commissions for the failed transaction
             updateData.superadminComm = 0;
             updateData.whitelabelComm = 0;
             updateData.masterDistributorCom = 0;
             updateData.distributorCom = 0;
             updateData.retailerCom = 0;
 
-            if (currentStatus === 'SUCCESS') {
-                const totalCommission = calculateTotalCommission(existingTransaction);
-                if (totalCommission > 0) {
-                    await updateWalletBalance(
-                        existingTransaction.refId,
-                        existingTransaction.companyId,
-                        -totalCommission,
-                        existingTransaction.refId
-                    );
-                }
-            }
         } else if (newStatus === 'SUCCESS') {
             updateData.superadminComm = existingTransaction.superadminComm;
             updateData.whitelabelComm = existingTransaction.whitelabelComm;
@@ -120,9 +189,9 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
         updateData
     );
 
-    return { 
-        success: true, 
-        message: 'Status updated successfully', 
+    return {
+        success: true,
+        message: 'Status updated successfully',
         record: existingTransaction,
         serviceType: serviceType
     };
@@ -138,7 +207,7 @@ const paymentCallback = async (req, res) => {
         }
 
         const statusUpper = status.toUpperCase();
-        const newStatus = statusUpper === 'SUCCESS' ? 'SUCCESS' 
+        const newStatus = statusUpper === 'SUCCESS' ? 'SUCCESS'
             : (statusUpper === 'PENDING' ? 'PENDING' : 'FAILURE');
 
         const operatorId = opid && opid.trim() !== '' ? opid : null;
@@ -147,26 +216,26 @@ const paymentCallback = async (req, res) => {
 
         if (result.success) {
             const serviceType = result.serviceType || result.record?.serviceType;
-            console.log('[Payment Callback] Status updated successfully:', { 
-                txid, 
-                status: newStatus, 
+            console.log('[Payment Callback] Status updated successfully:', {
+                txid,
+                status: newStatus,
                 opid: operatorId,
                 serviceType: serviceType,
                 previousStatus: result.record?.status
             });
         } else {
-            console.error('[Payment Callback] Failed to update status:', result.message, { 
-                txid, 
-                status: newStatus 
+            console.error('[Payment Callback] Failed to update status:', result.message, {
+                txid,
+                status: newStatus
             });
         }
 
         return res.send('OK');
     } catch (error) {
-        console.error('[Payment Callback] Error:', error, { 
-            txid: req.query.txid, 
-            status: req.query.status, 
-            opid: req.query.opid 
+        console.error('[Payment Callback] Error:', error, {
+            txid: req.query.txid,
+            status: req.query.status,
+            opid: req.query.opid
         });
         return res.send('OK');
     }
@@ -230,7 +299,7 @@ const aslPayoutCallback = async (req, res) => {
 
         return res.send('OK');
     } catch (error) {
-        console.error('[ASL Payout Callback] Error:', error, { 
+        console.error('[ASL Payout Callback] Error:', error, {
             body: req.body
         });
         return res.send('OK');
