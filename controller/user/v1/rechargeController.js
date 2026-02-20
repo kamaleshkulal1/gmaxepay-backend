@@ -3,9 +3,9 @@ const model = require('../../../models');
 const inspayService = require('../../../services/inspayService');
 const { Op, Sequelize } = require('sequelize');
 const { generateTransactionID } = require('../../../utils/transactionID');
-const round2 = (num) => {
+const round4 = (num) => {
     const n = Number(num);
-    return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : 0;
+    return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
 };
 
 const calcSlabAmount = (slab, baseAmount) => {
@@ -16,9 +16,9 @@ const calcSlabAmount = (slab, baseAmount) => {
 
     const amtType = (slab.amtType || 'fix').toLowerCase();
     if (amtType === 'per') {
-        return round2((base * rawComm) / 100);
+        return round4((base * rawComm) / 100);
     }
-    return round2(rawComm);
+    return round4(rawComm);
 };
 
 const recharge = async (req, res) => {
@@ -38,7 +38,7 @@ const recharge = async (req, res) => {
             return res.failure({ message: 'Circle is required' });
         }
 
-        const amountNumber = round2(parseFloat(amount));
+        const amountNumber = round4(parseFloat(amount));
         const user = req.user;
 
         // 1. Fetch User, Operator, Company
@@ -236,22 +236,12 @@ const recharge = async (req, res) => {
                 }
 
                 // D. Calculate Amounts
-                console.log(`[Recharge] Scenario: ${commData.scenario} | Amount: ${amountNumber} | Operator: ${operatorType}`);
-                console.log(`[Recharge] Slabs Found -> SA: ${!!commData.slabs.saSlab}, WL: ${!!commData.slabs.wlSlab}, MD: ${!!commData.slabs.mdSlab}, Dist: ${!!commData.slabs.distSlab}, Ret: ${!!commData.slabs.retSlab}`);
-
                 const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
                 const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
                 let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
                 let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, amountNumber) : 0;
                 let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, amountNumber) : 0;
 
-                console.log(`[Recharge] Raw Slab Calcs -> SA: ${saSlabAmount}, WL: ${wlSlabAmount}, MD: ${mdSlabAmount}, Dist: ${distSlabAmount}, Ret: ${retSlabAmount}`);
-
-                // Margins & Shortfalls
-
-                // Super Admin
-                // Here, we look at the difference between what SA gets from Operator vs what WL actually passes down to their child
-                // Based on user: operator comm (saSlabAmount) - whitelabel given com to downline (companyCost)
                 let companyCost = 0;
                 if (commData.users.masterDistributor) companyCost = mdSlabAmount;
                 else if (commData.users.distributor) companyCost = distSlabAmount;
@@ -265,13 +255,13 @@ const recharge = async (req, res) => {
                     commData.amounts.saShortfall = 0;
                 } else {
                     commData.amounts.superAdminComm = saSlabAmount;
-                    commData.amounts.saShortfall = parseFloat(Math.abs(saIncomingVsWlOutgoingDiff).toFixed(2));
+                    commData.amounts.saShortfall = parseFloat(Math.abs(saIncomingVsWlOutgoingDiff).toFixed(4));
                 }
 
                 // Company (WL)
                 commData.amounts.companyComm = Math.max(0, wlSlabAmount - companyCost);
                 if (companyCost > wlSlabAmount) {
-                    commData.amounts.wlShortfall = parseFloat((companyCost - wlSlabAmount).toFixed(2));
+                    commData.amounts.wlShortfall = parseFloat((companyCost - wlSlabAmount).toFixed(4));
                 }
 
                 // Master Distributor
@@ -279,7 +269,7 @@ const recharge = async (req, res) => {
                     let mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
                     commData.amounts.mdComm = Math.max(0, mdSlabAmount - mdCost);
                     if (mdCost > mdSlabAmount) {
-                        commData.amounts.mdShortfall = parseFloat((mdCost - mdSlabAmount).toFixed(2));
+                        commData.amounts.mdShortfall = parseFloat((mdCost - mdSlabAmount).toFixed(4));
                     }
                 }
 
@@ -287,7 +277,7 @@ const recharge = async (req, res) => {
                 if (commData.users.distributor) {
                     commData.amounts.distComm = Math.max(0, distSlabAmount - retSlabAmount);
                     if (retSlabAmount > distSlabAmount) {
-                        commData.amounts.distShortfall = parseFloat((retSlabAmount - distSlabAmount).toFixed(2));
+                        commData.amounts.distShortfall = parseFloat((retSlabAmount - distSlabAmount).toFixed(4));
                     }
                 }
 
@@ -335,7 +325,7 @@ const recharge = async (req, res) => {
             // However, for user wallet debit, it must happen on Success OR Pending.
 
             // Base Debit Logic first
-            const openingMainWallet = round2(currentWallet.mainWallet || 0);
+            const openingMainWallet = round4(currentWallet.mainWallet || 0);
 
             if ([4, 5].includes(user.userRole)) {
                 if (isSuccess) {
@@ -351,11 +341,11 @@ const recharge = async (req, res) => {
                     const remarkText = `Recharge-${operator.operatorName}`;
 
                     // A. Retailer Update (User)
-                    const retailerOpening = round2(commData.wallets.retailerWallet.mainWallet);
+                    const retailerOpening = round4(commData.wallets.retailerWallet.mainWallet);
                     // Debit Amount AND Credit Commission (Net effect)
                     // If we want separate entries, we do separate. But typically wallet is updated net.
                     // The old code did: opening - amount + comm.
-                    const retailerClosing = round2(retailerOpening - amountNumber + commData.amounts.retailerComm);
+                    const retailerClosing = round4(retailerOpening - amountNumber + commData.amounts.retailerComm);
 
                     walletUpdates.push(
                         dbService.update(model.wallet, { id: commData.wallets.retailerWallet.id }, { mainWallet: retailerClosing, updatedBy: user.id })
@@ -383,9 +373,9 @@ const recharge = async (req, res) => {
                     // B. Distributor Update
                     if (commData.users.distributor) {
                         const dWallet = commData.wallets.distributorWallet;
-                        const dOpening = round2(dWallet.mainWallet);
+                        const dOpening = round4(dWallet.mainWallet);
                         const dNet = commData.amounts.distComm - commData.amounts.distShortfall;
-                        const dClosing = round2(dOpening + dNet);
+                        const dClosing = round4(dOpening + dNet);
 
                         walletUpdates.push(
                             dbService.update(model.wallet, { id: dWallet.id }, { mainWallet: dClosing, updatedBy: commData.users.distributor.id })
@@ -414,9 +404,9 @@ const recharge = async (req, res) => {
                     // C. Master Distributor Update
                     if (commData.users.masterDistributor) {
                         const mWallet = commData.wallets.masterDistributorWallet;
-                        const mOpening = round2(mWallet.mainWallet);
+                        const mOpening = round4(mWallet.mainWallet);
                         const mNet = commData.amounts.mdComm - commData.amounts.mdShortfall;
-                        const mClosing = round2(mOpening + mNet);
+                        const mClosing = round4(mOpening + mNet);
 
                         walletUpdates.push(
                             dbService.update(model.wallet, { id: mWallet.id }, { mainWallet: mClosing, updatedBy: commData.users.masterDistributor.id })
@@ -444,9 +434,9 @@ const recharge = async (req, res) => {
 
                     // D. Company Update
                     const cWallet = commData.wallets.companyWallet;
-                    const cOpening = round2(cWallet.mainWallet);
+                    const cOpening = round4(cWallet.mainWallet);
                     const cNet = commData.amounts.companyComm - commData.amounts.wlShortfall;
-                    const cClosing = round2(cOpening + cNet);
+                    const cClosing = round4(cOpening + cNet);
 
                     walletUpdates.push(
                         dbService.update(model.wallet, { id: cWallet.id }, { mainWallet: cClosing, updatedBy: commData.users.companyAdmin.id })
@@ -473,9 +463,9 @@ const recharge = async (req, res) => {
 
                     // E. Super Admin Update
                     const saWallet = commData.wallets.superAdminWallet;
-                    const saOpening = round2(saWallet.mainWallet);
+                    const saOpening = round4(saWallet.mainWallet);
                     const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
-                    const saClosing = round2(saOpening + saNet);
+                    const saClosing = round4(saOpening + saNet);
 
                     walletUpdates.push(
                         dbService.update(model.wallet, { id: saWallet.id }, { mainWallet: saClosing, updatedBy: commData.users.superAdmin.id })
@@ -505,7 +495,7 @@ const recharge = async (req, res) => {
 
                 } else if (isPending) {
                     // Pending State: Only Deduct Amount from User. NO Commission yet.
-                    const closing = round2(openingMainWallet - amountNumber);
+                    const closing = round4(openingMainWallet - amountNumber);
                     await dbService.update(model.wallet, { id: currentWallet.id }, { mainWallet: closing, updatedBy: user.id });
 
                     await dbService.createOne(model.walletHistory, {
@@ -529,7 +519,7 @@ const recharge = async (req, res) => {
                 }
             } else {
                 // Non-Role 4/5 Logic (Fallback)
-                const closing = round2(openingMainWallet - amountNumber);
+                const closing = round4(openingMainWallet - amountNumber);
                 await dbService.update(model.wallet, { id: currentWallet.id }, { mainWallet: closing, updatedBy: user.id });
 
                 await dbService.createOne(model.walletHistory, {
