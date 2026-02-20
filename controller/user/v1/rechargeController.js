@@ -237,6 +237,7 @@ const recharge = async (req, res) => {
                 }
 
                 // D. Calculate Amounts
+                const operatorCommissionAmount = operator.comm ? calcSlabAmount({ amtType: operator.amtType, commAmt: operator.comm }, amountNumber) : 0;
                 const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
                 const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
                 let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
@@ -248,15 +249,12 @@ const recharge = async (req, res) => {
                 else if (commData.users.distributor) companyCost = distSlabAmount;
                 else companyCost = retSlabAmount;
 
-                const operatorCommission = saSlabAmount + wlSlabAmount; // The total Incoming from operator 
-                const saIncomingVsWlOutgoingDiff = operatorCommission - companyCost;
-
-                if (saIncomingVsWlOutgoingDiff >= 0) {
-                    commData.amounts.superAdminComm = saSlabAmount;
-                    commData.amounts.saShortfall = 0;
+                // Super Admin
+                commData.amounts.superAdminComm = Math.max(0, operatorCommissionAmount - wlSlabAmount);
+                if (wlSlabAmount > operatorCommissionAmount) {
+                    commData.amounts.saShortfall = parseFloat((wlSlabAmount - operatorCommissionAmount).toFixed(4));
                 } else {
-                    commData.amounts.superAdminComm = saSlabAmount;
-                    commData.amounts.saShortfall = parseFloat(Math.abs(saIncomingVsWlOutgoingDiff).toFixed(4));
+                    commData.amounts.saShortfall = 0;
                 }
 
                 // Company (WL)
