@@ -60,7 +60,7 @@ const registerOperator = async (req, res) => {
         case 1:
           return { roleTypes: [1, 2], roleNames: ['AD', 'WU'] };
         case 2:
-          return { roleTypes: [2, 3, 4, 5], roleNames: ['WU', 'MD', 'DI', 'RE'] };
+          return { roleTypes: [1, 2, 3, 4, 5], roleNames: ['AD', 'WU', 'MD', 'DI', 'RE'] };
         case 3:
           return { roleTypes: [3, 4, 5], roleNames: ['MD', 'DI', 'RE'] };
         case 4:
@@ -84,10 +84,6 @@ const registerOperator = async (req, res) => {
 
 
       const config = getRoleConfig(addedByRole);
-      // Filter roles based on companyId
-      // If companyId is 1 (Super Admin), we only create AD (1) and WU (2)
-      let roleTypes = config.roleTypes;
-      let roleNames = config.roleNames;
 
       roleTypes.forEach((roleType, index) => {
         dataToInsert.push({
