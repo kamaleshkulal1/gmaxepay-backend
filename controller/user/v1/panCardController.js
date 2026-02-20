@@ -1,7 +1,7 @@
 const { Op, Sequelize } = require('sequelize');
 const dbService = require('../../../utils/dbService');
 const ekycHub = require('../../../services/eKycHub');
-const { model } = require('../../../models');
+const model = require('../../../models');
 const { generateTransactionID } = require('../../../utils/transactionID');
 
 const round4 = (num) => {
