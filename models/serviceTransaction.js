@@ -55,7 +55,7 @@ let ServiceTransaction = sequelize.define(
       allowNull: false,
       defaultValue: 'PENDING',
       validate: {
-        isIn: [['SUCCESS', 'FAILURE', 'PENDING']]
+        isIn: [['SUCCESS', 'FAILURE', 'PENDING', 'REFUNDED']]
       }
     },
     // Mobile Recharge & DTH specific fields

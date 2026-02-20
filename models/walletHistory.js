@@ -74,7 +74,7 @@ let WalletHistory = sequelize.define(
     paymentStatus: {
       type: DataTypes.STRING,
       validate: {
-        isIn: [['SUCCESS', 'PENDING', 'FAILED', 'REFUND']]
+        isIn: [['SUCCESS', 'PENDING', 'FAILED', 'REFUND', 'REFUNDED']]
       }
     },
     paymentInstrument: {
