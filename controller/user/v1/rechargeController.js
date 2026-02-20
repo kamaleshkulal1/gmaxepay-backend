@@ -257,7 +257,8 @@ const recharge = async (req, res) => {
                 else if (commData.users.distributor) companyCost = distSlabAmount;
                 else companyCost = retSlabAmount;
 
-                const saIncomingVsWlOutgoingDiff = saSlabAmount - companyCost;
+                const operatorCommission = saSlabAmount + wlSlabAmount; // The total Incoming from operator 
+                const saIncomingVsWlOutgoingDiff = operatorCommission - companyCost;
 
                 if (saIncomingVsWlOutgoingDiff >= 0) {
                     commData.amounts.superAdminComm = saSlabAmount;
