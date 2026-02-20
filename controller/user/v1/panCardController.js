@@ -26,7 +26,7 @@ const panCardActions = async (req, res) => {
   try {
     const userId = req.user.id;
     const companyId = req.user.companyId;
-    const { mobile_number, action, } = req.body;
+    const { mobile_number, action } = req.body;
     const user = req.user;
     const amount = 107;
 
@@ -320,10 +320,12 @@ const panCardActions = async (req, res) => {
 
     const mode = 'EKYC';
     // const eKycHubPromise = action === 'correction'
-    //   ? ekycHub.panCardCorrection(mobileNumber, mode)
-    //   : ekycHub.panCardNew(mobileNumber, mode);
+    //   ? ekycHub.panCardCorrection(mobileNumber, mode, transactionId)
+    //   : ekycHub.panCardNew(mobileNumber, mode, transactionId);
 
     // const response = await eKycHubPromise;
+
+    // Using static response for testing purposes
     const response = {
       txid: 54036297,
       status: 'Success',
@@ -334,7 +336,7 @@ const panCardActions = async (req, res) => {
       number: '9071138349',
       amount: '107',
       orderid: 'YZCPY51519'
-    }
+    };
 
     // Normalize status to uppercase
     const normalizeStatus = (status) => {
@@ -348,7 +350,12 @@ const panCardActions = async (req, res) => {
     const isSuccess = normalizeStatus(response.status) === 'SUCCESS';
     const isPending = normalizeStatus(response.status) === 'PENDING';
     const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILURE');
-    const orderid = response.orderid || transactionId;
+
+    // Order Id must come from the response as compulsory
+    const orderid = response.orderid;
+    if (!orderid) {
+      return res.failure({ message: 'Order ID not received from the provider response' });
+    }
 
     // 4. Update Wallets & Create History (Post-API Success/Pending)
     let retailerComm = 0;
@@ -574,6 +581,7 @@ const panCardActions = async (req, res) => {
         serviceType: 'Pan',
         orderid: orderid,
         transactionId: transactionId,
+        txid: response?.txid ? String(response.txid) : null,
         mobile_number: mobileNumber,
         amount: amountNumber,
         redirect_url: response?.redirect_url || response?.url || null,
@@ -604,6 +612,7 @@ const panCardActions = async (req, res) => {
         serviceType: 'Pan',
         orderid: orderid,
         transactionId: transactionId,
+        txid: response?.txid ? String(response.txid) : null,
         mobile_number: mobileNumber,
         amount: amountNumber,
         redirect_url: response?.redirect_url || response?.url || null,

@@ -6,9 +6,9 @@ const inspayToken = process.env.INSPAY_TOKEN;
 const username = process.env.EKYCHUB_USERNAME;
 const token = process.env.EKYCHUB_TOKEN;
 
-const {generateSystemReference} = require('../utils/generateSystemReferenceNumber');
+const { generateSystemReference } = require('../utils/generateSystemReferenceNumber');
 
-const  balanceEnquiry = async () => {
+const balanceEnquiry = async () => {
   let config = {
     method: 'get',
     url: `${ekychubUrl}/verification/balance?`,
@@ -34,116 +34,116 @@ const  balanceEnquiry = async () => {
 
 const createAadharVerificationUrl = async (redirect_url) => {
   const orderid = generateSystemReference();
-    let config = {
-      method: 'get',
-      url: `${ekychubUrl}/digilocker/create_url_aadhaar?`,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      params: {
-        username,
-        token,
-        redirect_url,
-        orderid
-      }
-    };
-    console.log('config', config);
-    return axios
-      .request(config)
-      .then((response) => {
-        console.log('response', response);
-        console.log('response', response.data);
-        return response.data;
-      })
-      .catch((error) => {
-        return error.response.data;
-      });
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/digilocker/create_url_aadhaar?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      redirect_url,
+      orderid
+    }
+  };
+  console.log('config', config);
+  return axios
+    .request(config)
+    .then((response) => {
+      console.log('response', response);
+      console.log('response', response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      return error.response.data;
+    });
 };
 
 const createPanVerificationUrl = async (redirect_url) => {
   const orderid = generateSystemReference();
-    let config = {
-      method: 'get',
-      url: `${ekychubUrl}/digilocker/create_url_pan?`,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      params: {
-        username,
-        token,
-        redirect_url,
-        orderid
-      }
-    };
-    return axios
-      .request(config)
-      .then((response) => {
-        return response.data;
-      })
-      .catch((error) => {
-        return error.response.data;
-      });
-}  
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/digilocker/create_url_pan?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      redirect_url,
+      orderid
+    }
+  };
+  return axios
+    .request(config)
+    .then((response) => {
+      return response.data;
+    })
+    .catch((error) => {
+      return error.response.data;
+    });
+}
 
-const getDocuments = async(verification_id, reference_id, document_type)=>{
+const getDocuments = async (verification_id, reference_id, document_type) => {
   const orderid = generateSystemReference();
-    let config = {
-      method: 'get',
-      url: `${ekychubUrl}/digilocker/get_document?`,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      params: {
-        username,
-        token,
-        orderid,
-        verification_id,
-        reference_id,
-        document_type
-      }
-    };
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/digilocker/get_document?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      orderid,
+      verification_id,
+      reference_id,
+      document_type
+    }
+  };
 
-    return axios
-      .request(config)
-      .then((response) => {
-        return response.data;
-      })
-      .catch((error) => {
-        return error.response.data;
-      });
+  return axios
+    .request(config)
+    .then((response) => {
+      return response.data;
+    })
+    .catch((error) => {
+      return error.response.data;
+    });
 }
 
 const panVerification = async (pan) => {
-    const orderid = generateSystemReference();
-    let config = {
-      method: 'get',
-      url: `${ekychubUrl}/verification/pan_verification?`,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      params: {
-        username,
-        token,
-        pan,
-        orderid
-      }
+  const orderid = generateSystemReference();
+  let config = {
+    method: 'get',
+    url: `${ekychubUrl}/verification/pan_verification?`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    params: {
+      username,
+      token,
+      pan,
+      orderid
     }
-    return axios
-      .request(config)
-      .then((response) => {
-        return response.data;
-      })
-      .catch((error) => {
-        console.log(error.response);
-        return error.response.data;
-      });   
+  }
+  return axios
+    .request(config)
+    .then((response) => {
+      return response.data;
+    })
+    .catch((error) => {
+      console.log(error.response);
+      return error.response.data;
+    });
 }
 
 const bankVerification = async (account_number, ifsc) => {
   const orderid = generateSystemReference();
   // Set timeout to 60 seconds (60000ms) for bank verification as it can take longer
   const BANK_VERIFICATION_TIMEOUT = Number(process.env.EKYCHUB_BANK_VERIFICATION_TIMEOUT_MS || 60000);
-  
+
   let config = {
     method: 'get',
     url: `${ekychubUrl}/verification/penny_less?`,
@@ -178,7 +178,7 @@ const bankVerification = async (account_number, ifsc) => {
           txid: orderid
         };
       }
-      
+
       // Handle network errors
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         console.error('Bank verification network error:', error.code, error.message);
@@ -192,12 +192,12 @@ const bankVerification = async (account_number, ifsc) => {
           txid: orderid
         };
       }
-      
+
       // Handle response errors (API returned error status)
       if (error.response && error.response.data) {
         return error.response.data;
       }
-      
+
       // Handle other errors
       console.error('Bank verification error:', error.message);
       return {
@@ -213,10 +213,10 @@ const bankVerification = async (account_number, ifsc) => {
 }
 
 
-const panCardCorrection = async (number, mode) => {
-  const orderid = generateSystemReference();
+const panCardCorrection = async (number, mode, orderid) => {
+  if (!orderid) orderid = generateSystemReference();
   const url = `${inspayUrl}/nsdl/correction?`;
-    let config = {
+  let config = {
     method: 'get',
     url: url,
     headers: {
@@ -243,8 +243,8 @@ const panCardCorrection = async (number, mode) => {
     });
 }
 
-const panCardNew = async (number, mode) => {
-  const orderid = generateSystemReference();
+const panCardNew = async (number, mode, orderid) => {
+  if (!orderid) orderid = generateSystemReference();
   const url = `${inspayUrl}/nsdl/new_pan?`;
   let config = {
     method: 'get',
@@ -261,15 +261,15 @@ const panCardNew = async (number, mode) => {
     }
   }
   return axios
-  .request(config)
-  .then((response) => {
-    console.log("response", response)
-    console.log("response", response.data);
-    return response.data;
-  })
-  .catch((error) => {
-    return error.response.data;
-  });
+    .request(config)
+    .then((response) => {
+      console.log("response", response)
+      console.log("response", response.data);
+      return response.data;
+    })
+    .catch((error) => {
+      return error.response.data;
+    });
 }
 module.exports = {
   createAadharVerificationUrl,
