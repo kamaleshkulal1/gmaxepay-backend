@@ -250,17 +250,24 @@ const recharge = async (req, res) => {
                 // Margins & Shortfalls
 
                 // Super Admin
-                commData.amounts.superAdminComm = Math.max(0, saSlabAmount - wlSlabAmount);
-                if (wlSlabAmount > saSlabAmount) {
-                    commData.amounts.saShortfall = parseFloat((wlSlabAmount - saSlabAmount).toFixed(2));
-                }
-
-                // Company (WL)
+                // Here, we look at the difference between what SA gets from Operator vs what WL actually passes down to their child
+                // Based on user: operator comm (saSlabAmount) - whitelabel given com to downline (companyCost)
                 let companyCost = 0;
                 if (commData.users.masterDistributor) companyCost = mdSlabAmount;
                 else if (commData.users.distributor) companyCost = distSlabAmount;
                 else companyCost = retSlabAmount;
 
+                const saIncomingVsWlOutgoingDiff = saSlabAmount - companyCost;
+
+                if (saIncomingVsWlOutgoingDiff >= 0) {
+                    commData.amounts.superAdminComm = saSlabAmount;
+                    commData.amounts.saShortfall = 0;
+                } else {
+                    commData.amounts.superAdminComm = saSlabAmount;
+                    commData.amounts.saShortfall = parseFloat(Math.abs(saIncomingVsWlOutgoingDiff).toFixed(2));
+                }
+
+                // Company (WL)
                 commData.amounts.companyComm = Math.max(0, wlSlabAmount - companyCost);
                 if (companyCost > wlSlabAmount) {
                     commData.amounts.wlShortfall = parseFloat((companyCost - wlSlabAmount).toFixed(2));
