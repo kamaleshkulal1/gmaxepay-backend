@@ -47,17 +47,12 @@ const registerOperator = async (req, res) => {
       ...createdUser.dataValues
     };
 
+    // Fetch all slabs (for all companies) so that the new operator
+    // is available in commission slabs for every company.
     const slabs = await dbService.findAll(
       model.slab,
       { isDelete: false },
       { select: ['id', 'addedByRole', 'addedBy', 'companyId'] }
-    );
-
-    // Fetch all companies to apply Admin slabs to all companies
-    const allCompanies = await dbService.findAll(
-      model.company,
-      { isDeleted: false },
-      { select: ['id'] }
     );
 
     const getRoleConfig = (userRole) => {
@@ -87,48 +82,26 @@ const registerOperator = async (req, res) => {
       const slabCompanyId = slabData.companyId;
       const addedBy = slabData.addedBy;
 
-      const config = getRoleConfig(addedByRole);
-      let roleTypes = config.roleTypes;
-      let roleNames = config.roleNames;
 
-      if (addedByRole === 1) {
-        // If slab is added by Admin (Role 1), add to all companies
-        allCompanies.forEach((company) => {
-          const companyId = company.dataValues ? company.dataValues.id : company.id;
-          roleTypes.forEach((roleType, index) => {
-            dataToInsert.push({
-              slabId: slab.id,
-              companyId: companyId,
-              operatorId: userToReturn.id,
-              operatorName: userToReturn.operatorName,
-              operatorType: userToReturn.operatorType,
-              roleType,
-              addedBy: addedBy,
-              roleName: roleNames[index],
-              commAmt: 0,
-              commType: commType,
-              amtType: amtType
-            });
-          });
+      const config = getRoleConfig(addedByRole);
+      const roleTypes = config.roleTypes;
+      const roleNames = config.roleNames;
+
+      roleTypes.forEach((roleType, index) => {
+        dataToInsert.push({
+          slabId: slab.id,
+          companyId: slabCompanyId,
+          operatorId: userToReturn.id,
+          operatorName: userToReturn.operatorName,
+          operatorType: userToReturn.operatorType,
+          roleType,
+          addedBy: addedBy,
+          roleName: roleNames[index],
+          commAmt: 0,
+          commType: commType,
+          amtType: amtType
         });
-      } else {
-        // Otherwise, add to the slab's company
-        roleTypes.forEach((roleType, index) => {
-          dataToInsert.push({
-            slabId: slab.id,
-            companyId: slabCompanyId,
-            operatorId: userToReturn.id,
-            operatorName: userToReturn.operatorName,
-            operatorType: userToReturn.operatorType,
-            roleType,
-            addedBy: addedBy,
-            roleName: roleNames[index],
-            commAmt: 0,
-            commType: commType,
-            amtType: amtType
-          });
-        });
-      }
+      });
     }
 
     await dbService.createMany(model.commSlab, dataToInsert);
