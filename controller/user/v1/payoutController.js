@@ -678,7 +678,7 @@ const payout = async (req, res) => {
 
             console.log('Sending Request to ASL API (MOCKED)');
             // Call ASL API for bank payout
-            /*
+
             aslResponse = await asl.aslAepsPayOut({
                 mobile: user.mobileNo,
                 accountNumber: customerBank.accountNumber,
@@ -691,14 +691,14 @@ const payout = async (req, res) => {
                 longitude: longitude,
                 agentTransactionId: transactionID
             });
-            */
-            aslResponse = {
-                status: 'SUCCESS',
-                orderid: 'PAY1723565406',
-                bankref: '604221395191',
-                remark: 'Transaction was Successfull',
-                agentTransactionId: transactionID
-            };
+
+            // aslResponse = {
+            //     status: 'SUCCESS',
+            //     orderid: 'PAY1723565406',
+            //     bankref: '604221395191',
+            //     remark: 'Transaction was Successfull',
+            //     agentTransactionId: transactionID
+            // };
             console.log('ASL API Response:', aslResponse);
 
             // Store API response and update status
