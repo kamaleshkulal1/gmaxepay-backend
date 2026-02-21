@@ -228,13 +228,130 @@ const aslPayoutCallback = async (req, res) => {
         const innerStatus = data && data.status ? data.status : null;
         const agentTransactionId = data && data.agentTransactionId ? data.agentTransactionId : null;
 
-        const existingPayout = await dbService.findOne(model.payoutHistory, { orderId });
+        // Look up by orderId first, then fall back to transactionID (ASL sometimes sends agent txn id)
+        let existingPayout = await dbService.findOne(model.payoutHistory, { orderId });
+        if (!existingPayout && agentTransactionId) {
+            existingPayout = await dbService.findOne(model.payoutHistory, { transactionID: agentTransactionId });
+        }
 
         if (!existingPayout) {
             console.error('[ASL Payout Callback] Payout history not found for orderId:', orderId);
             return res.send('OK');
         }
 
+        const previousStatus = existingPayout.status;
+
+        // ── FAILURE: Reverse all AEPS wallet impacts ──────────────────────────
+        if (newStatus === 'FAILED' && (previousStatus === 'SUCCESS' || previousStatus === 'PENDING')) {
+            console.log(`[ASL Payout Callback] Reversing payout wallets for transactionID: ${existingPayout.transactionID}, walletType: ${existingPayout.walletType}`);
+
+            const txnId = existingPayout.transactionID;
+            // payout used this AEPS wallet column (apes1Wallet or apes2Wallet)
+            const aepsWalletCol = existingPayout.walletType || 'apes1Wallet';
+
+            // Find all walletHistory entries for this transaction — includes the
+            // initiator's payout debit + all surcharge entries (company, SA, MD, dist, retailer)
+            const allHistories = await dbService.findAll(model.walletHistory, {
+                transactionId: txnId
+            });
+
+            if (allHistories && allHistories.length > 0) {
+                const reversalUpdates = [];
+                const reversalHistoryPromises = [];
+
+                for (const history of allHistories) {
+                    // Net impact = credit − debit on this party's wallet
+                    // To reverse: subtract net from current balance
+                    const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                    if (netImpact === 0) continue;
+
+                    const walletRecord = await dbService.findOne(model.wallet, {
+                        refId: history.refId,
+                        companyId: history.companyId
+                    });
+                    if (!walletRecord) continue;
+
+                    // The original payout entries used walletType to determine apes1Wallet/apes2Wallet
+                    // All payout surcharge history entries share the same walletType as the payout
+                    const walletCol = history.walletType && history.walletType !== 'mainWallet'
+                        ? history.walletType   // e.g. 'apes1Wallet' from surcharge entries
+                        : aepsWalletCol;       // fallback to payout's column
+
+                    const currentBal = round4(walletRecord[walletCol] || 0);
+                    const newBal = round4(currentBal - netImpact);
+
+                    reversalUpdates.push(
+                        dbService.update(model.wallet, { id: walletRecord.id }, {
+                            [walletCol]: newBal,
+                            updatedBy: existingPayout.refId
+                        })
+                    );
+
+                    reversalHistoryPromises.push(
+                        dbService.createOne(model.walletHistory, {
+                            refId: history.refId,
+                            companyId: history.companyId,
+                            walletType: walletCol,
+                            operator: history.operator || 'Payout1',
+                            remark: `Reversal - Payout Failed`,
+                            amount: history.amount || 0,
+                            comm: 0,
+                            surcharge: 0,
+                            openingAmt: currentBal,
+                            closingAmt: newBal,
+                            // Reversed: original credit becomes debit and vice versa
+                            credit: history.debit || 0,
+                            debit: history.credit || 0,
+                            transactionId: txnId,
+                            paymentStatus: 'REFUNDED',
+                            addedBy: existingPayout.refId,
+                            updatedBy: existingPayout.refId
+                        })
+                    );
+                }
+
+                await Promise.all([...reversalUpdates, ...reversalHistoryPromises]);
+                console.log(`[ASL Payout Callback] Reversed ${allHistories.length} wallet entries for txnId: ${txnId}`);
+
+            } else {
+                // Fallback: no walletHistory found — just refund payout amount to initiator's AEPS wallet
+                console.warn(`[ASL Payout Callback] No walletHistory found for txnId: ${txnId}, attempting fallback refund`);
+                const amountToRefund = round4(existingPayout.amount || 0);
+                if (amountToRefund > 0) {
+                    const walletRecord = await dbService.findOne(model.wallet, {
+                        refId: existingPayout.refId,
+                        companyId: existingPayout.companyId
+                    });
+                    if (walletRecord) {
+                        const currentBal = round4(walletRecord[aepsWalletCol] || 0);
+                        const newBal = round4(currentBal + amountToRefund);
+                        await dbService.update(model.wallet, { id: walletRecord.id }, {
+                            [aepsWalletCol]: newBal,
+                            updatedBy: existingPayout.refId
+                        });
+                        await dbService.createOne(model.walletHistory, {
+                            refId: existingPayout.refId,
+                            companyId: existingPayout.companyId,
+                            walletType: aepsWalletCol,
+                            operator: 'Payout1',
+                            remark: `Reversal - Payout Failed`,
+                            amount: amountToRefund,
+                            comm: 0, surcharge: 0,
+                            openingAmt: currentBal,
+                            closingAmt: newBal,
+                            credit: amountToRefund, debit: 0,
+                            transactionId: txnId,
+                            paymentStatus: 'REFUNDED',
+                            addedBy: existingPayout.refId,
+                            updatedBy: existingPayout.refId
+                        });
+                        console.log(`[ASL Payout Callback] Fallback refund of ${amountToRefund} applied to ${aepsWalletCol} for refId: ${existingPayout.refId}`);
+                    }
+                }
+            }
+        }
+
+        // ── Update payoutHistory record ───────────────────────────────────────
         const updateData = {
             status: newStatus,
             statusMessage: message || existingPayout.statusMessage,
@@ -253,12 +370,13 @@ const aslPayoutCallback = async (req, res) => {
 
         console.log('[ASL Payout Callback] Payout history updated:', {
             orderId,
-            previousStatus: existingPayout.status,
+            previousStatus,
             newStatus,
             bankRef,
             innerStatus,
             agentTransactionId,
-            code
+            code,
+            reversed: newStatus === 'FAILED' && (previousStatus === 'SUCCESS' || previousStatus === 'PENDING')
         });
 
         return res.send('OK');
@@ -270,7 +388,201 @@ const aslPayoutCallback = async (req, res) => {
     }
 };
 
+const aslAEPSCallback = async (req, res) => {
+    try {
+        const payload = req.body || {};
+        console.log('[ASL AEPS Callback] Incoming payload:', JSON.stringify(payload));
+
+        // ── Parse callback fields per ASL AEPS spec ───────────────────────────
+        const {
+            fingpayTransactionId,
+            merchantTranId,
+            transactionStatus,       // boolean: true = success
+            transactionStatusCode,   // '00' = success
+            transactionStatusMessage,
+            bankRRN,
+        } = payload;
+
+        if (!merchantTranId) {
+            console.error('[ASL AEPS Callback] Missing merchantTranId in payload');
+            return res.send('OK');
+        }
+
+        // Resolve status
+        const isSuccess =
+            transactionStatus === true ||
+            transactionStatus === 'true' ||
+            transactionStatusCode === '00' ||
+            (typeof transactionStatusMessage === 'string' &&
+                transactionStatusMessage.toUpperCase() === 'SUCCESS');
+
+        const newStatus = isSuccess ? 'SUCCESS' : 'FAILED';
+        console.log(`[ASL AEPS Callback] merchantTranId: ${merchantTranId}, resolved status: ${newStatus}`);
+
+        // ── Find aepsHistory by merchantTransactionId ─────────────────────────
+        const aepsHistoryRecord = await dbService.findOne(model.aepsHistory, {
+            merchantTransactionId: merchantTranId
+        });
+
+        if (!aepsHistoryRecord) {
+            console.error('[ASL AEPS Callback] aepsHistory not found for merchantTranId:', merchantTranId);
+            return res.send('OK');
+        }
+
+        const previousStatus = aepsHistoryRecord.status;
+
+        // ── FAILURE: Reverse all AEPS wallet impacts ──────────────────────────
+        if (newStatus === 'FAILED' && (previousStatus === 'SUCCESS' || previousStatus === 'PENDING')) {
+            console.log(`[ASL AEPS Callback] Reversing AEPS wallets for merchantTranId: ${merchantTranId}, txnId: ${aepsHistoryRecord.transactionId}`);
+
+            const txnId = aepsHistoryRecord.transactionId;
+
+            // All AEPS walletHistory entries for this transaction (retailer + dist + MD + company + SA)
+            const aepsWalletHistories = await dbService.findAll(model.walletHistory, {
+                transactionId: txnId,
+                walletType: 'AEPS'
+            });
+
+            if (aepsWalletHistories && aepsWalletHistories.length > 0) {
+                const reversalUpdates = [];
+                const reversalHistoryPromises = [];
+
+                for (const history of aepsWalletHistories) {
+                    const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                    if (netImpact === 0) continue;
+
+                    const walletRecord = await dbService.findOne(model.wallet, {
+                        refId: history.refId,
+                        companyId: history.companyId
+                    });
+                    if (!walletRecord) continue;
+
+                    const currentBal = round4(walletRecord.apes1Wallet || 0);
+                    const newBal = round4(currentBal - netImpact);
+
+                    reversalUpdates.push(
+                        dbService.update(model.wallet, { id: walletRecord.id }, {
+                            apes1Wallet: newBal,
+                            updatedBy: aepsHistoryRecord.refId
+                        })
+                    );
+
+                    reversalHistoryPromises.push(
+                        dbService.createOne(model.walletHistory, {
+                            refId: history.refId,
+                            companyId: history.companyId,
+                            walletType: 'AEPS',
+                            operator: history.operator || '',
+                            remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
+                            amount: history.amount || 0,
+                            comm: 0,
+                            surcharge: 0,
+                            openingAmt: currentBal,
+                            closingAmt: newBal,
+                            credit: history.debit || 0,   // swap
+                            debit: history.credit || 0,   // swap
+                            transactionId: txnId,
+                            paymentStatus: 'REFUNDED',
+                            addedBy: aepsHistoryRecord.refId,
+                            updatedBy: aepsHistoryRecord.refId
+                        })
+                    );
+                }
+
+                await Promise.all([...reversalUpdates, ...reversalHistoryPromises]);
+                console.log(`[ASL AEPS Callback] Reversed ${aepsWalletHistories.length} wallet entries for txnId: ${txnId}`);
+
+            } else {
+                // Fallback: reverse credit stored on aepsHistory itself
+                console.warn(`[ASL AEPS Callback] No walletHistory found for txnId: ${txnId}, attempting fallback refund`);
+                const creditToReverse = round4(aepsHistoryRecord.credit || 0);
+                if (creditToReverse > 0) {
+                    const walletRecord = await dbService.findOne(model.wallet, {
+                        refId: aepsHistoryRecord.refId,
+                        companyId: aepsHistoryRecord.companyId
+                    });
+                    if (walletRecord) {
+                        const currentBal = round4(walletRecord.apes1Wallet || 0);
+                        const newBal = round4(currentBal - creditToReverse);
+                        await dbService.update(model.wallet, { id: walletRecord.id }, {
+                            apes1Wallet: newBal,
+                            updatedBy: aepsHistoryRecord.refId
+                        });
+                        await dbService.createOne(model.walletHistory, {
+                            refId: aepsHistoryRecord.refId,
+                            companyId: aepsHistoryRecord.companyId,
+                            walletType: 'AEPS',
+                            operator: aepsHistoryRecord.operator || '',
+                            remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
+                            amount: aepsHistoryRecord.amount || 0,
+                            comm: 0, surcharge: 0,
+                            openingAmt: currentBal, closingAmt: newBal,
+                            credit: 0, debit: creditToReverse,
+                            transactionId: txnId,
+                            paymentStatus: 'REFUNDED',
+                            addedBy: aepsHistoryRecord.refId,
+                            updatedBy: aepsHistoryRecord.refId
+                        });
+                        console.log(`[ASL AEPS Callback] Fallback refund of ${creditToReverse} applied for refId: ${aepsHistoryRecord.refId}`);
+                    }
+                }
+            }
+
+            // Zero-out commissions on aepsHistory
+            await dbService.update(model.aepsHistory, { id: aepsHistoryRecord.id }, {
+                status: 'FAILED',
+                superadminComm: 0,
+                whitelabelComm: 0,
+                masterDistributorCom: 0,
+                distributorCom: 0,
+                retailerCom: 0,
+                superadminCommTDS: 0,
+                whitelabelCommTDS: 0,
+                masterDistributorComTDS: 0,
+                distributorComTDS: 0,
+                retailerComTDS: 0,
+                credit: 0,
+                updatedBy: aepsHistoryRecord.refId
+            });
+
+        } else if (newStatus === 'SUCCESS' && previousStatus === 'PENDING') {
+            // Confirm PENDING → SUCCESS (wallets were already credited at transaction time)
+            await dbService.update(model.aepsHistory, { id: aepsHistoryRecord.id }, {
+                status: 'SUCCESS',
+                updatedBy: aepsHistoryRecord.refId
+            });
+        }
+
+        // Always update gateway confirmation fields
+        await dbService.update(model.aepsHistory, { id: aepsHistoryRecord.id }, {
+            status: newStatus,
+            bankRRN: bankRRN || aepsHistoryRecord.bankRRN,
+            fpTransactionId: fingpayTransactionId || aepsHistoryRecord.fpTransactionId,
+            message: transactionStatusMessage || aepsHistoryRecord.message,
+            responseCode: transactionStatusCode || aepsHistoryRecord.responseCode,
+            responsePayload: payload,
+            updatedBy: aepsHistoryRecord.refId
+        });
+
+        console.log('[ASL AEPS Callback] Completed:', {
+            merchantTranId,
+            previousStatus,
+            newStatus,
+            bankRRN,
+            fingpayTransactionId,
+            reversed: newStatus === 'FAILED' && (previousStatus === 'SUCCESS' || previousStatus === 'PENDING')
+        });
+
+        return res.send('OK');
+    } catch (error) {
+        console.error('[ASL AEPS Callback] Error:', error, {
+            body: req.body
+        });
+        return res.send('OK');
+    }
+};
 module.exports = {
     paymentCallback,
-    aslPayoutCallback
+    aslPayoutCallback,
+    aslAEPSCallback
 };

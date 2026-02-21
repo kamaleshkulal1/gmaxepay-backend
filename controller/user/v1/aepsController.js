@@ -1052,6 +1052,7 @@ const checkStatus = async (req, res) => {
         if (!txnId) {
             return res.failure({ message: 'Transaction ID is required' });
         }
+
         const existingUser = await dbService.findOne(model.user, {
             id: req.user.id,
             companyId: req.user.companyId,
@@ -1069,20 +1070,195 @@ const checkStatus = async (req, res) => {
         if (!existingAepsOnboarding) {
             return res.failure({ message: 'AEPS onboarding not found' });
         }
-        const statusData = {
+
+        // ── Lookup existing AEPS history record for this txnId ───────────────
+        const aepsHistoryRecord = await dbService.findOne(model.aepsHistory, { transactionId: txnId });
+
+        // ── Call the ASL check-status API ────────────────────────────────────
+        const statusPayload = {
             uniqueID: existingAepsOnboarding.uniqueID,
             merchantLoginId: existingAepsOnboarding.merchantLoginId,
-            txnId: txnId,
+            txnId: txnId
+        };
+        const response = await asl.aslAepsCheckStatus(statusPayload);
+        console.log('[AEPS checkStatus] response:', JSON.stringify(response, null, 2));
+
+        const innerData = response?.data && typeof response.data === 'object' ? response.data : null;
+        const responseCode = innerData?.responseCode ?? response?.responseCode;
+        const transactionStatusRaw = innerData?.transactionStatus ?? innerData?.status ?? response?.status;
+        const transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
+
+        const isSuccess =
+            responseCode === '00' ||
+            transactionStatus === 'SUCCESS' ||
+            transactionStatus === 'SUCCESSFUL';
+
+        const isFailure = !isSuccess && (
+            transactionStatus === 'FAILED' ||
+            transactionStatus === 'FAILURE' ||
+            transactionStatus === 'ERROR' ||
+            (response?.status && String(response.status).toUpperCase() !== 'SUCCESS')
+        );
+
+        // ── If FAILURE: reverse all AEPS wallet commissions ──────────────────
+        if (isFailure && aepsHistoryRecord) {
+            const currentStatus = aepsHistoryRecord.status;
+
+            // Only reverse if the original transaction was SUCCESS or PENDING (not already FAILED/REFUNDED)
+            if (currentStatus === 'SUCCESS' || currentStatus === 'PENDING') {
+                console.log(`[AEPS checkStatus] Reversing commissions for txnId: ${txnId}, previous status: ${currentStatus}`);
+
+                // Find all walletHistory entries for this transactionId with walletType = AEPS
+                const aepsWalletHistories = await dbService.findAll(model.walletHistory, {
+                    transactionId: txnId,
+                    walletType: 'AEPS'
+                });
+
+                if (aepsWalletHistories && aepsWalletHistories.length > 0) {
+                    const reversalUpdates = [];
+                    const reversalHistoryPromises = [];
+
+                    for (const history of aepsWalletHistories) {
+                        // Net impact on this party's apes1Wallet was: credit − debit
+                        // To reverse: we subtract that net (i.e. debit credit, credit debit)
+                        const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                        if (netImpact === 0) continue;
+
+                        const walletRecord = await dbService.findOne(model.wallet, {
+                            refId: history.refId,
+                            companyId: history.companyId
+                        });
+                        if (!walletRecord) continue;
+
+                        const currentAeps = round4(walletRecord.apes1Wallet || 0);
+                        const newAeps = round4(currentAeps - netImpact);
+
+                        reversalUpdates.push(
+                            dbService.update(model.wallet, { id: walletRecord.id }, {
+                                apes1Wallet: newAeps,
+                                updatedBy: existingUser.id
+                            })
+                        );
+
+                        reversalHistoryPromises.push(
+                            dbService.createOne(model.walletHistory, {
+                                refId: history.refId,
+                                companyId: history.companyId,
+                                walletType: 'AEPS',
+                                operator: history.operator || '',
+                                remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
+                                amount: history.amount || 0,
+                                comm: 0,
+                                surcharge: 0,
+                                openingAmt: currentAeps,
+                                closingAmt: newAeps,
+                                // Reversed: credit becomes debit, debit becomes credit
+                                credit: history.debit || 0,
+                                debit: history.credit || 0,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: existingUser.id,
+                                updatedBy: existingUser.id
+                            })
+                        );
+                    }
+
+                    await Promise.all([...reversalUpdates, ...reversalHistoryPromises]);
+                    console.log(`[AEPS checkStatus] Reversed ${aepsWalletHistories.length} wallet entries for txnId: ${txnId}`);
+
+                } else {
+                    // No wallet history found — try to reverse by credit field stored in aepsHistory
+                    console.warn(`[AEPS checkStatus] No AEPS walletHistory found for txnId: ${txnId}, attempting fallback reversal`);
+                    const creditToReverse = round4(aepsHistoryRecord.credit || 0);
+                    if (creditToReverse > 0) {
+                        const walletRecord = await dbService.findOne(model.wallet, {
+                            refId: aepsHistoryRecord.refId,
+                            companyId: aepsHistoryRecord.companyId
+                        });
+                        if (walletRecord) {
+                            const currentAeps = round4(walletRecord.apes1Wallet || 0);
+                            const newAeps = round4(currentAeps - creditToReverse);
+                            await dbService.update(model.wallet, { id: walletRecord.id }, {
+                                apes1Wallet: newAeps,
+                                updatedBy: existingUser.id
+                            });
+                            await dbService.createOne(model.walletHistory, {
+                                refId: aepsHistoryRecord.refId,
+                                companyId: aepsHistoryRecord.companyId,
+                                walletType: 'AEPS',
+                                operator: aepsHistoryRecord.operator || '',
+                                remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
+                                amount: aepsHistoryRecord.amount || 0,
+                                comm: 0, surcharge: 0,
+                                openingAmt: currentAeps, closingAmt: newAeps,
+                                credit: 0, debit: creditToReverse,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: existingUser.id, updatedBy: existingUser.id
+                            });
+                        }
+                    }
+                }
+
+                // Update aepsHistory record to FAILED with zeroed commissions
+                await dbService.update(model.aepsHistory, { transactionId: txnId }, {
+                    status: 'FAILED',
+                    superadminComm: 0,
+                    whitelabelComm: 0,
+                    masterDistributorCom: 0,
+                    distributorCom: 0,
+                    retailerCom: 0,
+                    superadminCommTDS: 0,
+                    whitelabelCommTDS: 0,
+                    masterDistributorComTDS: 0,
+                    distributorComTDS: 0,
+                    retailerComTDS: 0,
+                    credit: 0,
+                    updatedBy: existingUser.id
+                });
+
+                return res.failure({
+                    message: innerData?.errorMessage || response?.message || 'AEPS transaction failed. Commissions reversed.',
+                    data: {
+                        txnId,
+                        status: 'FAILED',
+                        refunded: true,
+                        gatewayResponse: response
+                    }
+                });
+            }
         }
-        const response = await asl.aslAepsCheckStatus(statusData);
-        console.log("response", response);
-        if (response.status === 'SUCCESS') {
-            return res.success({ message: 'AEPS transaction status', data: response.data });
-        } else {
-            return res.failure({ message: 'AEPS transaction status', data: response.data });
+
+        // ── SUCCESS or still pending ─────────────────────────────────────────
+        if (isSuccess) {
+            // Update aepsHistory status to SUCCESS if it was PENDING
+            if (aepsHistoryRecord && aepsHistoryRecord.status === 'PENDING') {
+                await dbService.update(model.aepsHistory, { transactionId: txnId }, {
+                    status: 'SUCCESS',
+                    updatedBy: existingUser.id
+                });
+            }
+            return res.success({
+                message: 'AEPS transaction is successful',
+                data: {
+                    txnId,
+                    status: 'SUCCESS',
+                    gatewayResponse: response
+                }
+            });
         }
-    }
-    catch (error) {
+
+        // Indeterminate / still pending
+        return res.success({
+            message: 'AEPS transaction status',
+            data: {
+                txnId,
+                status: transactionStatus || 'UNKNOWN',
+                gatewayResponse: response
+            }
+        });
+
+    } catch (error) {
         console.error('Check status error', error);
         return res.failure({ message: error.message || 'Unable to check status' });
     }
