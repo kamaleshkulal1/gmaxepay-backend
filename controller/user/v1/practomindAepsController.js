@@ -975,13 +975,20 @@ const cashWithdrawal = async (req, res) => {
                 console.log('[AEPS2 CW] Scenario:', commData.scenario, '| Amounts:', JSON.stringify(commData.amounts));
             }
         }
+        const statementData = {
+            mobileNumber: customerNumber,
+            merchantLoginId: existingOnboarding.merchantLoginId,
+            latitude,
+            longitude,
+            aadhaarNumber,
+            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+            transactionAmount: amountNumber,
+            transactionId,
+            txtPidData
+        }
 
         // Call Practomind API
-        const response = await practomindService.practomindCashWithdrawal({
-            mobileNumber: customerNumber, merchantLoginId: existingOnboarding.merchantLoginId,
-            latitude, longitude, aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
-            transactionAmount: amountNumber, transactionId, txtPidData
-        });
+        const response = await practomindService.practomindCashWithdrawal(statementData);
         console.log('[AEPS2 CW] response', response);
 
         const isSuccess = response.status === true || response.status === 'true';
