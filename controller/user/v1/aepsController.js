@@ -7,6 +7,1087 @@ const googleMap = require('../../../services/googleMap');
 const imageService = require('../../../services/imageService');
 const { Op } = require('sequelize');
 
+const aepsTransaction = async (req, res) => {
+    try {
+        const {
+            amount,
+            txnType,
+            captureType,
+            biometricData,
+            bankiin,
+            latitude,
+            longitude,
+            ipAddress,
+            aadharNumber,
+            consumerNumber
+        } = req.body || {};
+
+        const round2 = (num) => {
+            const n = Number(num);
+            if (!Number.isFinite(n)) return 0;
+            return Math.round((n + Number.EPSILON) * 100) / 100;
+        };
+
+        const normalizeTxnType = (value) => (value ? String(value).trim().toUpperCase() : null);
+        const normalizeCaptureType = (value) => {
+            const t = value ? String(value).trim().toUpperCase() : null;
+            if (t === 'FINGURE') return 'FINGER';
+            return t;
+        };
+
+        const normalizedTxnType = normalizeTxnType(txnType);
+        const normalizedCaptureType = normalizeCaptureType(captureType);
+        const normalizedBankiin = bankiin ? String(bankiin).trim() : null;
+        if (!biometricData) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+        if (!normalizedCaptureType || !['FACE', 'FINGER'].includes(normalizedCaptureType)) {
+            return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
+        }
+        if (!normalizedTxnType || !['CW', 'BE', 'MS'].includes(normalizedTxnType)) {
+            return res.failure({ message: 'Invalid transaction type. Allowed values are CW, BE or MS' });
+        }
+        if (!normalizedBankiin) {
+            return res.failure({ message: 'bankiin is required' });
+        }
+
+        // Validate bankIIN exists in aslBankList
+        const bankDetails = await dbService.findOne(model.aslBankList, {
+            bankIIN: normalizedBankiin,
+            isDeleted: false,
+            isActive: true
+        });
+        if (!bankDetails) {
+            return res.failure({ message: 'Bank Name not found' });
+        }
+
+        if (!ipAddress) {
+            return res.failure({ message: 'ipAddress is required' });
+        }
+        if (!aadharNumber) {
+            return res.failure({ message: 'aadharNumber is required' });
+        }
+        if (!consumerNumber) {
+            return res.failure({ message: 'consumerNumber is required' });
+        }
+        if (!latitude || !longitude) {
+            return res.failure({ message: 'latitude and longitude are required' });
+        }
+
+        const amountNumber = round2(amount || 0);
+        if (normalizedTxnType === 'CW' && (!amountNumber || amountNumber < 100)) {
+            return res.failure({ message: 'Minimum amount for CW transaction is 100' });
+        }
+
+        // Ensure daily 2FA is completed for today (IST date)
+        await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
+        const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
+        const existingDaily2FA = await dbService.findOne(model.aepsDailyLogin, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            loginDate: todayDateStr
+        });
+        if (!existingDaily2FA) {
+            return res.failure({ message: 'AEPS daily 2FA authentication is required before transaction' });
+        }
+
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        if (!existingUser.latitude || !existingUser.longitude) {
+            return res.failure({ message: 'User latitude/longitude is required' });
+        }
+
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            merchantStatus: true
+        });
+        if (!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not completed' });
+        }
+        if (!existingAepsOnboarding.merchantLoginId) {
+            return res.failure({ message: 'AEPS merchantLoginId not found' });
+        }
+        if (!existingAepsOnboarding.isOtpValidated) {
+            return res.failure({ message: 'AEPS eKYC OTP validation is required before transaction' });
+        }
+        if (!existingAepsOnboarding.isBioMetricValidated) {
+            return res.failure({ message: 'AEPS eKYC biometric validation is required before transaction' });
+        }
+        if (!existingAepsOnboarding.isBankKycOtpValidated) {
+            return res.failure({ message: 'Bank eKYC OTP validation is required before transaction' });
+        }
+        if (!existingAepsOnboarding.isBankKycBiometricValidated) {
+            return res.failure({ message: 'Bank eKYC biometric validation is required before transaction' });
+        }
+
+        const existingBioMetric = await dbService.findOne(model.bioMetric, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            captureType: normalizedCaptureType
+        });
+        if (!existingBioMetric) {
+            return res.failure({ message: 'Biometric data is required' });
+        }
+
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+
+        const generatedTxnId = generateTransactionID(existingCompany?.companyName);
+
+        // ── Fetch AEPS operator based on txnType ──────────────────────────────
+        // CW: uses AEPS1 operator (matched by amount range)
+        // MS: uses AEPS_MS operator (no amount range needed)
+        // BE: no operator required — no commission is calculated for BE
+        let operator = null;
+        let operatorType = null;
+
+        if (normalizedTxnType === 'CW') {
+            operator = await dbService.findOne(model.operator, {
+                operatorType: 'AEPS1',
+                minValue: { [Op.lte]: amountNumber },
+                maxValue: { [Op.gte]: amountNumber }
+            });
+            operatorType = operator?.operatorType || 'AEPS1';
+        } else if (normalizedTxnType === 'MS') {
+            operator = await dbService.findOne(model.operator, {
+                operatorType: 'AEPS_MS',
+                isActive: true
+            });
+            operatorType = operator?.operatorType || 'AEPS_MS';
+        }
+        // BE: operator stays null, no commission
+
+        // ── Slab-based Commission (same logic as rechargeController) ──────────────
+        const round4 = (num) => {
+            const n = Number(num);
+            return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
+        };
+
+        const calcSlabAmount = (slab, baseAmount) => {
+            if (!slab) return 0;
+            const base = Number(baseAmount || 0);
+            const rawComm = Number(slab.commAmt || 0);
+            if (!Number.isFinite(base) || !Number.isFinite(rawComm)) return 0;
+            const amtType = (slab.amtType || 'fix').toLowerCase();
+            if (amtType === 'per') return round4((base * rawComm) / 100);
+            return round4(rawComm);
+        };
+
+        const commData = {
+            users: {},
+            wallets: {},
+            slabs: {},
+            amounts: {
+                retailerComm: 0,
+                distComm: 0,
+                mdComm: 0,
+                companyComm: 0,
+                superAdminComm: 0,
+                wlShortfall: 0,
+                mdShortfall: 0,
+                distShortfall: 0,
+                saShortfall: 0
+            },
+            scenario: ''
+        };
+
+        const user = req.user;
+
+        // Commission is only applicable for CW and MS, NOT for BE
+        if (['CW', 'MS'].includes(normalizedTxnType) && operator && [4, 5].includes(user.userRole)) {
+            // A. Fetch Company Admin and Super Admin
+            const [companyAdmin, superAdmin] = await Promise.all([
+                dbService.findOne(model.user, { companyId: user.companyId, userRole: 2, isActive: true }),
+                dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
+            ]);
+
+            if (companyAdmin && superAdmin) {
+                commData.users.companyAdmin = companyAdmin;
+                commData.users.superAdmin = superAdmin;
+
+                // B. Fetch Common Wallets
+                const [companyWallet, superAdminWallet] = await Promise.all([
+                    dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
+                    dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                ]);
+                commData.wallets.companyWallet = companyWallet;
+                commData.wallets.superAdminWallet = superAdminWallet;
+
+                if (user.userRole === 4) {
+                    // Distributor
+                    const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.distributor = distributor;
+                    // Distributor's wallet is the AEPS wallet
+                    commData.wallets.distributorWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+
+                    if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
+                        commData.scenario = 'DIST_DIRECT';
+                        const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                        commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                        commData.slabs.distSlab = companySlabComm?.find(c => (c.roleType === 4 || c.roleName === 'DI'));
+                    } else {
+                        commData.scenario = 'DIST_MD';
+                        const masterDistributor = await dbService.findOne(model.user, { id: distributor.reportingTo, companyId: user.companyId, isActive: true });
+                        if (masterDistributor) {
+                            commData.users.masterDistributor = masterDistributor;
+                            commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: user.companyId });
+
+                            const [SuperAdminSlabComm, companySlabComm, mdSlabComm] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                            commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                            commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
+                            commData.slabs.distSlab = mdSlabComm?.find(c => c.roleType === 4);
+                        }
+                    }
+
+                } else if (user.userRole === 5) {
+                    // Retailer
+                    const retailer = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.retailer = retailer;
+                    commData.wallets.retailerWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+
+                    let reportingUser = null;
+                    if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
+                        reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: user.companyId, isActive: true });
+                    }
+
+                    if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                        commData.scenario = 'RET_DIRECT';
+                        const [SuperAdminSlabComm, companySlabComm] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                        commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                        commData.slabs.retSlab = companySlabComm?.find(c => c.roleType === 5);
+
+                    } else if (reportingUser.userRole === 3) {
+                        commData.scenario = 'RET_MD';
+                        commData.users.masterDistributor = reportingUser;
+                        commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+
+                        const [SuperAdminSlabComm, companySlabComm, masterDistributorComm] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                        commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                        commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
+                        commData.slabs.retSlab = masterDistributorComm?.find(c => c.roleType === 5);
+
+                    } else if (reportingUser.userRole === 4) {
+                        commData.users.distributor = reportingUser;
+                        commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+
+                        if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
+                            commData.scenario = 'RET_DIST_CO';
+                            const [SuperAdminSlabComm, companySlabComm, distSlabComm] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                            commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                            commData.slabs.distSlab = companySlabComm?.find(c => c.roleType === 4);
+                            commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
+
+                        } else {
+                            commData.scenario = 'RET_DIST_MD';
+                            const masterDistributor = await dbService.findOne(model.user, { id: reportingUser.reportingTo, companyId: user.companyId, isActive: true });
+                            if (masterDistributor) {
+                                commData.users.masterDistributor = masterDistributor;
+                                commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: user.companyId });
+
+                                const [SuperAdminSlabComm, companySlabComm, mdSlabComm, distSlabComm] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: masterDistributor.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                ]);
+                                commData.slabs.saSlab = SuperAdminSlabComm?.find(c => (c.roleType === 1 || c.roleName === 'AD'));
+                                commData.slabs.wlSlab = SuperAdminSlabComm?.find(c => (c.roleType === 2 || c.roleName === 'WU'));
+                                commData.slabs.mdSlab = companySlabComm?.find(c => c.roleType === 3);
+                                commData.slabs.distSlab = mdSlabComm?.find(c => c.roleType === 4);
+                                commData.slabs.retSlab = distSlabComm?.find(c => c.roleType === 5);
+                            }
+                        }
+                    }
+                }
+
+                // D. Calculate Amounts
+                const operatorCommissionAmount = operator?.comm ? calcSlabAmount({ amtType: operator.amtType, commAmt: operator.comm }, amountNumber) : 0;
+                const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
+                const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
+                const mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
+                const distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, amountNumber) : 0;
+                const retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, amountNumber) : 0;
+
+                let companyCost = 0;
+                if (commData.users.masterDistributor) companyCost = mdSlabAmount;
+                else if (commData.users.distributor) companyCost = distSlabAmount;
+                else companyCost = retSlabAmount;
+
+                // Super Admin
+                commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
+                commData.amounts.saShortfall = wlSlabAmount > operatorCommissionAmount
+                    ? parseFloat((wlSlabAmount - operatorCommissionAmount).toFixed(4)) : 0;
+
+                // Company (WL)
+                commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
+                if (companyCost > wlSlabAmount) {
+                    commData.amounts.wlShortfall = parseFloat((companyCost - wlSlabAmount).toFixed(4));
+                }
+
+                // Master Distributor
+                if (commData.users.masterDistributor) {
+                    const mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
+                    commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
+                    if (mdCost > mdSlabAmount) {
+                        commData.amounts.mdShortfall = parseFloat((mdCost - mdSlabAmount).toFixed(4));
+                    }
+                }
+
+                // Distributor
+                if (commData.users.distributor) {
+                    commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
+                    if (retSlabAmount > distSlabAmount) {
+                        commData.amounts.distShortfall = parseFloat((retSlabAmount - distSlabAmount).toFixed(4));
+                    }
+                }
+
+                // Retailer
+                commData.amounts.retailerComm = retSlabAmount;
+
+                // ── TDS: 2% of each party's GROSS incoming commission ─────────────
+                const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
+                const tds2 = (gross) => round4(gross * TDS_RATE);
+
+                commData.tds = {
+                    superAdminTDS: tds2(operatorCommissionAmount),   // SA receives from operator
+                    whitelabelTDS: tds2(wlSlabAmount),               // WL receives from SA
+                    masterDistributorTDS: tds2(mdSlabAmount),               // MD receives from WL
+                    distributorTDS: tds2(distSlabAmount),             // Dist receives from MD/WL
+                    retailerTDS: tds2(retSlabAmount)               // Retailer receives from Dist/MD/WL
+                };
+
+                // ── Avail flags: which parties exist in this commission chain ─────
+                commData.avail = {
+                    superAdminAvail: Boolean(commData.users.superAdmin),
+                    whitelabelAvail: Boolean(commData.users.companyAdmin),
+                    masterDistributorAvail: Boolean(commData.users.masterDistributor),
+                    distributorAvail: Boolean(commData.users.distributor),
+                    retailerAvail: Boolean(commData.users.retailer)
+                };
+
+                console.log('[AEPS] Scenario:', commData.scenario);
+                console.log('[AEPS] Final Distribution Amounts:', JSON.stringify(commData.amounts, null, 2));
+                console.log('[AEPS] TDS:', JSON.stringify(commData.tds, null, 2));
+                console.log('[AEPS] Avail:', JSON.stringify(commData.avail, null, 2));
+            }
+        }
+
+        // Transaction metadata we want to persist for reporting/audit
+        const consumerAadhaarNumber = aadharNumber ? String(aadharNumber) : null;
+        const resolvedIpAddress = ipAddress ? String(ipAddress) : (req.ip ? String(req.ip) : null);
+        const txLatitude = latitude ?? existingUser.latitude;
+        const txLongitude = longitude ?? existingUser.longitude;
+
+        const payload = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            aadhaarNo: aadharNumber,
+            txnType: normalizedTxnType,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+            bankiin: normalizedBankiin,
+            mobile: consumerNumber,
+            amount: normalizedTxnType === 'CW' ? amountNumber : undefined, // MS and BE don't send amount
+            latitude: txLatitude,
+            longitude: txLongitude,
+            transactionId: generatedTxnId,
+            captureType: normalizedCaptureType,
+            biometricData: biometricData
+        };
+        console.log('payload', payload);
+
+        // ── MOCK API RESPONSE (ASL API call commented out for testing) ─────────
+        // const aepsResponse = await asl.aslAepsTransaction(payload);
+        let aepsResponse;
+        if (normalizedTxnType === 'CW') {
+            aepsResponse = {
+                status: 'SUCCESS',
+                data: {
+                    terminalId: 'FA012123',
+                    requestTransactionTime: '01/01/2018 23:59:59',
+                    transactionAmount: amountNumber,
+                    transactionStatus: 'successful',
+                    balanceAmount: 200,
+                    bankRRN: '765765656857',
+                    transactionType: 'CW',
+                    FingpayTransactionId: 'CW00010291117175529',
+                    merchantTxnId: generatedTxnId,
+                    responseCode: '00'
+                },
+                message: 'successful'
+            };
+        } else if (normalizedTxnType === 'BE') {
+            aepsResponse = {
+                status: 'SUCCESS',
+                data: {
+                    terminalId: 'FA274530',
+                    requestTransactionTime: '01/05/2020 00:04:32',
+                    transactionAmount: 590.0,
+                    transactionStatus: 'successful',
+                    balanceAmount: 1500.0,
+                    bankRRN: '012200836920',
+                    transactionType: 'BE',
+                    fpTransactionId: 'BEBD0491833010520000431984I',
+                    merchantTxnId: generatedTxnId,
+                    errorCode: null,
+                    errorMessage: null,
+                    merchantTransactionId: null,
+                    responseCode: '00'
+                },
+                message: 'successful'
+            };
+        } else if (normalizedTxnType === 'MS') {
+            aepsResponse = {
+                status: 'SUCCESS',
+                data: {
+                    terminalId: 'FA049053',
+                    requestTransactionTime: '03/01/2020 16:56:53',
+                    transactionStatus: 'successful',
+                    balanceAmount: 995.88,
+                    bankRRN: '000316273914',
+                    transactionType: 'MS',
+                    fpTransactionId: '000316273914',
+                    merchantTxnId: generatedTxnId,
+                    errorCode: null,
+                    errorMessage: null,
+                    miniStatementStructureModel: [
+                        { date: '31/12/2019', txnType: 'Cr', amount: ' 1.00', narration: ' INF/INFT/021841' },
+                        { date: '31/12/2019', txnType: 'Cr', amount: ' 1.00', narration: ' INF/INFT/021841' }
+                    ],
+                    responseCode: '00'
+                },
+                message: 'successful'
+            };
+        }
+        const safeJsonStringify = (value) => {
+            try {
+                const seen = new WeakSet();
+                return JSON.stringify(
+                    value,
+                    (key, val) => {
+                        if (typeof val === 'bigint') return val.toString();
+                        if (val instanceof Error) {
+                            return { name: val.name, message: val.message, stack: val.stack };
+                        }
+                        if (typeof val === 'function') {
+                            return `[Function ${val.name || 'anonymous'}]`;
+                        }
+                        if (val && typeof val === 'object') {
+                            if (seen.has(val)) return '[Circular]';
+                            seen.add(val);
+                        }
+                        return val;
+                    },
+                    2
+                );
+            } catch (e) {
+                return String(value);
+            }
+        };
+        // Log response as JSON (prefer response.data if this is an axios response)
+        console.log('aepsResponse', safeJsonStringify(aepsResponse?.data ?? aepsResponse));
+
+        // Normalize response (sometimes comes as JSON string)
+        let parsedResponse = aepsResponse;
+        if (typeof aepsResponse === 'string') {
+            try {
+                parsedResponse = JSON.parse(aepsResponse);
+            } catch (e) {
+                const jsonMatch = aepsResponse.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    try {
+                        parsedResponse = JSON.parse(jsonMatch[0]);
+                    } catch (parseError) {
+                        parsedResponse = { status: 'ERROR', message: aepsResponse };
+                    }
+                } else {
+                    parsedResponse = { status: 'ERROR', message: aepsResponse };
+                }
+            }
+        }
+
+        const topStatus = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
+        const innerData =
+            parsedResponse && typeof parsedResponse === 'object' && parsedResponse.data && typeof parsedResponse.data === 'object'
+                ? parsedResponse.data
+                : null;
+        const transactionStatusRaw =
+            innerData?.transactionStatus ??
+            innerData?.status ??
+            parsedResponse?.transactionStatus ??
+            parsedResponse?.status;
+        const transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
+        const responseCode = innerData?.responseCode ?? parsedResponse?.responseCode;
+
+        const isSuccess =
+            responseCode === '00' ||
+            transactionStatus === 'SUCCESS' ||
+            transactionStatus === 'SUCCESSFUL' ||
+            topStatus === 'SUCCESS';
+
+        const isPending =
+            !isSuccess &&
+            (
+                transactionStatus === 'PENDING' ||
+                transactionStatus === 'PROCESSING' ||
+                transactionStatus === 'INPROGRESS' ||
+                transactionStatus === 'IN_PROGRESS' ||
+                transactionStatus === 'INITIATED' ||
+                transactionStatus === 'SUBMITTED'
+            );
+
+        const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILED');
+
+        // If gateway returns contradictory wrapper status (e.g. status="ERROR" but responseCode="00"),
+        // normalize it so API consumers don't see ERROR inside a successful response.
+        const normalizedGatewayResponse =
+            parsedResponse && typeof parsedResponse === 'object' && Object.prototype.hasOwnProperty.call(parsedResponse, 'status')
+                ? { ...parsedResponse, status: isSuccess ? 'SUCCESS' : (topStatus || 'ERROR') }
+                : parsedResponse;
+
+        // Only set merchantTransactionId for SUCCESS transactions
+        // For FAILED/PENDING, it should be null
+        const merchantTransactionId = isSuccess
+            ? (innerData?.merchantTxnId ||
+                innerData?.merchantTransactionId ||
+                normalizedGatewayResponse?.merchantTxnId ||
+                normalizedGatewayResponse?.merchantTransactionId ||
+                payload.transactionId)
+            : null;
+        const transactionType = isSuccess
+            ? (innerData?.transactionType ||
+                normalizedGatewayResponse?.transactionType)
+            : null;
+
+        // Prepare request payload for persistence (mask biometric)
+        const safeRequest = {
+            ...payload,
+            biometricData: undefined,
+            biometricDataPresent: Boolean(payload.biometricData),
+            ipAddress: resolvedIpAddress,
+            consumerAadhaarNumber,
+            consumerNumber
+        };
+
+        // Resolve complete address from latitude/longitude (best-effort: do not fail transaction if Google fails)
+        let transactionCompleteAddress = null;
+        try {
+            if (txLatitude !== undefined && txLatitude !== null && txLongitude !== undefined && txLongitude !== null) {
+                const geo = await googleMap.reverseGeocode(txLatitude, txLongitude);
+                transactionCompleteAddress =
+                    geo?.complete_address ||
+                    geo?.address ||
+                    geo?.formatted_address ||
+                    null;
+            }
+        } catch (geoErr) {
+            transactionCompleteAddress = null;
+        }
+
+        // ── Per-party AEPS wallet updates & history (SUCCESS or PENDING only) ─────
+        // Initiating user's AEPS wallet snapshot (used for history even on FAILURE)
+        let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
+        if (!wallet) {
+            wallet = await model.wallet.create({
+                refId: req.user.id,
+                companyId: req.user.companyId,
+                roleType: req.user.userType,
+                mainWallet: 0,
+                apes1Wallet: 0,
+                apes2Wallet: 0,
+                addedBy: req.user.id,
+                updatedBy: req.user.id
+            });
+        }
+        const openingAepsWallet = round2(wallet.apes1Wallet || 0);
+
+        // Slab commission references — GROSS amounts (for reporting)
+        const retailerCommAmt = commData.amounts.retailerComm || 0;
+        const distCommAmt = commData.amounts.distComm || 0;
+        const mdCommAmt = commData.amounts.mdComm || 0;
+        const companyCommAmt = commData.amounts.companyComm || 0;
+        const superAdminCommAmt = commData.amounts.superAdminComm || 0;
+        const distShortfallAmt = commData.amounts.distShortfall || 0;
+        const mdShortfallAmt = commData.amounts.mdShortfall || 0;
+        const wlShortfallAmt = commData.amounts.wlShortfall || 0;
+        const saShortfallAmt = commData.amounts.saShortfall || 0;
+
+        // TDS amounts (2% of each party's gross incoming commission)
+        const retailerTDS = commData.tds?.retailerTDS || 0;
+        const distributorTDS = commData.tds?.distributorTDS || 0;
+        const masterDistTDS = commData.tds?.masterDistributorTDS || 0;
+        const whitelabelTDS = commData.tds?.whitelabelTDS || 0;
+        const superAdminTDS = commData.tds?.superAdminTDS || 0;
+
+        // NET amounts = gross commission − TDS (what actually gets credited to each party)
+        const retailerNetAmt = round4(retailerCommAmt - retailerTDS);
+        const distNetAmt = round4(distCommAmt - distributorTDS);
+        const mdNetAmt = round4(mdCommAmt - masterDistTDS);
+        const companyNetAmt = round4(companyCommAmt - whitelabelTDS);
+        const superAdminNetAmt = round4(superAdminCommAmt - superAdminTDS);
+
+        // Avail flags
+        const aepsAvail = commData.avail || {
+            superAdminAvail: false, whitelabelAvail: false,
+            masterDistributorAvail: false, distributorAvail: false, retailerAvail: false
+        };
+
+        // Transaction initiator's AEPS wallet credit = NET retail comm (role 5) or NET dist comm (role 4)
+        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerNetAmt : distNetAmt) : 0;
+        const closingAepsWallet = (isSuccess || isPending) ? round4(openingAepsWallet + initiatorCredit) : openingAepsWallet;
+
+
+        if (isSuccess || isPending) {
+            const remarkStatus = isPending ? ` Pending-${operator?.operatorName || normalizedBankiin}` : `-${operator?.operatorName || normalizedBankiin}`;
+            const remarkText = `AEPS ${normalizedTxnType}${remarkStatus}`;
+
+            const walletUpdates = [];
+            const historyPromises = [];
+
+            if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
+
+                // A. Initiating User (Retailer role 5 OR Distributor role 4)
+                if (initiatorCredit > 0) {
+                    await wallet.update({ apes1Wallet: closingAepsWallet, updatedBy: req.user.id });
+                }
+
+                await model.walletHistory.create({
+                    refId: req.user.id,
+                    companyId: req.user.companyId,
+                    walletType: 'AEPS',
+                    operator: operator?.operatorName || normalizedBankiin,
+                    amount: amountNumber,
+                    comm: initiatorCredit,
+                    surcharge: 0,
+                    openingAmt: openingAepsWallet,
+                    closingAmt: closingAepsWallet,
+                    credit: initiatorCredit,
+                    debit: 0,
+                    merchantTransactionId,
+                    transactionId: safeRequest.transactionId,
+                    paymentStatus,
+                    paymentInstrument: {
+                        service: 'AEPS',
+                        request: safeRequest,
+                        response: normalizedGatewayResponse,
+                        metadata: { ipAddress: resolvedIpAddress, latitude: txLatitude, longitude: txLongitude, transactionCompleteAddress }
+                    },
+                    remark: remarkText,
+                    aepsTxnType: normalizedTxnType,
+                    bankiin: normalizedBankiin,
+                    superadminComm: superAdminCommAmt,
+                    whitelabelComm: companyCommAmt,
+                    masterDistributorCom: mdCommAmt,
+                    distributorCom: distCommAmt,
+                    retailerCom: retailerCommAmt,
+                    addedBy: req.user.id,
+                    updatedBy: req.user.id,
+                    userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo }
+                });
+
+                // B. Distributor (role 4) — only present when retailer (role 5) is the initiator
+                if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
+                    const dWallet = commData.wallets.distributorWallet;
+                    const dOpening = round4(dWallet.apes1Wallet || 0);
+                    // Net credit = gross comm − TDS − shortfall
+                    const dNet = distNetAmt - distShortfallAmt;
+                    const dClosing = round4(dOpening + dNet);
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: dWallet.id }, { apes1Wallet: dClosing, updatedBy: commData.users.distributor.id })
+                    );
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.distributor.id,
+                        companyId: user.companyId,
+                        walletType: 'AEPS',
+                        operator: operator?.operatorName || normalizedBankiin,
+                        remark: `${remarkText} - dist comm`,
+                        amount: amountNumber,
+                        comm: distCommAmt,
+                        surcharge: 0,
+                        openingAmt: dOpening,
+                        closingAmt: dClosing,
+                        credit: distNetAmt,
+                        debit: distShortfallAmt + distributorTDS,
+                        merchantTransactionId,
+                        transactionId: safeRequest.transactionId,
+                        paymentStatus,
+                        addedBy: commData.users.distributor.id,
+                        updatedBy: commData.users.distributor.id
+                    }));
+                }
+
+                // C. Master Distributor
+                if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
+                    const mWallet = commData.wallets.masterDistributorWallet;
+                    const mOpening = round4(mWallet.apes1Wallet || 0);
+                    const mNet = mdNetAmt - mdShortfallAmt;
+                    const mClosing = round4(mOpening + mNet);
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: mWallet.id }, { apes1Wallet: mClosing, updatedBy: commData.users.masterDistributor.id })
+                    );
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.masterDistributor.id,
+                        companyId: user.companyId,
+                        walletType: 'AEPS',
+                        operator: operator?.operatorName || normalizedBankiin,
+                        remark: `${remarkText} - md comm`,
+                        amount: amountNumber,
+                        comm: mdCommAmt,
+                        surcharge: 0,
+                        openingAmt: mOpening,
+                        closingAmt: mClosing,
+                        credit: mdNetAmt,
+                        debit: mdShortfallAmt + masterDistTDS,
+                        merchantTransactionId,
+                        transactionId: safeRequest.transactionId,
+                        paymentStatus,
+                        addedBy: commData.users.masterDistributor.id,
+                        updatedBy: commData.users.masterDistributor.id
+                    }));
+                }
+
+                // D. Company (WL)
+                if (commData.wallets.companyWallet) {
+                    const cWallet = commData.wallets.companyWallet;
+                    const cOpening = round4(cWallet.apes1Wallet || 0);
+                    const cNet = companyNetAmt - wlShortfallAmt;
+                    const cClosing = round4(cOpening + cNet);
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: cWallet.id }, { apes1Wallet: cClosing, updatedBy: commData.users.companyAdmin.id })
+                    );
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.companyAdmin.id,
+                        companyId: user.companyId,
+                        walletType: 'AEPS',
+                        operator: operator?.operatorName || normalizedBankiin,
+                        remark: `${remarkText} - company comm`,
+                        amount: amountNumber,
+                        comm: companyCommAmt,
+                        surcharge: 0,
+                        openingAmt: cOpening,
+                        closingAmt: cClosing,
+                        credit: companyNetAmt,
+                        debit: wlShortfallAmt + whitelabelTDS,
+                        merchantTransactionId,
+                        transactionId: safeRequest.transactionId,
+                        paymentStatus,
+                        addedBy: commData.users.companyAdmin.id,
+                        updatedBy: commData.users.companyAdmin.id
+                    }));
+                }
+
+                // E. Super Admin
+                if (commData.wallets.superAdminWallet) {
+                    const saWallet = commData.wallets.superAdminWallet;
+                    const saOpening = round4(saWallet.apes1Wallet || 0);
+                    const saNet = superAdminNetAmt - saShortfallAmt;
+                    const saClosing = round4(saOpening + saNet);
+                    walletUpdates.push(
+                        dbService.update(model.wallet, { id: saWallet.id }, { apes1Wallet: saClosing, updatedBy: commData.users.superAdmin.id })
+                    );
+                    historyPromises.push(dbService.createOne(model.walletHistory, {
+                        refId: commData.users.superAdmin.id,
+                        companyId: 1,
+                        walletType: 'AEPS',
+                        operator: operator?.operatorName || normalizedBankiin,
+                        remark: `${remarkText} - admin comm`,
+                        amount: amountNumber,
+                        comm: superAdminCommAmt,
+                        surcharge: 0,
+                        openingAmt: saOpening,
+                        closingAmt: saClosing,
+                        credit: superAdminNetAmt,
+                        debit: saShortfallAmt + superAdminTDS,
+                        merchantTransactionId,
+                        transactionId: safeRequest.transactionId,
+                        paymentStatus,
+                        addedBy: commData.users.superAdmin.id,
+                        updatedBy: commData.users.superAdmin.id
+                    }));
+                }
+
+                // Execute all remaining updates
+                await Promise.all([...walletUpdates, ...historyPromises]);
+
+            } else {
+                // Non-role 4/5 fallback: just credit initiator AEPS wallet
+                if (initiatorCredit > 0) {
+                    await wallet.update({ apes1Wallet: closingAepsWallet, updatedBy: req.user.id });
+                }
+                await model.walletHistory.create({
+                    refId: req.user.id,
+                    companyId: req.user.companyId,
+                    walletType: 'AEPS',
+                    operator: operator?.operatorName || normalizedBankiin,
+                    amount: amountNumber,
+                    comm: 0,
+                    surcharge: 0,
+                    openingAmt: openingAepsWallet,
+                    closingAmt: closingAepsWallet,
+                    credit: initiatorCredit,
+                    debit: 0,
+                    merchantTransactionId,
+                    transactionId: safeRequest.transactionId,
+                    paymentStatus,
+                    paymentInstrument: {
+                        service: 'AEPS',
+                        request: safeRequest,
+                        response: normalizedGatewayResponse,
+                        metadata: { ipAddress: resolvedIpAddress, latitude: txLatitude, longitude: txLongitude, transactionCompleteAddress }
+                    },
+                    remark: remarkText,
+                    aepsTxnType: normalizedTxnType,
+                    bankiin: normalizedBankiin,
+                    addedBy: req.user.id,
+                    updatedBy: req.user.id,
+                    userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo }
+                });
+            }
+        }
+
+        // Separate AEPS history (for reporting) — always written for all statuses
+        const creditToApply = (isSuccess || isPending) ? initiatorCredit : 0;
+        if (model.aepsHistory) {
+            await model.aepsHistory.create({
+                refId: req.user.id,
+                companyId: req.user.companyId,
+                operator: operator?.operatorName || normalizedBankiin,
+                bankiin: normalizedBankiin,
+                aepsTxnType: normalizedTxnType,
+                captureType: normalizedCaptureType,
+                amount: amountNumber,
+                transactionId: safeRequest.transactionId,
+                merchantTransactionId,
+                consumerNumber: consumerNumber ? String(consumerNumber) : null,
+                consumerAadhaarNumber,
+                ipAddress: resolvedIpAddress,
+                latitude: txLatitude !== undefined && txLatitude !== null ? Number(txLatitude) : null,
+                longitude: txLongitude !== undefined && txLongitude !== null ? Number(txLongitude) : null,
+                transactionCompleteAddress,
+                bankRRN:
+                    innerData?.bankRRN ||
+                    innerData?.bankRrn ||
+                    normalizedGatewayResponse?.bankRRN ||
+                    normalizedGatewayResponse?.bankRrn,
+                fpTransactionId:
+                    innerData?.fpTransactionId ||
+                    innerData?.FingpayTransactionId ||
+                    normalizedGatewayResponse?.fpTransactionId ||
+                    normalizedGatewayResponse?.FingpayTransactionId,
+                responseCode,
+                status: paymentStatus,
+                message:
+                    normalizedGatewayResponse?.message ||
+                    innerData?.errorMessage ||
+                    innerData?.responseMessage ||
+                    innerData?.message,
+                requestPayload: safeRequest,
+                responsePayload: normalizedGatewayResponse,
+                openingAepsWallet,
+                closingAepsWallet,
+                credit: creditToApply,
+                superadminComm: superAdminCommAmt,
+                whitelabelComm: companyCommAmt,
+                masterDistributorCom: mdCommAmt,
+                distributorCom: distCommAmt,
+                retailerCom: retailerCommAmt,
+                superadminCommTDS: superAdminTDS,
+                whitelabelCommTDS: whitelabelTDS,
+                masterDistributorComTDS: masterDistTDS,
+                distributorComTDS: distributorTDS,
+                retailerComTDS: retailerTDS,
+                ...aepsAvail,
+                addedBy: req.user.id,
+                updatedBy: req.user.id
+            });
+        }
+
+        // If FAILED/PENDING: do not stop persistence above; just return gateway response after storing
+        if (!isSuccess) {
+            return res.failure({
+                message:
+                    normalizedGatewayResponse?.message ||
+                    innerData?.message ||
+                    (isPending ? 'AEPS transaction pending' : 'AEPS transaction failed'),
+                data: {
+                    paymentStatus,
+                    responseCode,
+                    transactionStatus,
+                    merchantTransactionId: null,
+                    gatewayResponse: normalizedGatewayResponse
+                }
+            });
+        }
+
+        // Use bank details already fetched during validation
+        let bankName = null;
+        let bankLogo = null;
+        if (bankDetails) {
+            bankName = bankDetails.bankName;
+            bankLogo = imageService.getImageUrl(bankDetails.bankLogo, false);
+        }
+
+        // Get company logo URL - check company.logo first, then companyImage table
+        let companyLogo = null;
+        if (existingCompany?.logo) {
+            companyLogo = imageService.getImageUrl(existingCompany.logo, false);
+        } else if (existingCompany?.id) {
+            // Try to get logo from companyImage table (type: signature, subtype: logo)
+            const companyLogoImage = await dbService.findOne(model.companyImage, {
+                companyId: existingCompany.id,
+                type: 'signature',
+                subtype: 'logo',
+                isActive: true
+            });
+            if (companyLogoImage?.s3Key) {
+                companyLogo = imageService.getImageUrl(companyLogoImage.s3Key, false);
+            }
+        }
+
+        // Extract transaction date/time from gateway response
+        const transactionDateTimeRaw = innerData?.requestTransactionTime ||
+            normalizedGatewayResponse?.data?.requestTransactionTime ||
+            null;
+
+        // Format transaction date/time (if from gateway, use as-is; otherwise use current time)
+        let transactionDateTime = transactionDateTimeRaw;
+        let transactionTime = transactionDateTimeRaw;
+        if (!transactionDateTimeRaw) {
+            const now = new Date();
+            // Format as DD/MM/YYYY HH:MM:SS
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            transactionDateTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+            transactionTime = `${hours}:${minutes}:${seconds}`;
+        } else {
+            // If gateway provides time, extract just time part if needed
+            const timeMatch = transactionDateTimeRaw.match(/(\d{2}:\d{2}:\d{2})/);
+            if (timeMatch) {
+                transactionTime = timeMatch[1];
+            }
+        }
+
+        // Extract remaining balance from gateway response
+        const remainingBalance = innerData?.balanceAmount ||
+            normalizedGatewayResponse?.data?.balanceAmount ||
+            normalizedGatewayResponse?.balanceAmount ||
+            null;
+
+        const miniStatement = innerData?.miniStatementStructureModel ||
+            normalizedGatewayResponse?.data?.miniStatementStructureModel ||
+            aepsResponse?.miniStatementStructureModel ||
+            null;
+
+        // Extract client_transaction_id for transactionId
+        const clientTransactionId = normalizedGatewayResponse?.client_transaction_id ||
+            payload.transactionId;
+
+        // Format response with all required fields
+        const responseData = {
+            status: paymentStatus,
+            service: 'AEPS',
+            transactionId: clientTransactionId,
+            referenceId: merchantTransactionId,
+            transactionType: transactionType,
+            transactionDate: transactionDateTime,
+            transactionTime: transactionTime,
+            amount: amountNumber,
+            remainingBalance: remainingBalance,
+            miniStatement: miniStatement,
+            bankName: bankName,
+            bankLogo: bankLogo,
+            response: aepsResponse,
+            companyName: existingCompany?.companyName || null,
+            companyLogo: companyLogo,
+        };
+
+        // Add mini statement data for MS transactions
+        if (normalizedTxnType === 'MS' && miniStatement && Array.isArray(miniStatement)) {
+            responseData.response.miniStatement = miniStatement;
+        }
+
+        return res.success({
+            message: 'AEPS transaction successful',
+            data: responseData
+        });
+    }
+    catch (error) {
+        console.error('AEPS transaction error', error);
+        return res.failure({ message: error.message || 'Unable to process AEPS transaction' });
+    }
+}
+
+
+const checkStatus = async (req, res) => {
+    try {
+        const { txnId } = req.body;
+        if (!txnId) {
+            return res.failure({ message: 'Transaction ID is required' });
+        }
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingAepsOnboarding) {
+            return res.failure({ message: 'AEPS onboarding not found' });
+        }
+        const statusData = {
+            uniqueID: existingAepsOnboarding.uniqueID,
+            merchantLoginId: existingAepsOnboarding.merchantLoginId,
+            txnId: txnId,
+        }
+        const response = await asl.aslAepsCheckStatus(statusData);
+        console.log("response", response);
+        if (response.status === 'SUCCESS') {
+            return res.success({ message: 'AEPS transaction status', data: response.data });
+        } else {
+            return res.failure({ message: 'AEPS transaction status', data: response.data });
+        }
+    }
+    catch (error) {
+        console.error('Check status error', error);
+        return res.failure({ message: error.message || 'Unable to check status' });
+    }
+}
+
 
 const getOnboardingStatus = async (req, res) => {
     try {
@@ -952,689 +2033,6 @@ const aeps2FaAuthentication = async (req, res) => {
     catch (error) {
         console.error('AEPS 2FA authentication error', error);
         return res.failure({ message: error.message || 'Unable to process AEPS 2FA authentication' });
-    }
-}
-
-const aepsTransaction = async (req, res) => {
-    try {
-        const {
-            amount,
-            txnType,
-            captureType,
-            biometricData,
-            bankiin,
-            latitude,
-            longitude,
-            ipAddress,
-            aadharNumber,
-            consumerNumber
-        } = req.body || {};
-
-        const round2 = (num) => {
-            const n = Number(num);
-            if (!Number.isFinite(n)) return 0;
-            return Math.round((n + Number.EPSILON) * 100) / 100;
-        };
-
-        const normalizeTxnType = (value) => (value ? String(value).trim().toUpperCase() : null);
-        const normalizeCaptureType = (value) => {
-            const t = value ? String(value).trim().toUpperCase() : null;
-            if (t === 'FINGURE') return 'FINGER';
-            return t;
-        };
-
-        const normalizedTxnType = normalizeTxnType(txnType);
-        const normalizedCaptureType = normalizeCaptureType(captureType);
-        const normalizedBankiin = bankiin ? String(bankiin).trim() : null;
-        if (!biometricData) {
-            return res.failure({ message: 'Biometric data is required' });
-        }
-        if (!normalizedCaptureType || !['FACE', 'FINGER'].includes(normalizedCaptureType)) {
-            return res.failure({ message: 'Invalid capture type. Allowed values are FACE or FINGER' });
-        }
-        if (!normalizedTxnType || !['CW', 'BE', 'MS'].includes(normalizedTxnType)) {
-            return res.failure({ message: 'Invalid transaction type. Allowed values are CW, BE or MS' });
-        }
-        if (!normalizedBankiin) {
-            return res.failure({ message: 'bankiin is required' });
-        }
-
-        // Validate bankIIN exists in aslBankList
-        const bankDetails = await dbService.findOne(model.aslBankList, {
-            bankIIN: normalizedBankiin,
-            isDeleted: false,
-            isActive: true
-        });
-        if (!bankDetails) {
-            return res.failure({ message: 'Bank Name not found' });
-        }
-
-        if (!ipAddress) {
-            return res.failure({ message: 'ipAddress is required' });
-        }
-        if (!aadharNumber) {
-            return res.failure({ message: 'aadharNumber is required' });
-        }
-        if (!consumerNumber) {
-            return res.failure({ message: 'consumerNumber is required' });
-        }
-        if (!latitude || !longitude) {
-            return res.failure({ message: 'latitude and longitude are required' });
-        }
-
-        const amountNumber = round2(amount || 0);
-        if (normalizedTxnType === 'CW' && (!amountNumber || amountNumber < 100)) {
-            return res.failure({ message: 'Minimum amount for CW transaction is 100' });
-        }
-
-        // Ensure daily 2FA is completed for today (IST date)
-        await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
-        const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
-        const existingDaily2FA = await dbService.findOne(model.aepsDailyLogin, {
-            refId: req.user.id,
-            companyId: req.user.companyId,
-            loginDate: todayDateStr
-        });
-        if (!existingDaily2FA) {
-            return res.failure({ message: 'AEPS daily 2FA authentication is required before transaction' });
-        }
-
-        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
-
-        if (!existingUser.latitude || !existingUser.longitude) {
-            return res.failure({ message: 'User latitude/longitude is required' });
-        }
-
-        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
-            userId: req.user.id,
-            companyId: req.user.companyId,
-            merchantStatus: true
-        });
-        if (!existingAepsOnboarding) {
-            return res.failure({ message: 'AEPS onboarding not completed' });
-        }
-        if (!existingAepsOnboarding.merchantLoginId) {
-            return res.failure({ message: 'AEPS merchantLoginId not found' });
-        }
-        if (!existingAepsOnboarding.isOtpValidated) {
-            return res.failure({ message: 'AEPS eKYC OTP validation is required before transaction' });
-        }
-        if (!existingAepsOnboarding.isBioMetricValidated) {
-            return res.failure({ message: 'AEPS eKYC biometric validation is required before transaction' });
-        }
-        if (!existingAepsOnboarding.isBankKycOtpValidated) {
-            return res.failure({ message: 'Bank eKYC OTP validation is required before transaction' });
-        }
-        if (!existingAepsOnboarding.isBankKycBiometricValidated) {
-            return res.failure({ message: 'Bank eKYC biometric validation is required before transaction' });
-        }
-
-        const existingBioMetric = await dbService.findOne(model.bioMetric, {
-            refId: req.user.id,
-            companyId: req.user.companyId,
-            captureType: normalizedCaptureType
-        });
-        if (!existingBioMetric) {
-            return res.failure({ message: 'Biometric data is required' });
-        }
-
-        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
-
-        const generatedTxnId = generateTransactionID(existingCompany?.companyName);
-
-        const resolveOperator = async () => {
-            const pickBestByAmount = (operators, amountVal) => {
-                if (!operators || !operators.length) return null;
-                const matches = operators.filter((op) => {
-                    const min = op.minValue !== undefined && op.minValue !== null ? Number(op.minValue) : null;
-                    const max = op.maxValue !== undefined && op.maxValue !== null ? Number(op.maxValue) : null;
-                    if (Number.isFinite(min) && amountVal < min) return false;
-                    if (Number.isFinite(max) && amountVal > max) return false;
-                    return true;
-                });
-                const candidates = matches.length ? matches : operators;
-                // Choose most specific range: smallest span, else highest minValue, else newest
-                candidates.sort((a, b) => {
-                    const aMin = Number.isFinite(Number(a.minValue)) ? Number(a.minValue) : -Infinity;
-                    const bMin = Number.isFinite(Number(b.minValue)) ? Number(b.minValue) : -Infinity;
-                    const aMax = Number.isFinite(Number(a.maxValue)) ? Number(a.maxValue) : Infinity;
-                    const bMax = Number.isFinite(Number(b.maxValue)) ? Number(b.maxValue) : Infinity;
-                    const aSpan = aMax - aMin;
-                    const bSpan = bMax - bMin;
-                    if (aSpan !== bSpan) return aSpan - bSpan;
-                    if (aMin !== bMin) return bMin - aMin;
-                    return (b.id || 0) - (a.id || 0);
-                });
-                return candidates[0];
-            };
-
-            // Amount-based operator selection:
-            // Your operator rows are like 100-500, 501-1000, ... 9001-10000 with operatorType="AEPS".
-            // bankiin is BANK IIN (e.g. 109104) so DO NOT match it with operatorCode (AEPS011 etc).
-            const aepsOperators = await model.operator.findAll({ where: { operatorType: 'AEPS' } });
-
-            // Primary: pick matching min/max range
-            const matched = pickBestByAmount(aepsOperators, amountNumber);
-            if (matched) return matched;
-
-            // Fallback: if no match (e.g. BE/MS amount=0), pick closest boundary
-            const sorted = (aepsOperators || []).slice().sort((a, b) => Number(a.minValue || 0) - Number(b.minValue || 0));
-            if (!sorted.length) return null;
-            if (amountNumber <= Number(sorted[0].minValue || 0)) return sorted[0];
-            return sorted[sorted.length - 1];
-        };
-
-        const operator = await resolveOperator();
-
-        // Commission/TDS: simple operator-based (no slabs/ranges). All fields can be null.
-        const toNullableNumber = (value) => {
-            if (value === undefined || value === null || value === '') return null;
-            const n = Number(value);
-            if (!Number.isFinite(n)) return null;
-            return round2(n);
-        };
-
-        const TDS_PERCENT = Number(process.env.AEPS_TDS_PERCENT || 2);
-        const calculateTdsAmount = (commValue) => {
-            if (commValue === null || commValue === undefined) return null;
-            return round2((Number(commValue) * TDS_PERCENT) / 100);
-        };
-
-        const calcCommByAmtType = (baseValue) => {
-            const base = toNullableNumber(baseValue);
-            if (base === null) return null;
-            const amtType = operator?.amtType ? String(operator.amtType).toLowerCase() : 'fix';
-            if (amtType === 'per') {
-                return round2((amountNumber * base) / 100);
-            }
-            return round2(base);
-        };
-
-        const superadminComm = calcCommByAmtType(operator?.superadminComm);
-        const whitelabelComm = calcCommByAmtType(operator?.whitelabelComm);
-        const masterDistributorCom = calcCommByAmtType(
-            operator?.masterDistributorCom ?? operator?.masterDistrbutorCom
-        );
-        const distributorCom = calcCommByAmtType(operator?.distributorCom);
-        // If retailerCom not configured, fallback to operator.comm
-        const retailerCommBase = operator?.retailerCom ?? operator?.reatilerCom ?? operator?.comm;
-        const retailerCom = calcCommByAmtType(retailerCommBase);
-
-        // TDS will be calculated later, only for SUCCESS transactions
-        // For now, initialize to 0 (will be recalculated after gateway response)
-        let superadminCommTDS = 0;
-        let whitelabelCommTDS = 0;
-        let masterDistributorComTDS = 0;
-        let distributorComTDS = 0;
-        let retailerComTDS = 0;
-        // retailerNetCredit will be calculated after TDS is determined (sum of all commissions after TDS)
-        let retailerNetCredit = 0;
-
-        // Transaction metadata we want to persist for reporting/audit
-        const consumerAadhaarNumber = aadharNumber ? String(aadharNumber) : null;
-        const resolvedIpAddress = ipAddress ? String(ipAddress) : (req.ip ? String(req.ip) : null);
-        const txLatitude = latitude ?? existingUser.latitude;
-        const txLongitude = longitude ?? existingUser.longitude;
-
-        const payload = {
-            uniqueID: existingAepsOnboarding.uniqueID,
-            aadhaarNo: aadharNumber,
-            txnType: normalizedTxnType,
-            merchantLoginId: existingAepsOnboarding.merchantLoginId,
-            bankiin: normalizedBankiin,
-            mobile: consumerNumber,
-            amount: amountNumber,
-            latitude: txLatitude,
-            longitude: txLongitude,
-            transactionId: generatedTxnId,
-            captureType: normalizedCaptureType,
-            biometricData: biometricData
-        };
-        console.log('payload', payload);
-        const aepsResponse = await asl.aslAepsTransaction(payload);
-        const safeJsonStringify = (value) => {
-            try {
-                const seen = new WeakSet();
-                return JSON.stringify(
-                    value,
-                    (key, val) => {
-                        if (typeof val === 'bigint') return val.toString();
-                        if (val instanceof Error) {
-                            return { name: val.name, message: val.message, stack: val.stack };
-                        }
-                        if (typeof val === 'function') {
-                            return `[Function ${val.name || 'anonymous'}]`;
-                        }
-                        if (val && typeof val === 'object') {
-                            if (seen.has(val)) return '[Circular]';
-                            seen.add(val);
-                        }
-                        return val;
-                    },
-                    2
-                );
-            } catch (e) {
-                return String(value);
-            }
-        };
-        // Log response as JSON (prefer response.data if this is an axios response)
-        console.log('aepsResponse', safeJsonStringify(aepsResponse?.data ?? aepsResponse));
-
-        // Normalize response (sometimes comes as JSON string)
-        let parsedResponse = aepsResponse;
-        if (typeof aepsResponse === 'string') {
-            try {
-                parsedResponse = JSON.parse(aepsResponse);
-            } catch (e) {
-                const jsonMatch = aepsResponse.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    try {
-                        parsedResponse = JSON.parse(jsonMatch[0]);
-                    } catch (parseError) {
-                        parsedResponse = { status: 'ERROR', message: aepsResponse };
-                    }
-                } else {
-                    parsedResponse = { status: 'ERROR', message: aepsResponse };
-                }
-            }
-        }
-
-        const topStatus = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
-        const innerData =
-            parsedResponse && typeof parsedResponse === 'object' && parsedResponse.data && typeof parsedResponse.data === 'object'
-                ? parsedResponse.data
-                : null;
-        const transactionStatusRaw =
-            innerData?.transactionStatus ??
-            innerData?.status ??
-            parsedResponse?.transactionStatus ??
-            parsedResponse?.status;
-        const transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
-        const responseCode = innerData?.responseCode ?? parsedResponse?.responseCode;
-
-        const isSuccess =
-            responseCode === '00' ||
-            transactionStatus === 'SUCCESS' ||
-            transactionStatus === 'SUCCESSFUL' ||
-            topStatus === 'SUCCESS';
-
-        const isPending =
-            !isSuccess &&
-            (
-                transactionStatus === 'PENDING' ||
-                transactionStatus === 'PROCESSING' ||
-                transactionStatus === 'INPROGRESS' ||
-                transactionStatus === 'IN_PROGRESS' ||
-                transactionStatus === 'INITIATED' ||
-                transactionStatus === 'SUBMITTED'
-            );
-
-        const paymentStatus = isSuccess ? 'SUCCESS' : (isPending ? 'PENDING' : 'FAILED');
-
-        // Calculate TDS only for SUCCESS transactions
-        // For FAILED/PENDING, TDS remains 0
-        if (isSuccess) {
-            superadminCommTDS = calculateTdsAmount(superadminComm);
-            whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
-            masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
-            distributorComTDS = calculateTdsAmount(distributorCom);
-            retailerComTDS = calculateTdsAmount(retailerCom);
-        }
-
-        // Calculate total commission credit: ALL commissions minus TDS (all credited to retailer wallet)
-        if (isSuccess) {
-            const superadminNet = (superadminComm === null ? 0 : Number(superadminComm || 0)) - (superadminCommTDS || 0);
-            const whitelabelNet = (whitelabelComm === null ? 0 : Number(whitelabelComm || 0)) - (whitelabelCommTDS || 0);
-            const masterDistributorNet = (masterDistributorCom === null ? 0 : Number(masterDistributorCom || 0)) - (masterDistributorComTDS || 0);
-            const distributorNet = (distributorCom === null ? 0 : Number(distributorCom || 0)) - (distributorComTDS || 0);
-            const retailerNet = (retailerCom === null ? 0 : Number(retailerCom || 0)) - (retailerComTDS || 0);
-
-            // Total commission credit = sum of all commissions after TDS
-            retailerNetCredit = round2(superadminNet + whitelabelNet + masterDistributorNet + distributorNet + retailerNet);
-        }
-
-        // If gateway returns contradictory wrapper status (e.g. status="ERROR" but responseCode="00"),
-        // normalize it so API consumers don't see ERROR inside a successful response.
-        const normalizedGatewayResponse =
-            parsedResponse && typeof parsedResponse === 'object' && Object.prototype.hasOwnProperty.call(parsedResponse, 'status')
-                ? { ...parsedResponse, status: isSuccess ? 'SUCCESS' : (topStatus || 'ERROR') }
-                : parsedResponse;
-
-        // Only set merchantTransactionId for SUCCESS transactions
-        // For FAILED/PENDING, it should be null
-        const merchantTransactionId = isSuccess
-            ? (innerData?.merchantTxnId ||
-                innerData?.merchantTransactionId ||
-                normalizedGatewayResponse?.merchantTxnId ||
-                normalizedGatewayResponse?.merchantTransactionId ||
-                payload.transactionId)
-            : null;
-        const transactionType = isSuccess
-            ? (innerData?.transactionType ||
-                innerData?.transactionType ||
-                normalizedGatewayResponse?.transactionType ||
-                normalizedGatewayResponse?.transactionType)
-            : null;
-        // Prepare request payload for persistence (mask biometric)
-        const safeRequest = {
-            ...payload,
-            biometricData: undefined,
-            biometricDataPresent: Boolean(payload.biometricData),
-            ipAddress: resolvedIpAddress,
-            consumerAadhaarNumber,
-            consumerNumber
-        };
-
-        // Ensure wallet exists so we can snapshot opening/closing (even for FAILED/PENDING)
-        let wallet = await model.wallet.findOne({
-            where: { refId: req.user.id, companyId: req.user.companyId }
-        });
-
-        if (!wallet) {
-            wallet = await model.wallet.create({
-                refId: req.user.id,
-                companyId: req.user.companyId,
-                roleType: req.user.userType,
-                mainWallet: 0,
-                apes1Wallet: 0,
-                apes2Wallet: 0,
-                addedBy: req.user.id,
-                updatedBy: req.user.id
-            });
-        }
-
-        const openingAepsWallet = round2(wallet.apes1Wallet || 0);
-        const creditToApply = isSuccess ? retailerNetCredit : 0;
-        const closingAepsWallet = isSuccess ? round2(openingAepsWallet + creditToApply) : openingAepsWallet;
-
-        // Only credit AEPS wallet on SUCCESS
-        if (isSuccess && creditToApply) {
-            await wallet.update({
-                apes1Wallet: closingAepsWallet,
-                updatedBy: req.user.id
-            });
-        }
-
-        // Resolve complete address from latitude/longitude (best-effort: do not fail transaction if Google fails)
-        let transactionCompleteAddress = null;
-        try {
-            if (txLatitude !== undefined && txLatitude !== null && txLongitude !== undefined && txLongitude !== null) {
-                const geo = await googleMap.reverseGeocode(txLatitude, txLongitude);
-                transactionCompleteAddress =
-                    geo?.complete_address ||
-                    geo?.address ||
-                    geo?.formatted_address ||
-                    null;
-            }
-        } catch (geoErr) {
-            transactionCompleteAddress = null;
-        }
-
-        // Always store walletHistory + aepsHistory for SUCCESS / FAILED / PENDING.
-        await model.walletHistory.create({
-            refId: req.user.id,
-            companyId: req.user.companyId,
-            walletType: 'AEPS',
-            operator: operator?.operatorName || normalizedBankiin,
-            amount: amountNumber,
-            comm: retailerCom === null ? 0 : Number(retailerCom || 0),
-            surcharge: 0,
-            openingAmt: openingAepsWallet,
-            closingAmt: closingAepsWallet,
-            credit: creditToApply,
-            debit: 0,
-            merchantTransactionId,
-            transactionId: safeRequest.transactionId,
-            paymentStatus,
-            paymentInstrument: {
-                service: 'AEPS',
-                request: safeRequest,
-                response: normalizedGatewayResponse,
-                metadata: {
-                    ipAddress: resolvedIpAddress,
-                    latitude: txLatitude,
-                    longitude: txLongitude,
-                    transactionCompleteAddress
-                }
-            },
-            remark: `AEPS ${normalizedTxnType}`,
-            aepsTxnType: normalizedTxnType,
-            bankiin: normalizedBankiin,
-            superadminComm,
-            whitelabelComm,
-            masterDistributorCom,
-            distributorCom,
-            retailerCom,
-            superadminCommTDS,
-            whitelabelCommTDS,
-            masterDistributorComTDS,
-            distributorComTDS,
-            retailerComTDS,
-            addedBy: req.user.id,
-            updatedBy: req.user.id,
-            userDetails: {
-                id: existingUser.id,
-                userType: existingUser.userType,
-                mobileNo: existingUser.mobileNo
-            }
-        });
-
-        // Separate AEPS history (for reporting)
-        if (model.aepsHistory) {
-            await model.aepsHistory.create({
-                refId: req.user.id,
-                companyId: req.user.companyId,
-                operator: operator?.operatorName || normalizedBankiin,
-                bankiin: normalizedBankiin,
-                aepsTxnType: normalizedTxnType,
-                captureType: normalizedCaptureType,
-                amount: amountNumber,
-                transactionId: safeRequest.transactionId,
-                merchantTransactionId,
-                consumerNumber: consumerNumber ? String(consumerNumber) : null,
-                consumerAadhaarNumber,
-                ipAddress: resolvedIpAddress,
-                latitude: txLatitude !== undefined && txLatitude !== null ? Number(txLatitude) : null,
-                longitude: txLongitude !== undefined && txLongitude !== null ? Number(txLongitude) : null,
-                transactionCompleteAddress,
-                bankRRN:
-                    innerData?.bankRRN ||
-                    innerData?.bankRrn ||
-                    normalizedGatewayResponse?.bankRRN ||
-                    normalizedGatewayResponse?.bankRrn,
-                fpTransactionId:
-                    innerData?.fpTransactionId ||
-                    innerData?.FingpayTransactionId ||
-                    normalizedGatewayResponse?.fpTransactionId ||
-                    normalizedGatewayResponse?.FingpayTransactionId,
-                responseCode,
-                status: paymentStatus,
-                message:
-                    normalizedGatewayResponse?.message ||
-                    innerData?.errorMessage ||
-                    innerData?.responseMessage ||
-                    innerData?.message,
-                requestPayload: safeRequest,
-                responsePayload: normalizedGatewayResponse,
-                openingAepsWallet,
-                closingAepsWallet: closingAepsWallet,
-                credit: creditToApply,
-                superadminComm,
-                whitelabelComm,
-                masterDistributorCom,
-                distributorCom,
-                retailerCom,
-                superadminCommTDS,
-                whitelabelCommTDS,
-                masterDistributorComTDS,
-                distributorComTDS,
-                retailerComTDS,
-                addedBy: req.user.id,
-                updatedBy: req.user.id
-            });
-        }
-
-        // If FAILED/PENDING: do not stop persistence above; just return gateway response after storing
-        if (!isSuccess) {
-            return res.failure({
-                message:
-                    normalizedGatewayResponse?.message ||
-                    innerData?.message ||
-                    (isPending ? 'AEPS transaction pending' : 'AEPS transaction failed'),
-                data: {
-                    paymentStatus,
-                    responseCode,
-                    transactionStatus,
-                    merchantTransactionId: null,
-                    gatewayResponse: normalizedGatewayResponse
-                }
-            });
-        }
-
-        // Use bank details already fetched during validation
-        let bankName = null;
-        let bankLogo = null;
-        if (bankDetails) {
-            bankName = bankDetails.bankName;
-            bankLogo = imageService.getImageUrl(bankDetails.bankLogo, false);
-        }
-
-        // Get company logo URL - check company.logo first, then companyImage table
-        let companyLogo = null;
-        if (existingCompany?.logo) {
-            companyLogo = imageService.getImageUrl(existingCompany.logo, false);
-        } else if (existingCompany?.id) {
-            // Try to get logo from companyImage table (type: signature, subtype: logo)
-            const companyLogoImage = await dbService.findOne(model.companyImage, {
-                companyId: existingCompany.id,
-                type: 'signature',
-                subtype: 'logo',
-                isActive: true
-            });
-            if (companyLogoImage?.s3Key) {
-                companyLogo = imageService.getImageUrl(companyLogoImage.s3Key, false);
-            }
-        }
-
-        // Extract transaction date/time from gateway response
-        const transactionDateTimeRaw = innerData?.requestTransactionTime ||
-            normalizedGatewayResponse?.data?.requestTransactionTime ||
-            null;
-
-        // Format transaction date/time (if from gateway, use as-is; otherwise use current time)
-        let transactionDateTime = transactionDateTimeRaw;
-        let transactionTime = transactionDateTimeRaw;
-        if (!transactionDateTimeRaw) {
-            const now = new Date();
-            // Format as DD/MM/YYYY HH:MM:SS
-            const day = String(now.getDate()).padStart(2, '0');
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const year = now.getFullYear();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            transactionDateTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-            transactionTime = `${hours}:${minutes}:${seconds}`;
-        } else {
-            // If gateway provides time, extract just time part if needed
-            const timeMatch = transactionDateTimeRaw.match(/(\d{2}:\d{2}:\d{2})/);
-            if (timeMatch) {
-                transactionTime = timeMatch[1];
-            }
-        }
-
-        // Extract remaining balance from gateway response
-        const remainingBalance = innerData?.balanceAmount ||
-            normalizedGatewayResponse?.data?.balanceAmount ||
-            normalizedGatewayResponse?.balanceAmount ||
-            null;
-
-        const miniStatement = innerData?.miniStatementStructureModel ||
-            normalizedGatewayResponse?.data?.miniStatementStructureModel ||
-            aepsResponse?.miniStatementStructureModel ||
-            null;
-
-        // Extract client_transaction_id for transactionId
-        const clientTransactionId = normalizedGatewayResponse?.client_transaction_id ||
-            payload.transactionId;
-
-        // Format response with all required fields
-        const responseData = {
-            status: paymentStatus,
-            service: 'AEPS',
-            transactionId: clientTransactionId,
-            referenceId: merchantTransactionId,
-            transactionType: transactionType,
-            transactionDate: transactionDateTime,
-            transactionTime: transactionTime,
-            amount: amountNumber,
-            remainingBalance: remainingBalance,
-            miniStatement: miniStatement,
-            bankName: bankName,
-            bankLogo: bankLogo,
-            response: aepsResponse,
-            companyName: existingCompany?.companyName || null,
-            companyLogo: companyLogo,
-        };
-
-        // Add mini statement data for MS transactions
-        if (normalizedTxnType === 'MS' && miniStatement && Array.isArray(miniStatement)) {
-            responseData.response.miniStatement = miniStatement;
-        }
-
-        return res.success({
-            message: 'AEPS transaction successful',
-            data: responseData
-        });
-    }
-    catch (error) {
-        console.error('AEPS transaction error', error);
-        return res.failure({ message: error.message || 'Unable to process AEPS transaction' });
-    }
-}
-
-const checkStatus = async (req, res) => {
-    try {
-        const { txnId } = req.body;
-        if (!txnId) {
-            return res.failure({ message: 'Transaction ID is required' });
-        }
-        const existingUser = await dbService.findOne(model.user, {
-            id: req.user.id,
-            companyId: req.user.companyId,
-            isActive: true
-        });
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
-
-        const existingAepsOnboarding = await dbService.findOne(model.aepsOnboarding, {
-            userId: req.user.id,
-            companyId: req.user.companyId,
-            isActive: true
-        });
-        if (!existingAepsOnboarding) {
-            return res.failure({ message: 'AEPS onboarding not found' });
-        }
-        const statusData = {
-            uniqueID: existingAepsOnboarding.uniqueID,
-            merchantLoginId: existingAepsOnboarding.merchantLoginId,
-            txnId: txnId,
-        }
-        const response = await asl.aslAepsCheckStatus(statusData);
-        console.log("response", response);
-        if (response.status === 'SUCCESS') {
-            return res.success({ message: 'AEPS transaction status', data: response.data });
-        } else {
-            return res.failure({ message: 'AEPS transaction status', data: response.data });
-        }
-    }
-    catch (error) {
-        console.error('Check status error', error);
-        return res.failure({ message: error.message || 'Unable to check status' });
     }
 }
 

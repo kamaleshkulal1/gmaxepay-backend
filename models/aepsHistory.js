@@ -175,6 +175,27 @@ let AepsHistory = sequelize.define(
       type: DataTypes.FLOAT,
       allowNull: true
     },
+    superAdminAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    whitelabelAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    masterDistributorAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    distributorAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    retailerAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+
     addedBy: {
       type: DataTypes.INTEGER,
       allowNull: true

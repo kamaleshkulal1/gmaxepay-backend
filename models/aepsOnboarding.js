@@ -1,7 +1,4 @@
-/**
- * aepsOnboarding.js
- * @description :: sequelize model of database table aepsOnboarding
- */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');

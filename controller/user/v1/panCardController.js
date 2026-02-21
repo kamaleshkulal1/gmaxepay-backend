@@ -86,8 +86,6 @@ const panCardActions = async (req, res) => {
 
     // Fetch User Wallet First
     currentWallet = await dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId });
-    console.log("currentWallet", currentWallet);
-    // Initial check for balance
     if (currentWallet.mainWallet < amountNumber) {
       return res.failure({ message: 'Insufficient balance' });
     }
@@ -303,24 +301,24 @@ const panCardActions = async (req, res) => {
     }
 
     const mode = 'EKYC';
-    // const eKycHubPromise = action === 'correction'
-    //   ? ekycHub.panCardCorrection(mobileNumber, mode, transactionId)
-    //   : ekycHub.panCardNew(mobileNumber, mode, transactionId);
+    const eKycHubPromise = action === 'correction'
+      ? ekycHub.panCardCorrection(mobileNumber, mode, transactionId)
+      : ekycHub.panCardNew(mobileNumber, mode, transactionId);
 
-    // const response = await eKycHubPromise;
+    const response = await eKycHubPromise;
 
     // Using static response for testing purposes
-    const response = {
-      txid: 54036297,
-      status: 'Success',
-      response_type: 'PAN_CARD',
-      opid: 'Order is under process',
-      message: 'Pan Redirection url created',
-      url: 'https://connect.inspay.in/nsdl/pan?process_id=3024&txid=54036297&mode=K',
-      number: '9071138349',
-      amount: '107',
-      orderid: 'YZCPY51519'
-    };
+    // const response = {
+    //   txid: 54036297,
+    //   status: 'Success',
+    //   response_type: 'PAN_CARD',
+    //   opid: 'Order is under process',
+    //   message: 'Pan Redirection url created',
+    //   url: 'https://connect.inspay.in/nsdl/pan?process_id=3024&txid=54036297&mode=K',
+    //   number: '9071138349',
+    //   amount: '107',
+    //   orderid: 'YZCPY51519'
+    // };
 
     // Normalize status to uppercase
     const normalizeStatus = (status) => {
