@@ -85,24 +85,8 @@ const panCardActions = async (req, res) => {
     let currentWallet = null;
 
     // Fetch User Wallet First
-    currentWallet = await model.wallet.findOne({
-      where: { refId: user.id, companyId: user.companyId }
-    });
-
-    // Create wallet if doesn't exist
-    if (!currentWallet) {
-      currentWallet = await model.wallet.create({
-        refId: user.id,
-        companyId: user.companyId,
-        roleType: user.userType,
-        mainWallet: 0,
-        apes1Wallet: 0,
-        apes2Wallet: 0,
-        addedBy: user.id,
-        updatedBy: user.id
-      });
-    }
-
+    currentWallet = await dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId });
+    console.log("currentWallet", currentWallet);
     // Initial check for balance
     if (currentWallet.mainWallet < amountNumber) {
       return res.failure({ message: 'Insufficient balance' });
