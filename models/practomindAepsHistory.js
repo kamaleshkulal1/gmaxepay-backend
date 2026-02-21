@@ -155,10 +155,125 @@ const PractomindAepsHistory = sequelize.define(
       allowNull: true,
       comment: 'Full response from Practomind API'
     },
+    superAdminAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    whitelabelAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    masterDistributorAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    distributorAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
+    retailerAvail: {
+      type: DataTypes.BOOLEAN,
+      default: false
+    },
     ipAddress: {
       type: DataTypes.STRING,
       allowNull: true,
       comment: 'IP address of the request'
+    },
+    // Wallet snapshot for AEPS2 wallet crediting
+    openingAeps2Wallet: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      comment: 'AEPS2 wallet balance before this transaction'
+    },
+    closingAeps2Wallet: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      comment: 'AEPS2 wallet balance after this transaction'
+    },
+    credit: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Net amount credited to initiator AEPS2 wallet'
+    },
+    // --- Commission Breakdown (for CW and MS only) ---
+    superadminComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    whitelabelComm: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    masterDistributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    distributorCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    retailerCom: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    // --- TDS on Commission (2% of each party's gross incoming commission) ---
+    superadminCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    whitelabelCommTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    masterDistributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    distributorComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    retailerComTDS: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0
+    },
+    // --- Avail flags: which parties existed in this chain ---
+    superAdminAvail: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    whitelabelAvail: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    masterDistributorAvail: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    distributorAvail: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    retailerAvail: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    paymentStatus: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Normalised payment status: SUCCESS | FAILED | PENDING'
     },
     ...reusableModelAttribute
   },

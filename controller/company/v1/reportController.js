@@ -145,6 +145,7 @@ const getAeps2Reports = async (req, res) => {
         });
     }
 };
+
 const getRechargeReports = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, {
@@ -179,7 +180,7 @@ const getRechargeReports = async (req, res) => {
 
         if (dataToFind && dataToFind.options !== undefined) {
             options = { ...dataToFind.options };
-            
+
             if (dataToFind.options.sort) {
                 const sortEntries = Object.entries(dataToFind.options.sort);
                 options.order = sortEntries.map(([field, direction]) => {

@@ -3,7 +3,7 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const practomindService = require('../../../services/practomind');
 const aepsDailyLoginService = require('../../../services/aepsDailyLoginService');
-const { generateTransactionID} = require('../../../utils/transactionID');
+const { generateTransactionID } = require('../../../utils/transactionID');
 const imageService = require('../../../services/imageService');
 const { Op, Transaction } = require('sequelize');
 const sequelize = require('../../../config/dbConnection');
@@ -18,7 +18,7 @@ const convertImageToBase64 = async (imageData) => {
 
         // Get image buffer from S3
         const imageBuffer = await imageService.getImageFromS3(s3Key);
-        
+
         // Convert buffer to base64
         return imageBuffer.toString('base64');
     } catch (error) {
@@ -29,11 +29,11 @@ const convertImageToBase64 = async (imageData) => {
 
 const getPractomindAepsOnboardingStatus = async (req, res) => {
     try {
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
-        
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
@@ -46,14 +46,14 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
         // Daily 2FA status (IST date based)
         await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
-        
+
         const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, {
             refId: req.user.id,
             companyId: req.user.companyId,
             loginDate: todayDateStr,
             isLoggedIn: true
         });
-        
+
         const isDaily2FACompleted = Boolean(existingDaily2FA);
         const nextEligibleAt = aepsDailyLoginService.getNextMidnightIST();
 
@@ -137,13 +137,13 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
 const createPractomindAepsOnboarding = async (req, res) => {
     try {
         const [existingUser, existingOnboarding] = await Promise.all([
-            dbService.findOne(model.user, { 
-                id: req.user.id, 
-                companyId: req.user.companyId 
+            dbService.findOne(model.user, {
+                id: req.user.id,
+                companyId: req.user.companyId
             }),
-            dbService.findOne(model.practomindAepsOnboarding, { 
-                userId: req.user.id, 
-                companyId: req.user.companyId 
+            dbService.findOne(model.practomindAepsOnboarding, {
+                userId: req.user.id,
+                companyId: req.user.companyId
             })
         ]);
 
@@ -151,24 +151,22 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
-
-        // OPTIMIZATION: Fetch all dependent data in parallel (Second batch)
         const [
             existingCompany,
             existingOutlet,
             bankDetails,
             existingUserStateCode
         ] = await Promise.all([
-            dbService.findOne(model.company, { 
-                id: existingUser.companyId 
+            dbService.findOne(model.company, {
+                id: existingUser.companyId
             }),
-            dbService.findOne(model.outlet, { 
-                refId: existingUser.id, 
-                companyId: existingUser.companyId 
+            dbService.findOne(model.outlet, {
+                refId: existingUser.id,
+                companyId: existingUser.companyId
             }),
-            dbService.findOne(model.customerBank, { 
-                refId: existingUser.id, 
-                companyId: existingUser.companyId 
+            dbService.findOne(model.customerBank, {
+                refId: existingUser.id,
+                companyId: existingUser.companyId
             }),
             dbService.findOne(model.practomindState, {
                 state: existingUser?.state
@@ -182,7 +180,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
         if (!existingOutlet) {
             return res.failure({ message: 'Outlet not found' });
         }
-        
+
         if (!bankDetails) {
             return res.failure({ message: 'Bank details not found' });
         }
@@ -192,11 +190,11 @@ const createPractomindAepsOnboarding = async (req, res) => {
             existingCompanyCode,
             existingShopStateCode
         ] = await Promise.all([
-            dbService.findOne(model.user, { 
+            dbService.findOne(model.user, {
                 userRole: 2,
-                companyId: existingCompany.id 
+                companyId: existingCompany.id
             }),
-            dbService.findOne(model.practomindCompanyCode, { 
+            dbService.findOne(model.practomindCompanyCode, {
                 id: existingOutlet.shopCategoryId
             }),
             dbService.findOne(model.practomindState, {
@@ -212,9 +210,9 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Company code not found. Please configure MCC code in outlet settings.' });
         }
 
-        const existingCompanyAdminBankDetails = await dbService.findOne(model.customerBank, { 
-            refId: existingCompanyAdmin.id, 
-            companyId: existingCompany.id 
+        const existingCompanyAdminBankDetails = await dbService.findOne(model.customerBank, {
+            refId: existingCompanyAdmin.id,
+            companyId: existingCompany.id
         });
 
         if (!existingCompanyAdminBankDetails) {
@@ -229,7 +227,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             const transaction = await sequelize.transaction({
                 isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE
             });
-            
+
             try {
                 const lastOnboarding = await model.practomindAepsOnboarding.findOne({
                     where: {
@@ -250,7 +248,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
                     nextNumber = isNaN(lastNumber) ? 1 : lastNumber + 1;
                 }
                 merchantLoginId = `GMAX${nextNumber.toString().padStart(6, '0')}`;
-                
+
                 await transaction.commit();
             } catch (error) {
                 await transaction.rollback();
@@ -263,7 +261,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             convertImageToBase64(existingOutlet.shopImage),
             convertImageToBase64(existingUser.panCardFrontImage)
         ]);
-        
+
         const onboardingData = {
             merchantLoginId: merchantLoginId,
             merchantFirstName: existingUser?.name,
@@ -295,13 +293,13 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPanImage: merchantPanImageBase64
         };
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
-        const isSuccess = response?.status === true || response?.status === 'true' || 
-                         (response?.result && (response.result.status === true || response.result.status === 'true'));
+        const isSuccess = response?.status === true || response?.status === 'true' ||
+            (response?.result && (response.result.status === true || response.result.status === 'true'));
 
         if (!isSuccess) {
-            return res.failure({ 
-                message: response?.message || 'Practomind AEPS onboarding failed', 
-                data: response 
+            return res.failure({
+                message: response?.message || 'Practomind AEPS onboarding failed',
+                data: response
             });
         }
 
@@ -346,9 +344,9 @@ const createPractomindAepsOnboarding = async (req, res) => {
             throw dbError;
         }
 
-        return res.success({ 
-            message: 'Practomind AEPS onboarding successful', 
-            data: response 
+        return res.success({
+            message: 'Practomind AEPS onboarding successful',
+            data: response
         });
 
     } catch (err) {
@@ -359,18 +357,18 @@ const createPractomindAepsOnboarding = async (req, res) => {
 
 const sendEkycOtp = async (req, res) => {
     try {
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
-        
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id,
+            companyId: existingUser.companyId
         });
 
         if (!existingOnboarding) {
@@ -381,10 +379,10 @@ const sendEkycOtp = async (req, res) => {
         if (!existingOnboarding.userPan || !existingOnboarding.aadhaarNumber) {
             return res.failure({ message: 'PAN and Aadhaar details are required from onboarding' });
         }
-        
-        const shopDetails = await dbService.findOne(model.outlet, { 
-            refId: existingUser.id, 
-            companyId: existingUser.companyId 
+
+        const shopDetails = await dbService.findOne(model.outlet, {
+            refId: existingUser.id,
+            companyId: existingUser.companyId
         });
 
         const otpData = {
@@ -413,14 +411,14 @@ const sendEkycOtp = async (req, res) => {
                 }
             );
 
-            return res.success({ 
-                message: response.message || 'OTP sent successfully', 
-                data: response.result 
+            return res.success({
+                message: response.message || 'OTP sent successfully',
+                data: response.result
             });
         } else {
-            return res.failure({ 
-                message: response.message || 'Failed to send OTP', 
-                data: response 
+            return res.failure({
+                message: response.message || 'Failed to send OTP',
+                data: response
             });
         }
     } catch (err) {
@@ -432,11 +430,11 @@ const sendEkycOtp = async (req, res) => {
 const validateEkycOtp = async (req, res) => {
     try {
         const { otp } = req.body;
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
-        
+
         if (!otp) {
             return res.failure({ message: 'OTP is required' });
         }
@@ -444,9 +442,9 @@ const validateEkycOtp = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id,
+            companyId: existingUser.companyId
         });
 
         if (!existingOnboarding || !existingOnboarding.isOtpSent) {
@@ -482,14 +480,14 @@ const validateEkycOtp = async (req, res) => {
                 }
             );
 
-            return res.success({ 
-                message: response.message || 'OTP validated successfully', 
-                data: response 
+            return res.success({
+                message: response.message || 'OTP validated successfully',
+                data: response
             });
         } else {
-            return res.failure({ 
-                message: response.message || 'OTP validation failed', 
-                data: response 
+            return res.failure({
+                message: response.message || 'OTP validation failed',
+                data: response
             });
         }
     } catch (err) {
@@ -501,18 +499,18 @@ const validateEkycOtp = async (req, res) => {
 
 const resendEkycOtp = async (req, res) => {
     try {
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
-        
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id,
+            companyId: existingUser.companyId
         });
 
         if (!existingOnboarding || !existingOnboarding.isOtpSent) {
@@ -536,14 +534,14 @@ const resendEkycOtp = async (req, res) => {
         const isSuccess = response.status === true || response.status === 'true';
 
         if (isSuccess) {
-            return res.success({ 
-                message: response.message || 'OTP resent successfully', 
-                data: response 
+            return res.success({
+                message: response.message || 'OTP resent successfully',
+                data: response
             });
         } else {
-            return res.failure({ 
-                message: response.message || 'Failed to resend OTP', 
-                data: response 
+            return res.failure({
+                message: response.message || 'Failed to resend OTP',
+                data: response
             });
         }
     } catch (err) {
@@ -555,18 +553,18 @@ const resendEkycOtp = async (req, res) => {
 const ekycSubmit = async (req, res) => {
     try {
         const { txtPidData } = req.body;
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
-        
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id,
+            companyId: existingUser.companyId
         });
 
         if (!existingOnboarding || !existingOnboarding.isOtpValidated) {
@@ -597,11 +595,11 @@ const ekycSubmit = async (req, res) => {
         if (isSuccess) {
             // Check if kycResponseCode exists (means need to repeat the process from onboarding)
             const hasKycResponseCode = response.kycResponseCode && response.kycResponseCode !== '';
-            
+
             if (hasKycResponseCode) {
                 // Increment retry count
                 const retryCount = (existingOnboarding.ekycRetryCount || 0) + 1;
-                
+
                 // Reset onboarding and biometric flags - user must restart from onboarding
                 await dbService.update(
                     model.practomindAepsOnboarding,
@@ -617,8 +615,8 @@ const ekycSubmit = async (req, res) => {
                     }
                 );
 
-                return res.failure({ 
-                    message: `EKYC verification failed with code ${response.kycResponseCode}. Please repeat the entire process from onboarding to EKYC. Attempt: ${retryCount}`, 
+                return res.failure({
+                    message: `EKYC verification failed with code ${response.kycResponseCode}. Please repeat the entire process from onboarding to EKYC. Attempt: ${retryCount}`,
                     data: response,
                     kycResponseCode: response.kycResponseCode,
                     retryCount: retryCount,
@@ -640,15 +638,15 @@ const ekycSubmit = async (req, res) => {
                     }
                 );
 
-                return res.success({ 
-                    message: response.message || 'EKYC completed successfully', 
-                    data: response 
+                return res.success({
+                    message: response.message || 'EKYC completed successfully',
+                    data: response
                 });
             }
         } else {
-            return res.failure({ 
-                message: response.message || 'EKYC submission failed', 
-                data: response 
+            return res.failure({
+                message: response.message || 'EKYC submission failed',
+                data: response
             });
         }
     } catch (err) {
@@ -657,27 +655,26 @@ const ekycSubmit = async (req, res) => {
     }
 };
 
-
 const dailyAuthentication = async (req, res) => {
     try {
         const { txtPidData, latitude, longitude } = req.body;
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
         console.log("txtPidData", txtPidData);
-        
+
         if (!existingUser) {
-        return res.failure({ message: 'User not found' });
+            return res.failure({ message: 'User not found' });
         }
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id,
+            companyId: existingUser.companyId
         });
 
-        const existingCustomerBank = await dbService.findOne(model.customerBank, { 
-            refId: existingUser.id, 
+        const existingCustomerBank = await dbService.findOne(model.customerBank, {
+            refId: existingUser.id,
             companyId: existingUser.companyId,
             isPrimary: true
         });
@@ -685,9 +682,9 @@ const dailyAuthentication = async (req, res) => {
         if (!existingCustomerBank) {
             return res.failure({ message: 'Please add primary bank details first' });
         }
-        const practomindBank =  await dbService.findOne(model.practomindBankList, { 
-           bankName: existingCustomerBank.bankName,
-           isActive: true
+        const practomindBank = await dbService.findOne(model.practomindBankList, {
+            bankName: existingCustomerBank.bankName,
+            isActive: true
         });
         if (!practomindBank) {
             return res.failure({ message: 'Practomind bank not found' });
@@ -748,14 +745,14 @@ const dailyAuthentication = async (req, res) => {
                 status: 'success'
             });
 
-            return res.success({ 
-                message: response.message || 'Daily authentication successful', 
-                data: response 
+            return res.success({
+                message: response.message || 'Daily authentication successful',
+                data: response
             });
         } else {
-            return res.failure({ 
-                message: response.message || 'Daily authentication failed', 
-                data: response 
+            return res.failure({
+                message: response.message || 'Daily authentication failed',
+                data: response
             });
         }
     } catch (err) {
@@ -766,173 +763,304 @@ const dailyAuthentication = async (req, res) => {
 
 const cashWithdrawal = async (req, res) => {
     try {
-        const { latitude, longitude, txtPidData, transactionAmount, aadhaarNumber,  customerNumber ,bankIIN} = req.body;
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
-        });
-        
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
+        const { latitude, longitude, txtPidData, transactionAmount, aadhaarNumber, customerNumber, bankIIN } = req.body;
 
-        const existingCompany = await dbService.findOne(model.company, { 
-            id: req.user.companyId 
-        });
-        
-        if (!existingCompany) {
-            return res.failure({ message: 'Company not found' });
-        }
+        const round4 = (num) => { const n = Number(num); return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0; };
 
-        // Check if user completed daily authentication
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) return res.failure({ message: 'User not found' });
+
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+        if (!existingCompany) return res.failure({ message: 'Company not found' });
+
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
-        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, {
-            refId: req.user.id,
-            companyId: req.user.companyId,
-            loginDate: todayDateStr,
-            isLoggedIn: true
-        });
+        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, { refId: req.user.id, companyId: req.user.companyId, loginDate: todayDateStr, isLoggedIn: true });
+        if (!existingDaily2FA) return res.failure({ message: 'Please complete daily authentication first' });
 
-        if (!existingDaily2FA) {
-            return res.failure({ message: 'Please complete daily authentication first' });
-        }
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { userId: existingUser.id, companyId: existingUser.companyId });
+        if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') return res.failure({ message: 'Onboarding not completed' });
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
-        });
+        if (!bankIIN) return res.failure({ message: 'Bank IIN is required' });
+        if (!aadhaarNumber) return res.failure({ message: 'Aadhaar number is required' });
+        if (!customerNumber) return res.failure({ message: 'Customer number is required' });
+        if (!txtPidData) return res.failure({ message: 'Biometric data is required' });
+        if (!transactionAmount || transactionAmount <= 0) return res.failure({ message: 'Valid transaction amount is required' });
 
-        if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') {
-            return res.failure({ message: 'Onboarding not completed' });
-        }
+        const practomindBank = await dbService.findOne(model.practomindBankList, { iinno: bankIIN, isActive: true });
+        if (!practomindBank) return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
 
-        if (!bankIIN) {
-            return res.failure({ message: 'Bank IIN is required' });
-        }
-        if (!aadhaarNumber) {
-            return res.failure({ message: 'Aadhaar number is required' });
-        }
-        if (!customerNumber) {
-            return res.failure({ message: 'Customer number is required' });
-        }
-        if (!txtPidData) {
-            return res.failure({ message: 'Biometric data is required' });
-        }
-        if (!transactionAmount || transactionAmount <= 0) {
-            return res.failure({ message: 'Valid transaction amount is required' });
-        }
-
-        const practomindBank = await dbService.findOne(model.practomindBankList, { 
-            iinno: bankIIN,
-            isActive: true
-        });
-
-        if (!practomindBank) {
-            return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
-        }
-
-        // Generate unique transaction ID
+        const amountNumber = round4(transactionAmount || 0);
         const transactionId = generateTransactionID(existingCompany?.companyName);
 
-        // Prepare transaction data
-        const transactionData = {
-            mobileNumber: customerNumber,
-            merchantLoginId: existingOnboarding.merchantLoginId,
-            latitude: latitude,
-            longitude: longitude,
-            aadhaarNumber: aadhaarNumber,
-            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
-            transactionAmount: transactionAmount,
-            transactionId: transactionId,
-            txtPidData: txtPidData
+        // ── AEPS2 operator lookup (amount-range based) ─────────────────────────
+        const operator = await dbService.findOne(model.operator, {
+            operatorType: 'AEPS2',
+            minValue: { [Op.lte]: amountNumber },
+            maxValue: { [Op.gte]: amountNumber }
+        });
+        const operatorType = operator?.operatorType || 'AEPS2';
+
+        const calcSlabAmount = (slab, base) => {
+            if (!slab) return 0;
+            const b = Number(base || 0), rc = Number(slab.commAmt || 0);
+            if (!Number.isFinite(b) || !Number.isFinite(rc)) return 0;
+            return (slab.amtType || 'fix').toLowerCase() === 'per' ? round4((b * rc) / 100) : round4(rc);
         };
+
+        const commData = { users: {}, wallets: {}, slabs: {}, amounts: { retailerComm: 0, distComm: 0, mdComm: 0, companyComm: 0, superAdminComm: 0, wlShortfall: 0, mdShortfall: 0, distShortfall: 0, saShortfall: 0 }, scenario: '' };
+        const user = req.user;
+
+        if (operator && [4, 5].includes(user.userRole)) {
+            const [companyAdmin, superAdmin] = await Promise.all([
+                dbService.findOne(model.user, { companyId: user.companyId, userRole: 2, isActive: true }),
+                dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
+            ]);
+            if (companyAdmin && superAdmin) {
+                commData.users.companyAdmin = companyAdmin;
+                commData.users.superAdmin = superAdmin;
+                const [companyWallet, superAdminWallet] = await Promise.all([
+                    dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
+                    dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                ]);
+                commData.wallets.companyWallet = companyWallet;
+                commData.wallets.superAdminWallet = superAdminWallet;
+
+                if (user.userRole === 4) {
+                    const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.distributor = distributor;
+                    commData.wallets.distributorWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
+                        commData.scenario = 'DIST_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                    } else {
+                        commData.scenario = 'DIST_MD';
+                        const md = await dbService.findOne(model.user, { id: distributor.reportingTo, companyId: user.companyId, isActive: true });
+                        if (md) {
+                            commData.users.masterDistributor = md;
+                            commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                            const [saSlab, coSlab, mdSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                            commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                        }
+                    }
+                } else if (user.userRole === 5) {
+                    const retailer = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.retailer = retailer;
+                    commData.wallets.retailerWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    let reportingUser = null;
+                    if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
+                        reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: user.companyId, isActive: true });
+                    }
+                    if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                        commData.scenario = 'RET_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.retSlab = coSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 3) {
+                        commData.scenario = 'RET_MD';
+                        commData.users.masterDistributor = reportingUser;
+                        commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        const [saSlab, coSlab, mdSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                        commData.slabs.retSlab = mdSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 4) {
+                        commData.users.distributor = reportingUser;
+                        commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
+                            commData.scenario = 'RET_DIST_CO';
+                            const [saSlab, coSlab, distSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4);
+                            commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                        } else {
+                            commData.scenario = 'RET_DIST_MD';
+                            const md = await dbService.findOne(model.user, { id: reportingUser.reportingTo, companyId: user.companyId, isActive: true });
+                            if (md) {
+                                commData.users.masterDistributor = md;
+                                commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                                const [saSlab, coSlab, mdSlab, distSlab] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                ]);
+                                commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                                commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                                commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                            }
+                        }
+                    }
+                }
+
+                // Calculate amounts
+                const operatorCommissionAmount = operator?.comm ? calcSlabAmount({ amtType: operator.amtType, commAmt: operator.comm }, amountNumber) : 0;
+                const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
+                const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
+                let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
+                let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, amountNumber) : 0;
+                let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, amountNumber) : 0;
+
+                let companyCost = 0;
+                if (commData.users.masterDistributor) companyCost = mdSlabAmount;
+                else if (commData.users.distributor) companyCost = distSlabAmount;
+                else companyCost = retSlabAmount;
+
+                // Super Admin
+                commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
+                if (wlSlabAmount > operatorCommissionAmount) {
+                    commData.amounts.saShortfall = round4(wlSlabAmount - operatorCommissionAmount);
+                } else {
+                    commData.amounts.saShortfall = 0;
+                }
+
+                // Company (WL)
+                commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
+                if (companyCost > wlSlabAmount) {
+                    commData.amounts.wlShortfall = round4(companyCost - wlSlabAmount);
+                }
+
+                // Master Distributor
+                if (commData.users.masterDistributor) {
+                    let mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
+                    commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
+                    if (mdCost > mdSlabAmount) {
+                        commData.amounts.mdShortfall = round4(mdCost - mdSlabAmount);
+                    }
+                }
+
+                // Distributor
+                if (commData.users.distributor) {
+                    commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
+                    if (retSlabAmount > distSlabAmount) {
+                        commData.amounts.distShortfall = round4(retSlabAmount - distSlabAmount);
+                    }
+                }
+
+                // Retailer (User)
+                commData.amounts.retailerComm = retSlabAmount;
+
+                const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
+                const tds = g => round4(g * TDS_RATE);
+                commData.tds = { superAdminTDS: tds(operatorCommissionAmount), whitelabelTDS: tds(wlSlabAmount), masterDistributorTDS: tds(mdSlabAmount), distributorTDS: tds(distSlabAmount), retailerTDS: tds(retSlabAmount) };
+                commData.avail = { superAdminAvail: Boolean(commData.users.superAdmin), whitelabelAvail: Boolean(commData.users.companyAdmin), masterDistributorAvail: Boolean(commData.users.masterDistributor), distributorAvail: Boolean(commData.users.distributor), retailerAvail: Boolean(commData.users.retailer) };
+                console.log('[AEPS2 CW] Scenario:', commData.scenario, '| Amounts:', JSON.stringify(commData.amounts));
+            }
+        }
 
         // Call Practomind API
-        const response = await practomindService.practomindCashWithdrawal(transactionData);
-        // const response = {
-        //     "status": true,
-        //     "message": "Request Completed",
-        //     "result": {
-        //       "transactionAmount": 100,
-        //       "device": "MANTRA.MSIPL",
-        //       "requestTransactionTime": "12/02/2026 20:15:22",
-        //       "transactionStatus": "successful",
-        //       "balanceAmount": 7993.16,
-        //       "bankRRN": "604320340699",
-        //       "transactionType": "CW",
-        //       "fpTransactionId": "CWM75598526043201522511I",
-        //       "merchantTransactionId": "PUNJI29054106303369"
-        //     },
-        //     "ministatement": "",
-        //     "outletname": "",
-        //     "outletmobile": "",
-        //     "url": "https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16181",
-        //     "partnerTxnid": "ZPAY26021214454D3459"
-        //   }
-          
-        console.log('response', response);
+        const response = await practomindService.practomindCashWithdrawal({
+            mobileNumber: customerNumber, merchantLoginId: existingOnboarding.merchantLoginId,
+            latitude, longitude, aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+            transactionAmount: amountNumber, transactionId, txtPidData
+        });
+        console.log('[AEPS2 CW] response', response);
 
-        // Parse response
         const isSuccess = response.status === true || response.status === 'true';
+        const paymentStatus = isSuccess ? 'SUCCESS' : 'FAILED';
+        const merchantTransactionId = isSuccess ? (response?.result?.merchantTransactionId || null) : null;
 
-        // Save transaction to practomindAepsHistory
-        const historyData = {
-            refId: existingUser.id,
-            companyId: existingUser.companyId,
-            merchantLoginId: existingOnboarding.merchantLoginId,
-            transactionType: 'CW',
-            transactionAmount: transactionAmount || 0,
-            balanceAmount: response?.result?.balanceAmount || null,
-            transactionId: transactionId,
-            merchantTransactionId: response?.result?.merchantTransactionId || null,
-            bankRRN: response?.result?.bankRRN || null,
-            fpTransactionId: response?.result?.fpTransactionId || null,
-            partnerTxnid: response?.partnerTxnid || null,
-            transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
-            status: isSuccess,
-            message: response.message || '',
-            device: response?.result?.device || null,
-            requestTransactionTime: response?.result?.requestTransactionTime || null,
-            consumerAadhaarNumber: aadhaarNumber,
-            mobileNumber: existingUser.mobileNo,
-            bankIin: practomindBank.aeps_bank_id,
-            latitude: latitude || null,
-            longitude: longitude || null,
-            receiptUrl: response?.url || null,
-            outletname: response?.outletname || null,
-            outletmobile: response?.outletmobile || null,
-            ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
-            requestPayload: {
-                mobileNumber: transactionData.mobileNumber,
-                latitude: transactionData.latitude,
-                longitude: transactionData.longitude,
-                adhaarNumber: transactionData.aadhaarNumber || aadhaarNumber,
-                nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
-                transactionAmount: transactionData.transactionAmount,
-                transactionId: transactionData.transactionId
-            },
-            responsePayload: response,
-            ipAddress: req.ip || req.connection?.remoteAddress,
-            addedBy: existingUser.id
-        };
+        const retailerCommAmt = commData.amounts.retailerComm || 0, distCommAmt = commData.amounts.distComm || 0;
+        const mdCommAmt = commData.amounts.mdComm || 0, companyCommAmt = commData.amounts.companyComm || 0, superAdminCommAmt = commData.amounts.superAdminComm || 0;
+        const distShortfallAmt = commData.amounts.distShortfall || 0, mdShortfallAmt = commData.amounts.mdShortfall || 0;
+        const wlShortfallAmt = commData.amounts.wlShortfall || 0, saShortfallAmt = commData.amounts.saShortfall || 0;
+        const retailerTDS = commData.tds?.retailerTDS || 0, distributorTDS = commData.tds?.distributorTDS || 0;
+        const masterDistTDS = commData.tds?.masterDistributorTDS || 0, whitelabelTDS = commData.tds?.whitelabelTDS || 0, superAdminTDS = commData.tds?.superAdminTDS || 0;
+        const retailerNetAmt = round4(retailerCommAmt - retailerTDS), distNetAmt = round4(distCommAmt - distributorTDS);
+        const mdNetAmt = round4(mdCommAmt - masterDistTDS), companyNetAmt = round4(companyCommAmt - whitelabelTDS), superAdminNetAmt = round4(superAdminCommAmt - superAdminTDS);
+        const aepsAvail = commData.avail || { superAdminAvail: false, whitelabelAvail: false, masterDistributorAvail: false, distributorAvail: false, retailerAvail: false };
 
-        try {
-            await dbService.createOne(model.practomindAepsHistory, historyData);
-        } catch (historyError) {
-            console.error('Failed to save cash withdrawal transaction history:', historyError);
-        }
+        let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
+        if (!wallet) wallet = await model.wallet.create({ refId: req.user.id, companyId: req.user.companyId, roleType: req.user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: req.user.id, updatedBy: req.user.id });
+        const openingAeps2Wallet = round2(wallet.apes2Wallet || 0);
+        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerNetAmt : distNetAmt) : 0;
+        const closingAeps2Wallet = isSuccess ? round4(openingAeps2Wallet + initiatorCredit) : openingAeps2Wallet;
 
         if (isSuccess) {
-            return res.success({ 
-                message: response.message || 'Cash withdrawal successful', 
-                data: response 
-            });
-        } else {
-            return res.failure({ 
-                message: response.message || 'Cash withdrawal failed', 
-                data: response 
-            });
+            const remarkText = `AEPS2 CW-${operator?.operatorName || practomindBank.bankName || bankIIN}`;
+            const walletUpdates = [], historyPromises = [];
+            if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
+                if (initiatorCredit > 0) await wallet.update({ apes2Wallet: closingAeps2Wallet, updatedBy: req.user.id });
+                await model.walletHistory.create({ refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: amountNumber, comm: initiatorCredit, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId, paymentStatus, remark: remarkText, aepsTxnType: 'CW', bankiin: bankIIN, superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } });
+                if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
+                    const dW = commData.wallets.distributorWallet, dO = round4(dW.apes2Wallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { apes2Wallet: dC, updatedBy: commData.users.distributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - dist comm`, amount: amountNumber, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt + distributorTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
+                }
+                if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
+                    const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.apes2Wallet || 0), mC = round4(mO + mdNetAmt - mdShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: mW.id }, { apes2Wallet: mC, updatedBy: commData.users.masterDistributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - md comm`, amount: amountNumber, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt + masterDistTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
+                }
+                if (commData.wallets.companyWallet) {
+                    const cW = commData.wallets.companyWallet, cO = round4(cW.apes2Wallet || 0), cC = round4(cO + companyNetAmt - wlShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: cW.id }, { apes2Wallet: cC, updatedBy: commData.users.companyAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - company comm`, amount: amountNumber, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt + whitelabelTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
+                }
+                if (commData.wallets.superAdminWallet) {
+                    const sW = commData.wallets.superAdminWallet, sO = round4(sW.apes2Wallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { apes2Wallet: sC, updatedBy: commData.users.superAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
+                }
+                await Promise.all([...walletUpdates, ...historyPromises]);
+            } else {
+                if (initiatorCredit > 0) await wallet.update({ apes2Wallet: closingAeps2Wallet, updatedBy: req.user.id });
+                await model.walletHistory.create({ refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: amountNumber, comm: 0, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId, paymentStatus, remark: `AEPS2 CW-${bankIIN}`, aepsTxnType: 'CW', bankiin: bankIIN, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } });
+            }
         }
+
+        // Save to practomindAepsHistory (always)
+        const creditToApply = isSuccess ? initiatorCredit : 0;
+        try {
+            await dbService.createOne(model.practomindAepsHistory, {
+                refId: existingUser.id, companyId: existingUser.companyId, merchantLoginId: existingOnboarding.merchantLoginId,
+                transactionType: 'CW', transactionAmount: amountNumber, balanceAmount: response?.result?.balanceAmount || null,
+                transactionId, merchantTransactionId, bankRRN: response?.result?.bankRRN || null, fpTransactionId: response?.result?.fpTransactionId || null,
+                partnerTxnid: response?.partnerTxnid || null, transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+                status: isSuccess, paymentStatus, message: response.message || '', device: response?.result?.device || null,
+                requestTransactionTime: response?.result?.requestTransactionTime || null, consumerAadhaarNumber: aadhaarNumber,
+                mobileNumber: existingUser.mobileNo, bankIin: practomindBank.aeps_bank_id, latitude: latitude || null, longitude: longitude || null,
+                receiptUrl: response?.url || null, outletname: response?.outletname || null, outletmobile: response?.outletmobile || null,
+                ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
+                requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno, transactionAmount: amountNumber, transactionId },
+                responsePayload: response, ipAddress: req.ip || req.connection?.remoteAddress,
+                openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
+                superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt,
+                superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
+                ...aepsAvail, addedBy: existingUser.id
+            });
+        } catch (historyError) { console.error('Failed to save cash withdrawal transaction history:', historyError); }
+
+        if (isSuccess) return res.success({ message: response.message || 'Cash withdrawal successful', data: response });
+        return res.failure({ message: response.message || 'Cash withdrawal failed', data: response });
     } catch (err) {
         console.error('Cash Withdrawal error:', err);
         return res.failure({ message: err.message || 'Failed to process cash withdrawal' });
@@ -941,12 +1069,12 @@ const cashWithdrawal = async (req, res) => {
 
 const balanceEnquiry = async (req, res) => {
     try {
-        const { latitude, longitude, txtPidData, bankIIN, aadhaarNumber ,customerNumber} = req.body;
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const { latitude, longitude, txtPidData, bankIIN, aadhaarNumber, customerNumber } = req.body;
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
-        
+
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
@@ -964,9 +1092,9 @@ const balanceEnquiry = async (req, res) => {
             return res.failure({ message: 'Please complete daily authentication first' });
         }
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id,
+            companyId: existingUser.companyId
         });
 
         if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') {
@@ -987,11 +1115,11 @@ const balanceEnquiry = async (req, res) => {
             return res.failure({ message: 'Biometric data is required' });
         }
 
-        const existingCompany = await dbService.findOne(model.company, { 
-            id: req.user.companyId 
+        const existingCompany = await dbService.findOne(model.company, {
+            id: req.user.companyId
         });
 
-        const practomindBank = await dbService.findOne(model.practomindBankList, { 
+        const practomindBank = await dbService.findOne(model.practomindBankList, {
             iinno: bankIIN,
             isActive: true
         });
@@ -1057,7 +1185,7 @@ const balanceEnquiry = async (req, res) => {
             partnerTxnid: response?.partnerTxnid || response?.result?.result?.partnerTxnid || null,
             transactionStatus: response?.result?.transactionStatus || response?.result?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
             status: isSuccess,
-            message: response.message|| response?.result?.message || response?.result?.result?.message || '',
+            message: response.message || response?.result?.message || response?.result?.result?.message || '',
             device: response?.result?.device || response?.result?.result?.device || null,
             requestTransactionTime: response?.result?.requestTransactionTime || response?.result?.result?.requestTransactionTime || null,
             consumerAadhaarNumber: aadhaarNumber,
@@ -1066,7 +1194,7 @@ const balanceEnquiry = async (req, res) => {
             latitude: latitude || null,
             longitude: longitude || null,
             receiptUrl: response?.url || response?.result?.url || response?.result?.result?.url || null,
-            outletname: response?.outletname|| response?.result?.outletname || response?.result?.result?.outletname || null,
+            outletname: response?.outletname || response?.result?.outletname || response?.result?.result?.outletname || null,
             outletmobile: response?.outletmobile || response?.result?.outletname || response?.result?.result?.outletmobile || null,
             ministatement: response?.ministatement || response?.result?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
             requestPayload: {
@@ -1089,14 +1217,14 @@ const balanceEnquiry = async (req, res) => {
         }
 
         if (isSuccess) {
-            return res.success({ 
-                message: response.message || response?.result?.message || response?.result?.result?.message || 'Balance enquiry successful', 
-                data: response 
+            return res.success({
+                message: response.message || response?.result?.message || response?.result?.result?.message || 'Balance enquiry successful',
+                data: response
             });
         } else {
-            return res.failure({ 
-                message: response.message || response?.result?.message || response?.result?.result?.message || 'Balance enquiry failed', 
-                data: response 
+            return res.failure({
+                message: response.message || response?.result?.message || response?.result?.result?.message || 'Balance enquiry failed',
+                data: response
             });
         }
     } catch (err) {
@@ -1107,68 +1235,209 @@ const balanceEnquiry = async (req, res) => {
 
 const miniStatement = async (req, res) => {
     try {
-        const { latitude, longitude, txtPidData, bankIIN, aadhaarNumber ,customerNumber} = req.body;
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
-        });
-        
-        if (!existingUser) {
-            return res.failure({ message: 'User not found' });
-        }
+        const { latitude, longitude, txtPidData, bankIIN, aadhaarNumber, customerNumber } = req.body;
 
-        // Check if user completed daily authentication
+        const round4 = (num) => { const n = Number(num); return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0; };
+
+        const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
+        if (!existingUser) return res.failure({ message: 'User not found' });
+
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
-        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, {
-            refId: req.user.id,
-            companyId: req.user.companyId,
-            loginDate: todayDateStr,
-            isLoggedIn: true
-        });
+        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, { refId: req.user.id, companyId: req.user.companyId, loginDate: todayDateStr, isLoggedIn: true });
+        if (!existingDaily2FA) return res.failure({ message: 'Please complete daily authentication first' });
 
-        if (!existingDaily2FA) {
-            return res.failure({ message: 'Please complete daily authentication first' });
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { userId: existingUser.id, companyId: existingUser.companyId });
+        if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') return res.failure({ message: 'Onboarding not completed' });
+
+        if (!bankIIN) return res.failure({ message: 'Bank IIN is required' });
+        if (!aadhaarNumber) return res.failure({ message: 'Aadhaar number is required' });
+        if (!customerNumber) return res.failure({ message: 'Customer number is required' });
+        if (!txtPidData) return res.failure({ message: 'Biometric data is required' });
+
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+        const practomindBank = await dbService.findOne(model.practomindBankList, { iinno: bankIIN, isActive: true });
+        if (!practomindBank) return res.failure({ message: 'Bank Is Not Supported For Mini Statement' });
+
+        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXPAY');
+
+        // ── AEPS2_MS operator lookup (no amount range for MS) ─────────────────
+        const operator = await dbService.findOne(model.operator, { operatorType: 'AEPS2_MS' });
+        const operatorType = operator?.operatorType || 'AEPS2_MS';
+        const calcSlabAmount = (slab, base) => {
+            if (!slab) return 0;
+            const b = Number(base || 0), rc = Number(slab.commAmt || 0);
+            if (!Number.isFinite(b) || !Number.isFinite(rc)) return 0;
+            return (slab.amtType || 'fix').toLowerCase() === 'per' ? round4((b * rc) / 100) : round4(rc);
+        };
+
+        const commData = { users: {}, wallets: {}, slabs: {}, amounts: { retailerComm: 0, distComm: 0, mdComm: 0, companyComm: 0, superAdminComm: 0, wlShortfall: 0, mdShortfall: 0, distShortfall: 0, saShortfall: 0 }, scenario: '' };
+        const user = req.user;
+        const msBase = 0; // MS commission is fixed (not amount-based)
+
+        if (operator && [4, 5].includes(user.userRole)) {
+            const [companyAdmin, superAdmin] = await Promise.all([
+                dbService.findOne(model.user, { companyId: user.companyId, userRole: 2, isActive: true }),
+                dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
+            ]);
+            if (companyAdmin && superAdmin) {
+                commData.users.companyAdmin = companyAdmin;
+                commData.users.superAdmin = superAdmin;
+                const [companyWallet, superAdminWallet] = await Promise.all([
+                    dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
+                    dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                ]);
+                commData.wallets.companyWallet = companyWallet;
+                commData.wallets.superAdminWallet = superAdminWallet;
+
+                if (user.userRole === 4) {
+                    const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.distributor = distributor;
+                    commData.wallets.distributorWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
+                        commData.scenario = 'DIST_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                    } else {
+                        commData.scenario = 'DIST_MD';
+                        const md = await dbService.findOne(model.user, { id: distributor.reportingTo, companyId: user.companyId, isActive: true });
+                        if (md) {
+                            commData.users.masterDistributor = md;
+                            commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                            const [saSlab, coSlab, mdSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                            commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                        }
+                    }
+                } else if (user.userRole === 5) {
+                    const retailer = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.retailer = retailer;
+                    commData.wallets.retailerWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    let reportingUser = null;
+                    if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
+                        reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: user.companyId, isActive: true });
+                    }
+                    if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                        commData.scenario = 'RET_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.retSlab = coSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 3) {
+                        commData.scenario = 'RET_MD';
+                        commData.users.masterDistributor = reportingUser;
+                        commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        const [saSlab, coSlab, mdSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                        commData.slabs.retSlab = mdSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 4) {
+                        commData.users.distributor = reportingUser;
+                        commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
+                            commData.scenario = 'RET_DIST_CO';
+                            const [saSlab, coSlab, distSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4);
+                            commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                        } else {
+                            commData.scenario = 'RET_DIST_MD';
+                            const md = await dbService.findOne(model.user, { id: reportingUser.reportingTo, companyId: user.companyId, isActive: true });
+                            if (md) {
+                                commData.users.masterDistributor = md;
+                                commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                                const [saSlab, coSlab, mdSlab, distSlab] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                ]);
+                                commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                                commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                                commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                            }
+                        }
+                    }
+                }
+
+                const operatorCommissionAmount = operator?.comm ? calcSlabAmount({ amtType: operator.amtType, commAmt: operator.comm }, msBase) : 0;
+                const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, msBase) : 0;
+                const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, msBase) : 0;
+                let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, msBase) : 0;
+                let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, msBase) : 0;
+                let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, msBase) : 0;
+
+                let companyCost = 0;
+                if (commData.users.masterDistributor) companyCost = mdSlabAmount;
+                else if (commData.users.distributor) companyCost = distSlabAmount;
+                else companyCost = retSlabAmount;
+
+                // Super Admin
+                commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
+                if (wlSlabAmount > operatorCommissionAmount) {
+                    commData.amounts.saShortfall = round4(wlSlabAmount - operatorCommissionAmount);
+                } else {
+                    commData.amounts.saShortfall = 0;
+                }
+
+                // Company (WL)
+                commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
+                if (companyCost > wlSlabAmount) {
+                    commData.amounts.wlShortfall = round4(companyCost - wlSlabAmount);
+                }
+
+                // Master Distributor
+                if (commData.users.masterDistributor) {
+                    let mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
+                    commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
+                    if (mdCost > mdSlabAmount) {
+                        commData.amounts.mdShortfall = round4(mdCost - mdSlabAmount);
+                    }
+                }
+
+                // Distributor
+                if (commData.users.distributor) {
+                    commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
+                    if (retSlabAmount > distSlabAmount) {
+                        commData.amounts.distShortfall = round4(retSlabAmount - distSlabAmount);
+                    }
+                }
+
+                // Retailer (User)
+                commData.amounts.retailerComm = retSlabAmount;
+
+                const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
+                const tds = g => round4(g * TDS_RATE);
+                commData.tds = { superAdminTDS: tds(operatorCommissionAmount), whitelabelTDS: tds(wlSlabAmount), masterDistributorTDS: tds(mdSlabAmount), distributorTDS: tds(distSlabAmount), retailerTDS: tds(retSlabAmount) };
+                commData.avail = { superAdminAvail: Boolean(commData.users.superAdmin), whitelabelAvail: Boolean(commData.users.companyAdmin), masterDistributorAvail: Boolean(commData.users.masterDistributor), distributorAvail: Boolean(commData.users.distributor), retailerAvail: Boolean(commData.users.retailer) };
+                console.log('[AEPS2 MS] Scenario:', commData.scenario, '| Amounts:', JSON.stringify(commData.amounts));
+            }
         }
-
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { 
-            userId: existingUser.id, 
-            companyId: existingUser.companyId 
-        });
-
-        if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') {
-            return res.failure({ message: 'Onboarding not completed' });
-        }
-
-        // Validate required fields
-        if (!bankIIN) {
-            return res.failure({ message: 'Bank IIN is required' });
-        }
-        if (!aadhaarNumber) {
-            return res.failure({ message: 'Aadhaar number is required' });
-        }
-        if (!customerNumber) {
-            return res.failure({ message: 'Customer number is required' });
-        }
-        if (!txtPidData) {
-            return res.failure({ message: 'Biometric data is required' });
-        }
-
-        const existingCompany = await dbService.findOne(model.company, { 
-            id: req.user.companyId 
-        });
-
-        const practomindBank = await dbService.findOne(model.practomindBankList, { 
-            iinno: bankIIN,
-            isActive: true
-        });
-        if (!practomindBank) {
-            return res.failure({ message: 'Bank Is Not Supported For Mini Statement' });
-        }
-
-        // Generate unique transaction ID
-        const transactionId = generateTransactionID(existingCompany?.companyName || 'PRACTOMIND');
-
-        // Prepare statement data
         const statementData = {
             mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
@@ -1179,7 +1448,6 @@ const miniStatement = async (req, res) => {
             transactionId: transactionId,
             txtPidData: txtPidData
         };
-
         // Call Practomind API
         const response = await practomindService.practomindMiniStatement(statementData);
         // const response = {
@@ -1247,68 +1515,85 @@ const miniStatement = async (req, res) => {
         //     "partnerTxnid": "ZPAY2602130537E7EE11",
         //     "utr": "604411127454"
         //   }
-          
+
 
         // Parse response
         const isSuccess = response.status === true || response.status === 'true';
+        const paymentStatus = isSuccess ? 'SUCCESS' : 'FAILED';
+        const merchantTransactionId = response?.result?.merchantTransactionId || null;
 
-        // Save transaction to practomindAepsHistory
-        const historyData = {
-            refId: existingUser.id,
-            companyId: existingUser.companyId,
-            merchantLoginId: existingOnboarding.merchantLoginId,
-            transactionType: 'MS',
-            transactionAmount: 0,
-            balanceAmount: response?.result?.balanceAmount || null,
-            transactionId: transactionId,
-            merchantTransactionId: response?.result?.merchantTransactionId || null,
-            bankRRN: response?.result?.bankRRN || null,
-            fpTransactionId: response?.result?.fpTransactionId || null,
-            partnerTxnid: response?.partnerTxnid || null,
-            transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
-            status: isSuccess,
-            message: response.message || '',
-            device: response?.result?.device || null,
-            requestTransactionTime: response?.result?.requestTransactionTime || null,
-            consumerAadhaarNumber: aadhaarNumber,
-            mobileNumber: existingUser.mobileNo,
-            bankIin: practomindBank.aeps_bank_id,
-            latitude: latitude || null,
-            longitude: longitude || null,
-            receiptUrl: response?.url || null,
-            outletname: response?.outletname || null,
-            outletmobile: response?.outletmobile || null,
-            ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
-            requestPayload: {
-                mobileNumber: statementData.mobileNumber,
-                latitude: statementData.latitude,
-                longitude: statementData.longitude,
-                adhaarNumber: statementData.aadhaarNumber || aadhaarNumber,
-                nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
-                transactionId: statementData.transactionId
-            },
-            responsePayload: response,
-            ipAddress: req.ip || req.connection?.remoteAddress,
-            addedBy: existingUser.id
-        };
+        const retailerCommAmt = commData.amounts.retailerComm || 0, distCommAmt = commData.amounts.distComm || 0;
+        const mdCommAmt = commData.amounts.mdComm || 0, companyCommAmt = commData.amounts.companyComm || 0, superAdminCommAmt = commData.amounts.superAdminComm || 0;
+        const distShortfallAmt = commData.amounts.distShortfall || 0, mdShortfallAmt = commData.amounts.mdShortfall || 0;
+        const wlShortfallAmt = commData.amounts.wlShortfall || 0, saShortfallAmt = commData.amounts.saShortfall || 0;
+        const retailerTDS = commData.tds?.retailerTDS || 0, distributorTDS = commData.tds?.distributorTDS || 0;
+        const masterDistTDS = commData.tds?.masterDistributorTDS || 0, whitelabelTDS = commData.tds?.whitelabelTDS || 0, superAdminTDS = commData.tds?.superAdminTDS || 0;
 
-        try {
-            await dbService.createOne(model.practomindAepsHistory, historyData);
-        } catch (historyError) {
-            console.error('Failed to save mini statement transaction history:', historyError);
-        }
+        const retailerNetAmt = round4(retailerCommAmt - retailerTDS), distNetAmt = round4(distCommAmt - distributorTDS);
+        const mdNetAmt = round4(mdCommAmt - masterDistTDS), companyNetAmt = round4(companyCommAmt - whitelabelTDS), superAdminNetAmt = round4(superAdminCommAmt - superAdminTDS);
+        const aepsAvail = commData.avail || { superAdminAvail: false, whitelabelAvail: false, masterDistributorAvail: false, distributorAvail: false, retailerAvail: false };
+
+        let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
+        if (!wallet) wallet = await model.wallet.create({ refId: req.user.id, companyId: req.user.companyId, roleType: req.user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: req.user.id, updatedBy: req.user.id });
+        const openingAeps2Wallet = round4(wallet.apes2Wallet || 0);
+        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerNetAmt : distNetAmt) : 0;
+        const closingAeps2Wallet = isSuccess ? round4(openingAeps2Wallet + initiatorCredit) : openingAeps2Wallet;
 
         if (isSuccess) {
-            return res.success({ 
-                message: response.message || 'Mini statement retrieved successfully', 
-                data: response 
-            });
-        } else {
-            return res.failure({ 
-                message: response.message || 'Failed to retrieve mini statement', 
-                data: response 
-            });
+            const remarkText = `AEPS2 MS-${operator?.operatorName || practomindBank.bankName || bankIIN}`;
+            const walletUpdates = [], historyPromises = [];
+            if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
+                if (initiatorCredit > 0) await wallet.update({ apes2Wallet: closingAeps2Wallet, updatedBy: req.user.id });
+                await model.walletHistory.create({ refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: 0, comm: initiatorCredit, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId, paymentStatus, remark: remarkText, aepsTxnType: 'MS', bankiin: bankIIN, superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } });
+                if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
+                    const dW = commData.wallets.distributorWallet, dO = round4(dW.apes2Wallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { apes2Wallet: dC, updatedBy: commData.users.distributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - dist comm`, amount: 0, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt + distributorTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
+                }
+                if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
+                    const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.apes2Wallet || 0), mC = round4(mO + mdNetAmt - mdShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: mW.id }, { apes2Wallet: mC, updatedBy: commData.users.masterDistributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - md comm`, amount: 0, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt + masterDistTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
+                }
+                if (commData.wallets.companyWallet) {
+                    const cW = commData.wallets.companyWallet, cO = round4(cW.apes2Wallet || 0), cC = round4(cO + companyNetAmt - wlShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: cW.id }, { apes2Wallet: cC, updatedBy: commData.users.companyAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - company comm`, amount: 0, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt + whitelabelTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
+                }
+                if (commData.wallets.superAdminWallet) {
+                    const sW = commData.wallets.superAdminWallet, sO = round4(sW.apes2Wallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { apes2Wallet: sC, updatedBy: commData.users.superAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - admin comm`, amount: 0, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId, transactionId, paymentStatus, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
+                }
+                await Promise.all([...walletUpdates, ...historyPromises]);
+            }
         }
+
+        const creditToApply = isSuccess ? initiatorCredit : 0;
+        try {
+            await dbService.createOne(model.practomindAepsHistory, {
+                refId: existingUser.id, companyId: existingUser.companyId, merchantLoginId: existingOnboarding.merchantLoginId,
+                transactionType: 'MS', transactionAmount: 0, balanceAmount: response?.balanceAmount || response?.result?.balanceAmount || null,
+                transactionId, merchantTransactionId, bankRRN: response?.result?.bankRRN || response?.utr || null,
+                fpTransactionId: response?.result?.fpTransactionId || null, partnerTxnid: response?.partnerTxnid || null,
+                transactionStatus: response?.transactionStatus || response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+                status: isSuccess, paymentStatus, message: response.message || '',
+                device: response?.result?.device || null, requestTransactionTime: response?.result?.requestTransactionTime || null,
+                consumerAadhaarNumber: aadhaarNumber, mobileNumber: existingUser.mobileNo,
+                bankIin: practomindBank.aeps_bank_id, latitude: latitude || null, longitude: longitude || null,
+                receiptUrl: response?.url || null, outletname: response?.outletname || null, outletmobile: response?.outletmobile || null,
+                ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
+                requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno, transactionId },
+                responsePayload: response, ipAddress: req.ip || req.connection?.remoteAddress,
+                openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
+                superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt,
+                superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
+                ...aepsAvail, addedBy: existingUser.id
+            });
+        } catch (historyError) { console.error('Failed to save mini statement transaction history:', historyError); }
+
+        if (isSuccess) return res.success({ message: response.message || 'Mini statement retrieved successfully', data: response });
+        return res.failure({ message: response.message || 'Failed to retrieve mini statement', data: response });
     } catch (err) {
         console.error('Mini Statement error:', err);
         return res.failure({ message: err.message || 'Failed to retrieve mini statement' });
@@ -1317,9 +1602,9 @@ const miniStatement = async (req, res) => {
 
 const bankList = async (req, res) => {
     try {
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -1327,7 +1612,7 @@ const bankList = async (req, res) => {
         const banks = await dbService.findAll(model.practomindBankList, {
             isActive: true
         });
-        
+
         // Map to response format with CDN URLs for logos
         const formattedBankList = banks.map(bank => {
             const bankData = bank.toJSON ? bank.toJSON() : bank;
@@ -1337,10 +1622,10 @@ const bankList = async (req, res) => {
                 bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
             };
         });
-        
-        return res.success({ 
-            message: 'Bank list retrieved successfully', 
-            data: formattedBankList 
+
+        return res.success({
+            message: 'Bank list retrieved successfully',
+            data: formattedBankList
         });
     }
     catch (err) {
@@ -1350,10 +1635,10 @@ const bankList = async (req, res) => {
 };
 
 const recentBanks = async (req, res) => {
-    try {        
-        const existingUser = await dbService.findOne(model.user, { 
-            id: req.user.id, 
-            companyId: req.user.companyId 
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
         });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
@@ -1452,7 +1737,7 @@ const aepsTransactionHistory = async (req, res) => {
 
         if (userRole === 4 || userRole === 5) {
             query.refId = userId;
-            query.companyId= companyId;
+            query.companyId = companyId;
         } else if (userRole === 3) {
             const reportingUsers = await dbService.findAll(
                 model.user,
@@ -1460,7 +1745,7 @@ const aepsTransactionHistory = async (req, res) => {
                     reportingTo: userId,
                     companyId: companyId,
                     isDeleted: false,
-                    userRole: { [Op.in]: [4, 5] } 
+                    userRole: { [Op.in]: [4, 5] }
                 },
                 {
                     attributes: ['id']
