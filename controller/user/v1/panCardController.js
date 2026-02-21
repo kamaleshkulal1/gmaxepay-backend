@@ -43,7 +43,7 @@ const panCardActions = async (req, res) => {
       return res.failure({ message: 'Amount is required' });
     }
 
-    const amountNumber = round4(parseFloat(amount));
+    const amountNumber = amount;
 
     const [existingUser, operator, existingCompany] = await Promise.all([
       dbService.findOne(model.user, { id: userId }),
