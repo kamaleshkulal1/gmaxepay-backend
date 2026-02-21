@@ -17,899 +17,726 @@ const calculateCCF1 = (billAmount, flatFee, percentFee) => {
   return Math.floor(totalCCF1);
 };
 
-const payBill = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const companyId = req.companyId || req.user.companyId;
-    const { fetchRefId } = req.body;
-
-    const convertRupeesToPaisa = (amount) =>
-      Math.round(parseFloat(amount) * 100).toString();
-    const convertPaisaToRupees = (paisa) =>
-      (parseFloat(paisa) / 100).toFixed(2);
-    const user = await dbService.findOne(
-      model.user,
-      { id: userId },
-      {
-        attributes: [
-          'userRole',
-          'addedBy',
-          'name',
-          'email',
-          'secureKey',
-          'mobileNo',
-          'reportingTo',
-          'companyId'
-        ]
-      }
-    );
-    if (!user) return res.failure({ message: 'User not found' });
-
-    // Ensure companyId is available - use user.companyId as final fallback
-    const finalCompanyId = companyId || user.companyId;
-    if (!finalCompanyId) {
-      return res.failure({ message: 'Company ID is required' });
-    }
-    if (!fetchRefId)
-      return res.failure({ message: 'Required payment parameters missing' });
-
-
-    const fetchedBillData = await dbService.findOne(model.billFetchData, {
-      fetchRefId: req.body.fetchRefId,
-      status: 'Pending',
-      expiresAt: { [sequelize.Op.gt]: new Date() }
-    });
-
-    if (!fetchedBillData)
-      return res.failure({
-        message: 'Bill data not found or expired. Please fetch the bill again.'
-      });
-
-    const agentId = fetchedBillData.agentId;
-    const billerId = fetchedBillData.billerId;
-    const billerAdhoc = fetchedBillData.billerAdhoc;
-    const operatorService = fetchedBillData.operatorService;
-    const fetchRefReqId = fetchedBillData.fetchRefId;
-    const agentDeviceInfo = fetchedBillData.agentDeviceInfo
-      ? typeof fetchedBillData.agentDeviceInfo === 'string'
-        ? JSON.parse(fetchedBillData.agentDeviceInfo)
-        : fetchedBillData.agentDeviceInfo
-      : {};
-    const customerInfo = fetchedBillData.customerInfo
-      ? typeof fetchedBillData.customerInfo === 'string'
-        ? JSON.parse(fetchedBillData.customerInfo)
-        : fetchedBillData.customerInfo
-      : {};
-    const inputParams = fetchedBillData.inputParams
-      ? typeof fetchedBillData.inputParams === 'string'
-        ? JSON.parse(fetchedBillData.inputParams)
-        : fetchedBillData.inputParams
-      : {};
-    const billerDetails = fetchedBillData.billerDetails
-      ? typeof fetchedBillData.billerDetails === 'string'
-        ? JSON.parse(fetchedBillData.billerDetails)
-        : fetchedBillData.billerDetails
-      : {};
-    const additionalInfo = fetchedBillData.additionalInfo
-      ? typeof fetchedBillData.additionalInfo === 'string'
-        ? JSON.parse(fetchedBillData.additionalInfo)
-        : fetchedBillData.additionalInfo
-      : {};
-    const responseData = fetchedBillData.responseData
-      ? typeof fetchedBillData.responseData === 'string'
-        ? JSON.parse(fetchedBillData.responseData)
-        : fetchedBillData.responseData
-      : {};
-
-    const billAmount = parseFloat(
-      responseData?.amountInfo?.amount ||
-      responseData?.billDetails?.billAmount ||
-      '0'
-    );
-    if (isNaN(billAmount) || billAmount <= 0)
-      return res.failure({ message: 'Invalid bill amount' });
-
-    let billerResponseData;
-    if (billerDetails && Object.keys(billerDetails).length > 0) {
-      billerResponseData = {
-        ...billerDetails,
-        billAmount: convertRupeesToPaisa(billerDetails.billAmount || billAmount)
-      };
-    } else {
-      billerResponseData = {
-        billAmount: convertRupeesToPaisa(billAmount),
-        billDate:
-          responseData?.billDetails?.billDate ||
-          new Date().toISOString().split('T')[0],
-        billNumber: responseData?.billDetails?.billNumber || '',
-        billPeriod: responseData?.billDetails?.billPeriod || 'Monthly',
-        customerName: responseData?.billDetails?.customerName || '',
-        dueDate: responseData?.billDetails?.dueDate || ''
-      };
-    }
-    const foundOperator = await dbService.findOne(
-      model.operator,
-      { operatorName: operatorService, operatorType: 'BBPS' },
-      {
-        attributes: [
-          'id',
-          'operatorName',
-          'operatorType',
-          'operatorCode',
-          'minValue',
-          'maxValue',
-          'comm',
-          'superadminComm',
-          'whitelabelComm',
-          'masterDistributorCom',
-          'masterDistrbutorCom',
-          'distributorCom',
-          'retailerCom',
-          'reatilerCom',
-          'amtType'
-        ]
-      }
-    );
-    if (!foundOperator) return res.failure({ message: 'Invalid Operator!' });
-
-    const foundCategory = await dbService.findOne(
-      model.bbpsOperatorCategory,
-      { name: operatorService },
-      {
-        attributes: [
-          'custConvFee',
-          'flatFee',
-          'percentFee',
-          'gstRate',
-          'isCCF1Category'
-        ]
-      }
-    );
-    if (!foundCategory) return res.failure({ message: 'Invalid Category!' });
-
-    let ccf1Amount = 0;
-    let needsCCF1 = false;
-    if (foundCategory.isCCF1Category) {
-      needsCCF1 = true;
-    }
-    if (needsCCF1) {
-      const flatFee =
-        (foundCategory.flatFee ? foundCategory.flatFee : 0) * 100 || 100;
-      const percentFee = foundCategory.percentFee || 1.2;
-      ccf1Amount = calculateCCF1(
-        parseInt(convertRupeesToPaisa(billAmount)),
-        flatFee,
-        percentFee
-      );
-      console.log(
-        `CCF1 calculated for category: ${operatorService}, amount: ${ccf1Amount} paisa`
-      );
-    }
-    const channelPaymentInfo = await dbService.findOne(
-      model.bbpsPaymentInfo,
-      { initiatingChannel: agentDeviceInfo?.initChannel },
-      {
-        attributes: ['paymentMethod', 'paymentInfo']
-      }
-    );
-
-    if (!channelPaymentInfo) {
-      return res.failure({
-        message: 'Payment mode is required. Please contact the administrator.'
-      });
-    }
-
-    let channelPaymentMethod = channelPaymentInfo.paymentMethod || {};
-    let channelPaymentInfoData = channelPaymentInfo.paymentInfo || {};
-
-    if (typeof channelPaymentMethod === 'string') {
-      try {
-        channelPaymentMethod = JSON.parse(channelPaymentMethod);
-      } catch (error) {
-        console.error('Error parsing paymentMethod:', error);
-        channelPaymentMethod = {};
-      }
-    }
-
-    if (typeof channelPaymentInfoData === 'string') {
-      try {
-        channelPaymentInfoData = JSON.parse(channelPaymentInfoData);
-      } catch (error) {
-        console.error('Error parsing paymentInfo:', error);
-        channelPaymentInfoData = {};
-      }
-    }
-    const jsonData = {
-      agentId,
-      billerAdhoc,
-      agentDeviceInfo: {
-        ip: agentDeviceInfo?.agentIp || agentDeviceInfo?.ip || ' ',
-        mac: agentDeviceInfo?.agentMac || agentDeviceInfo?.mac || ' ',
-        initChannel:
-          agentDeviceInfo?.agentInitChannel ||
-          agentDeviceInfo?.initChannel ||
-          ' '
-      },
-      customerInfo: {
-        customerMobile: customerInfo?.customerMobile || '',
-        customerEmail: customerInfo?.customerEmail || '',
-        customerAdhaar: customerInfo?.customerAdhaar || '',
-        customerPan: customerInfo?.customerPan || '',
-        REMITTER_NAME: 'GMAXPAY'
-      },
-      billerId,
-      inputParams,
-      billerResponse: billerResponseData,
-      paymentRefId: fetchRefId,
-      amountInfo: {
-        amount: convertRupeesToPaisa(
-          responseData?.amountInfo?.amount?.toString() ||
-          responseData?.billDetails?.billAmount ||
-          '0'
-        ),
-        currency: process.env.BBPS_CURRENCY_CODE || 356,
-        custConvFee: foundCategory.custConvFee || 0,
-        ...(needsCCF1 && { CCF1: ccf1Amount }),
-        amountTags: process.env.BBPS_AMOUNT_TAGS
-          ? JSON.parse(process.env.BBPS_AMOUNT_TAGS)
-          : []
-      },
-      paymentMethod: channelPaymentMethod,
-      paymentInfo: channelPaymentInfoData
-    };
-
-    console.log('jsonData:', JSON.stringify(jsonData, null, 2));
-
-    if (
-      additionalInfo &&
-      additionalInfo.info &&
-      additionalInfo.info.length > 0
-    ) {
-      jsonData.additionalInfo = additionalInfo;
-    } else if (
-      responseData?.additionalInfo?.info &&
-      responseData.additionalInfo.info.length > 0
-    ) {
-      jsonData.additionalInfo = responseData.additionalInfo;
-    }
-
-    if (needsCCF1) {
-      const ccf1InRupees = convertPaisaToRupees(ccf1Amount);
-      const ccf1Info = {
-        infoName: 'CCF1 Fee (Rs.) + GST',
-        infoValue: ccf1InRupees
-      };
-      if (jsonData.additionalInfo && jsonData.additionalInfo.info) {
-        jsonData.additionalInfo.info.push(ccf1Info);
-      } else {
-        jsonData.additionalInfo = {
-          info: [ccf1Info]
-        };
-      }
-    }
-    const [foundUserWallet, bbpsOperatorName] = await Promise.all([
-      dbService.findOne(model.wallet, { refId: userId }),
-      dbService.findOne(
-        model.bbpsOperator,
-        { billerId: billerId },
-        { attributes: ['id', 'name'] }
-      )
-    ]);
-
-    if (!foundUserWallet) return res.failure({ message: 'Wallet not found!' });
-
-    // Use mainWallet balance
-    const currentWalletBalance = foundUserWallet.mainWallet || 0;
-
-    let ccf1Rupees = needsCCF1
-      ? parseFloat(convertPaisaToRupees(ccf1Amount))
-      : 0;
-    let custConvFeeRupees =
-      foundCategory.custConvFee && foundCategory.custConvFee != 0
-        ? parseFloat(convertPaisaToRupees(foundCategory.custConvFee))
-        : 0;
-
-    // Commission/TDS calculation - use operator default commission
-    const round2 = (num) => {
-      const n = Number(num);
-      if (!Number.isFinite(n)) return 0;
-      return Math.round((n + Number.EPSILON) * 100) / 100;
-    };
-
-    const TDS_PERCENT = Number(process.env.BBPS_TDS_PERCENT || process.env.AEPS_TDS_PERCENT || 2);
-
-    // Use operator default commission (comm field) - default is 0.97 rupees
-    const earnedCommission = foundOperator?.comm ? round2(Number(foundOperator.comm)) : 0.97;
-
-    // Calculate TDS on earned commission (2% of commission)
-    const calculateTdsAmount = (commValue) => {
-      if (commValue === null || commValue === undefined || commValue === 0) return 0;
-      return round2((Number(commValue) * TDS_PERCENT) / 100);
-    };
-
-    // Initialize all commissions to 0 - only user's role commission will be set to 0.97
-    let superadminComm = 0;
-    let whitelabelComm = 0;
-    let masterDistributorCom = 0;
-    let distributorCom = 0;
-    let retailerCom = 0;
-
-    // Determine user role and set only that role's commission to 0.97
-    // userRole: 1=Super Admin, 2=Whitelabel/Company Admin, 3=Master Distributor, 4=Distributor, 5=Retailer
-    const userRole = user.userRole;
-
-    if (userRole === 1) {
-      superadminComm = earnedCommission;
-    } else if (userRole === 2) {
-      whitelabelComm = earnedCommission;
-    } else if (userRole === 3) {
-      masterDistributorCom = earnedCommission;
-    } else if (userRole === 4) {
-      distributorCom = earnedCommission;
-    } else if (userRole === 5) {
-      retailerCom = earnedCommission;
-    }
-
-    // TDS breakdown (will be calculated after success, only for user's role)
-    let superadminCommTDS = 0;
-    let whitelabelCommTDS = 0;
-    let masterDistributorComTDS = 0;
-    let distributorComTDS = 0;
-    let retailerComTDS = 0;
-
-    // Simple transaction - debit calculation
-    let debit = parseFloat(billAmount) + ccf1Rupees + custConvFeeRupees;
-    // Commission credit will be calculated after gateway response (only for SUCCESS)
-    // Credit commission to the wallet of the user who made the payment based on their role
-    // For now, initialize to 0 (will be recalculated after gateway response)
-    let userCommissionCredit = 0;
-    let retailerNetCredit = 0; // For backward compatibility
-    let balance = currentWalletBalance - debit;
-    let commission = earnedCommission;
-    let surcharge = 0;
-
-    if (currentWalletBalance < debit)
-      return res.failure({
-        message: 'Insufficient wallet balance!'
-      });
-
-    // Fetch company to get company name for transaction ID generation
-    const existingCompany = await dbService.findOne(model.company, { id: finalCompanyId });
-    const transactionID = generateTransactionID(existingCompany?.companyName);
-
-    // Simple transaction - no commission tracking
-
-    let parsedResponse = null;
-
-    try {
-      const { data: responseData } = await bbpsService.payBillRequest(jsonData, fetchRefId);
-      parsedResponse = responseData;
-      console.log('reposeData', parsedResponse);
-
-      // Convert respAmount to rupees if present
-      if (parsedResponse?.respAmount) {
-        const respAmountInRupees = convertPaisaToRupees(
-          parsedResponse.respAmount
-        );
-        parsedResponse.respAmount = respAmountInRupees;
-      }
-
-      // If custConvFee is present in response, treat as surcharge (convert to rupees)
-      let apiCustConvFeeRupees = 0;
-      if (parsedResponse?.custConvFee && !isNaN(parsedResponse.custConvFee)) {
-        apiCustConvFeeRupees = parseFloat(
-          convertPaisaToRupees(parsedResponse.custConvFee)
-        );
-      }
-
-      if (parsedResponse.responseCode !== '000') {
-        let errorMessage = 'Unable to process payment. Please try again later.';
-        if (
-          parsedResponse.vErrorRootVO &&
-          Array.isArray(parsedResponse.vErrorRootVO.error)
-        ) {
-          const firstError = parsedResponse.vErrorRootVO.error[0];
-          if (firstError && firstError.errorMessage) {
-            errorMessage = firstError.errorMessage;
-          }
-          parsedResponse.vErrorRootVO.error.forEach((errorItem, index) => {
-            console.error(
-              `Error ${index + 1}: Code: ${errorItem.errorCode}, Message: ${errorItem.errorMessage}`
-            );
-          });
-        }
-        const billStatus = 'Failed';
-        const failedHistoryData = {
-          refId: userId,
-          companyId: finalCompanyId,
-          operatorId: foundOperator.id,
-          operator: foundOperator.operatorName,
-          billNumber: responseData?.billDetails?.billNumber || billerId,
-          api: 'BBPS',
-          walletType: 'MainWallet',
-          billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
-          amount: billAmount,
-          debit: 0,
-          comm: earnedCommission,
-          surcharge: 0,
-          opening: currentWalletBalance,
-          closing: currentWalletBalance,
-          credit: 0,
-          mobileNumber: customerInfo?.customerMobile || '',
-          cardNumber: '',
-          transactionType: 'BBPS',
-          transactionId: transactionID,
-          paymentStatus: billStatus,
-          refundStatus: 'Success',
-          paymentMethod: 'Wallet',
-          fetchBillId: fetchRefReqId,
-          remarks: errorMessage,
-          response: parsedResponse,
-          addedBy: userId,
-          updatedBy: userId,
-          isStatusChecked: false,
-          distributerSurcharge: 0,
-          distributorAmount: '0.00',
-          distributerComm: distributorCom === null ? '0.00' : String(distributorCom || 0),
-          companyCommission: '0.00',
-          whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
-          adminAmount: '0.00',
-          adminSurcharge: 0,
-          adminComm: '0.00',
-          // Commission breakdown (for failed transactions, TDS remains 0)
-          superadminComm,
-          whitelabelComm,
-          masterDistributorCom,
-          distributorCom,
-          retailerCom,
-          // TDS on commission (0 for failed transactions)
-          superadminCommTDS: 0,
-          whitelabelCommTDS: 0,
-          masterDistributorComTDS: 0,
-          distributorComTDS: 0,
-          retailerComTDS: 0,
-          userDetails: {
-            name: user.name,
-            email: user.email,
-            mobileNo: user.mobileNo,
-            userRole: user.userRole,
-            ...customerInfo
-          },
-          txnRefId: '',
-          respAmount: '',
-          respCustomerName: customerInfo?.customerName || '',
-          respBillNumber: '',
-          respBillDate: new Date().toISOString().split('T')[0],
-          respDueDate: '',
-          respBillPeriod: '',
-          approvalRefNumber: null,
-          agentId: agentId,
-          initiatingChannel: fetchedBillData.initiatingChannel,
-          customerConvenienceFees: fetchedBillData.customerConvenienceFees,
-          ...user
-        };
-
-        await dbService.createOne(model.billPaymentHistory, failedHistoryData);
-        await dbService.update(
-          model.billFetchData,
-          { fetchRefId: fetchRefReqId },
-          { status: 'Failed' }
-        );
-
-        return res.failure({
-          message: errorMessage,
-          data: parsedResponse,
-          orderid: transactionID,
-          status: billStatus
-        });
-      }
-
-      const formattedResponse = {
-        responseCode: parsedResponse.responseCode
-      };
-
-      const billStatus =
-        formattedResponse.responseCode === '000'
-          ? 'Success'
-          : formattedResponse.responseCode === '204'
-            ? 'Pending'
-            : 'Failed';
-
-      // Calculate TDS only for SUCCESS transactions
-      // TDS is 2% of the earned commission (operator.comm = 0.97 rupees)
-      // Only calculate TDS for the user's role commission and credit remaining to wallet
-      if (billStatus === 'Success') {
-        // Calculate TDS only for the user's role commission
-        if (userRole === 1) {
-          // Super Admin - calculate TDS on superadmin commission
-          superadminCommTDS = calculateTdsAmount(superadminComm);
-          // Credit remaining commission after TDS to wallet
-          userCommissionCredit = round2(superadminComm - superadminCommTDS);
-        } else if (userRole === 2) {
-          // Whitelabel/Company Admin - calculate TDS on whitelabel commission
-          whitelabelCommTDS = calculateTdsAmount(whitelabelComm);
-          // Credit remaining commission after TDS to wallet
-          userCommissionCredit = round2(whitelabelComm - whitelabelCommTDS);
-        } else if (userRole === 3) {
-          // Master Distributor - calculate TDS on master distributor commission
-          masterDistributorComTDS = calculateTdsAmount(masterDistributorCom);
-          // Credit remaining commission after TDS to wallet
-          userCommissionCredit = round2(masterDistributorCom - masterDistributorComTDS);
-        } else if (userRole === 4) {
-          // Distributor - calculate TDS on distributor commission
-          distributorComTDS = calculateTdsAmount(distributorCom);
-          // Credit remaining commission after TDS to wallet
-          userCommissionCredit = round2(distributorCom - distributorComTDS);
-        } else if (userRole === 5) {
-          // Retailer - calculate TDS on retailer commission
-          retailerComTDS = calculateTdsAmount(retailerCom);
-          // Credit remaining commission after TDS to wallet
-          userCommissionCredit = round2(retailerCom - retailerComTDS);
-        }
-
-        // For backward compatibility, also set retailerNetCredit
-        retailerNetCredit = userCommissionCredit;
-      }
-
-      const respAmountInRupees =
-        parsedResponse?.respAmount || billAmount.toString();
-
-      // Recalculate closing balance with commission credit (only for SUCCESS)
-      const closingBalance = billStatus === 'Success'
-        ? round2(balance + userCommissionCredit)
-        : balance;
-
-      const historyData = {
-        refId: userId,
-        companyId: finalCompanyId,
-        operatorId: foundOperator.id,
-        operator: foundOperator.operatorName,
-        billNumber: responseData?.billDetails?.billNumber || billerId,
-        api: 'BBPS',
-        walletType: 'MainWallet',
-        amount: billAmount,
-        debit: billStatus === 'Failed' ? 0 : debit,
-        comm: earnedCommission,
-        surcharge: 0,
-        opening: currentWalletBalance,
-        closing: closingBalance,
-        credit: billStatus === 'Success' ? userCommissionCredit : 0,
-        mobileNumber: customerInfo?.customerMobile || '',
-        cardNumber: '',
-        transactionType: 'BBPS',
-        transactionId: transactionID,
-        paymentStatus: billStatus,
-        refundStatus: billStatus === 'Failed' ? 'Success' : 'Dispute',
-        paymentMethod: 'Wallet',
-        fetchBillId: fetchRefReqId,
-        remarks: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName}`,
-        billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
-        response: parsedResponse || {},
-        addedBy: userId,
-        updatedBy: userId,
-        isStatusChecked: billStatus === 'Success',
-        distributerSurcharge: 0,
-        distributorAmount: '0.00',
-        distributerComm: distributorCom === null ? '0.00' : String(distributorCom || 0),
-        companyCommission: '0.00',
-        whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
-        adminAmount: '0.00',
-        adminSurcharge: 0,
-        adminComm: '0.00',
-        // Commission breakdown
-        superadminComm,
-        whitelabelComm,
-        masterDistributorCom,
-        distributorCom,
-        retailerCom,
-        // TDS on commission
-        superadminCommTDS,
-        whitelabelCommTDS,
-        masterDistributorComTDS,
-        distributorComTDS,
-        retailerComTDS,
-        userDetails: {
-          name: user.name,
-          email: user.email,
-          mobileNo: user.mobileNo,
-          userRole: user.userRole,
-          ...customerInfo
-        },
-        txnRefId: parsedResponse?.txnRefId?.toString() || '',
-        respAmount: respAmountInRupees,
-        respCustomerName:
-          parsedResponse?.respCustomerName || customerInfo?.customerName || '',
-        respBillNumber:
-          parsedResponse?.respBillNumber ||
-          responseData?.billDetails?.billNumber ||
-          '',
-        respBillDate:
-          parsedResponse?.respBillDate ||
-          responseData?.billDetails?.billDate ||
-          new Date().toISOString().split('T')[0],
-        respDueDate:
-          parsedResponse?.respDueDate ||
-          responseData?.billDetails?.dueDate ||
-          '',
-        respBillPeriod:
-          parsedResponse?.respBillPeriod ||
-          responseData?.billDetails?.billPeriod ||
-          '',
-        approvalRefNumber: parsedResponse?.approvalRefNumber || null,
-        agentId: agentId,
-        initiatingChannel: fetchedBillData.initiatingChannel,
-        customerConvenienceFees: fetchedBillData.customerConvenienceFees,
-        ...user
-      };
-
-      if (formattedResponse.responseCode === '000') {
-        const currentDateTime = new Date().toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true
-        });
-
-        let url = `Thank you for payment of Rs.${parseInt(billAmount)} against ${bbpsOperatorName?.name || foundOperator.operatorName}, Consumer no ${customerInfo?.customerMobile}, B-Connect Txn Ref ID ${parsedResponse.txnRefId} on ${currentDateTime} vide Wallet. Team Gmaxepay`;
-
-        await amezesmsService.sendBbpsPaymentSucess(
-          customerInfo?.customerMobile,
-          url
-        );
-
-        const createdBillHistory = await dbService.createOne(
-          model.billPaymentHistory,
-          historyData
-        );
-
-        if (!createdBillHistory) {
-          return res.failure({
-            message: 'Create bill payment history failed!'
-          });
-        }
-
-        const updates = [];
-
-        // Update user mainWallet - add commission credit for successful transactions
-        updates.push(
-          dbService.update(
-            model.wallet,
-            { refId: userId, companyId: finalCompanyId },
-            {
-              mainWallet: closingBalance,
-              updatedBy: userId
-            }
-          )
-        );
-
-        if (updates.length > 0) {
-          const results = await Promise.all(updates);
-          const updateSuccess = results.every((r) => r !== null);
-
-          if (!updateSuccess) {
-            return res.failure({ message: 'Some wallet update failed!' });
-          }
-        }
-        try {
-          const walletHistoryEntries = [];
-
-          const userWalletHistory = {
-            refId: userId,
-            companyId: finalCompanyId,
-            remark: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName} - Bill No: ${responseData?.billDetails?.billNumber || billerId}`,
-            operator: foundOperator.operatorName,
-            amount: billAmount,
-            comm: earnedCommission,
-            surcharge: 0,
-            openingAmt: currentWalletBalance,
-            closingAmt: closingBalance,
-            credit: userCommissionCredit,
-            debit: debit.toFixed(2),
-            merchantTransactionId: transactionID,
-            transactionId:
-              parsedResponse?.txnRefId?.toString() || transactionID,
-            paymentStatus: 'SUCCESS',
-            addedBy: userId,
-            updatedBy: userId,
-            beneficiaryName: parsedResponse?.respCustomerName || '',
-            CUSTOMER_NAME: customerInfo?.customerName || '',
-            CUSTOMER_EMAIL: customerInfo?.customerEmail || '',
-            CUSTOMER_PHONE: customerInfo?.customerMobile || '',
-            refundStatus: 'Dispute',
-            isStatusChecked: true,
-            distributerSurcharge: 0,
-            distributorAmount: 0,
-            adminSurcharge: 0,
-            adminAmount: 0,
-            whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
-            // Commission breakdown
-            superadminComm,
-            whitelabelComm,
-            masterDistributorCom,
-            distributorCom,
-            retailerCom,
-            // TDS on commission
-            superadminCommTDS,
-            whitelabelCommTDS,
-            masterDistributorComTDS,
-            distributorComTDS,
-            retailerComTDS,
-            userDetails: {
-              name: user.name,
-              email: user.email,
-              mobileNo: user.mobileNo,
-              userRole: user.userRole,
-              ...customerInfo
-            }
-          };
-          walletHistoryEntries.push(userWalletHistory);
-
-          const walletHistoryPromises = walletHistoryEntries.map((entry) =>
-            dbService.createOne(model.walletHistory, entry)
-          );
-
-          const walletHistoryResults = await Promise.all(walletHistoryPromises);
-          const walletHistorySuccess = walletHistoryResults.every(
-            (result) => result !== null
-          );
-
-          if (!walletHistorySuccess) {
-            console.error('Some wallet history entries failed to create');
-          } else {
-            console.log(
-              `Successfully created ${walletHistoryResults.length} wallet history entries`
-            );
-          }
-        } catch (walletHistoryError) {
-          console.error(
-            'Error creating wallet history entries:',
-            walletHistoryError
-          );
-        }
-        await dbService.update(
-          model.billFetchData,
-          { fetchRefId: fetchRefReqId },
-          {
-            status: 'Success',
-            updatedBy: req.user.id
-          }
-        );
-
-        console.log(
-          'BBPS Pay Bill Response:',
-          parsedResponse,
-          'amount in rupees:',
-          parsedResponse.respAmount
-        );
-
-        return res.success({
-          message: 'Bill payment successful',
-          data: {
-            ...parsedResponse,
-            status: billStatus,
-            txid: parsedResponse?.txnRefId,
-            utr: parsedResponse?.approvalRefNumber,
-            mobile: parsedResponse?.mobile || customerInfo?.customerMobile,
-            amount: parsedResponse.respAmount,
-            message: parsedResponse?.responseReason || 'Payment Successful',
-            orderid: transactionID,
-            surcharge: (parseFloat(surcharge) + apiCustConvFeeRupees).toFixed(
-              2
-            ),
-            apiCustConvFee: apiCustConvFeeRupees.toFixed(2),
-            userRole: user.userRole
-          }
-        });
-      } else {
-        await dbService.createOne(model.billPaymentHistory, historyData);
-
-        await dbService.update(
-          model.billFetchData,
-          { fetchRefId: fetchRefId },
-          { status: 'Failed' }
-        );
-
-        return res.failure({
-          message: parsedResponse.responseReason || 'Bill payment failed',
-          data: {
-            status: billStatus,
-            message: parsedResponse.responseReason || 'Payment Failed',
-            orderid: transactionID
-          }
-        });
-      }
-    } catch (error) {
-      console.error('API or decrypt error:', error);
-
-      const failedHistoryData = {
-        refId: userId,
-        companyId: finalCompanyId,
-        operatorId: foundOperator.id,
-        operator: foundOperator.operatorName,
-        billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
-        billNumber: responseData?.billDetails?.billNumber || billerId,
-        api: 'BBPS',
-        walletType: 'MainWallet',
-        amount: billAmount,
-        debit: 0,
-        comm: earnedCommission,
-        surcharge: 0,
-        opening: currentWalletBalance,
-        closing: currentWalletBalance,
-        credit: 0,
-        mobileNumber: customerInfo?.customerMobile || '',
-        cardNumber: '',
-        transactionType: 'BBPS',
-        transactionId: transactionID,
-        paymentStatus: 'Failed',
-        refundStatus: 'Success',
-        paymentMethod: 'Wallet',
-        fetchBillId: fetchRefId,
-        remarks: error.message || 'Processing error',
-        response: JSON.stringify({ error: error.message }),
-        addedBy: userId,
-        updatedBy: userId,
-        isStatusChecked: false,
-        distributerSurcharge: 0,
-        distributorAmount: '0.00',
-        distributerComm: distributorCom === null ? '0.00' : String(distributorCom || 0),
-        companyCommission: '0.00',
-        whitelabelCommission: whitelabelComm === null ? 0 : Number(whitelabelComm || 0),
-        adminAmount: '0.00',
-        adminSurcharge: 0,
-        // Commission breakdown (for failed transactions, TDS remains 0)
-        superadminComm,
-        whitelabelComm,
-        masterDistributorCom,
-        distributorCom,
-        retailerCom,
-        // TDS on commission (0 for failed transactions)
-        superadminCommTDS: 0,
-        whitelabelCommTDS: 0,
-        masterDistributorComTDS: 0,
-        distributorComTDS: 0,
-        retailerComTDS: 0,
-        userDetails: {
-          name: user.name,
-          email: user.email,
-          mobileNo: user.mobileNo,
-          userRole: user.userRole,
-          ...customerInfo
-        },
-        txnRefId: '',
-        respAmount: '',
-        respCustomerName: customerInfo?.customerName || '',
-        respBillNumber: '',
-        respBillDate: new Date().toISOString().split('T')[0],
-        respDueDate: '',
-        respBillPeriod: '',
-        approvalRefNumber: null,
-        agentId: agentId,
-        initiatingChannel: fetchedBillData.initiatingChannel,
-        customerConvenienceFees: fetchedBillData.customerConvenienceFees,
-        ...user
-      };
-
-      await dbService.update(
-        model.billFetchData,
-        { fetchRefId: fetchRefId },
-        { status: 'Failed' }
-      );
-
-      await dbService.createOne(model.billPaymentHistory, failedHistoryData);
-
-      return res.internalServerError({
-        message: 'Error processing payment: ' + error.message
-      });
-    }
-  } catch (error) {
-    console.error('BBPS payBill error:', error);
-    return res.internalServerError({ message: error.message });
+const round4 = (num) => {
+  const n = Number(num);
+  return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
+};
+
+const calcSlabAmount = (slab, baseAmount) => {
+  if (!slab) return 0;
+  const base = Number(baseAmount || 0);
+  const rawComm = Number(slab.commAmt || 0);
+  if (!Number.isFinite(base) || !Number.isFinite(rawComm)) return 0;
+  const amtType = (slab.amtType || 'fix').toLowerCase();
+  if (amtType === 'per') {
+    return round4((base * rawComm) / 100);
   }
+  return round4(rawComm);
+};
+
+const payBill = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const companyId = req.companyId || req.user.companyId;
+        const { fetchRefId } = req.body;
+
+        const convertRupeesToPaisa = (amount) =>
+            Math.round(parseFloat(amount) * 100).toString();
+        const convertPaisaToRupees = (paisa) =>
+            (parseFloat(paisa) / 100).toFixed(2);
+
+        const user = await dbService.findOne(
+            model.user,
+            { id: userId },
+            {
+                attributes: [
+                    'userRole', 'addedBy', 'name', 'email', 'secureKey',
+                    'mobileNo', 'reportingTo', 'companyId'
+                ]
+            }
+        );
+        if (!user) return res.failure({ message: 'User not found' });
+
+        const finalCompanyId = companyId || user.companyId;
+        if (!finalCompanyId) return res.failure({ message: 'Company ID is required' });
+        if (!fetchRefId) return res.failure({ message: 'Required payment parameters missing' });
+
+        const fetchedBillData = await dbService.findOne(model.billFetchData, {
+            fetchRefId: req.body.fetchRefId,
+            status: 'Pending',
+            expiresAt: { [sequelize.Op.gt]: new Date() }
+        });
+
+        if (!fetchedBillData)
+            return res.failure({ message: 'Bill data not found or expired. Please fetch the bill again.' });
+
+        const agentId = fetchedBillData.agentId;
+        const billerId = fetchedBillData.billerId;
+        const billerAdhoc = fetchedBillData.billerAdhoc;
+        const operatorService = fetchedBillData.operatorService;
+        const fetchRefReqId = fetchedBillData.fetchRefId;
+        const agentDeviceInfo = fetchedBillData.agentDeviceInfo
+            ? typeof fetchedBillData.agentDeviceInfo === 'string'
+                ? JSON.parse(fetchedBillData.agentDeviceInfo)
+                : fetchedBillData.agentDeviceInfo
+            : {};
+        const customerInfo = fetchedBillData.customerInfo
+            ? typeof fetchedBillData.customerInfo === 'string'
+                ? JSON.parse(fetchedBillData.customerInfo)
+                : fetchedBillData.customerInfo
+            : {};
+        const inputParams = fetchedBillData.inputParams
+            ? typeof fetchedBillData.inputParams === 'string'
+                ? JSON.parse(fetchedBillData.inputParams)
+                : fetchedBillData.inputParams
+            : {};
+        const billerDetails = fetchedBillData.billerDetails
+            ? typeof fetchedBillData.billerDetails === 'string'
+                ? JSON.parse(fetchedBillData.billerDetails)
+                : fetchedBillData.billerDetails
+            : {};
+        const additionalInfo = fetchedBillData.additionalInfo
+            ? typeof fetchedBillData.additionalInfo === 'string'
+                ? JSON.parse(fetchedBillData.additionalInfo)
+                : fetchedBillData.additionalInfo
+            : {};
+        const responseData = fetchedBillData.responseData
+            ? typeof fetchedBillData.responseData === 'string'
+                ? JSON.parse(fetchedBillData.responseData)
+                : fetchedBillData.responseData
+            : {};
+
+        const billAmount = parseFloat(
+            responseData?.amountInfo?.amount || responseData?.billDetails?.billAmount || '0'
+        );
+        if (isNaN(billAmount) || billAmount <= 0)
+            return res.failure({ message: 'Invalid bill amount' });
+
+        let billerResponseData;
+        if (billerDetails && Object.keys(billerDetails).length > 0) {
+            billerResponseData = {
+                ...billerDetails,
+                billAmount: convertRupeesToPaisa(billerDetails.billAmount || billAmount)
+            };
+        } else {
+            billerResponseData = {
+                billAmount: convertRupeesToPaisa(billAmount),
+                billDate: responseData?.billDetails?.billDate || new Date().toISOString().split('T')[0],
+                billNumber: responseData?.billDetails?.billNumber || '',
+                billPeriod: responseData?.billDetails?.billPeriod || 'Monthly',
+                customerName: responseData?.billDetails?.customerName || '',
+                dueDate: responseData?.billDetails?.dueDate || ''
+            };
+        }
+
+        const foundOperator = await dbService.findOne(
+            model.operator,
+            { operatorName: operatorService, operatorType: 'BBPS' },
+            {
+                attributes: [
+                    'id', 'operatorName', 'operatorType', 'operatorCode',
+                    'minValue', 'maxValue', 'comm', 'amtType',
+                    'superadminComm', 'whitelabelComm', 'masterDistributorCom',
+                    'masterDistrbutorCom', 'distributorCom', 'retailerCom', 'reatilerCom'
+                ]
+            }
+        );
+        if (!foundOperator) return res.failure({ message: 'Invalid Operator!' });
+
+        const foundCategory = await dbService.findOne(
+            model.bbpsOperatorCategory,
+            { name: operatorService },
+            { attributes: ['custConvFee', 'flatFee', 'percentFee', 'gstRate', 'isCCF1Category'] }
+        );
+        if (!foundCategory) return res.failure({ message: 'Invalid Category!' });
+
+        let ccf1Amount = 0;
+        let needsCCF1 = false;
+        if (foundCategory.isCCF1Category) needsCCF1 = true;
+        if (needsCCF1) {
+            const flatFee = (foundCategory.flatFee ? foundCategory.flatFee : 0) * 100 || 100;
+            const percentFee = foundCategory.percentFee || 1.2;
+            ccf1Amount = calculateCCF1(parseInt(convertRupeesToPaisa(billAmount)), flatFee, percentFee);
+            console.log(`CCF1 calculated for category: ${operatorService}, amount: ${ccf1Amount} paisa`);
+        }
+
+        const channelPaymentInfo = await dbService.findOne(
+            model.bbpsPaymentInfo,
+            { initiatingChannel: agentDeviceInfo?.initChannel },
+            { attributes: ['paymentMethod', 'paymentInfo'] }
+        );
+        if (!channelPaymentInfo)
+            return res.failure({ message: 'Payment mode is required. Please contact the administrator.' });
+
+        let channelPaymentMethod = channelPaymentInfo.paymentMethod || {};
+        let channelPaymentInfoData = channelPaymentInfo.paymentInfo || {};
+        if (typeof channelPaymentMethod === 'string') {
+            try { channelPaymentMethod = JSON.parse(channelPaymentMethod); } catch (e) { channelPaymentMethod = {}; }
+        }
+        if (typeof channelPaymentInfoData === 'string') {
+            try { channelPaymentInfoData = JSON.parse(channelPaymentInfoData); } catch (e) { channelPaymentInfoData = {}; }
+        }
+
+        const jsonData = {
+            agentId, billerAdhoc,
+            agentDeviceInfo: {
+                ip: agentDeviceInfo?.agentIp || agentDeviceInfo?.ip || ' ',
+                mac: agentDeviceInfo?.agentMac || agentDeviceInfo?.mac || ' ',
+                initChannel: agentDeviceInfo?.agentInitChannel || agentDeviceInfo?.initChannel || ' '
+            },
+            customerInfo: {
+                customerMobile: customerInfo?.customerMobile || '',
+                customerEmail: customerInfo?.customerEmail || '',
+                customerAdhaar: customerInfo?.customerAdhaar || '',
+                customerPan: customerInfo?.customerPan || '',
+                REMITTER_NAME: 'GMAXPAY'
+            },
+            billerId, inputParams,
+            billerResponse: billerResponseData,
+            paymentRefId: fetchRefId,
+            amountInfo: {
+                amount: convertRupeesToPaisa(
+                    responseData?.amountInfo?.amount?.toString() || responseData?.billDetails?.billAmount || '0'
+                ),
+                currency: process.env.BBPS_CURRENCY_CODE || 356,
+                custConvFee: foundCategory.custConvFee || 0,
+                ...(needsCCF1 && { CCF1: ccf1Amount }),
+                amountTags: process.env.BBPS_AMOUNT_TAGS ? JSON.parse(process.env.BBPS_AMOUNT_TAGS) : []
+            },
+            paymentMethod: channelPaymentMethod,
+            paymentInfo: channelPaymentInfoData
+        };
+
+        console.log('jsonData:', JSON.stringify(jsonData, null, 2));
+
+        if (additionalInfo && additionalInfo.info && additionalInfo.info.length > 0) {
+            jsonData.additionalInfo = additionalInfo;
+        } else if (responseData?.additionalInfo?.info && responseData.additionalInfo.info.length > 0) {
+            jsonData.additionalInfo = responseData.additionalInfo;
+        }
+
+        if (needsCCF1) {
+            const ccf1InRupees = convertPaisaToRupees(ccf1Amount);
+            const ccf1Info = { infoName: 'CCF1 Fee (Rs.) + GST', infoValue: ccf1InRupees };
+            if (jsonData.additionalInfo && jsonData.additionalInfo.info) {
+                jsonData.additionalInfo.info.push(ccf1Info);
+            } else {
+                jsonData.additionalInfo = { info: [ccf1Info] };
+            }
+        }
+
+        const [foundUserWallet, bbpsOperatorName] = await Promise.all([
+            dbService.findOne(model.wallet, { refId: userId }),
+            dbService.findOne(model.bbpsOperator, { billerId }, { attributes: ['id', 'name'] })
+        ]);
+
+        if (!foundUserWallet) return res.failure({ message: 'Wallet not found!' });
+        const currentWalletBalance = foundUserWallet.mainWallet || 0;
+
+        const ccf1Rupees = needsCCF1 ? parseFloat(convertPaisaToRupees(ccf1Amount)) : 0;
+        const custConvFeeRupees = foundCategory.custConvFee && foundCategory.custConvFee != 0
+            ? parseFloat(convertPaisaToRupees(foundCategory.custConvFee)) : 0;
+
+        // ── Hierarchical Commission (same as rechargeController) ──────────────────
+        const amountNumber = round4(billAmount);
+        const operatorType = 'BBPS';
+        const debit = round4(parseFloat(billAmount) + ccf1Rupees + custConvFeeRupees);
+        const surcharge = 0;
+        const commission = foundOperator?.comm ? round4(Number(foundOperator.comm)) : 0;
+
+        const commData = {
+            users: {}, wallets: {}, slabs: {},
+            amounts: {
+                retailerComm: 0, distComm: 0, mdComm: 0,
+                companyComm: 0, superAdminComm: 0,
+                wlShortfall: 0, mdShortfall: 0, distShortfall: 0, saShortfall: 0
+            },
+            scenario: ''
+        };
+
+        if (currentWalletBalance < debit)
+            return res.failure({ message: 'Insufficient wallet balance!' });
+
+        if ([4, 5].includes(user.userRole)) {
+            const [companyAdmin, superAdmin] = await Promise.all([
+                dbService.findOne(model.user, { companyId: finalCompanyId, userRole: 2, isActive: true }),
+                dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
+            ]);
+
+            if (companyAdmin && superAdmin) {
+                commData.users.companyAdmin = companyAdmin;
+                commData.users.superAdmin = superAdmin;
+
+                const [companyWallet, superAdminWallet] = await Promise.all([
+                    dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: finalCompanyId }),
+                    dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                ]);
+                commData.wallets.companyWallet = companyWallet;
+                commData.wallets.superAdminWallet = superAdminWallet;
+
+                if (user.userRole === 4) {
+                    // ── Distributor ──
+                    const distributor = await dbService.findOne(model.user, { id: userId, companyId: finalCompanyId, isActive: true });
+                    commData.users.distributor = distributor;
+                    commData.wallets.distributorWallet = foundUserWallet;
+
+                    if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
+                        commData.scenario = 'DIST_DIRECT';
+                        const [saSlabs, wlSlabs] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: companyAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlabs?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlabs?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.distSlab = wlSlabs?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                    } else {
+                        commData.scenario = 'DIST_MD';
+                        const masterDistributor = await dbService.findOne(model.user, { id: distributor.reportingTo, companyId: finalCompanyId, isActive: true });
+                        if (masterDistributor) {
+                            commData.users.masterDistributor = masterDistributor;
+                            commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: finalCompanyId });
+                            const [saSlabs, wlSlabs, mdSlabs] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: companyAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: masterDistributor.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlabs?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlabs?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.mdSlab = wlSlabs?.find(c => c.roleType === 3);
+                            commData.slabs.distSlab = mdSlabs?.find(c => c.roleType === 4);
+                        }
+                    }
+
+                } else if (user.userRole === 5) {
+                    // ── Retailer ──
+                    const retailer = await dbService.findOne(model.user, { id: userId, companyId: finalCompanyId, isActive: true });
+                    commData.users.retailer = retailer;
+                    commData.wallets.retailerWallet = foundUserWallet;
+
+                    let reportingUser = null;
+                    if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
+                        reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: finalCompanyId, isActive: true });
+                    }
+
+                    if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                        commData.scenario = 'RET_DIRECT';
+                        const [saSlabs, wlSlabs] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: companyAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlabs?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlabs?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.retSlab = wlSlabs?.find(c => c.roleType === 5);
+
+                    } else if (reportingUser.userRole === 3) {
+                        commData.scenario = 'RET_MD';
+                        commData.users.masterDistributor = reportingUser;
+                        commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: finalCompanyId });
+                        const [saSlabs, wlSlabs, mdSlabs] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: companyAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: reportingUser.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlabs?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlabs?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.mdSlab = wlSlabs?.find(c => c.roleType === 3);
+                        commData.slabs.retSlab = mdSlabs?.find(c => c.roleType === 5);
+
+                    } else if (reportingUser.userRole === 4) {
+                        commData.users.distributor = reportingUser;
+                        commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: finalCompanyId });
+
+                        if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
+                            commData.scenario = 'RET_DIST_CO';
+                            const [saSlabs, wlSlabs, distSlabs] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: companyAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: reportingUser.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlabs?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlabs?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.distSlab = wlSlabs?.find(c => c.roleType === 4);
+                            commData.slabs.retSlab = distSlabs?.find(c => c.roleType === 5);
+
+                        } else {
+                            commData.scenario = 'RET_DIST_MD';
+                            const masterDistributor = await dbService.findOne(model.user, { id: reportingUser.reportingTo, companyId: finalCompanyId, isActive: true });
+                            if (masterDistributor) {
+                                commData.users.masterDistributor = masterDistributor;
+                                commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: masterDistributor.id, companyId: finalCompanyId });
+                                const [saSlabs, wlSlabs, mdSlabs, distSlabs] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: companyAdmin.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: masterDistributor.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: finalCompanyId, addedBy: reportingUser.id, operatorId: foundOperator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                ]);
+                                commData.slabs.saSlab = saSlabs?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                commData.slabs.wlSlab = saSlabs?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                commData.slabs.mdSlab = wlSlabs?.find(c => c.roleType === 3);
+                                commData.slabs.distSlab = mdSlabs?.find(c => c.roleType === 4);
+                                commData.slabs.retSlab = distSlabs?.find(c => c.roleType === 5);
+                            }
+                        }
+                    }
+                }
+
+                // ── Calculate commission amounts ──────────────────────────────────────
+                const operatorCommissionAmount = foundOperator.comm
+                    ? calcSlabAmount({ amtType: foundOperator.amtType, commAmt: foundOperator.comm }, amountNumber) : 0;
+                const saSlabAmount = calcSlabAmount(commData.slabs.saSlab, amountNumber);
+                const wlSlabAmount = calcSlabAmount(commData.slabs.wlSlab, amountNumber);
+                const mdSlabAmount = calcSlabAmount(commData.slabs.mdSlab, amountNumber);
+                const distSlabAmount = calcSlabAmount(commData.slabs.distSlab, amountNumber);
+                const retSlabAmount = calcSlabAmount(commData.slabs.retSlab, amountNumber);
+
+                let companyCost = 0;
+                if (commData.users.masterDistributor) companyCost = mdSlabAmount;
+                else if (commData.users.distributor) companyCost = distSlabAmount;
+                else companyCost = retSlabAmount;
+
+                // Super Admin
+                commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
+                commData.amounts.saShortfall = wlSlabAmount > operatorCommissionAmount
+                    ? parseFloat((wlSlabAmount - operatorCommissionAmount).toFixed(4)) : 0;
+
+                // Company (WL)
+                commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
+                commData.amounts.wlShortfall = companyCost > wlSlabAmount
+                    ? parseFloat((companyCost - wlSlabAmount).toFixed(4)) : 0;
+
+                // Master Distributor
+                if (commData.users.masterDistributor) {
+                    const mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
+                    commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
+                    commData.amounts.mdShortfall = mdCost > mdSlabAmount
+                        ? parseFloat((mdCost - mdSlabAmount).toFixed(4)) : 0;
+                }
+
+                // Distributor
+                if (commData.users.distributor) {
+                    commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
+                    commData.amounts.distShortfall = retSlabAmount > distSlabAmount
+                        ? parseFloat((retSlabAmount - distSlabAmount).toFixed(4)) : 0;
+                }
+
+                // Retailer
+                commData.amounts.retailerComm = retSlabAmount;
+
+                console.log('[BBPS payBill] Final Commission Amounts:', JSON.stringify(commData.amounts, null, 2));
+            }
+        }
+
+        // Fetch company for transaction ID generation
+        const existingCompany = await dbService.findOne(model.company, { id: finalCompanyId });
+        const transactionID = generateTransactionID(existingCompany?.companyName);
+
+        let parsedResponse = null;
+
+        try {
+            const { data: apiResponseData } = await bbpsService.payBillRequest(jsonData, fetchRefId);
+            parsedResponse = apiResponseData;
+            console.log('reposeData', parsedResponse);
+
+            if (parsedResponse?.respAmount) {
+                parsedResponse.respAmount = convertPaisaToRupees(parsedResponse.respAmount);
+            }
+
+            let apiCustConvFeeRupees = 0;
+            if (parsedResponse?.custConvFee && !isNaN(parsedResponse.custConvFee)) {
+                apiCustConvFeeRupees = parseFloat(convertPaisaToRupees(parsedResponse.custConvFee));
+            }
+
+            if (parsedResponse.responseCode !== '000') {
+                let errorMessage = 'Unable to process payment. Please try again later.';
+                if (parsedResponse.vErrorRootVO && Array.isArray(parsedResponse.vErrorRootVO.error)) {
+                    const firstError = parsedResponse.vErrorRootVO.error[0];
+                    if (firstError && firstError.errorMessage) errorMessage = firstError.errorMessage;
+                    parsedResponse.vErrorRootVO.error.forEach((errorItem, index) => {
+                        console.error(`Error ${index + 1}: Code: ${errorItem.errorCode}, Message: ${errorItem.errorMessage}`);
+                    });
+                }
+                await dbService.createOne(model.billPaymentHistory, {
+                    refId: userId, companyId: finalCompanyId, operatorId: foundOperator.id,
+                    operator: foundOperator.operatorName, billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
+                    billNumber: responseData?.billDetails?.billNumber || billerId,
+                    api: 'BBPS', walletType: 'MainWallet', amount: billAmount,
+                    debit: 0, comm: commission, surcharge: 0,
+                    opening: currentWalletBalance, closing: currentWalletBalance, credit: 0,
+                    mobileNumber: customerInfo?.customerMobile || '', cardNumber: '',
+                    transactionType: 'BBPS', transactionId: transactionID, paymentStatus: 'Failed',
+                    refundStatus: 'Success', paymentMethod: 'Wallet', fetchBillId: fetchRefReqId,
+                    remarks: errorMessage, response: parsedResponse, addedBy: userId, updatedBy: userId,
+                    isStatusChecked: false, distributerSurcharge: 0, distributorAmount: '0.00',
+                    distributerComm: String(commData.amounts.distComm || 0),
+                    companyCommission: '0.00', whitelabelCommission: commData.amounts.companyComm || 0,
+                    adminAmount: '0.00', adminSurcharge: 0, adminComm: '0.00',
+                    superadminComm: commData.amounts.superAdminComm,
+                    whitelabelComm: commData.amounts.companyComm,
+                    masterDistributorCom: commData.amounts.mdComm,
+                    distributorCom: commData.amounts.distComm,
+                    retailerCom: commData.amounts.retailerComm,
+                    userDetails: { name: user.name, email: user.email, mobileNo: user.mobileNo, userRole: user.userRole, ...customerInfo },
+                    txnRefId: '', respAmount: '', respCustomerName: customerInfo?.customerName || '',
+                    respBillNumber: '', respBillDate: new Date().toISOString().split('T')[0],
+                    respDueDate: '', respBillPeriod: '', approvalRefNumber: null,
+                    agentId, initiatingChannel: fetchedBillData.initiatingChannel,
+                    customerConvenienceFees: fetchedBillData.customerConvenienceFees, ...user
+                });
+                await dbService.update(model.billFetchData, { fetchRefId: fetchRefReqId }, { status: 'Failed' });
+                return res.failure({ message: errorMessage, data: parsedResponse, orderid: transactionID, status: 'Failed' });
+            }
+
+            const billStatus = parsedResponse.responseCode === '000' ? 'Success'
+                : parsedResponse.responseCode === '204' ? 'Pending' : 'Failed';
+            const isSuccess = billStatus === 'Success';
+            const isPending = billStatus === 'Pending';
+            const respAmountInRupees = parsedResponse?.respAmount || billAmount.toString();
+
+            // ── Post-response wallet updates ──────────────────────────────────────────
+            if (isSuccess || isPending) {
+                const remarkText = `BBPS-${bbpsOperatorName?.name || foundOperator.operatorName}`;
+
+                if ([4, 5].includes(user.userRole) && commData.users.companyAdmin && commData.users.superAdmin) {
+                    const walletUpdates = [];
+                    const historyPromises = [];
+
+                    // A. Retailer
+                    if (commData.users.retailer && commData.wallets.retailerWallet) {
+                        const rWallet = commData.wallets.retailerWallet;
+                        const rOpening = round4(rWallet.mainWallet);
+                        const rClosing = round4(rOpening - debit + commData.amounts.retailerComm);
+                        walletUpdates.push(dbService.update(model.wallet, { id: rWallet.id }, { mainWallet: rClosing, updatedBy: userId }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, {
+                            refId: userId, companyId: finalCompanyId,
+                            remark: remarkText, operator: foundOperator.operatorName,
+                            amount: billAmount, comm: commData.amounts.retailerComm, surcharge: 0,
+                            openingAmt: rOpening, closingAmt: rClosing,
+                            credit: commData.amounts.retailerComm, debit,
+                            transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+                            paymentStatus: billStatus.toUpperCase(), addedBy: userId, updatedBy: userId
+                        }));
+                    }
+
+                    // B. Distributor
+                    if (commData.users.distributor && commData.wallets.distributorWallet) {
+                        const dWallet = commData.wallets.distributorWallet;
+                        const dOpening = round4(dWallet.mainWallet);
+                        let dClosing, dDebit, dRemark;
+                        if (user.userRole === 4) {
+                            dClosing = round4(dOpening - debit + commData.amounts.distComm);
+                            dDebit = debit;
+                            dRemark = remarkText;
+                        } else {
+                            const dNet = commData.amounts.distComm - commData.amounts.distShortfall;
+                            dClosing = round4(dOpening + dNet);
+                            dDebit = commData.amounts.distShortfall;
+                            dRemark = `${remarkText} - dist comm`;
+                        }
+                        walletUpdates.push(dbService.update(model.wallet, { id: dWallet.id }, { mainWallet: dClosing, updatedBy: commData.users.distributor.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, {
+                            refId: commData.users.distributor.id, companyId: finalCompanyId,
+                            remark: dRemark, operator: foundOperator.operatorName,
+                            amount: billAmount, comm: commData.amounts.distComm, surcharge: 0,
+                            openingAmt: dOpening, closingAmt: dClosing,
+                            credit: commData.amounts.distComm, debit: dDebit,
+                            transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+                            paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id
+                        }));
+                    }
+
+                    // C. Master Distributor
+                    if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
+                        const mWallet = commData.wallets.masterDistributorWallet;
+                        const mOpening = round4(mWallet.mainWallet);
+                        const mNet = commData.amounts.mdComm - commData.amounts.mdShortfall;
+                        const mClosing = round4(mOpening + mNet);
+                        walletUpdates.push(dbService.update(model.wallet, { id: mWallet.id }, { mainWallet: mClosing, updatedBy: commData.users.masterDistributor.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, {
+                            refId: commData.users.masterDistributor.id, companyId: finalCompanyId,
+                            remark: `${remarkText} - md comm`, operator: foundOperator.operatorName,
+                            amount: billAmount, comm: commData.amounts.mdComm, surcharge: 0,
+                            openingAmt: mOpening, closingAmt: mClosing,
+                            credit: commData.amounts.mdComm, debit: commData.amounts.mdShortfall,
+                            transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+                            paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id
+                        }));
+                    }
+
+                    // D. Company (WL)
+                    if (commData.wallets.companyWallet) {
+                        const cWallet = commData.wallets.companyWallet;
+                        const cOpening = round4(cWallet.mainWallet);
+                        const cNet = commData.amounts.companyComm - commData.amounts.wlShortfall;
+                        const cClosing = round4(cOpening + cNet);
+                        walletUpdates.push(dbService.update(model.wallet, { id: cWallet.id }, { mainWallet: cClosing, updatedBy: commData.users.companyAdmin.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, {
+                            refId: commData.users.companyAdmin.id, companyId: finalCompanyId,
+                            remark: `${remarkText} - company comm`, operator: foundOperator.operatorName,
+                            amount: billAmount, comm: commData.amounts.companyComm, surcharge: 0,
+                            openingAmt: cOpening, closingAmt: cClosing,
+                            credit: commData.amounts.companyComm, debit: commData.amounts.wlShortfall,
+                            transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+                            paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id
+                        }));
+                    }
+
+                    // E. Super Admin
+                    if (commData.wallets.superAdminWallet) {
+                        const saWallet = commData.wallets.superAdminWallet;
+                        const saOpening = round4(saWallet.mainWallet);
+                        const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
+                        const saClosing = round4(saOpening + saNet);
+                        walletUpdates.push(dbService.update(model.wallet, { id: saWallet.id }, { mainWallet: saClosing, updatedBy: commData.users.superAdmin.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, {
+                            refId: commData.users.superAdmin.id, companyId: 1,
+                            remark: `${remarkText} - admin comm`, operator: foundOperator.operatorName,
+                            amount: billAmount, comm: commData.amounts.superAdminComm, surcharge: 0,
+                            openingAmt: saOpening, closingAmt: saClosing,
+                            credit: commData.amounts.superAdminComm, debit: commData.amounts.saShortfall,
+                            transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+                            paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id
+                        }));
+                    }
+
+                    await Promise.all([...walletUpdates, ...historyPromises]);
+
+                } else {
+                    // Non-role 4/5 fallback — just debit the user, no commission
+                    const fallbackClosing = round4(currentWalletBalance - debit);
+                    await dbService.update(model.wallet, { refId: userId, companyId: finalCompanyId }, { mainWallet: fallbackClosing, updatedBy: userId });
+                    await dbService.createOne(model.walletHistory, {
+                        refId: userId, companyId: finalCompanyId,
+                        remark: `BBPS-${bbpsOperatorName?.name || foundOperator.operatorName}`,
+                        operator: foundOperator.operatorName, amount: billAmount, comm: 0, surcharge: 0,
+                        openingAmt: currentWalletBalance, closingAmt: fallbackClosing,
+                        credit: 0, debit,
+                        transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+                        paymentStatus: billStatus.toUpperCase(), addedBy: userId, updatedBy: userId
+                    });
+                }
+            }
+
+            // ── billPaymentHistory record ─────────────────────────────────────────────
+            const userClosingBal = (() => {
+                if (isSuccess || isPending) {
+                    if (commData.users.retailer) return round4(currentWalletBalance - debit + commData.amounts.retailerComm);
+                    if (commData.users.distributor && user.userRole === 4) return round4(currentWalletBalance - debit + commData.amounts.distComm);
+                }
+                return round4(currentWalletBalance - (isSuccess || isPending ? debit : 0));
+            })();
+
+            const historyData = {
+                refId: userId, companyId: finalCompanyId, operatorId: foundOperator.id,
+                operator: foundOperator.operatorName, billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
+                billNumber: responseData?.billDetails?.billNumber || billerId,
+                api: 'BBPS', walletType: 'MainWallet', amount: billAmount,
+                debit: isSuccess || isPending ? debit : 0,
+                comm: commission, surcharge: 0,
+                opening: currentWalletBalance, closing: userClosingBal,
+                credit: commData.amounts.retailerComm || commData.amounts.distComm || 0,
+                mobileNumber: customerInfo?.customerMobile || '', cardNumber: '',
+                transactionType: 'BBPS', transactionId: transactionID, paymentStatus: billStatus,
+                refundStatus: billStatus === 'Failed' ? 'Success' : 'Dispute',
+                paymentMethod: 'Wallet', fetchBillId: fetchRefReqId,
+                remarks: `BBPS payment for ${bbpsOperatorName?.name || foundOperator.operatorName}`,
+                response: parsedResponse || {}, addedBy: userId, updatedBy: userId,
+                isStatusChecked: isSuccess,
+                distributerSurcharge: 0, distributorAmount: '0.00',
+                distributerComm: String(commData.amounts.distComm || 0),
+                companyCommission: '0.00', whitelabelCommission: commData.amounts.companyComm || 0,
+                adminAmount: '0.00', adminSurcharge: 0, adminComm: '0.00',
+                superadminComm: commData.amounts.superAdminComm,
+                whitelabelComm: commData.amounts.companyComm,
+                masterDistributorCom: commData.amounts.mdComm,
+                distributorCom: commData.amounts.distComm,
+                retailerCom: commData.amounts.retailerComm,
+                userDetails: { name: user.name, email: user.email, mobileNo: user.mobileNo, userRole: user.userRole, ...customerInfo },
+                txnRefId: parsedResponse?.txnRefId?.toString() || '',
+                respAmount: respAmountInRupees,
+                respCustomerName: parsedResponse?.respCustomerName || customerInfo?.customerName || '',
+                respBillNumber: parsedResponse?.respBillNumber || responseData?.billDetails?.billNumber || '',
+                respBillDate: parsedResponse?.respBillDate || responseData?.billDetails?.billDate || new Date().toISOString().split('T')[0],
+                respDueDate: parsedResponse?.respDueDate || responseData?.billDetails?.dueDate || '',
+                respBillPeriod: parsedResponse?.respBillPeriod || responseData?.billDetails?.billPeriod || '',
+                approvalRefNumber: parsedResponse?.approvalRefNumber || null,
+                agentId, initiatingChannel: fetchedBillData.initiatingChannel,
+                customerConvenienceFees: fetchedBillData.customerConvenienceFees, ...user
+            };
+
+            if (isSuccess) {
+                const currentDateTime = new Date().toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                });
+                const smsUrl = `Thank you for payment of Rs.${parseInt(billAmount)} against ${bbpsOperatorName?.name || foundOperator.operatorName}, Consumer no ${customerInfo?.customerMobile}, B-Connect Txn Ref ID ${parsedResponse.txnRefId} on ${currentDateTime} vide Wallet. Team Gmaxepay`;
+                await amezesmsService.sendBbpsPaymentSucess(customerInfo?.customerMobile, smsUrl);
+
+                const createdBillHistory = await dbService.createOne(model.billPaymentHistory, historyData);
+                if (!createdBillHistory) return res.failure({ message: 'Create bill payment history failed!' });
+
+                await dbService.update(model.billFetchData, { fetchRefId: fetchRefReqId }, { status: 'Success', updatedBy: req.user.id });
+
+                console.log('BBPS Pay Bill Response:', parsedResponse, 'amount in rupees:', parsedResponse.respAmount);
+
+                return res.success({
+                    message: 'Bill payment successful',
+                    data: {
+                        ...parsedResponse, status: billStatus,
+                        txid: parsedResponse?.txnRefId, utr: parsedResponse?.approvalRefNumber,
+                        mobile: parsedResponse?.mobile || customerInfo?.customerMobile,
+                        amount: parsedResponse.respAmount,
+                        message: parsedResponse?.responseReason || 'Payment Successful',
+                        orderid: transactionID,
+                        surcharge: (parseFloat(surcharge) + apiCustConvFeeRupees).toFixed(2),
+                        apiCustConvFee: apiCustConvFeeRupees.toFixed(2),
+                        userRole: user.userRole
+                    }
+                });
+            } else {
+                await dbService.createOne(model.billPaymentHistory, historyData);
+                await dbService.update(model.billFetchData, { fetchRefId: fetchRefId }, { status: 'Failed' });
+                return res.failure({
+                    message: parsedResponse.responseReason || 'Bill payment failed',
+                    data: { status: billStatus, message: parsedResponse.responseReason || 'Payment Failed', orderid: transactionID }
+                });
+            }
+        } catch (error) {
+            console.error('API or decrypt error:', error);
+            await dbService.update(model.billFetchData, { fetchRefId: fetchRefId }, { status: 'Failed' });
+            await dbService.createOne(model.billPaymentHistory, {
+                refId: userId, companyId: finalCompanyId, operatorId: foundOperator.id,
+                operator: foundOperator.operatorName, billerName: `${bbpsOperatorName?.name || foundOperator.operatorName}`,
+                billNumber: billerId, api: 'BBPS', walletType: 'MainWallet', amount: billAmount,
+                debit: 0, comm: commission, surcharge: 0,
+                opening: currentWalletBalance, closing: currentWalletBalance, credit: 0,
+                mobileNumber: customerInfo?.customerMobile || '', cardNumber: '',
+                transactionType: 'BBPS', transactionId: transactionID, paymentStatus: 'Failed',
+                refundStatus: 'Success', paymentMethod: 'Wallet', fetchBillId: fetchRefId,
+                remarks: error.message || 'Processing error',
+                response: JSON.stringify({ error: error.message }),
+                addedBy: userId, updatedBy: userId, isStatusChecked: false,
+                distributerSurcharge: 0, distributorAmount: '0.00',
+                distributerComm: String(commData.amounts.distComm || 0),
+                companyCommission: '0.00', whitelabelCommission: commData.amounts.companyComm || 0,
+                adminAmount: '0.00', adminSurcharge: 0, adminComm: '0.00',
+                superadminComm: commData.amounts.superAdminComm,
+                whitelabelComm: commData.amounts.companyComm,
+                masterDistributorCom: commData.amounts.mdComm,
+                distributorCom: commData.amounts.distComm,
+                retailerCom: commData.amounts.retailerComm,
+                userDetails: { name: user.name, email: user.email, mobileNo: user.mobileNo, userRole: user.userRole, ...customerInfo },
+                txnRefId: '', respAmount: '', respCustomerName: customerInfo?.customerName || '',
+                respBillNumber: '', respBillDate: new Date().toISOString().split('T')[0],
+                respDueDate: '', respBillPeriod: '', approvalRefNumber: null,
+                agentId, initiatingChannel: fetchedBillData.initiatingChannel,
+                customerConvenienceFees: fetchedBillData.customerConvenienceFees, ...user
+            });
+            return res.internalServerError({ message: 'Error processing payment: ' + error.message });
+        }
+    } catch (error) {
+        console.error('BBPS payBill error:', error);
+        return res.internalServerError({ message: error.message });
+    }
 };
 
 const fetchBill = async (req, res) => {
@@ -1406,6 +1233,7 @@ const getBillerIds = async (req, res) => {
     });
   }
 }
+
 const getAllCategories = async (req, res) => {
   try {
     const categories = await dbService.findAll(model.bbpsOperatorCategory, { isActive: true, isDeleted: false }, { attributes: ['id', 'name'] });
