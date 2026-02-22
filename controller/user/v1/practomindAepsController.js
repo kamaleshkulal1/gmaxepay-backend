@@ -1055,7 +1055,7 @@ const cashWithdrawal = async (req, res) => {
                 if (commData.wallets.superAdminWallet) {
                     const sW = commData.wallets.superAdminWallet, sO = round4(sW.apes2Wallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
                     walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { apes2Wallet: sC, updatedBy: commData.users.superAdmin.id }));
-                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId, transactionId, paymentStatus, superadminComm: superAdminCommAmt, aepsTxnType: 'CW', superadminCommTDS: superAdminTDS, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId, transactionId, paymentStatus, aepsTxnType: 'CW', bankiin: bankIIN, superadminComm: superAdminCommAmt, superadminCommTDS: superAdminTDS, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
                 }
                 await Promise.all([...walletUpdates, ...historyPromises]);
             } else {
@@ -1307,8 +1307,7 @@ const miniStatement = async (req, res) => {
 
         const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXPAY');
 
-        // ── AEPS2_MS operator lookup (no amount range for MS) ─────────────────
-        const operator = await dbService.findOne(model.operator, { operatorType: 'AEPS2_MS' });
+        const operator = await dbService.findOne(model.operator, { operatorName: 'AEPS2_MS' });
         const operatorType = operator?.operatorType || 'AEPS2_MS';
         const calcSlabAmount = (slab, base) => {
             if (!slab) return 0;
@@ -1319,7 +1318,7 @@ const miniStatement = async (req, res) => {
 
         const commData = { users: {}, wallets: {}, slabs: {}, amounts: { retailerComm: 0, distComm: 0, mdComm: 0, companyComm: 0, superAdminComm: 0, wlShortfall: 0, mdShortfall: 0, distShortfall: 0, saShortfall: 0 }, scenario: '' };
         const user = req.user;
-        const msBase = 0; // MS commission is fixed (not amount-based)
+        const msBase = 0;
 
         if (operator && [4, 5].includes(user.userRole)) {
             const [companyAdmin, superAdmin] = await Promise.all([
