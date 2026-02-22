@@ -1066,6 +1066,23 @@ const cashWithdrawal = async (req, res) => {
 
         // Save to practomindAepsHistory (always)
         const creditToApply = isSuccess ? initiatorCredit : 0;
+
+        console.log('[AEPS2 CW] Preparing to save history. Data to insert:', {
+            refId: existingUser.id, companyId: existingUser.companyId,
+            transactionId, merchantTransactionId, transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+            openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
+            commissions: {
+                superadminCommAmt, companyCommAmt, mdCommAmt, distCommAmt, retailerCommAmt
+            },
+            tds: {
+                superAdminTDS, whitelabelTDS, masterDistTDS, distributorTDS, retailerTDS
+            },
+            shortfalls: {
+                saShortfallAmt, wlShortfallAmt, mdShortfallAmt, distShortfallAmt
+            },
+            availability: aepsAvail
+        });
+
         try {
             await dbService.createOne(model.practomindAepsHistory, {
                 refId: existingUser.id, companyId: existingUser.companyId, merchantLoginId: existingOnboarding.merchantLoginId,
@@ -1599,6 +1616,23 @@ const miniStatement = async (req, res) => {
         }
 
         const creditToApply = isSuccess ? initiatorCredit : 0;
+
+        console.log('[AEPS2 MS] Preparing to save history. Data to insert:', {
+            refId: existingUser.id, companyId: existingUser.companyId,
+            transactionId, merchantTransactionId, transactionStatus: response?.transactionStatus || response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
+            openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
+            commissions: {
+                superadminCommAmt, companyCommAmt, mdCommAmt, distCommAmt, retailerCommAmt
+            },
+            tds: {
+                superAdminTDS, whitelabelTDS, masterDistTDS, distributorTDS, retailerTDS
+            },
+            shortfalls: {
+                saShortfallAmt, wlShortfallAmt, mdShortfallAmt, distShortfallAmt
+            },
+            availability: aepsAvail
+        });
+
         try {
             await dbService.createOne(model.practomindAepsHistory, {
                 refId: existingUser.id, companyId: existingUser.companyId, merchantLoginId: existingOnboarding.merchantLoginId,
@@ -1619,7 +1653,9 @@ const miniStatement = async (req, res) => {
                 superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
                 ...aepsAvail, addedBy: existingUser.id
             });
-        } catch (historyError) { console.error('Failed to save mini statement transaction history:', historyError); }
+        } catch (historyError) {
+            console.error('Failed to save mini statement transaction history:', historyError?.message, historyError?.errors);
+        }
 
         if (isSuccess) return res.success({ message: response.message || 'Mini statement retrieved successfully', data: response });
         return res.failure({ message: response.message || 'Failed to retrieve mini statement', data: response });
