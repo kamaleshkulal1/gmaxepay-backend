@@ -1084,7 +1084,9 @@ const cashWithdrawal = async (req, res) => {
                 superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
                 ...aepsAvail, addedBy: existingUser.id
             });
-        } catch (historyError) { console.error('Failed to save cash withdrawal transaction history:', historyError); }
+        } catch (historyError) {
+            console.error('Failed to save cash withdrawal transaction history:', historyError?.message, historyError?.errors);
+        }
 
         if (isSuccess) return res.success({ message: response.message || 'Cash withdrawal successful', data: response });
         return res.failure({ message: response.message || 'Cash withdrawal failed', data: response });

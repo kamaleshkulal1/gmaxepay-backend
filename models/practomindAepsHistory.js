@@ -157,23 +157,23 @@ const PractomindAepsHistory = sequelize.define(
     },
     superAdminAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     whitelabelAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     masterDistributorAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     distributorAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     retailerAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     ipAddress: {
       type: DataTypes.STRING,
