@@ -581,6 +581,7 @@ const aslAEPSCallback = async (req, res) => {
         return res.send('OK');
     }
 };
+
 module.exports = {
     paymentCallback,
     aslPayoutCallback,

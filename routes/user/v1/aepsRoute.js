@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const aepsController = require('../../../controller/user/v1/aepsController');
+const aepsController = require('../../../controller/user/v1/aslAepsController');
 const authentication = require('../../../middleware/authentication');
 
 router.post('/onboarding-status', authentication, aepsController.getOnboardingStatus);

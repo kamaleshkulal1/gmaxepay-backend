@@ -22,10 +22,9 @@ const aepsTransaction = async (req, res) => {
             consumerNumber
         } = req.body || {};
 
-        const round2 = (num) => {
+        const round4 = (num) => {
             const n = Number(num);
-            if (!Number.isFinite(n)) return 0;
-            return Math.round((n + Number.EPSILON) * 100) / 100;
+            return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
         };
 
         const normalizeTxnType = (value) => (value ? String(value).trim().toUpperCase() : null);
@@ -74,7 +73,7 @@ const aepsTransaction = async (req, res) => {
             return res.failure({ message: 'latitude and longitude are required' });
         }
 
-        const amountNumber = round2(amount || 0);
+        const amountNumber = round4(amount || 0);
         if (normalizedTxnType === 'CW' && (!amountNumber || amountNumber < 100)) {
             return res.failure({ message: 'Minimum amount for CW transaction is 100' });
         }
@@ -153,18 +152,14 @@ const aepsTransaction = async (req, res) => {
             operatorType = operator?.operatorType || 'AEPS1';
         } else if (normalizedTxnType === 'MS') {
             operator = await dbService.findOne(model.operator, {
-                operatorType: 'AEPS_MS',
+                operatorType: 'AEPS1_MS',
                 isActive: true
             });
-            operatorType = operator?.operatorType || 'AEPS_MS';
+            operatorType = operator?.operatorType || 'AEPS1_MS';
         }
         // BE: operator stays null, no commission
 
         // ── Slab-based Commission (same logic as rechargeController) ──────────────
-        const round4 = (num) => {
-            const n = Number(num);
-            return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
-        };
 
         const calcSlabAmount = (slab, baseAmount) => {
             if (!slab) return 0;
@@ -623,7 +618,7 @@ const aepsTransaction = async (req, res) => {
                 updatedBy: req.user.id
             });
         }
-        const openingAepsWallet = round2(wallet.apes1Wallet || 0);
+        const openingAepsWallet = round4(wallet.apes1Wallet || 0);
 
         // Slab commission references — GROSS amounts (for reporting)
         const retailerCommAmt = commData.amounts.retailerComm || 0;
@@ -678,7 +673,7 @@ const aepsTransaction = async (req, res) => {
                 await model.walletHistory.create({
                     refId: req.user.id,
                     companyId: req.user.companyId,
-                    walletType: 'AEPS',
+                    walletType: 'AEPS1',
                     operator: operator?.operatorName || normalizedBankiin,
                     amount: amountNumber,
                     comm: initiatorCredit,
@@ -722,7 +717,7 @@ const aepsTransaction = async (req, res) => {
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.distributor.id,
                         companyId: user.companyId,
-                        walletType: 'AEPS',
+                        walletType: 'AEPS1',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - dist comm`,
                         amount: amountNumber,
@@ -752,7 +747,7 @@ const aepsTransaction = async (req, res) => {
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.masterDistributor.id,
                         companyId: user.companyId,
-                        walletType: 'AEPS',
+                        walletType: 'AEPS1',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - md comm`,
                         amount: amountNumber,
@@ -782,7 +777,7 @@ const aepsTransaction = async (req, res) => {
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.companyAdmin.id,
                         companyId: user.companyId,
-                        walletType: 'AEPS',
+                        walletType: 'AEPS1',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - company comm`,
                         amount: amountNumber,
@@ -812,7 +807,7 @@ const aepsTransaction = async (req, res) => {
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.superAdmin.id,
                         companyId: 1,
-                        walletType: 'AEPS',
+                        walletType: 'AEPS1',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - admin comm`,
                         amount: amountNumber,
@@ -841,7 +836,7 @@ const aepsTransaction = async (req, res) => {
                 await model.walletHistory.create({
                     refId: req.user.id,
                     companyId: req.user.companyId,
-                    walletType: 'AEPS',
+                    walletType: 'AEPS1',
                     operator: operator?.operatorName || normalizedBankiin,
                     amount: amountNumber,
                     comm: 0,
@@ -1045,7 +1040,6 @@ const aepsTransaction = async (req, res) => {
     }
 }
 
-
 const checkStatus = async (req, res) => {
     try {
         const { txnId } = req.body;
@@ -1108,10 +1102,10 @@ const checkStatus = async (req, res) => {
             if (currentStatus === 'SUCCESS' || currentStatus === 'PENDING') {
                 console.log(`[AEPS checkStatus] Reversing commissions for txnId: ${txnId}, previous status: ${currentStatus}`);
 
-                // Find all walletHistory entries for this transactionId with walletType = AEPS
+                // Find all walletHistory entries for this transactionId with walletType = AEPS1
                 const aepsWalletHistories = await dbService.findAll(model.walletHistory, {
                     transactionId: txnId,
-                    walletType: 'AEPS'
+                    walletType: 'AEPS1'
                 });
 
                 if (aepsWalletHistories && aepsWalletHistories.length > 0) {
@@ -1144,7 +1138,7 @@ const checkStatus = async (req, res) => {
                             dbService.createOne(model.walletHistory, {
                                 refId: history.refId,
                                 companyId: history.companyId,
-                                walletType: 'AEPS',
+                                walletType: 'AEPS1',
                                 operator: history.operator || '',
                                 remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
                                 amount: history.amount || 0,
@@ -1185,7 +1179,7 @@ const checkStatus = async (req, res) => {
                             await dbService.createOne(model.walletHistory, {
                                 refId: aepsHistoryRecord.refId,
                                 companyId: aepsHistoryRecord.companyId,
-                                walletType: 'AEPS',
+                                walletType: 'AEPS1',
                                 operator: aepsHistoryRecord.operator || '',
                                 remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
                                 amount: aepsHistoryRecord.amount || 0,
@@ -1263,6 +1257,7 @@ const checkStatus = async (req, res) => {
         return res.failure({ message: error.message || 'Unable to check status' });
     }
 }
+
 
 
 const getOnboardingStatus = async (req, res) => {
