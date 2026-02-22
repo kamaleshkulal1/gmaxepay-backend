@@ -1072,7 +1072,7 @@ const cashWithdrawal = async (req, res) => {
             transactionId, merchantTransactionId, transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
             openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
             commissions: {
-                superadminCommAmt, companyCommAmt, mdCommAmt, distCommAmt, retailerCommAmt
+                superAdminCommAmt, companyCommAmt, mdCommAmt, distCommAmt, retailerCommAmt
             },
             tds: {
                 superAdminTDS, whitelabelTDS, masterDistTDS, distributorTDS, retailerTDS
@@ -1622,7 +1622,7 @@ const miniStatement = async (req, res) => {
             transactionId, merchantTransactionId, transactionStatus: response?.transactionStatus || response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
             openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
             commissions: {
-                superadminCommAmt, companyCommAmt, mdCommAmt, distCommAmt, retailerCommAmt
+                superAdminCommAmt, companyCommAmt, mdCommAmt, distCommAmt, retailerCommAmt
             },
             tds: {
                 superAdminTDS, whitelabelTDS, masterDistTDS, distributorTDS, retailerTDS
