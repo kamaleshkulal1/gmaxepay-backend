@@ -988,7 +988,27 @@ const cashWithdrawal = async (req, res) => {
         }
 
         // Call Practomind API
-        const response = await practomindService.practomindCashWithdrawal(statementData);
+        // const response = await practomindService.practomindCashWithdrawal(statementData);
+        const response = {
+            status: true,
+            message: 'Request Completed',
+            result: {
+                transactionAmount: 100,
+                device: 'MANTRA.MSIPL',
+                requestTransactionTime: '22/02/2026 07:46:34',
+                transactionStatus: 'successful',
+                balanceAmount: 1227.94,
+                bankRRN: '605307015185',
+                transactionType: 'CW',
+                fpTransactionId: 'CWB75592226053074634909I',
+                merchantTransactionId: 'PUNJI65689214372138'
+            },
+            ministatement: '',
+            outletname: '',
+            outletmobile: '',
+            url: 'https://v2.punjikendra.in/api/cashwithdrawalaeps_print/16415',
+            partnerTxnid: 'ZPAY2602220216495E8E'
+        }
         console.log('[AEPS2 CW] response', response);
 
         const isSuccess = response.status === true || response.status === 'true';
@@ -1007,7 +1027,7 @@ const cashWithdrawal = async (req, res) => {
 
         let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
         if (!wallet) wallet = await model.wallet.create({ refId: req.user.id, companyId: req.user.companyId, roleType: req.user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: req.user.id, updatedBy: req.user.id });
-        const openingAeps2Wallet = round2(wallet.apes2Wallet || 0);
+        const openingAeps2Wallet = round4(wallet.apes2Wallet || 0);
         const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerNetAmt : distNetAmt) : 0;
         const closingAeps2Wallet = isSuccess ? round4(openingAeps2Wallet + initiatorCredit) : openingAeps2Wallet;
 
