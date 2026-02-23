@@ -408,7 +408,7 @@ const deleteCompany = async (req, res) => {
         }
       }
 
-      await dbService.delete(model.companyImage, { companyId: id });
+      await dbService.destroy(model.companyImage, { companyId: id });
     }
 
     const company = await dbService.findOne(model.company, { id });
@@ -421,7 +421,7 @@ const deleteCompany = async (req, res) => {
       }
     }
 
-    await dbService.delete(model.company, { id });
+    await dbService.destroy(model.company, { id });
     return res.success({ message: 'Company deleted successfully' });
   } catch (error) {
     console.error('Error deleting company:', error);
