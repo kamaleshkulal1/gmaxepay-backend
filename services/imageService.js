@@ -108,7 +108,6 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
           : `${AWS_CDN_URL}/${s3Key}`;
       }
     } catch {
-      // Ignore errors
     }
     return null;
   }

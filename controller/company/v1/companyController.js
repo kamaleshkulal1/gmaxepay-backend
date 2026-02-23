@@ -323,11 +323,15 @@ const getAllCompanyImages = async (req, res) => {
 
     if (dataToFind.query) {
       query = { ...query, ...dataToFind.query };
+      // Default to active images only if not explicitly specified
+      if (query.isActive === undefined) {
+        query.isActive = true;
+      }
     } else {
       // Fallback for old/direct flat payload
       if (dataToFind.type) query.type = dataToFind.type;
       if (dataToFind.subtype) query.subtype = dataToFind.subtype;
-      if (dataToFind.isActive !== undefined) query.isActive = dataToFind.isActive;
+      query.isActive = dataToFind.isActive !== undefined ? dataToFind.isActive : true; // Default to active
     }
 
     const companyId = req.user?.companyId || query.companyId || req.body.companyId;
