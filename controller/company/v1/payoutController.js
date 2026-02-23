@@ -61,17 +61,24 @@ const payout = async (req, res) => {
         if (!wallet) return res.failure({ message: 'Wallet not found' });
 
         const currentAepsBalance = parseFloat(wallet[walletType] || 0);
-        if (currentAepsBalance < payoutAmount) {
+
+        let gstAmount = 0;
+        if (mode === 'bank') {
+            gstAmount = parseFloat((payoutAmount * 0.18).toFixed(2));
+        }
+
+        const initialRequired = payoutAmount + gstAmount;
+        if (currentAepsBalance < initialRequired) {
             return res.failure({
                 message: `Insufficient ${normalizedAepsType} wallet balance`,
                 currentBalance: currentAepsBalance,
-                requiredAmount: payoutAmount
+                requiredAmount: initialRequired
             });
         }
 
         const transactionID = generateTransactionID(company.companyName || company.name);
         const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
-        let aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount).toFixed(2));
+        let aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount - gstAmount).toFixed(2));
         const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
         const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
 
@@ -243,17 +250,17 @@ const payout = async (req, res) => {
 
                 if (commType === 'sur') {
                     // Check if AEPS Wallet has enough for Payout + Surcharge
-                    if (currentAepsBalance < totalRequired) {
+                    if (currentAepsBalance < totalRequired + gstAmount) {
                         return res.failure({
-                            message: `Insufficient wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${currentAepsBalance}`
+                            message: `Insufficient wallet balance for payout + surcharge + GST. Required: ${totalRequired + gstAmount}, Available: ${currentAepsBalance}`
                         });
                     }
                 } else if (commType === 'com') {
                     // Check if AEPS Wallet has enough for Net Payout (Payout - Commission)? 
                     // Typically we check against the net debit.
-                    if (currentAepsBalance < totalNet) {
+                    if (currentAepsBalance < totalNet + gstAmount) {
                         return res.failure({
-                            message: `Insufficient wallet balance. Required: ${totalNet}, Available: ${currentAepsBalance}`
+                            message: `Insufficient wallet balance. Required: ${totalNet + gstAmount}, Available: ${currentAepsBalance}`
                         });
                     }
                 }
@@ -521,6 +528,23 @@ const payout = async (req, res) => {
         }
 
         const payoutHistory = await dbService.createOne(model.payoutHistory, payoutHistoryData);
+
+        if (mode === 'bank' && gstAmount > 0) {
+            const gstOpening = aepsOpeningBalance - payoutAmount;
+            const gstClosing = gstOpening - gstAmount;
+            await dbService.createOne(model.gstHistory, {
+                refId: user.id,
+                companyId: user.companyId,
+                transactionId: transactionID,
+                status: payoutHistoryData.status,
+                amount: gstAmount,
+                openingAmt: parseFloat(gstOpening.toFixed(2)),
+                closingAmt: parseFloat(gstClosing.toFixed(2)),
+                aepsType: normalizedAepsType,
+                addedBy: user.id,
+                updatedBy: user.id
+            });
+        }
 
         if (payoutHistoryData.status === 'SUCCESS') {
             if (mode === 'wallet') {

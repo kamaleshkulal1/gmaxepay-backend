@@ -70,6 +70,7 @@ db.practomindAepsHistory = require('./practomindAepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
+db.gstHistory = require('./gstHistory');
 // db.recharge = require('./recharge');
 // db.dthRecharge = require('./dthRecharge');
 db.serviceTransaction = require('./serviceTransaction');
@@ -577,6 +578,24 @@ db.payoutHistory.belongsTo(db.company, {
 db.company.hasMany(db.payoutHistory, {
   foreignKey: 'companyId',
   as: 'payoutHistories',
+  sourceKey: 'id'
+});
+
+// GST History Relationships
+db.user.hasMany(db.gstHistory, {
+  foreignKey: 'refId',
+  as: 'gstHistories',
+  sourceKey: 'id'
+});
+
+db.gstHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.gstHistory, {
+  foreignKey: 'companyId',
+  as: 'gstHistories',
   sourceKey: 'id'
 });
 

@@ -88,12 +88,19 @@ const payout = async (req, res) => {
         const currentAepsBalance = parseFloat(wallet[walletType] || 0);
         console.log(`Current ${normalizedAepsType} Balance:`, currentAepsBalance);
 
-        if (currentAepsBalance < payoutAmount) {
+        let gstAmount = 0;
+        if (mode === 'bank') {
+            gstAmount = parseFloat((payoutAmount * 0.18).toFixed(2));
+        }
+
+        const initialRequired = payoutAmount + gstAmount;
+
+        if (currentAepsBalance < initialRequired) {
             console.log('Insufficient Main Balance Check Failed');
             return res.failure({
                 message: `Insufficient ${normalizedAepsType} wallet balance`,
                 currentBalance: currentAepsBalance,
-                requiredAmount: payoutAmount
+                requiredAmount: initialRequired
             });
         }
 
@@ -239,8 +246,8 @@ const payout = async (req, res) => {
                 const mdBalance = parseFloat(commData.wallets.masterDistributorWallet[walletType] || 0);
                 console.log(`MD Balance Check (${walletType}): Required ${totalRequired}, Available ${mdBalance}`);
 
-                if (mdBalance < totalRequired) {
-                    return res.failure({ message: `Insufficient MD wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${mdBalance}` });
+                if (mdBalance < totalRequired + gstAmount) {
+                    return res.failure({ message: `Insufficient MD wallet balance for payout + surcharge + GST. Required: ${totalRequired + gstAmount}, Available: ${mdBalance}` });
                 }
 
             } else if (user.userRole === 4) {
@@ -365,8 +372,8 @@ const payout = async (req, res) => {
                 const distBalance = parseFloat(commData.wallets.distributorWallet[walletType] || 0); // AEPS Wallet Check
                 console.log(`Distributor Balance Check (${walletType}): Required ${totalRequired}, Available ${distBalance}`);
 
-                if (distBalance < totalRequired) {
-                    return res.failure({ message: `Insufficient distributor wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${distBalance}` });
+                if (distBalance < totalRequired + gstAmount) {
+                    return res.failure({ message: `Insufficient distributor wallet balance for payout + surcharge + GST. Required: ${totalRequired + gstAmount}, Available: ${distBalance}` });
                 }
 
             } else if (user.userRole === 5) {
@@ -566,8 +573,8 @@ const payout = async (req, res) => {
                 const retBalance = parseFloat(commData.wallets.retailerWallet[walletType] || 0); // AEPS Wallet Check
                 console.log(`Retailer Balance Check (${walletType}): Required ${totalRequired}, Available ${retBalance}`);
 
-                if (retBalance < totalRequired) {
-                    return res.failure({ message: `Insufficient retailer wallet balance for payout + surcharge. Required: ${totalRequired}, Available: ${retBalance}` });
+                if (retBalance < totalRequired + gstAmount) {
+                    return res.failure({ message: `Insufficient retailer wallet balance for payout + surcharge + GST. Required: ${totalRequired + gstAmount}, Available: ${retBalance}` });
                 }
             }
 
@@ -612,7 +619,7 @@ const payout = async (req, res) => {
         const transactionID = generateTransactionID(company.companyName || company.name);
         // ... (existing balance calc logic)
         const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
-        const aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount).toFixed(2));
+        const aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount - gstAmount).toFixed(2));
         const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
         const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
 
@@ -721,6 +728,23 @@ const payout = async (req, res) => {
 
         // Create payout history record
         const payoutHistory = await dbService.createOne(model.payoutHistory, payoutHistoryData);
+
+        if (mode === 'bank' && gstAmount > 0) {
+            const gstOpening = aepsOpeningBalance - payoutAmount;
+            const gstClosing = gstOpening - gstAmount;
+            await dbService.createOne(model.gstHistory, {
+                refId: user.id,
+                companyId: user.companyId,
+                transactionId: transactionID,
+                status: payoutHistoryData.status,
+                amount: gstAmount,
+                openingAmt: parseFloat(gstOpening.toFixed(2)),
+                closingAmt: parseFloat(gstClosing.toFixed(2)),
+                aepsType: normalizedAepsType,
+                addedBy: user.id,
+                updatedBy: user.id
+            });
+        }
 
         // Update wallet balance and Commercials if SUCCESS
         if (payoutHistoryData.status === 'SUCCESS') {

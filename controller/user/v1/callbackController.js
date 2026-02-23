@@ -255,6 +255,11 @@ const aslPayoutCallback = async (req, res) => {
                 transactionId: txnId
             });
 
+            // Find GST deduction, if any
+            const gstRecord = await dbService.findOne(model.gstHistory, {
+                transactionId: txnId
+            });
+
             if (allHistories && allHistories.length > 0) {
                 const reversalUpdates = [];
                 const reversalHistoryPromises = [];
@@ -310,6 +315,53 @@ const aslPayoutCallback = async (req, res) => {
                     );
                 }
 
+                if (gstRecord && gstRecord.amount > 0 && gstRecord.status !== 'FAILED') {
+                    // Refund the GST amount to the initiator's wallet
+                    const gstAmountToRefund = round4(gstRecord.amount);
+                    const walletRecord = await dbService.findOne(model.wallet, {
+                        refId: gstRecord.refId,
+                        companyId: gstRecord.companyId
+                    });
+
+                    if (walletRecord) {
+                        const currentBal = round4(walletRecord[aepsWalletCol] || 0);
+                        const newBal = round4(currentBal + gstAmountToRefund);
+
+                        reversalUpdates.push(
+                            dbService.update(model.wallet, { id: walletRecord.id }, {
+                                [aepsWalletCol]: newBal,
+                                updatedBy: existingPayout.refId
+                            })
+                        );
+
+                        reversalHistoryPromises.push(
+                            dbService.createOne(model.walletHistory, {
+                                refId: gstRecord.refId,
+                                companyId: gstRecord.companyId,
+                                walletType: aepsWalletCol,
+                                operator: 'GST Reversal',
+                                remark: `Reversal - Payout Failed (GST Refund)`,
+                                amount: gstAmountToRefund,
+                                comm: 0,
+                                surcharge: 0,
+                                openingAmt: currentBal,
+                                closingAmt: newBal,
+                                credit: gstAmountToRefund,
+                                debit: 0,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: existingPayout.refId,
+                                updatedBy: existingPayout.refId
+                            }),
+                            dbService.update(model.gstHistory, { id: gstRecord.id }, {
+                                status: 'FAILED',
+                                updatedBy: existingPayout.refId
+                            })
+                        );
+                        console.log(`[ASL Payout Callback] Reversed GST of ${gstAmountToRefund} to ${aepsWalletCol} for refId: ${gstRecord.refId}`);
+                    }
+                }
+
                 await Promise.all([...reversalUpdates, ...reversalHistoryPromises]);
                 console.log(`[ASL Payout Callback] Reversed ${allHistories.length} wallet entries for txnId: ${txnId}`);
 
@@ -346,6 +398,38 @@ const aslPayoutCallback = async (req, res) => {
                             updatedBy: existingPayout.refId
                         });
                         console.log(`[ASL Payout Callback] Fallback refund of ${amountToRefund} applied to ${aepsWalletCol} for refId: ${existingPayout.refId}`);
+
+                        if (gstRecord && gstRecord.amount > 0 && gstRecord.status !== 'FAILED') {
+                            const gstAmountToRefund = round4(gstRecord.amount);
+                            const currentBalAfterFallback = round4(newBal); // Using the balance *after* the base refund
+                            const finalBalWithGst = round4(currentBalAfterFallback + gstAmountToRefund);
+
+                            await dbService.update(model.wallet, { id: walletRecord.id }, {
+                                [aepsWalletCol]: finalBalWithGst,
+                                updatedBy: existingPayout.refId
+                            });
+                            await dbService.createOne(model.walletHistory, {
+                                refId: gstRecord.refId,
+                                companyId: gstRecord.companyId,
+                                walletType: aepsWalletCol,
+                                operator: 'GST Reversal',
+                                remark: `Reversal - Payout Failed (GST Refund)`,
+                                amount: gstAmountToRefund,
+                                comm: 0, surcharge: 0,
+                                openingAmt: currentBalAfterFallback,
+                                closingAmt: finalBalWithGst,
+                                credit: gstAmountToRefund, debit: 0,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: existingPayout.refId,
+                                updatedBy: existingPayout.refId
+                            });
+                            await dbService.update(model.gstHistory, { id: gstRecord.id }, {
+                                status: 'FAILED',
+                                updatedBy: existingPayout.refId
+                            });
+                            console.log(`[ASL Payout Callback] Fallback GST refund of ${gstAmountToRefund} applied to ${aepsWalletCol}`);
+                        }
                     }
                 }
             }
