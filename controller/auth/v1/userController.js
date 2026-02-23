@@ -29,19 +29,19 @@ const login = async (req, res) => {
         if (!latitude || !longitude) {
             return res.failure({ message: 'Location coordinates are required!' });
         }
-        
+
         // First check if user exists with this phone number and companyId
-        const existingUser = await dbService.findOne(model.user, { 
+        const existingUser = await dbService.findOne(model.user, {
             mobileNo,
             companyId,
             isActive: true
         });
-        
+
         if (!existingUser) {
             return res.failure({ message: 'Invalid phone number' });
         }
-        
-        if(existingUser.kycStatus !== 'FULL_KYC' || existingUser.kycSteps !== 7) {
+
+        if (existingUser.kycStatus !== 'FULL_KYC' || existingUser.kycSteps !== 7) {
             return res.failure({ message: 'KYC is not completed! Please complete your KYC to login.' });
         }
 
@@ -69,10 +69,14 @@ const login = async (req, res) => {
         if (result.flag) {
             return res.failure({ message: result.msg });
         }
+        const data = {
+            ...result.data,
+            userRole: existingUser.userRole
+        }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
-            data: result.data
+            data: data
         });
 
     } catch (error) {
@@ -102,7 +106,7 @@ const verifyOTP = async (req, res) => {
         if (!token) {
             return res.failure({ message: 'Token is required!' });
         }
-        
+
         const result = await authService.verifyMobileOTP(
             token,
             otp,
@@ -113,7 +117,7 @@ const verifyOTP = async (req, res) => {
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -166,7 +170,7 @@ const resetPassword = async (req, res) => {
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -198,7 +202,7 @@ const handle2FA = async (req, res) => {
         if (!dataToken) {
             return res.badRequest({ message: 'Token is required!' });
         }
-        
+
         const result = await authService.handle2FA(
             dataToken,
             otp,
@@ -212,7 +216,7 @@ const handle2FA = async (req, res) => {
             return res.badRequest({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -248,7 +252,7 @@ const setMPIN = async (req, res) => {
         if (!dataToken) {
             return res.failure({ message: 'Token is required!' });
         }
-        
+
         const result = await authService.setupMPIN(
             dataToken,
             newMPIN,
@@ -263,7 +267,7 @@ const setMPIN = async (req, res) => {
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -295,7 +299,7 @@ const verifyMPIN = async (req, res) => {
         if (!dataToken) {
             return res.failure({ message: 'Token is required!' });
         }
-        
+
         const result = await authService.verifyMPIN(
             dataToken,
             mpin,
@@ -309,7 +313,7 @@ const verifyMPIN = async (req, res) => {
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -320,8 +324,8 @@ const verifyMPIN = async (req, res) => {
     }
 };
 
-const resendOTP = async(req,res)=>{
-    try{
+const resendOTP = async (req, res) => {
+    try {
         const companyId = req.headers['x-company-id'];
         const token = req.headers['token'];
         if (!companyId) {
@@ -334,7 +338,7 @@ const resendOTP = async(req,res)=>{
         if (!token) {
             return res.failure({ message: 'Token is required!' });
         }
-        
+
         const result = await authService.resendMobileOTP(
             token,
             companyId
@@ -344,12 +348,12 @@ const resendOTP = async(req,res)=>{
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
-        
-    }catch(error){
+
+    } catch (error) {
         console.log(error);
         return res.internalServerError({ message: error.message });
     }
@@ -371,12 +375,12 @@ const refreshAccessToken = async (req, res) => {
         }
 
         const result = await authService.refreshAccessToken(refreshToken);
-        
+
         if (result.flag) {
             return res.unAuthorized({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -389,7 +393,7 @@ const refreshAccessToken = async (req, res) => {
 
 const logout = async (req, res) => {
     try {
-        const userId = req.user?.id; 
+        const userId = req.user?.id;
         const companyId = req.headers['x-company-id'];
         if (!companyId) {
             return res.failure({ message: 'Company ID is required!' });
@@ -408,7 +412,7 @@ const logout = async (req, res) => {
             return res.failure({ message: 'Logout failed!' });
         }
 
-        return res.success({ 
+        return res.success({
             message: 'Logged out successfully!'
         });
 
@@ -423,7 +427,7 @@ const resendTemporaryPassword = async (req, res) => {
         const { mobileNo } = req.body;
         if (!mobileNo) {
             return res.failure({ message: 'Mobile number is required!' });
-        }   
+        }
         const companyId = req.headers['x-company-id'];
         if (!companyId) {
             return res.failure({ message: 'Company ID is required!' });
@@ -436,7 +440,7 @@ const resendTemporaryPassword = async (req, res) => {
         if (result.flag) {
             return res.failure({ message: result.msg });
         }
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -467,7 +471,7 @@ const verifyForgotPasswordOTP = async (req, res) => {
         if (!token) {
             return res.failure({ message: 'Token is required!' });
         }
-        
+
         const result = await authService.verifyForgotPasswordOTP(
             token,
             otp,
@@ -478,7 +482,7 @@ const verifyForgotPasswordOTP = async (req, res) => {
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -509,7 +513,7 @@ const requestResendTemporaryPassword = async (req, res) => {
         if (!phoneNumber) {
             return res.failure({ message: 'Phone number is required!' });
         }
-        
+
         const result = await authService.requestResendTemporaryPassword(
             phoneNumber,
             companyId,
@@ -520,7 +524,7 @@ const requestResendTemporaryPassword = async (req, res) => {
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
@@ -552,7 +556,7 @@ const verifyResendTemporaryPasswordOTP = async (req, res) => {
         if (!token) {
             return res.failure({ message: 'Token is required!' });
         }
-        
+
         const result = await authService.verifyResendTemporaryPasswordOTP(
             token,
             otp,
@@ -563,7 +567,7 @@ const verifyResendTemporaryPasswordOTP = async (req, res) => {
             return res.failure({ message: result.msg });
         }
 
-        return res.success({ 
+        return res.success({
             message: result.msg,
             data: result.data
         });
