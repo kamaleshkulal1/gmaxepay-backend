@@ -11,7 +11,8 @@ const uploadFields = upload.fields([
   { name: 'sliders', maxCount: 10 } // Allow up to 10 slider images
 ]);
 
-router.post('/get', companyController.getCompanyDettails);
+router.post('/get', companyController.getCompanyDetails);
 router.post('/update', authentication, uploadFields, multer, companyController.updateCompany);
+router.post('/images', authentication, companyController.getAllCompanyImages);
 
 module.exports = router;
