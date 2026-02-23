@@ -3,17 +3,7 @@ const { parseTimeToMilliseconds } = require('./common');
 const { doubleEncrypt, decrypt } = require('./doubleCheckUp');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 
-/**
- * Generate encrypted onboarding token
- * @param {Object} userData - User data to encode in token
- * @param {Number} userData.userId - User ID
- * @param {String} userData.name - User name
- * @param {Number} userData.companyId - Company ID
- * @param {String} userData.mobileNo - Mobile number
- * @param {Number} userData.userRole - User role
- * @param {String} expiryString - Expiry string (e.g., "5m", "6d")
- * @returns {Object} - Returns token string and expiry date
- */
+
 const generateOnboardingToken = (userData, expiryString = '6d') => {
   try {
     // Parse expiry time
@@ -105,11 +95,7 @@ const decryptOnboardingToken = (token) => {
   }
 };
 
-/**
- * Format expiry time string for display
- * @param {String} expiryString - Expiry string (e.g., "5m", "6d")
- * @returns {String} - Formatted string (e.g., "5 minutes", "6 days")
- */
+
 const formatExpiryTime = (expiryString) => {
   if (!expiryString || typeof expiryString !== 'string') {
     return '6 days';
@@ -117,7 +103,7 @@ const formatExpiryTime = (expiryString) => {
 
   const timeRegex = /^(\d+)([smhd])$/i;
   const match = expiryString.match(timeRegex);
-  
+
   if (!match) {
     return '6 days';
   }

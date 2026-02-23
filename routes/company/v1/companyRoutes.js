@@ -14,5 +14,6 @@ const uploadFields = upload.fields([
 router.post('/get', companyController.getCompanyDetails);
 router.post('/update', authentication, uploadFields, multer, companyController.updateCompany);
 router.post('/images', authentication, companyController.getAllCompanyImages);
+router.post('/delete/:id', authentication, companyController.deleteCompany);
 
 module.exports = router;

@@ -384,5 +384,50 @@ const getAllCompanyImages = async (req, res) => {
   }
 };
 
+const deleteCompany = async (req, res) => {
+  try {
+    const id = req.params.id || req.body.id;
+    if (!id) {
+      return res.failure({ message: 'Company ID is required' });
+    }
 
-module.exports = { getCompanyDetails, updateCompany, getAllCompanyImages };
+    // Find all images for this company
+    const existingImages = await dbService.findAll(model.companyImage, {
+      companyId: id
+    });
+
+    // Delete images from S3
+    if (existingImages && existingImages.length > 0) {
+      for (const image of existingImages) {
+        if (image.s3Key) {
+          try {
+            await deleteImageFromS3(image.s3Key);
+          } catch (err) {
+            console.error(`Error deleting image ${image.s3Key} from S3:`, err);
+          }
+        }
+      }
+
+      await dbService.delete(model.companyImage, { companyId: id });
+    }
+
+    const company = await dbService.findOne(model.company, { id });
+    if (company) {
+      if (company.logo && !existingImages.find(img => img.s3Key === company.logo)) {
+        try { await deleteImageFromS3(company.logo); } catch (e) { }
+      }
+      if (company.favicon && !existingImages.find(img => img.s3Key === company.favicon)) {
+        try { await deleteImageFromS3(company.favicon); } catch (e) { }
+      }
+    }
+
+    await dbService.delete(model.company, { id });
+    return res.success({ message: 'Company deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting company:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+
+module.exports = { getCompanyDetails, updateCompany, getAllCompanyImages, deleteCompany };
