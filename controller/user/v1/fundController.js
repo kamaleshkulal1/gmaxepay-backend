@@ -807,23 +807,17 @@ const allbankDetails = async (req, res) => {
         let targetUser = null;
         let bankDetailsList = [];
 
-        if (existingUser.reportingTo && existingUser.reportingTo !== null) {
-            // Get reporting user's bank list
-            targetUser = await dbService.findOne(model.user, {
-                id: existingUser.reportingTo,
-                companyId: req.user.companyId,
-                isActive: true
-            });
-
+        // First try to get reporting user's bank list
+        if (existingUser.reportingTo) {
+            targetUser = await dbService.findOne(model.user, { id: existingUser.reportingTo, companyId: req.user.companyId, isActive: true });
             if (targetUser) {
-                bankDetailsList = await dbService.findAll(model.customerBank, {
-                    refId: targetUser.id,
-                    companyId: targetUser.companyId,
-                    isFundTransfer: true
-                });
+                bankDetailsList = await dbService.findAll(model.customerBank, { refId: targetUser.id, companyId: targetUser.companyId, isFundTransfer: true });
             }
-        } else {
-            // If no reporting manager, find company admin
+        }
+        console.log('bankDetailsList', bankDetailsList);
+
+        // If reportingTo is null OR bank list is empty, fallback to company admin (userRole: 2)
+        if (!existingUser.reportingTo || !bankDetailsList || bankDetailsList.length === 0) {
             targetUser = await dbService.findOne(model.user, {
                 userRole: 2,
                 companyId: req.user.companyId,
@@ -831,18 +825,12 @@ const allbankDetails = async (req, res) => {
             });
 
             if (targetUser) {
-                bankDetailsList = await dbService.findAll(model.customerBank, {
-                    refId: targetUser.id,
-                    companyId: targetUser.companyId,
-                    isFundTransfer: true
-                });
+                bankDetailsList = await dbService.findAll(model.customerBank, { refId: targetUser.id, companyId: targetUser.companyId, isFundTransfer: true });
             }
         }
 
         if (!targetUser) {
-            return res.failure({
-                message: existingUser.reportingTo ? 'Reporting manager not found' : 'Company admin not found'
-            });
+            return res.failure({ message: 'Reporting user or company admin not found' });
         }
 
         if (!bankDetailsList || bankDetailsList.length === 0) {
