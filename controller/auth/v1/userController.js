@@ -71,7 +71,7 @@ const login = async (req, res) => {
         }
         const data = {
             ...result.data,
-            userRole: existingUser.userRole
+            userRole: existingUser?.userRole
         }
 
         return res.success({
