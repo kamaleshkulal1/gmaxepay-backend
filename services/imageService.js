@@ -91,7 +91,7 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
     }
 
     if (isCompanyImage) {
-      return `${BASE_URL}/api/images/${s3Key}`;
+      return `${AWS_CDN_URL}/${s3Key}`;
     }
 
     const encrypted = encrypt(s3Key);
@@ -104,7 +104,7 @@ const getImageUrl = (encryptedKey, useSecureProxy = true) => {
       if (s3Key && s3Key.startsWith('images/')) {
         const isCompanyImage = s3Key.includes('/signature/') || s3Key.includes('/loginSlider/');
         return isCompanyImage
-          ? `${BASE_URL}/api/images/${s3Key}`
+          ? `${AWS_CDN_URL}/${s3Key}`
           : `${AWS_CDN_URL}/${s3Key}`;
       }
     } catch {
