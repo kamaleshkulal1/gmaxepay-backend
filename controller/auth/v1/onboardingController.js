@@ -27,23 +27,23 @@ const getOrigin = (req) => req.get('origin') || req.get('referer') || '';
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return false;
-  
+
   try {
     const url = new URL(origin);
     const hostname = url.hostname.toLowerCase();
     const protocol = url.protocol.toLowerCase();
-    
+
     // Allow localhost with any port (http://localhost:*, http://127.0.0.1:*, http://::1:*)
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
       return protocol === 'http:' || protocol === 'https:';
     }
-    
+
     // Allow https://app.gmaxepay.in
     if (hostname === 'app.gmaxepay.in') {
       return protocol === 'https:';
     }
-    
-    
+
+
     return false;
   } catch (error) {
     // If origin is not a valid URL, deny access
@@ -53,21 +53,21 @@ const isAllowedOrigin = (origin) => {
 
 const ensureAllowedOrigin = (req) => {
   const origin = getOrigin(req);
-  
+
   // If no origin header, allow only in development (for API testing tools)
   // Browsers always send Origin header for cross-origin requests
   if (!origin) {
     const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
     return !isProduction;
   }
-  
+
   return isAllowedOrigin(origin);
 };
 
 const isAllowedCompanyDomain = (domain) => {
   if (!domain) return false;
   const normalizedDomain = domain.toString().trim().toLowerCase();
-  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in' ;
+  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in';
 };
 
 const getRequestedDomain = (req) => {
@@ -107,7 +107,7 @@ const getTokenFromReq = (req) => {
 
 const loadContextByToken = async (token) => {
   if (!token) return { error: 'Onboarding token is required' };
-  
+
   // Encrypt the token before searching (since tokens are stored encrypted in database)
   let encryptedToken;
   try {
@@ -116,7 +116,7 @@ const loadContextByToken = async (token) => {
     console.error('Error encrypting token for search:', error);
     return { error: 'Invalid token format' };
   }
-  
+
   const tokenRecord = await dbService.findOne(model.onboardingToken, {
     token: encryptedToken,
     isDeleted: false
@@ -135,12 +135,12 @@ const loadContextByToken = async (token) => {
   const company = await dbService.findOne(model.company, { id: tokenData.companyId, isDeleted: false });
   if (!company) return { error: 'Company not found' };
   const outlet = await dbService.findOne(model.outlet, { refId: user.id, companyId: company.id });
-  
+
   // Find customer record to lookup customerBank (customerBank.refId references customer table)
   const customer = await dbService.findOne(model.customer, {
     mobile: user.mobileNo
   });
-  
+
   // Find customerBank using customer.id if customer exists, otherwise try user.id for backward compatibility
   let customerBank = null;
   if (customer) {
@@ -150,7 +150,7 @@ const loadContextByToken = async (token) => {
   if (!customerBank) {
     customerBank = await dbService.findOne(model.customerBank, { refId: user.id, companyId: company.id });
   }
-  
+
   // Fetch digilocker documents for Aadhaar and PAN
   const [aadhaarDoc, panDoc] = await Promise.all([
     dbService.findOne(model.digilockerDocument, {
@@ -166,7 +166,7 @@ const loadContextByToken = async (token) => {
       isDeleted: false
     })
   ]);
-  
+
   // Get image URLs (keys are already decrypted by model hooks)
   // Profile images use simple CDN URLs, other images use secure proxy
   const getImageUrl = (imageData, isProfileImage = false) => {
@@ -204,7 +204,7 @@ const loadContextByToken = async (token) => {
     profileImageWithShopVerify: user.profileImageWithShopVerify,
     mobileNo: user.mobileNo,
     email: user.email,
-    profileImage: getImageUrl(user.profileImage, true), 
+    profileImage: getImageUrl(user.profileImage, true),
     aadharFrontImage: getImageUrl(user.aadharFrontImage, false),
     aadharBackImage: getImageUrl(user.aadharBackImage, false),
     panCardFrontImage: getImageUrl(user.panCardFrontImage, false),
@@ -227,7 +227,7 @@ const loadContextByToken = async (token) => {
     };
     const plainKey = extractKey(shopImage);
     if (!plainKey) return null;
-    return imageService.getImageUrl(plainKey, true); 
+    return imageService.getImageUrl(plainKey, true);
   };
 
   const outletDetails = outlet ? {
@@ -249,16 +249,16 @@ const loadContextByToken = async (token) => {
     companyName: company.companyName,
   }
 
-  return { 
-    tokenRecord, 
-    tokenData, 
-    company, 
-    user, 
-    outlet, 
-    customerBank, 
-    companyDetails, 
-    userDetails, 
-    outletDetails, 
+  return {
+    tokenRecord,
+    tokenData,
+    company,
+    user,
+    outlet,
+    customerBank,
+    companyDetails,
+    userDetails,
+    outletDetails,
     customerBankDetails,
     aadhaarDoc,
     panDoc
@@ -272,7 +272,7 @@ const getPendingSteps = (ctx) => {
   const customerBankDetails = ctx.customerBankDetails || ctx.customerBank || null;
   const aadhaarDoc = ctx.aadhaarDoc || null;
   const panDoc = ctx.panDoc || null;
-  
+
   // Helper to extract S3 key from JSON field
   const extractS3Key = (imageData) => {
     if (!imageData) return null;
@@ -288,20 +288,20 @@ const getPendingSteps = (ctx) => {
     }
     return null;
   };
-  
+
   // Get image fields from userDetails or user
   const aadharFrontImage = userDetails?.aadharFrontImage || ctx.user?.aadharFrontImage;
   const aadharBackImage = userDetails?.aadharBackImage || ctx.user?.aadharBackImage;
   const panCardFrontImage = userDetails?.panCardFrontImage || ctx.user?.panCardFrontImage;
   const panCardBackImage = userDetails?.panCardBackImage || ctx.user?.panCardBackImage;
-  
+
   // Check Aadhaar sub-steps
   const aadhaarConnect = !!(aadhaarDoc && aadhaarDoc.verificationId);
   const aadhaarDownload = !!(aadhaarDoc && aadhaarDoc.name); // If name exists, document is downloaded
   const aadhaarFrontImageKey = extractS3Key(aadharFrontImage);
   const aadhaarBackImageKey = extractS3Key(aadharBackImage);
   const aadhaarUpload = !!(user.isAadharUploaded);
-  
+
   // Check PAN sub-steps
   const panConnect = !!(panDoc && panDoc.verificationId);
   const panDownload = !!(panDoc && panDoc.panNumber); // If panNumber exists, document is downloaded
@@ -312,44 +312,44 @@ const getPendingSteps = (ctx) => {
   // Check if verification is done via manual upload flags
   const aadharVerifyFlag = !!(user.isAadharUploaded || userDetails.isAadharUploaded);
   const panVerifyFlag = !!(user.isPanUploaded || userDetails.isPanUploaded);
-  
+
   const aadhaarSubSteps = [
     { key: 'connect', label: 'Connect Aadhaar', done: aadharVerifyFlag || aadhaarConnect },
     { key: 'download', label: 'Download Aadhaar', done: aadharVerifyFlag || aadhaarDownload },
-    { key: 'upload', label: 'Upload Aadhaar Images', done: aadharVerifyFlag  }
+    { key: 'upload', label: 'Upload Aadhaar Images', done: aadharVerifyFlag }
   ];
-  
+
   const panSubSteps = [
     { key: 'connect', label: 'Connect PAN', done: panVerifyFlag || panConnect },
     { key: 'download', label: 'Download PAN', done: panVerifyFlag || panDownload },
-    { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag  }
+    { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag }
   ];
-  
+
   // Overall done: either manual flag is set OR all digilocker/image steps are complete
   const aadhaarAllDone = aadharVerifyFlag || (aadhaarConnect && aadhaarDownload && aadhaarUpload);
   const panAllDone = panVerifyFlag || (panConnect && panDownload && panUpload);
-  
+
   // Check shop details verification using shopDetailsVerify field from user
   const shopDetailsDone = !!(user.shopDetailsVerify || userDetails?.shopDetailsVerify);
-  
+
   // Check bank verification using bankDetailsVerify field from user AND customerBankDetails
-  const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) || 
-                          !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
-  
+  const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) ||
+    !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
+
   const profileVerified = !!(user.profileImageWithShopVerify || userDetails?.profileImageWithShopVerify);
 
   const steps = [
     { key: 'mobileVerification', label: 'Mobile verification', done: !!userDetails?.mobileVerify },
     { key: 'emailVerification', label: 'Email verification', done: !!userDetails?.emailVerify },
-    { 
-      key: 'aadharVerification', 
-      label: 'Aadhaar verification', 
+    {
+      key: 'aadharVerification',
+      label: 'Aadhaar verification',
       done: aadhaarAllDone,
       subSteps: aadhaarSubSteps
     },
-    { 
-      key: 'panVerification', 
-      label: 'PAN verification', 
+    {
+      key: 'panVerification',
+      label: 'PAN verification',
       done: panAllDone,
       subSteps: panSubSteps
     },
@@ -366,16 +366,16 @@ const calculateKycStatus = (ctx) => {
   const pendingInfo = getPendingSteps(ctx);
   const completedSteps = pendingInfo.steps.filter(s => s.done).length;
   const totalSteps = 7;
-  
+
   let kycStatus = 'NO_KYC';
   let kycSteps = completedSteps;
-  
+
   if (completedSteps >= 4 && completedSteps < totalSteps) {
     kycStatus = 'HALF_KYC';
   } else if (completedSteps === totalSteps) {
     kycStatus = 'FULL_KYC';
   }
-  
+
   return { kycStatus, kycSteps, completedSteps, totalSteps };
 };
 
@@ -383,12 +383,12 @@ const calculateKycStatus = (ctx) => {
 const generateTempPassword = () => {
   const numbers = '0123456789';
   let password = '';
-  
+
   // Generate 8 random digits
   for (let i = 0; i < 8; i++) {
     password += numbers[Math.floor(Math.random() * numbers.length)];
   }
-  
+
   return password;
 };
 
@@ -398,7 +398,7 @@ const updateKycStatus = async (userId, companyId, ctx) => {
     // Reload user and context to get latest data
     const user = await dbService.findOne(model.user, { id: userId, companyId: companyId, isDeleted: false });
     if (!user) return;
-    
+
     // Get latest context data
     const outlet = await dbService.findOne(model.outlet, { refId: userId, companyId: companyId });
     const customer = await dbService.findOne(model.customer, { mobile: user.mobileNo });
@@ -423,7 +423,7 @@ const updateKycStatus = async (userId, companyId, ctx) => {
         isDeleted: false
       })
     ]);
-    
+
     // Calculate KYC status
     const kycInfo = calculateKycStatus({
       user: user,
@@ -432,13 +432,13 @@ const updateKycStatus = async (userId, companyId, ctx) => {
       aadhaarDoc: aadhaarDoc || ctx?.aadhaarDoc,
       panDoc: panDoc || ctx?.panDoc
     });
-    
+
     // Update KYC status and steps
     await dbService.update(model.user, { id: userId }, {
       kycStatus: kycInfo.kycStatus,
       kycSteps: kycInfo.kycSteps
     });
-    
+
     return kycInfo;
   } catch (error) {
     console.error('Error updating KYC status:', error);
@@ -453,11 +453,11 @@ const revertKycVerification = async (userId, companyId, kycType) => {
     if (!user) return;
 
     const updateData = {};
-    
+
     if (kycType === 'pan') {
       // Revert PAN verification
       updateData.panVerify = false;
-      
+
       // Delete PAN digilocker document
       const panDoc = await dbService.findOne(model.digilockerDocument, {
         refId: userId,
@@ -476,7 +476,7 @@ const revertKycVerification = async (userId, companyId, kycType) => {
     } else if (kycType === 'aadhar' || kycType === 'aadhaar') {
       // Revert Aadhaar verification
       updateData.aadharVerify = false;
-      
+
       // Delete Aadhaar digilocker document
       const aadhaarDoc = await dbService.findOne(model.digilockerDocument, {
         refId: userId,
@@ -497,7 +497,7 @@ const revertKycVerification = async (userId, companyId, kycType) => {
     // Update user if any fields need to be reverted
     if (Object.keys(updateData).length > 0) {
       await dbService.update(model.user, { id: userId, companyId: companyId }, updateData);
-      
+
       // Recalculate and update KYC status
       await updateKycStatus(userId, companyId, {});
     }
@@ -583,7 +583,7 @@ const sendSmsMobile = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    if(mobileNo != ctx.userDetails.mobileNo) {
+    if (mobileNo != ctx.userDetails.mobileNo) {
       return res.failure({ message: 'Invalid Mobile Number' });
     }
 
@@ -686,7 +686,7 @@ const resetSmsOtp = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    if(mobileNo != ctx.userDetails.mobileNo) {
+    if (mobileNo != ctx.userDetails.mobileNo) {
       return res.failure({ message: 'Invalid Mobile Number' });
     }
 
@@ -729,10 +729,10 @@ const sendEmailOtp = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
     const user = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
-    if(email != user.email){
+    if (email != user.email) {
       return res.failure({ message: 'Invalid Email Address' });
     }
-    
+
     if (!user) return res.failure({ message: 'User not found' });
     if (!user.email) return res.failure({ message: 'Email not set for user' });
 
@@ -818,12 +818,12 @@ const resetEmailOtp = async (req, res) => {
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
-    const { email } = req.body 
+    const { email } = req.body
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
     const user = await dbService.findOne(model.user, { id: ctx.tokenData.userId, companyId: ctx.tokenData.companyId, isDeleted: false });
-    if(email != user.email){
+    if (email != user.email) {
       return res.failure({ message: 'Invalid Email Address' });
     }
     if (!user) return res.failure({ message: 'User not found' });
@@ -851,26 +851,26 @@ const resetEmailOtp = async (req, res) => {
 
 // Step 4: Aadhaar verification
 const connectAadhaarVerification = async (req, res) => {
-  try{
+  try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
     if (ctx.error) return res.failure({ message: ctx.error });
-    const {redirect_url} = req.body || {};
+    const { redirect_url } = req.body || {};
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
-    
+
     // Append isRedirect=true to redirect_url
     const modifiedRedirectUrl = redirect_url;
-    const existingUser = await dbService.findOne(model.user, { 
-      id: ctx.tokenData.userId, 
-      companyId: ctx.tokenData.companyId, 
-      isDeleted: false 
+    const existingUser = await dbService.findOne(model.user, {
+      id: ctx.tokenData.userId,
+      companyId: ctx.tokenData.companyId,
+      isDeleted: false
     });
-    if(!existingUser) return res.failure({ message: 'User not found' });
-    
+    if (!existingUser) return res.failure({ message: 'User not found' });
+
     const allDigilockerDocuments = await dbService.findAll(model.digilockerDocument, {
       refId: ctx.tokenData.userId,
       companyId: ctx.tokenData.companyId,
@@ -879,23 +879,23 @@ const connectAadhaarVerification = async (req, res) => {
     }, {
       sort: { id: -1 }
     });
-    
+
     const existingDoc = allDigilockerDocuments && allDigilockerDocuments.length > 0 ? allDigilockerDocuments[0] : null;
-    
+
     if (existingDoc && existingUser.aadharVerify) {
       // Use existing context with the existingDoc
-      const pendingInfo = getPendingSteps({ 
-        userDetails: ctx.userDetails, 
-        outletDetails: ctx.outletDetails, 
-        customerBankDetails: ctx.customerBankDetails, 
-        aadhaarDoc: existingDoc, 
-        panDoc: ctx.panDoc 
+      const pendingInfo = getPendingSteps({
+        userDetails: ctx.userDetails,
+        outletDetails: ctx.outletDetails,
+        customerBankDetails: ctx.customerBankDetails,
+        aadhaarDoc: existingDoc,
+        panDoc: ctx.panDoc
       });
-      return res.success({ 
+      return res.success({
         message: 'Aadhaar verification already processed. Please download from digilocker',
-        data: { 
-          steps: pendingInfo.steps, 
-          pending: pendingInfo.pending 
+        data: {
+          steps: pendingInfo.steps,
+          pending: pendingInfo.pending
         }
       });
     }
@@ -917,7 +917,7 @@ const connectAadhaarVerification = async (req, res) => {
           isActive: true
         });
       }
-      return res.success({ message: 'Aadhaar Connection Successful' , data: response });
+      return res.success({ message: 'Aadhaar Connection Successful', data: response });
     } else {
       return res.failure({ message: 'Failed to connect Aadhaar verification', data: response });
     }
@@ -928,7 +928,7 @@ const connectAadhaarVerification = async (req, res) => {
 
 // Step 5: PAN verification
 const connectPanVerification = async (req, res) => {
-  try{
+  try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
@@ -936,48 +936,48 @@ const connectPanVerification = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    const {redirect_url} = req.body || {};
+    const { redirect_url } = req.body || {};
     if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
-    
-    const existingUser = await dbService.findOne(model.user, { 
-      id: ctx.tokenData.userId, 
-      companyId: ctx.tokenData.companyId, 
-      isDeleted: false 
+
+    const existingUser = await dbService.findOne(model.user, {
+      id: ctx.tokenData.userId,
+      companyId: ctx.tokenData.companyId,
+      isDeleted: false
     });
-    if(!existingUser) return res.failure({ message: 'User not found' });
-    
+    if (!existingUser) return res.failure({ message: 'User not found' });
+
     console.log(`[connectPanVerification] User ID: ${ctx.tokenData.userId}, Company ID: ${ctx.tokenData.companyId}`);
-    
+
     const existingDoc = await dbService.findOne(model.digilockerDocument, {
       refId: ctx.tokenData.userId,
       companyId: ctx.tokenData.companyId,
       documentType: 'PAN',
       isDeleted: false
     });
-    
+
     if (existingDoc && existingUser.panVerify) {
       console.log(`[connectPanVerification] PAN already verified for user ${ctx.tokenData.userId}`);
       // Use existing context with the existingDoc
-      const pendingInfo = getPendingSteps({ 
-        userDetails: ctx.userDetails, 
-        outletDetails: ctx.outletDetails, 
-        customerBankDetails: ctx.customerBankDetails, 
-        aadhaarDoc: ctx.aadhaarDoc, 
-        panDoc: existingDoc 
+      const pendingInfo = getPendingSteps({
+        userDetails: ctx.userDetails,
+        outletDetails: ctx.outletDetails,
+        customerBankDetails: ctx.customerBankDetails,
+        aadhaarDoc: ctx.aadhaarDoc,
+        panDoc: existingDoc
       });
-      return res.success({ 
+      return res.success({
         message: 'PAN verification already processed. Please download from digilocker',
-        data: { 
-          steps: pendingInfo.steps, 
-          pending: pendingInfo.pending 
+        data: {
+          steps: pendingInfo.steps,
+          pending: pendingInfo.pending
         }
       });
     }
-    
+
     console.log(`[connectPanVerification] Creating PAN verification URL for user ${ctx.tokenData.userId}`);
     const response = await ekycHub.createPanVerificationUrl(redirect_url);
     console.log(`[connectPanVerification] API Response status: ${response?.status}`);
-    
+
     if (response && response.status === 'Success') {
       const { verification_id, reference_id } = response;
       if (verification_id) {
@@ -994,7 +994,7 @@ const connectPanVerification = async (req, res) => {
         });
         console.log(`[connectPanVerification] Document record created for user ${ctx.tokenData.userId}, verification_id: ${verification_id}`);
       }
-      return res.success({ message: 'PAN Connection Successful' , data: response });
+      return res.success({ message: 'PAN Connection Successful', data: response });
     } else {
       console.error(`[connectPanVerification] Failed response:`, response);
       return res.failure({ message: 'Failed to connect PAN verification', data: response });
@@ -1008,7 +1008,7 @@ const connectPanVerification = async (req, res) => {
 
 // Get Digilocker Both Pan and Aadhaar Documents
 const getDigilockerDocuments = async (req, res) => {
-  try{
+  try {
     if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
     const token = getTokenFromReq(req);
     const ctx = await loadContextByToken(token);
@@ -1016,10 +1016,10 @@ const getDigilockerDocuments = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    
+
     const { document_type } = req.body || {};
     if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
-    
+
     const docType = document_type.toUpperCase();
     if (docType !== 'AADHAAR' && docType !== 'PAN') {
       return res.failure({ message: 'Invalid document type. Must be AADHAAR or PAN' });
@@ -1030,12 +1030,12 @@ const getDigilockerDocuments = async (req, res) => {
     const docTypeLabel = docType === 'AADHAAR' ? 'Aadhaar' : 'PAN';
 
     // Find user
-    const existingUser = await dbService.findOne(model.user, { 
-      id: userId, 
-      companyId: companyId, 
-      isDeleted: false 
+    const existingUser = await dbService.findOne(model.user, {
+      id: userId,
+      companyId: companyId,
+      isDeleted: false
     });
-    if(!existingUser) {
+    if (!existingUser) {
       return res.failure({ message: 'User not found' });
     }
 
@@ -1056,9 +1056,9 @@ const getDigilockerDocuments = async (req, res) => {
     const existingDigilockerDocument = allDigilockerDocuments[0];
 
     // Validate document ownership and required fields
-    if (existingDigilockerDocument.refId !== userId || 
-        existingDigilockerDocument.companyId !== companyId || 
-        existingDigilockerDocument.documentType !== docType) {
+    if (existingDigilockerDocument.refId !== userId ||
+      existingDigilockerDocument.companyId !== companyId ||
+      existingDigilockerDocument.documentType !== docType) {
       return res.failure({ message: 'Document access denied. Data mismatch detected.' });
     }
 
@@ -1067,11 +1067,11 @@ const getDigilockerDocuments = async (req, res) => {
     }
 
     const { verificationId: verification_id, referenceId: reference_id } = existingDigilockerDocument;
-    
+
     // Check if we can return cached data
     const isUserVerified = docType === 'AADHAAR' ? existingUser.aadharVerify : existingUser.panVerify;
-    const hasFullData = (docType === 'AADHAAR' && existingDigilockerDocument.name) || 
-                       (docType === 'PAN' && existingDigilockerDocument.panNumber);
+    const hasFullData = (docType === 'AADHAAR' && existingDigilockerDocument.name) ||
+      (docType === 'PAN' && existingDigilockerDocument.panNumber);
     const hasAddress = docType === 'AADHAAR' && existingDigilockerDocument.address;
     let response;
     if (isUserVerified && hasFullData) {
@@ -1107,10 +1107,10 @@ const getDigilockerDocuments = async (req, res) => {
     } else {
       // Fetch from API
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
-      
+
       const responseStatus = (response?.status || '').toString().toUpperCase();
       const isSuccess = responseStatus === 'SUCCESS' || responseStatus === 'SUCCEED' || responseStatus === 'Success';
-      
+
       if (response && isSuccess) {
         // Process successful response
         const docData = response.data || response;
@@ -1121,7 +1121,7 @@ const getDigilockerDocuments = async (req, res) => {
           txid: docData.txid || null,
           fullResponse: response
         };
-        
+
         // Map document-specific fields
         if (docType === 'AADHAAR') {
           updateData.name = docData.name || null;
@@ -1143,11 +1143,11 @@ const getDigilockerDocuments = async (req, res) => {
             updateData.xmlFile = docData.xml_file;
           }
         }
-        
+
         // Update document
         await dbService.update(
           model.digilockerDocument,
-          { 
+          {
             id: existingDigilockerDocument.id,
             refId: userId,
             companyId: companyId,
@@ -1156,35 +1156,35 @@ const getDigilockerDocuments = async (req, res) => {
           },
           updateData
         );
-        
+
         // Update user verification status
-        const userUpdateData = docType === 'AADHAAR' 
-          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }), ...(updateData.address && { fullAddress: updateData.address}) }
+        const userUpdateData = docType === 'AADHAAR'
+          ? { aadharVerify: true, ...(updateData.name && { name: updateData.name }), ...(updateData.dob && { dob: updateData.dob }), ...(updateData.address && { fullAddress: updateData.address }) }
           : { panVerify: true };
-        
-        await dbService.update(model.user, { 
+
+        await dbService.update(model.user, {
           id: userId,
           companyId: companyId,
           isDeleted: false
         }, userUpdateData);
-        
+
         // Update KYC status
-        await updateKycStatus(userId, companyId, { 
-          aadhaarDoc: docType === 'AADHAAR' ? existingDigilockerDocument : ctx?.aadhaarDoc, 
-          panDoc: docType === 'PAN' ? existingDigilockerDocument : ctx?.panDoc 
+        await updateKycStatus(userId, companyId, {
+          aadhaarDoc: docType === 'AADHAAR' ? existingDigilockerDocument : ctx?.aadhaarDoc,
+          panDoc: docType === 'PAN' ? existingDigilockerDocument : ctx?.panDoc
         });
       } else {
         // Handle API errors
         const responseData = response?.data || response || {};
         const errorCode = responseData.code || responseData.error_code || null;
         const errorMessage = (responseData.message || responseData.error_message || '').toLowerCase();
-        
-        const isExpiredOrPending = errorCode === 'url_expired' || 
-                                   errorCode === 'validation_pending' || 
-                                   errorMessage.includes('url expired') || 
-                                   errorMessage.includes('expired') ||
-                                   errorMessage.includes('validation in process');
-        
+
+        const isExpiredOrPending = errorCode === 'url_expired' ||
+          errorCode === 'validation_pending' ||
+          errorMessage.includes('url expired') ||
+          errorMessage.includes('expired') ||
+          errorMessage.includes('validation in process');
+
         if (isExpiredOrPending) {
           // Delete the latest document request
           await dbService.destroy(model.digilockerDocument, {
@@ -1193,37 +1193,37 @@ const getDigilockerDocuments = async (req, res) => {
             companyId: companyId,
             documentType: docType
           });
-          
+
           // Reset user verification flag
           const resetData = docType === 'AADHAAR' ? { aadharVerify: false } : { panVerify: false };
-          await dbService.update(model.user, { 
+          await dbService.update(model.user, {
             id: userId,
             companyId: companyId,
             isDeleted: false
           }, resetData);
-          
+
           // Update KYC status
-          await updateKycStatus(userId, companyId, { 
-            aadhaarDoc: docType === 'AADHAAR' ? null : ctx?.aadhaarDoc, 
-            panDoc: docType === 'PAN' ? null : ctx?.panDoc 
+          await updateKycStatus(userId, companyId, {
+            aadhaarDoc: docType === 'AADHAAR' ? null : ctx?.aadhaarDoc,
+            panDoc: docType === 'PAN' ? null : ctx?.panDoc
           });
-          
-          const errorMsg = errorCode === 'validation_pending' 
+
+          const errorMsg = errorCode === 'validation_pending'
             ? `Validation is in process. Please reconnect your ${docTypeLabel}.`
             : `Digilocker request URL has expired. Please reconnect your ${docTypeLabel}.`;
-          
-          return res.failure({ 
-            message: errorMsg, 
+
+          return res.failure({
+            message: errorMsg,
             data: {
               ...responseData,
               requiresReconnect: true
             }
           });
         }
-        
-        return res.failure({ 
-          message: `Failed to fetch ${docTypeLabel} document from digilocker`, 
-          data: response 
+
+        return res.failure({
+          message: `Failed to fetch ${docTypeLabel} document from digilocker`,
+          data: response
         });
       }
     }
@@ -1258,7 +1258,7 @@ const getDigilockerDocuments = async (req, res) => {
         );
       }
     }
-    
+
     const message = `${docTypeLabel} Verification Downloaded`;
     return res.success({ message, data: response.data || response });
   }
@@ -1278,11 +1278,11 @@ const postShopDetails = async (req, res) => {
       return res.failure({ message: 'Invalid Domain' });
     }
     const { shopName, longitude, ipAddress, latitude } = req.body || {};
-  
-    if(!shopName) return res.failure({ message: 'Shop name is required' });
-    if(!longitude) return res.failure({ message: 'Longitude is required' });
-    if(!ipAddress) return res.failure({ message: 'IP address is required' });
-    if(!latitude) return res.failure({ message: 'Latitude is required' });
+
+    if (!shopName) return res.failure({ message: 'Shop name is required' });
+    if (!longitude) return res.failure({ message: 'Longitude is required' });
+    if (!ipAddress) return res.failure({ message: 'IP address is required' });
+    if (!latitude) return res.failure({ message: 'Latitude is required' });
 
     // Reverse geocode to get complete address
     const addressData = await googleMap.reverseGeocode(latitude, longitude);
@@ -1342,7 +1342,7 @@ const postShopDetails = async (req, res) => {
 
     const outletPayload = {
       shopName,
-      shopAddress: formatted_address||completeAddress,
+      shopAddress: formatted_address || completeAddress,
       ...(shopImageKey ? { shopImage: shopImageKey } : {}),
       outletGoogleMapsLink: addressData?.place_google_maps_link,
       shopCity: addressData?.address_components?.city,
@@ -1361,7 +1361,7 @@ const postShopDetails = async (req, res) => {
     );
 
     // Set shopDetailsVerify to true in user table (prevents multiple shops)
-    await dbService.update(model.user, { id: ctx.user.id }, { shopDetailsVerify: true});
+    await dbService.update(model.user, { id: ctx.user.id }, { shopDetailsVerify: true });
 
     // Update KYC status
     await updateKycStatus(ctx.user.id, ctx.company.id, { outlet, customerBank: ctx.customerBank, aadhaarDoc: ctx.aadhaarDoc, panDoc: ctx.panDoc });
@@ -1379,33 +1379,33 @@ const postShopDetails = async (req, res) => {
 // Step 7: Bank details (CustomerBank)
 const calculateStringSimilarity = (str1, str2) => {
   if (!str1 || !str2) return 0;
-  
+
   // Normalize strings: trim, lowercase, remove extra spaces
   const normalize = (str) => {
     return (str || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
   };
-  
+
   const s1 = normalize(str1);
   const s2 = normalize(str2);
-  
+
   // If both strings are empty after normalization
   if (!s1 && !s2) return 100;
   if (!s1 || !s2) return 0;
-  
+
   // If strings are exactly equal
   if (s1 === s2) return 100;
-  
+
   // Calculate Levenshtein distance
   const len1 = s1.length;
   const len2 = s2.length;
-  
+
   // Create a matrix for dynamic programming
   const matrix = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
-  
+
   // Initialize first row and column
   for (let i = 0; i <= len1; i++) matrix[i][0] = i;
   for (let j = 0; j <= len2; j++) matrix[0][j] = j;
-  
+
   // Fill the matrix
   for (let i = 1; i <= len1; i++) {
     for (let j = 1; j <= len2; j++) {
@@ -1417,13 +1417,13 @@ const calculateStringSimilarity = (str1, str2) => {
       );
     }
   }
-  
+
   const distance = matrix[len1][len2];
   const maxLen = Math.max(len1, len2);
-  
+
   // Calculate similarity percentage
   const similarity = maxLen === 0 ? 100 : ((maxLen - distance) / maxLen) * 100;
-  
+
   return Math.round(similarity * 100) / 100; // Round to 2 decimal places
 };
 
@@ -1569,8 +1569,11 @@ const postBankDetails = async (req, res) => {
       ifsc,
       city: city || null,
       branch: branch || null,
+      isFundTransfer: true,
+      isPayout: true,
       isActive: true,
-      isPrimary: true
+      isPrimary: true,
+
     };
     let customerBank = ctx.customerBank;
     if (customerBank) {
@@ -1823,12 +1826,12 @@ const normalizeDate = (dateString) => {
   const dateStr = dateString.toString().trim();
   const match = dateStr.match(/(\d{1,4})[-\/\.](\d{1,2})[-\/\.](\d{2,4})/);
   if (!match) return dateStr;
-  
+
   let day, month, year;
   const part1 = match[1];
   const part2 = match[2];
   const part3 = match[3];
-  
+
   if (part1.length === 4) {
     year = part1;
     month = part2.padStart(2, '0');
@@ -1843,34 +1846,34 @@ const normalizeDate = (dateString) => {
     const yy = parseInt(part3);
     year = yy < 50 ? `20${part3.padStart(2, '0')}` : `19${part3.padStart(2, '0')}`;
   }
-  
+
   return `${day}-${month}-${year}`;
 };
 
 const extractBase64FromImage = async (imageString) => {
   if (!imageString) return null;
-  
+
   // Handle data URL format: data:image/jpeg;base64,/9j/4AAQ...
   if (imageString.startsWith('data:image')) {
     return imageString.split(',')[1];
   }
-  
+
   // Check if it's a URL (S3, CDN, or HTTP/HTTPS)
   if (imageString.startsWith('http://') || imageString.startsWith('https://')) {
     try {
       // Download the image from URL
       const response = await axios.get(imageString, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
-      
+
       // Validate it's a valid image
       const isJPEG = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
       const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
-      
+
       if (!isJPEG && !isPNG) {
         console.error('Downloaded image is not JPEG or PNG. URL:', imageString);
         return null;
       }
-      
+
       // Convert to base64
       return buffer.toString('base64');
     } catch (error) {
@@ -1878,7 +1881,7 @@ const extractBase64FromImage = async (imageString) => {
       return null;
     }
   }
-  
+
   // If it's already a base64 string, return as is
   // Validate it's a valid base64 string
   try {
@@ -1891,50 +1894,50 @@ const extractBase64FromImage = async (imageString) => {
   } catch (e) {
     console.error('Error validating base64 string:', e);
   }
-  
+
   return null;
 };
 
 // Helper function to validate and convert base64 to buffer
 const validateAndConvertBase64 = (base64String) => {
   if (!base64String) return null;
-  
+
   try {
     // Remove any whitespace
     const cleanBase64 = base64String.replace(/\s/g, '');
-    
+
     // Validate base64 format
     if (!/^[A-Za-z0-9+/=]+$/.test(cleanBase64)) {
       console.error('Invalid base64 format');
       return null;
     }
-    
+
     // Convert to buffer
     const buffer = Buffer.from(cleanBase64, 'base64');
-    
+
     // Validate buffer is not empty and has minimum size (at least 100 bytes for a valid image)
     if (buffer.length < 100) {
       console.error('Image buffer too small:', buffer.length);
       return null;
     }
-    
+
     // Validate it's a valid image format (JPEG or PNG)
     // JPEG starts with FF D8 FF
     // PNG starts with 89 50 4E 47
     const isJPEG = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
     const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
-    
+
     if (!isJPEG && !isPNG) {
       console.error('Invalid image format. Expected JPEG or PNG. First bytes:', buffer.slice(0, 4));
       return null;
     }
-    
+
     // AWS Rekognition has a 15MB limit
     if (buffer.length > 15 * 1024 * 1024) {
       console.error('Image too large:', buffer.length, 'bytes');
       return null;
     }
-    
+
     return buffer;
   } catch (error) {
     console.error('Error converting base64 to buffer:', error);
@@ -1946,14 +1949,14 @@ const cleanupOldImages = async (oldFrontKey, oldBackKey, newFrontKey, newBackKey
   const cleanupPromises = [];
   if (oldFrontKey && oldFrontKey !== newFrontKey) {
     cleanupPromises.push(
-      imageService.deleteImageFromS3(oldFrontKey).catch(err => 
+      imageService.deleteImageFromS3(oldFrontKey).catch(err =>
         console.error('Error deleting old front image from S3:', err)
       )
     );
   }
   if (oldBackKey && oldBackKey !== newBackKey) {
     cleanupPromises.push(
-      imageService.deleteImageFromS3(oldBackKey).catch(err => 
+      imageService.deleteImageFromS3(oldBackKey).catch(err =>
         console.error('Error deleting old back image from S3:', err)
       )
     );
@@ -1970,32 +1973,32 @@ const uploadAadharDocuments = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    
+
     const front_photo = req.files?.front_photo?.[0];
     const back_photo = req.files?.back_photo?.[0];
-    
+
     if (!front_photo || !back_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
-      return res.failure({ 
+      return res.failure({
         message: !front_photo ? 'Front photo is required' : 'Back photo is required',
         receivedFields: receivedFields || 'none',
         expectedFields: ['front_photo', 'back_photo']
       });
     }
-    
+
     const [existingUser, existingAadharDetails] = await Promise.all([
       dbService.findOne(model.user, { id: ctx.user.id }),
-      dbService.findOne(model.digilockerDocument, { 
-        refId: ctx.user.id, 
-        companyId: ctx.company.id, 
-        documentType: 'AADHAAR', 
-        isDeleted: false 
+      dbService.findOne(model.digilockerDocument, {
+        refId: ctx.user.id,
+        companyId: ctx.company.id,
+        documentType: 'AADHAAR',
+        isDeleted: false
       })
     ]);
-    
+
     const oldFrontImageKey = extractS3Key(existingUser?.aadharFrontImage);
     const oldBackImageKey = extractS3Key(existingUser?.aadharBackImage);
-    
+
     // Extract data from both images using AWS Textract service
     // Processes front image, back image, and extracts photo from front image in parallel
     const [frontData, backData, frontPhoto] = await Promise.all([
@@ -2006,7 +2009,7 @@ const uploadAadharDocuments = async (req, res) => {
 
     // Validate that data extraction was successful for front image
     if (!frontData.success) {
-      return res.failure({ 
+      return res.failure({
         message: frontData.error || 'Failed to extract data from front image',
         success: false
       });
@@ -2014,7 +2017,7 @@ const uploadAadharDocuments = async (req, res) => {
 
     // Validate that data extraction was successful for back image
     if (!backData.success) {
-      return res.failure({ 
+      return res.failure({
         message: backData.error || 'Failed to extract data from back image',
         success: false
       });
@@ -2031,8 +2034,8 @@ const uploadAadharDocuments = async (req, res) => {
     const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
     const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
 
-    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber 
-      ? frontAadhaarNumber === backAadhaarNumber 
+    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber
+      ? frontAadhaarNumber === backAadhaarNumber
       : false;
 
     // Upload images to S3 after successful extraction
@@ -2054,7 +2057,7 @@ const uploadAadharDocuments = async (req, res) => {
         ctx.user.id
       )
     ]);
-    
+
     const frontImageS3Key = frontUploadResult.key;
     const backImageS3Key = backUploadResult.key;
 
@@ -2062,10 +2065,10 @@ const uploadAadharDocuments = async (req, res) => {
     if (!frontAadhaarNumber && !backAadhaarNumber) {
       // Delete newly uploaded images from S3 since validation failed
       await Promise.all([
-        imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
           console.error('Error deleting front image from S3:', err)
         ),
-        imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(backImageS3Key).catch(err =>
           console.error('Error deleting back image from S3:', err)
         )
       ]);
@@ -2075,16 +2078,16 @@ const uploadAadharDocuments = async (req, res) => {
     if (!aadhaar_numbers_match) {
       // Delete newly uploaded images from S3 since validation failed
       await Promise.all([
-        imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
           console.error('Error deleting front image from S3:', err)
         ),
-        imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(backImageS3Key).catch(err =>
           console.error('Error deleting back image from S3:', err)
         )
       ]);
       return res.failure({ message: 'Aadhaar numbers from front and back images do not match' });
     }
-    
+
     const extractedData = {
       aadhaar_number: frontAadhaarNumber || backAadhaarNumber || null,
       photo: frontPhoto || null,
@@ -2104,19 +2107,19 @@ const uploadAadharDocuments = async (req, res) => {
       if (existingAadharDetails.uid && extractedData.aadhaar_number) {
         const existingLast4 = getLast4Digits(existingAadharDetails.uid);
         const extractedLast4 = getLast4Digits(extractedData.aadhaar_number);
-        
+
         if (existingLast4 && extractedLast4) {
           if (existingLast4 !== extractedLast4) {
             // Delete newly uploaded images from S3 since validation failed and we won't save them
             await Promise.all([
-              imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
                 console.error('Error deleting front image from S3:', err)
               ),
-              imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(backImageS3Key).catch(err =>
                 console.error('Error deleting back image from S3:', err)
               )
             ]);
-            
+
             return res.failure({ message: 'pls check your uploaded image' });
           }
           validationResults.aadhaarLast4Match = true;
@@ -2125,7 +2128,7 @@ const uploadAadharDocuments = async (req, res) => {
 
       const hasExistingDob = !!existingAadharDetails.dob;
       const hasExtractedDob = !!extractedData.dob;
-      
+
       if (hasExistingDob && hasExtractedDob) {
         const existingDob = normalizeDate(existingAadharDetails.dob);
         const extractedDob = normalizeDate(extractedData.dob);
@@ -2160,23 +2163,23 @@ const uploadAadharDocuments = async (req, res) => {
           const extractedPhotoBase64ForRekognition = extractedPhotoBuffer.toString('base64');
 
           const faceComparison = await rekognitionService.compareFaces(
-            photoLinkBase64ForRekognition, 
+            photoLinkBase64ForRekognition,
             extractedPhotoBase64ForRekognition
           );
-          console.log("faceComparison",faceComparison);
-          
+          console.log("faceComparison", faceComparison);
+
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
-          if(!validationResults.photoMatch){
+          if (!validationResults.photoMatch) {
             // Delete newly uploaded images from S3 since photo validation failed and we won't save them
             await Promise.all([
-              imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
                 console.error('Error deleting front image from S3:', err)
               ),
-              imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(backImageS3Key).catch(err =>
                 console.error('Error deleting back image from S3:', err)
               )
             ]);
-            
+
             return res.failure({ message: 'pls check your uploaded image' });
           }
           if (!faceComparison.success) {
@@ -2192,8 +2195,8 @@ const uploadAadharDocuments = async (req, res) => {
     }
 
     if (existingAadharDetails) {
-      validationResults.allValidationsPassed = 
-        validationResults.aadhaarLast4Match && 
+      validationResults.allValidationsPassed =
+        validationResults.aadhaarLast4Match &&
         validationResults.dobMatch &&
         validationResults.photoMatch;
     }
@@ -2207,21 +2210,21 @@ const uploadAadharDocuments = async (req, res) => {
       (!existingAadharDetails || validationResults.allValidationsPassed);
     const aadharDetailsPayload = sanitizedAadhaarNumber
       ? {
-          aadhaarLast4: aadharLast4 || null,
-          aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
-        }
+        aadhaarLast4: aadharLast4 || null,
+        aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
+      }
       : null;
 
     const updateData = {
-      aadharFrontImage: frontImageS3Key, 
+      aadharFrontImage: frontImageS3Key,
       aadharBackImage: backImageS3Key,
       isAadharUploaded: true
     };
-    
+
     if (aadharDetailsPayload) {
       updateData.aadharDetails = aadharDetailsPayload;
     }
-    
+
     if (extractedData.aadhaar_number && extractedData.aadhaar_numbers_match) {
       if (existingAadharDetails) {
         if (validationResults.allValidationsPassed) {
@@ -2231,13 +2234,13 @@ const uploadAadharDocuments = async (req, res) => {
         updateData.aadharVerify = true;
       }
     }
-    
+
     try {
       await dbService.update(model.user, { id: ctx.user.id }, updateData);
     } catch (dbError) {
       const errorMessage = dbError.message || dbError.parent?.message || '';
-      if (dbError.name === 'SequelizeDatabaseError' && 
-          (errorMessage.includes('too long') || errorMessage.includes('value too long'))) {
+      if (dbError.name === 'SequelizeDatabaseError' &&
+        (errorMessage.includes('too long') || errorMessage.includes('value too long'))) {
         if (aadharDetailsPayload) {
           const minimalDetails = {
             aadhaarLast4: aadharDetailsPayload.aadhaarLast4 || null,
@@ -2258,12 +2261,12 @@ const uploadAadharDocuments = async (req, res) => {
         throw dbError;
       }
     }
-    
+
     await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
-    
+
     // Update KYC status after Aadhaar upload
     await updateKycStatus(ctx.user.id, ctx.company.id, ctx);
-    
+
     let responseMessage = 'Aadhar documents processed and uploaded successfully';
     if (existingAadharDetails) {
       if (validationResults.allValidationsPassed) {
@@ -2285,8 +2288,8 @@ const uploadAadharDocuments = async (req, res) => {
       }
     }
 
-    return res.success({ 
-      message: responseMessage, 
+    return res.success({
+      message: responseMessage,
       data: {
         ...extractedData
       }
@@ -2307,21 +2310,21 @@ const uploadPanDocuments = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    
+
     const front_photo = req.files?.front_photo?.[0];
-    
+
     if (!front_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
-      return res.failure({ 
+      return res.failure({
         message: 'Front photo is required',
         receivedFields: receivedFields || 'none',
         expectedFields: ['front_photo']
       });
     }
-    
+
     // Call LLM service for PAN verification first
     const llmResult = await llmService.llmPanVerification(front_photo);
-    
+
     // Initialize response variables
     let frontImageS3Key = null;
     let backImageS3Key = null;
@@ -2329,15 +2332,15 @@ const uploadPanDocuments = async (req, res) => {
     let panExistsInDigilocker = false;
     let uploaded = false;
     let verificationMessage = llmResult?.message || 'PAN card processed successfully';
-    
+
     // Only proceed if LLM verification succeeds
     if (llmResult?.success && llmResult?.data?.pan_number) {
       const extractedPanNumber = llmResult.data.pan_number;
-      
+
       // Read static back image file
       const staticBackImagePath = path.join(__dirname, '../../../public/panbackside.jpeg');
       const staticBackImageBuffer = fs.readFileSync(staticBackImagePath);
-      
+
       // Parallelize: Get existing user data, check digilocker PAN, and fetch Aadhaar doc
       const [existingUser, digilockerPanDoc, aadhaarDocResult] = await Promise.all([
         dbService.findOne(model.user, { id: ctx.user.id }),
@@ -2356,43 +2359,43 @@ const uploadPanDocuments = async (req, res) => {
           isDeleted: false
         })
       ]);
-      
+
       // Use Aadhaar doc from context if available, otherwise use fetched result
       const aadhaarDoc = ctx.aadhaarDoc || aadhaarDocResult;
-      
+
       const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
       const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
-      
+
       // Check if PAN exists in digilocker
       if (digilockerPanDoc) {
         panExistsInDigilocker = true;
       }
-      
+
       // Perform face comparison first (before uploading to S3)
       // Use front_photo.buffer directly instead of base64 from LLM result
       if (aadhaarDoc?.photoLink && front_photo.buffer) {
         try {
           // Extract base64 from Aadhaar photo
           const aadhaarPhotoBase64 = await extractBase64FromImage(aadhaarDoc.photoLink);
-          
+
           // Use front_photo.buffer directly for PAN photo (convert to base64)
           const panPhotoBase64 = front_photo.buffer.toString('base64');
-          
+
           if (aadhaarPhotoBase64 && panPhotoBase64) {
             const aadhaarBuffer = validateAndConvertBase64(aadhaarPhotoBase64);
             const panBuffer = validateAndConvertBase64(panPhotoBase64);
-            
+
             if (aadhaarBuffer && panBuffer) {
               faceComparisonResult = await rekognitionService.compareFaces(
                 aadhaarBuffer.toString('base64'),
                 panBuffer.toString('base64')
               );
-              
+
               // Only proceed with S3 upload if face matches
               if (faceComparisonResult?.success && faceComparisonResult?.matched) {
                 uploaded = true;
                 verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';
-                
+
                 // Upload images to S3 only if face comparison matches
                 const [frontUploadResult, backUploadResult] = await Promise.all([
                   imageService.uploadImageToS3(
@@ -2412,10 +2415,10 @@ const uploadPanDocuments = async (req, res) => {
                     ctx.user.id
                   )
                 ]);
-                
+
                 frontImageS3Key = frontUploadResult.key;
                 backImageS3Key = backUploadResult.key;
-                
+
                 // Update user records with uploaded image keys
                 const updateData = {
                   panCardFrontImage: frontImageS3Key,
@@ -2423,10 +2426,10 @@ const uploadPanDocuments = async (req, res) => {
                   panVerify: true,
                   isPanUploaded: true
                 };
-                
+
                 await dbService.update(model.user, { id: ctx.user.id }, updateData);
                 await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
-                
+
                 // Update KYC status after PAN upload
                 await updateKycStatus(ctx.user.id, ctx.company.id, { aadhaarDoc: aadhaarDoc });
               } else {
@@ -2444,7 +2447,7 @@ const uploadPanDocuments = async (req, res) => {
         verificationMessage = 'Aadhaar photo not available for verification';
       }
     }
-    
+
     // Handle failure cases - return failure response
     // Case 1: LLM verification failed
     if (!llmResult?.success) {
@@ -2460,7 +2463,7 @@ const uploadPanDocuments = async (req, res) => {
         }
       });
     }
-    
+
     // Case 2: Face comparison failed (matched: false)
     if (faceComparisonResult && !faceComparisonResult.matched) {
       return res.failure({
@@ -2478,7 +2481,7 @@ const uploadPanDocuments = async (req, res) => {
         }
       });
     }
-    
+
     // Case 3: Aadhaar photo not available (face comparison couldn't be performed)
     if (!faceComparisonResult && llmResult?.success) {
       return res.failure({
@@ -2493,7 +2496,7 @@ const uploadPanDocuments = async (req, res) => {
         }
       });
     }
-    
+
     // Success case: Face comparison matched - prepare simplified response
     const llmVerificationResponse = {
       success: llmResult?.success || false,
@@ -2504,8 +2507,8 @@ const uploadPanDocuments = async (req, res) => {
         similarity: faceComparisonResult.similarity
       } : null
     };
-    
-    return res.success({ 
+
+    return res.success({
       message: 'PAN documents uploaded successfully',
       data: {
         panCardFrontImage: frontImageS3Key,
@@ -2548,15 +2551,15 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
     if (!ensureDomainMatches(req, ctx.company)) {
       return res.failure({ message: 'Invalid Domain' });
     }
-    
+
     // Extract uploaded files
     const front_photo = req.files?.front_photo?.[0];
     const back_photo = req.files?.back_photo?.[0];
-    
+
     // Validate that both photos are provided
     if (!front_photo || !back_photo) {
       const receivedFields = req.files ? Object.keys(req.files).join(', ') : 'none';
-      return res.failure({ 
+      return res.failure({
         message: !front_photo ? 'Front photo is required' : 'Back photo is required',
         receivedFields: receivedFields || 'none',
         expectedFields: ['front_photo', 'back_photo']
@@ -2565,14 +2568,14 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
 
     const [existingUser, existingAadharDetails] = await Promise.all([
       dbService.findOne(model.user, { id: ctx.user.id }),
-      dbService.findOne(model.digilockerDocument, { 
-        refId: ctx.user.id, 
-        companyId: ctx.company.id, 
-        documentType: 'AADHAAR', 
-        isDeleted: false 
+      dbService.findOne(model.digilockerDocument, {
+        refId: ctx.user.id,
+        companyId: ctx.company.id,
+        documentType: 'AADHAAR',
+        isDeleted: false
       })
     ]);
-    
+
     const oldFrontImageKey = extractS3Key(existingUser?.aadharFrontImage);
     const oldBackImageKey = extractS3Key(existingUser?.aadharBackImage);
 
@@ -2586,7 +2589,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
 
     // Validate that data extraction was successful for front image
     if (!frontData.success) {
-      return res.failure({ 
+      return res.failure({
         message: frontData.error || 'Failed to extract data from front image',
         success: false
       });
@@ -2594,7 +2597,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
 
     // Validate that data extraction was successful for back image
     if (!backData.success) {
-      return res.failure({ 
+      return res.failure({
         message: backData.error || 'Failed to extract data from back image',
         success: false
       });
@@ -2611,8 +2614,8 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
     const frontAadhaarNumber = extractExact12Digits(frontData.aadhaar_number);
     const backAadhaarNumber = extractExact12Digits(backData.aadhaar_number);
 
-    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber 
-      ? frontAadhaarNumber === backAadhaarNumber 
+    const aadhaar_numbers_match = frontAadhaarNumber && backAadhaarNumber
+      ? frontAadhaarNumber === backAadhaarNumber
       : false;
 
     // Upload images to S3 after successful extraction
@@ -2634,7 +2637,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
         ctx.user.id
       )
     ]);
-    
+
     const frontImageS3Key = frontUploadResult.key;
     const backImageS3Key = backUploadResult.key;
 
@@ -2642,10 +2645,10 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
     if (!frontAadhaarNumber && !backAadhaarNumber) {
       // Delete newly uploaded images from S3 since validation failed
       await Promise.all([
-        imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
           console.error('Error deleting front image from S3:', err)
         ),
-        imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(backImageS3Key).catch(err =>
           console.error('Error deleting back image from S3:', err)
         )
       ]);
@@ -2655,10 +2658,10 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
     if (!aadhaar_numbers_match) {
       // Delete newly uploaded images from S3 since validation failed
       await Promise.all([
-        imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
           console.error('Error deleting front image from S3:', err)
         ),
-        imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+        imageService.deleteImageFromS3(backImageS3Key).catch(err =>
           console.error('Error deleting back image from S3:', err)
         )
       ]);
@@ -2684,19 +2687,19 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       if (existingAadharDetails.uid && extractedData.aadhaar_number) {
         const existingLast4 = getLast4Digits(existingAadharDetails.uid);
         const extractedLast4 = getLast4Digits(extractedData.aadhaar_number);
-        
+
         if (existingLast4 && extractedLast4) {
           if (existingLast4 !== extractedLast4) {
             // Delete newly uploaded images from S3 since validation failed and we won't save them
             await Promise.all([
-              imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
                 console.error('Error deleting front image from S3:', err)
               ),
-              imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(backImageS3Key).catch(err =>
                 console.error('Error deleting back image from S3:', err)
               )
             ]);
-            
+
             return res.failure({ message: 'pls check your uploaded image' });
           }
           validationResults.aadhaarLast4Match = true;
@@ -2705,7 +2708,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
 
       const hasExistingDob = !!existingAadharDetails.dob;
       const hasExtractedDob = !!extractedData.dob;
-      
+
       if (hasExistingDob && hasExtractedDob) {
         const existingDob = normalizeDate(existingAadharDetails.dob);
         const extractedDob = normalizeDate(extractedData.dob);
@@ -2740,23 +2743,23 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
           const extractedPhotoBase64ForRekognition = extractedPhotoBuffer.toString('base64');
 
           const faceComparison = await rekognitionService.compareFaces(
-            photoLinkBase64ForRekognition, 
+            photoLinkBase64ForRekognition,
             extractedPhotoBase64ForRekognition
           );
           console.log("faceComparison", faceComparison);
-          
+
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
-          if(!validationResults.photoMatch){
+          if (!validationResults.photoMatch) {
             // Delete newly uploaded images from S3 since photo validation failed and we won't save them
             await Promise.all([
-              imageService.deleteImageFromS3(frontImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(frontImageS3Key).catch(err =>
                 console.error('Error deleting front image from S3:', err)
               ),
-              imageService.deleteImageFromS3(backImageS3Key).catch(err => 
+              imageService.deleteImageFromS3(backImageS3Key).catch(err =>
                 console.error('Error deleting back image from S3:', err)
               )
             ]);
-            
+
             return res.failure({ message: 'pls check your uploaded image' });
           }
           if (!faceComparison.success) {
@@ -2772,8 +2775,8 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
     }
 
     if (existingAadharDetails) {
-      validationResults.allValidationsPassed = 
-        validationResults.aadhaarLast4Match && 
+      validationResults.allValidationsPassed =
+        validationResults.aadhaarLast4Match &&
         validationResults.dobMatch &&
         validationResults.photoMatch;
     }
@@ -2787,21 +2790,21 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
       (!existingAadharDetails || validationResults.allValidationsPassed);
     const aadharDetailsPayload = sanitizedAadhaarNumber
       ? {
-          aadhaarLast4: aadharLast4 || null,
-          aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
-        }
+        aadhaarLast4: aadharLast4 || null,
+        aadhaarNumber: canPersistFullAadhaarNumber ? sanitizedAadhaarNumber : null
+      }
       : null;
 
     const updateData = {
-      aadharFrontImage: frontImageS3Key, 
+      aadharFrontImage: frontImageS3Key,
       aadharBackImage: backImageS3Key,
       isAadharUploaded: true
     };
-    
+
     if (aadharDetailsPayload) {
       updateData.aadharDetails = aadharDetailsPayload;
     }
-    
+
     if (extractedData.aadhaar_number && extractedData.aadhaar_numbers_match) {
       if (existingAadharDetails) {
         if (validationResults.allValidationsPassed) {
@@ -2811,13 +2814,13 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
         updateData.aadharVerify = true;
       }
     }
-    
+
     try {
       await dbService.update(model.user, { id: ctx.user.id }, updateData);
     } catch (dbError) {
       const errorMessage = dbError.message || dbError.parent?.message || '';
-      if (dbError.name === 'SequelizeDatabaseError' && 
-          (errorMessage.includes('too long') || errorMessage.includes('value too long'))) {
+      if (dbError.name === 'SequelizeDatabaseError' &&
+        (errorMessage.includes('too long') || errorMessage.includes('value too long'))) {
         if (aadharDetailsPayload) {
           const minimalDetails = {
             aadhaarLast4: aadharDetailsPayload.aadhaarLast4 || null,
@@ -2838,12 +2841,12 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
         throw dbError;
       }
     }
-    
+
     await cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key);
-    
+
     // Update KYC status after Aadhaar upload
     await updateKycStatus(ctx.user.id, ctx.company.id, ctx);
-    
+
     let responseMessage = 'Aadhar documents processed and uploaded successfully';
     if (existingAadharDetails) {
       if (validationResults.allValidationsPassed) {
@@ -2880,16 +2883,16 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
     console.log("response", response);
     console.log("DataResponse", response);
 
-    return res.success({ 
-      message: responseMessage, 
+    return res.success({
+      message: responseMessage,
       data: {
         ...response
       }
     });
   } catch (error) {
     console.error('Error in upload front back Aadhar documents:', error);
-    return res.failure({ 
-      message: 'Failed to process Aadhar documents', 
+    return res.failure({
+      message: 'Failed to process Aadhar documents',
       error: error.message,
       success: false
     });
@@ -2907,10 +2910,10 @@ const uploadFrontBackPanDocuments = async (req, res) => {
     }
 
     const front_photo = req.file || req.files?.front_photo?.[0];
-    
+
     if (!front_photo) {
       const receivedFields = req.file ? 'front_photo' : (req.files ? Object.keys(req.files).join(', ') : 'none');
-      return res.failure({ 
+      return res.failure({
         message: 'Front photo is required',
         receivedFields: receivedFields || 'none',
         expectedFields: ['front_photo']
@@ -2935,7 +2938,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
     ]);
 
     if (!frontData.success) {
-      return res.failure({ 
+      return res.failure({
         message: frontData.error || 'Failed to extract data from front image',
         data: {
           textractVerification: {
@@ -2948,7 +2951,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
     }
 
     let extractedPanNumber = extractPanNumber(frontData.pan_number);
-    
+
     if (!extractedPanNumber && frontData.rawText) {
       const match = frontData.rawText.match(/[A-Z]{4,5}\s*[A-Z]?\d{4}[A-Z]/);
       if (match) {
@@ -2960,7 +2963,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
     }
 
     if (!extractedPanNumber) {
-      return res.failure({ 
+      return res.failure({
         message: 'Could not extract PAN number from image. Please ensure the PAN card image is clear and readable.',
         data: {
           textractVerification: {
@@ -2998,7 +3001,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
     const aadhaarDoc = ctx.aadhaarDoc || aadhaarDocResult;
     const oldFrontImageKey = extractS3Key(existingUser?.panCardFrontImage);
     const oldBackImageKey = extractS3Key(existingUser?.panCardBackImage);
-    
+
     if (digilockerPanDoc) {
       panExistsInDigilocker = true;
     }
@@ -3053,10 +3056,10 @@ const uploadFrontBackPanDocuments = async (req, res) => {
                 dbService.update(model.user, { id: ctx.user.id }, updateData),
                 updateKycStatus(ctx.user.id, ctx.company.id, { aadhaarDoc: aadhaarDoc })
               ];
-              
+
               cleanupOldImages(oldFrontImageKey, oldBackImageKey, frontImageS3Key, backImageS3Key)
                 .catch(err => console.error('Error cleaning up old images:', err));
-              
+
               await Promise.all(updatePromises);
             } else {
               verificationMessage = 'Pls check your uploaded Image';
@@ -3112,7 +3115,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
       } : null
     };
 
-    return res.success({ 
+    return res.success({
       message: 'PAN documents uploaded successfully',
       data: {
         panCardFrontImage: frontImageS3Key,
@@ -3122,8 +3125,8 @@ const uploadFrontBackPanDocuments = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in upload front back Pan documents:', error);
-    return res.failure({ 
-      message: 'Failed to process Pan documents', 
+    return res.failure({
+      message: 'Failed to process Pan documents',
       error: error.message
     });
   }
