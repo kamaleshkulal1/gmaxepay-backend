@@ -66,9 +66,6 @@ let GstHistory = sequelize.define(
         timestamps: true
     }
 );
-
-GstHistory.belongsTo(User, { foreignKey: 'refId', as: 'user' });
-
 sequelizeTransforms(GstHistory);
 sequelizePaginate.paginate(GstHistory);
 
