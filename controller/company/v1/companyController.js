@@ -393,7 +393,7 @@ const deleteCompany = async (req, res) => {
 
     // Find all images for this company
     const existingImages = await dbService.findAll(model.companyImage, {
-      companyId: id
+      id
     });
 
     // Delete images from S3
