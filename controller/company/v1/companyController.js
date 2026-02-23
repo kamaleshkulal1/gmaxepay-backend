@@ -408,7 +408,7 @@ const deleteCompany = async (req, res) => {
         }
       }
 
-      await dbService.destroy(model.companyImage, { companyId: id });
+      await dbService.destroy(model.companyImage, { id });
     }
 
     const company = await dbService.findOne(model.company, { id });
@@ -420,9 +420,7 @@ const deleteCompany = async (req, res) => {
         try { await deleteImageFromS3(company.favicon); } catch (e) { }
       }
     }
-
-    await dbService.destroy(model.company, { id });
-    return res.success({ message: 'Company deleted successfully' });
+    return res.success({ message: 'Company Slider deleted successfully' });
   } catch (error) {
     console.error('Error deleting company:', error);
     return res.failure({ message: error.message });
