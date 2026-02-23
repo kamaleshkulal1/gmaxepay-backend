@@ -1019,7 +1019,8 @@ const payout = async (req, res) => {
             [normalizedAepsType.toLowerCase()]: {
                 openingBalance: aepsOpeningBalance,
                 closingBalance: aepsClosingBalance
-            }
+            },
+            gstAmount: gstAmount
         };
 
         if (responseData) {

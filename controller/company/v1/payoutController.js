@@ -642,7 +642,8 @@ const payout = async (req, res) => {
             [normalizedAepsType.toLowerCase()]: {
                 openingBalance: aepsOpeningBalance,
                 closingBalance: aepsClosingBalance
-            }
+            },
+            gstAmount: gstAmount
         };
 
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {
