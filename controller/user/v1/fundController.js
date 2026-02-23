@@ -814,6 +814,7 @@ const allbankDetails = async (req, res) => {
                 bankDetailsList = await dbService.findAll(model.customerBank, { refId: targetUser.id, companyId: targetUser.companyId, isFundTransfer: true });
             }
         }
+        console.log('targetUser', targetUser);
         console.log('bankDetailsList', bankDetailsList);
 
         // If reportingTo is null OR bank list is empty, fallback to company admin (userRole: 2)
