@@ -9,5 +9,7 @@ router.post('/rechargeReports', authentication, reportController.getRechargeRepo
 router.post('/aeps2Reports', authentication, reportController.getAeps2Reports);
 router.post('/aeps2/transactionDetails/:id', authentication, reportController.getAeps2TransactionDetailsById);
 router.post('/surRecReports', authentication, reportController.getSurRecReports);
+router.post('/bbpReports', authentication, reportController.getBbpReports);
+
 module.exports = router;
 

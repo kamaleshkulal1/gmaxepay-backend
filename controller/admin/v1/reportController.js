@@ -755,11 +755,173 @@ const getSurRecReports = async (req, res) => {
     }
 };
 
+const getBbpReports = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        if (req.user?.userRole !== 1) {
+            return res.failure({ message: 'Unauthorized access' });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = {};
+
+        if (dataToFind && dataToFind.query) {
+            query = { ...dataToFind.query };
+        }
+
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+
+            if (dataToFind.options.sort) {
+                const sortEntries = Object.entries(dataToFind.options.sort);
+                options.order = sortEntries.map(([field, direction]) => {
+                    return [field, direction === -1 ? 'DESC' : 'ASC'];
+                });
+            } else {
+                options.order = [['createdAt', 'DESC']];
+            }
+        } else {
+            options.order = [['createdAt', 'DESC']];
+        }
+
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const searchConditions = [];
+            const customSearch = dataToFind.customSearch;
+
+            if (customSearch.transactionId) {
+                const searchValue = String(customSearch.transactionId).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        transactionId: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.mobileNumber) {
+                const searchValue = String(customSearch.mobileNumber).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        mobileNumber: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            const userSearchFields = [];
+            if (customSearch.name) {
+                const searchName = String(customSearch.name).trim();
+                if (searchName) {
+                    userSearchFields.push({
+                        name: {
+                            [Op.iLike]: `%${searchName}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.mobileNo) {
+                const searchMobileNo = String(customSearch.mobileNo).trim();
+                if (searchMobileNo) {
+                    userSearchFields.push({
+                        mobileNo: {
+                            [Op.iLike]: `%${searchMobileNo}%`
+                        }
+                    });
+                }
+            }
+
+            if (userSearchFields.length > 0) {
+                const matchingUsers = await dbService.findAll(model.user, {
+                    [Op.or]: userSearchFields,
+                    isDeleted: false
+                }, {
+                    attributes: ['id']
+                });
+
+                const matchingUserIds = matchingUsers.map(u => u.id);
+                if (matchingUserIds.length > 0) {
+                    searchConditions.push({
+                        userId: { [Op.in]: matchingUserIds }
+                    });
+                } else {
+                    return res.status(200).send({
+                        status: 'SUCCESS',
+                        message: 'BBP reports retrieved successfully',
+                        data: [],
+                        total: 0,
+                        paginator: {
+                            page: options.page || 1,
+                            paginate: options.paginate || 10,
+                            totalPages: 0
+                        }
+                    });
+                }
+            }
+
+            if (searchConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.and]: [
+                        { [Op.or]: searchConditions }
+                    ]
+                };
+            }
+        }
+
+        options.include = [
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['id', 'name', 'userId', 'mobileNo'],
+                required: false
+            }
+        ];
+
+        const result = await dbService.paginate(model.billPaymentHistory, query, options);
+
+        if (!result || !result.data || result.data.length === 0) {
+            return res.status(200).send({
+                status: 'SUCCESS',
+                message: 'No BBP reports found',
+                data: [],
+                total: result?.total || 0,
+                paginator: result?.paginator || {
+                    page: options.page || 1,
+                    paginate: options.paginate || 10,
+                    totalPages: 0
+                }
+            });
+        }
+
+        return res.status(200).send({
+            status: 'SUCCESS',
+            message: 'BBP reports retrieved successfully',
+            data: result.data,
+            total: result.total || 0,
+            paginator: result.paginator
+        });
+    } catch (error) {
+        console.error('BBP reports error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve BBP reports' });
+    }
+};
+
 module.exports = {
     getAeps1Reports,
     getAepsTransactionDetailsById,
     getRechargeReports,
     getAeps2Reports,
     getAeps2TransactionDetailsById,
-    getSurRecReports
+    getSurRecReports,
+    getBbpReports
 };

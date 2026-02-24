@@ -1265,7 +1265,6 @@ const getRechargeReports = async (req, res) => {
                 }
             }
 
-            // Only apply search conditions if there are any valid conditions
             if (searchConditions.length > 0) {
                 query = {
                     ...query,
@@ -1274,7 +1273,6 @@ const getRechargeReports = async (req, res) => {
                     ]
                 };
             }
-            // If no search conditions found, continue with base query (will return all records)
         }
 
         options.include = [
