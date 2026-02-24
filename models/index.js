@@ -582,6 +582,11 @@ db.company.hasMany(db.payoutHistory, {
 });
 
 // GST History Relationships
+db.gstHistory.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
 db.user.hasMany(db.gstHistory, {
   foreignKey: 'refId',
   as: 'gstHistories',
