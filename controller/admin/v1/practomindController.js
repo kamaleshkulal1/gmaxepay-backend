@@ -32,7 +32,7 @@ const createBank = async (req, res) => {
     const bankName = (dataToCreate.bankName || '').trim();
     const iinno = (dataToCreate.iinno || '').trim();
 
-    if (!aeps_bank_id) {  
+    if (!aeps_bank_id) {
       return res.failure({ message: 'aeps_bank_id is required' });
     }
 
@@ -43,10 +43,9 @@ const createBank = async (req, res) => {
       return res.failure({ message: 'iinno is required' });
     }
 
-    // Check for duplicates (iinno and bankName cannot repeat)
     const duplicateCheck = await checkUniqueFieldsInDatabase(
       model.practomindBankList,
-      ['iinno', 'bankName','aeps_bank_id'],
+      ['iinno', 'bankName', 'aeps_bank_id'],
       { iinno, bankName, aeps_bank_id },
       'INSERT'
     );
@@ -59,7 +58,6 @@ const createBank = async (req, res) => {
 
     let bankLogo = dataToCreate.bankLogo ? String(dataToCreate.bankLogo).trim() : null;
 
-    // If logo file provided, upload to S3
     if (req.file && req.file.buffer) {
       const ext = path.extname(req.file.originalname) || '.jpg';
       const fixedFileName = `practomindBankLogo${Date.now()}${ext}`;
@@ -113,7 +111,7 @@ const updateBank = async (req, res) => {
     const existingBank = await dbService.findOne(model.practomindBankList, {
       id: parseInt(id),
       isDeleted: false
-    });    if (!existingBank) {
+    }); if (!existingBank) {
       return res.failure({ message: 'Bank not found' });
     }
 
@@ -140,12 +138,10 @@ const updateBank = async (req, res) => {
       dataToUpdate.aeps_bank_id = aeps_bank_id;
     }
 
-    // Check for duplicates if updating unique fields (excluding current record)
     if (dataToUpdate.iinno || dataToUpdate.bankName) {
       const checkIinno = dataToUpdate.iinno || existingBank.iinno;
       const checkBankName = dataToUpdate.bankName || existingBank.bankName;
 
-      // Check if iinno already exists (excluding current record)
       if (dataToUpdate.iinno) {
         const existingWithIinno = await dbService.findOne(model.practomindBankList, {
           iinno: checkIinno,
@@ -157,7 +153,6 @@ const updateBank = async (req, res) => {
         }
       }
 
-      // Check if bankName already exists (excluding current record)
       if (dataToUpdate.bankName) {
         const existingWithName = await dbService.findOne(model.practomindBankList, {
           bankName: { [Op.iLike]: checkBankName },
@@ -170,7 +165,6 @@ const updateBank = async (req, res) => {
       }
     }
 
-    // If logo file provided, replace logo in S3 and delete old
     if (req.file && req.file.buffer) {
       if (existingBank.bankLogo) {
         await imageService.deleteImageFromS3(existingBank.bankLogo);
@@ -190,7 +184,6 @@ const updateBank = async (req, res) => {
     }
 
     if (body.isActive !== undefined) {
-      // Properly convert string "false"/"true" to boolean
       if (typeof body.isActive === 'string') {
         dataToUpdate.isActive = body.isActive.toLowerCase() === 'true' || body.isActive === '1';
       } else {
@@ -242,7 +235,6 @@ const deleteBank = async (req, res) => {
       return res.failure({ message: 'Bank not found' });
     }
 
-    // Soft delete
     const updated = await dbService.update(
       model.practomindBankList,
       { id: parseInt(id) },

@@ -72,7 +72,7 @@ const registerService = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.internalServerError({ message: error.message });
+    return res.failure({ message: error.message });
   }
 };
 
@@ -152,7 +152,7 @@ const findAllServices = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.internalServerError({ message: error.message });
+    return res.failure({ message: error.message });
   }
 };
 
@@ -175,7 +175,7 @@ const getServices = async (req, res) => {
     });
 
     if (!foundPackageServices || foundPackageServices.length === 0) {
-      return res.recordNotFound();
+      return res.failure({ message: "No services found" });
     }
 
     const packageServicesWithIcons = await Promise.all(
@@ -197,7 +197,7 @@ const getServices = async (req, res) => {
     return res.success({ data: packageServicesWithIcons });
   } catch (error) {
     console.error(error);
-    return res.internalServerError({ message: error.message });
+    return res.failure({ message: error.message });
   }
 };
 
@@ -224,7 +224,7 @@ const updateService = async (req, res) => {
     });
 
     if (!existingService) {
-      return res.recordNotFound({ message: 'Service not found' });
+      return res.failure({ message: 'Service not found' });
     }
 
     if (dataToUpdate.hasOwnProperty('icon') && (dataToUpdate.icon === null || dataToUpdate.icon === '')) {
@@ -290,7 +290,7 @@ const updateService = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.internalServerError({ message: error.message });
+    return res.failure({ message: error.message });
   }
 };
 

@@ -40,35 +40,31 @@ app.use(
       },
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-    crossOriginEmbedderPolicy: false, // Set to true if you don't use iframes/embeds
+    crossOriginEmbedderPolicy: false,
     hsts: {
-      maxAge: 31536000, // 1 year
+      maxAge: 31536000,
       includeSubDomains: true,
       preload: true
     },
-    xFrameOptions: { action: 'deny' }, // Prevent clickjacking
-    xContentTypeOptions: true, // Prevent MIME type sniffing
+    xFrameOptions: { action: 'deny' },
+    xContentTypeOptions: true,
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     permittedCrossDomainPolicies: false
   })
 );
 app.use(cookieParser());
 
-// Trust proxy to get real client IP
 app.set('trust proxy', true);
 
-// CORS configuration - Allow all origins
-// MUST be early in middleware chain to handle preflight OPTIONS requests
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow all origins - no validation
     callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-company-domain', 'x-request-id', 'token', 'x-company-id'],
   exposedHeaders: ['x-request-id'],
-  maxAge: 86400, // Cache preflight for 24 hours
+  maxAge: 86400,
   optionsSuccessStatus: 200
 };
 
@@ -82,9 +78,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Use custom logging middleware instead of default morgan
 app.use(morganMiddleware);
-// SECURITY: Limit request body size (increased for file uploads, multer handles individual file limits)
 app.use(express.json({ limit: '10mb' }));
 app.use(sanitizeInput);
 app.use(preventNoSqlInjection);
@@ -136,8 +130,7 @@ function detectIPType(ip) {
   return 'unknown';
 }
 if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
-  // Add authentication middleware here if you need this endpoint
-  app.get('/test-ip', require('./middleware/authentication'), (req, res) => {
+  app.get('/test-ip', (req, res) => {
     res.json({
       message: 'IP tracking test (development only)',
       detectedIP: req.ip,
@@ -146,7 +139,6 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ENDPOINTS
     });
   });
 }
-// Error handling middleware
 app.use(errorLogger);
 
 app.use(secureErrorHandler);

@@ -6,6 +6,11 @@ const { Op, Sequelize } = require('sequelize');
 const bcrypt = require('bcrypt');
 const emailService = require('../../../services/emailService');
 const imageService = require('../../../services/imageService');
+const random = require('random-string-alphanumeric-generator');
+const moment = require('moment');
+const amezesmsApi = require('../../../services/amezesmsApi');
+const jwt = require('jsonwebtoken');
+const { JWT } = require('../../../constants/authConstant');
 
 const getProfile = async (req, res) => {
   try {
@@ -1831,6 +1836,208 @@ const revertKycData = async (req, res) => {
   }
 };
 
+const sendOldChangeMobileNoOtp = async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const id = req.user.id;
+    const user = await dbService.findOne(model.user, { id, companyId, isDeleted: false });
+    if (!user) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    const code = random.randomNumber(6);
+    const hashedCode = await bcrypt.hash(code, 10);
+    const expireOTP = moment().add(3, 'minutes').toISOString();
+
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { otpMobile: hashedCode + '~' + expireOTP }
+    );
+
+    let msg = `Dear user, your OTP for changing your mobile number is ${code}. Team Gmaxepay`;
+    await amezesmsApi.sendSmsOtp(user.mobileNo, msg);
+
+    return res.success({ message: 'OTP sent to your current mobile number' });
+  } catch (error) {
+    console.error('Error in sendOldChangeMobileNoOtp:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const verifyOldChangeMobileNoOtp = async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const id = req.user.id;
+    const { otp } = req.body;
+
+    if (!otp) {
+      return res.failure({ message: 'OTP is required' });
+    }
+
+    const user = await dbService.findOne(model.user, { id, companyId, isDeleted: false });
+    if (!user) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    if (!user.otpMobile) {
+      return res.failure({ message: 'OTP is not set. Please request a new OTP.' });
+    }
+
+    const [storedHash, expireOTP] = user.otpMobile.split('~');
+    const currentTime = moment().toISOString();
+
+    if (moment(currentTime).isAfter(expireOTP)) {
+      return res.failure({ message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, storedHash);
+    if (!isOtpValid) {
+      return res.failure({ message: 'Invalid OTP' });
+    }
+
+    // Generate a temporary token valid for 10 minutes to allow setting a new number
+    const token = jwt.sign(
+      { id: user.id, companyId: user.companyId, action: 'change_mobile_new' },
+      JWT.SECRET,
+      { expiresIn: '10m', algorithm: JWT.ALGORITHM || 'HS256' }
+    );
+
+    await dbService.update(model.user, { id: user.id }, { otpMobile: null });
+
+    return res.success({
+      message: 'OTP verified successfully. Please proceed to enter new mobile number.',
+      data: { changeMobileToken: token }
+    });
+  } catch (error) {
+    console.error('Error in verifyOldChangeMobileNoOtp:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const sendNewChangeMobileNoOtp = async (req, res) => {
+  try {
+    const { newMobileNo, changeMobileToken } = req.body;
+
+    if (!newMobileNo) {
+      return res.failure({ message: 'New mobile number is required' });
+    }
+    if (!changeMobileToken) {
+      return res.failure({ message: 'Change mobile token is required' });
+    }
+    try {
+      const decoded = jwt.verify(changeMobileToken, JWT.SECRET);
+      if (decoded.id !== req.user.id || decoded.action !== 'change_mobile_new') {
+        return res.failure({ message: 'Invalid token' });
+      }
+    } catch (err) {
+      return res.failure({ message: 'Token is invalid or has expired. Please restart the process.' });
+    }
+
+    const companyId = req.user.companyId;
+    const id = req.user.id;
+
+    // Check if new mobile number is already in use
+    const existingUserWithMobile = await dbService.findOne(model.user, {
+      mobileNo: newMobileNo,
+      companyId,
+      isDeleted: false
+    });
+
+    if (existingUserWithMobile) {
+      return res.failure({ message: 'Mobile number is already registered' });
+    }
+
+    const user = await dbService.findOne(model.user, { id, companyId, isDeleted: false });
+    if (!user) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    const code = random.randomNumber(6);
+    const hashedCode = await bcrypt.hash(code, 10);
+    const expireOTP = moment().add(3, 'minutes').toISOString();
+
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      { otpMobile: hashedCode + '~' + expireOTP + '~' + newMobileNo }
+    );
+
+    let msg = `Dear user, your OTP for setting your new mobile number is ${code}. Team Gmaxepay`;
+    await amezesmsApi.sendSmsOtp(newMobileNo, msg);
+
+    return res.success({ message: 'OTP sent to your new mobile number' });
+  } catch (error) {
+    console.error('Error in sendNewChangeMobileNoOtp:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+const verifyNewChangeMobileNoOtp = async (req, res) => {
+  try {
+    const { otp, changeMobileToken } = req.body;
+    const companyId = req.user.companyId;
+    const id = req.user.id;
+
+    if (!otp) {
+      return res.failure({ message: 'OTP is required' });
+    }
+    if (!changeMobileToken) {
+      return res.failure({ message: 'Change mobile token is required' });
+    }
+
+    try {
+      const decoded = jwt.verify(changeMobileToken, JWT.SECRET);
+      if (decoded.id !== id || decoded.action !== 'change_mobile_new') {
+        return res.failure({ message: 'Invalid token' });
+      }
+    } catch (err) {
+      return res.failure({ message: 'Token is invalid or has expired. Please restart the process.' });
+    }
+
+    const user = await dbService.findOne(model.user, { id, companyId, isDeleted: false });
+    if (!user) {
+      return res.failure({ message: 'User not found' });
+    }
+
+    if (!user.otpMobile) {
+      return res.failure({ message: 'OTP is not set. Please request a new OTP.' });
+    }
+
+    const parts = user.otpMobile.split('~');
+    if (parts.length < 3) {
+      return res.failure({ message: 'Invalid OTP state. Please request a new OTP for the new mobile number.' });
+    }
+
+    const [storedHash, expireOTP, newMobileNo] = parts;
+    const currentTime = moment().toISOString();
+
+    if (moment(currentTime).isAfter(expireOTP)) {
+      return res.failure({ message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, storedHash);
+    if (!isOtpValid) {
+      return res.failure({ message: 'Invalid OTP' });
+    }
+
+    await dbService.update(
+      model.user,
+      { id: user.id },
+      {
+        mobileNo: newMobileNo,
+        otpMobile: null
+      }
+    );
+
+    return res.success({ message: 'Mobile number updated successfully' });
+  } catch (error) {
+    console.error('Error in verifyNewChangeMobileNoOtp:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+
 module.exports = {
   getProfile,
   upgradeUserRole,
@@ -1842,5 +2049,9 @@ module.exports = {
   findAllTheirDownlineUsers,
   getByUserProfile,
   getCompleteKycData,
-  revertKycData
+  revertKycData,
+  sendOldChangeMobileNoOtp,
+  verifyOldChangeMobileNoOtp,
+  sendNewChangeMobileNoOtp,
+  verifyNewChangeMobileNoOtp
 };

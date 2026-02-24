@@ -47,8 +47,6 @@ const registerOperator = async (req, res) => {
       ...createdUser.dataValues
     };
 
-    // Fetch all slabs (for all companies) so that the new operator
-    // is available in commission slabs for every company.
     const slabs = await dbService.findAll(
       model.slab,
       { isDelete: false },
@@ -72,7 +70,6 @@ const registerOperator = async (req, res) => {
 
     const dataToInsert = [];
 
-    // Use commType and amtType from request body if provided, else fallback to defaults
     const commType = dataToCreate.commType || dataToCreate.CommType || 'com';
     const amtType = dataToCreate.amtType || dataToCreate.AmtType || 'fix';
 
@@ -113,9 +110,9 @@ const registerOperator = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error fetching operator list' });
     }
   }
 };
@@ -135,7 +132,7 @@ const findAllOperator = async (req, res) => {
     if (dataToFind && dataToFind.isCountOnly) {
       foundUser = await dbService.count(operator, query);
       if (!foundUser) {
-        return res.recordNotFound();
+        return res.failure({ message: 'No Operator Found exists!' });
       }
       foundUser = { totalRecords: foundUser };
       return res.success({ data: foundUser });
@@ -176,7 +173,7 @@ const findAllOperator = async (req, res) => {
     foundUser = await dbService.paginate(model.operator, query, options);
 
     if (!foundUser || foundUser.length === 0) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No Operator Found exists!' });
     }
     return res.status(200).send({
       status: 'SUCCESS',
@@ -187,9 +184,9 @@ const findAllOperator = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error fetching operator list' });
     }
   }
 };
@@ -219,9 +216,9 @@ const getOperator = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error fetching operator' });
     }
   }
 };
@@ -240,7 +237,7 @@ const partialUpdateOperator = async (req, res) => {
 
     const operatorExist = await dbService.findOne(operator, { id: id });
     if (!operatorExist) {
-      return res.badRequest({ message: `Operator Doesn't Exist!` });
+      return res.failure({ message: `Operator Doesn't Exist!` });
     }
 
     let { operator_image } = req.files || {};
@@ -278,7 +275,6 @@ const partialUpdateOperator = async (req, res) => {
         operatorType: dataToUpdate.operatorType
       };
 
-      // Only update commSlab – other commission tables are not needed
       if (model.commSlab) {
         await dbService.update(
           model.commSlab,
@@ -302,9 +298,9 @@ const partialUpdateOperator = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error updating operator' });
     }
   }
 };
@@ -316,7 +312,7 @@ const deleteOperator = async (req, res) => {
     });
 
     if (!foundApi) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No Operator Found exists!' });
     }
 
     let dataToUpdate = {
@@ -340,9 +336,9 @@ const deleteOperator = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error deleting operator' });
     }
   }
 };
@@ -355,7 +351,7 @@ const findAllOperatorType = async (req, res) => {
     return res.success({ data: datas });
   } catch (error) {
     console.log(error);
-    return res.internalServerError({ data: error.message });
+    return res.failure({ message: error.message || 'Error fetching operator type' });
   }
 };
 
@@ -367,7 +363,7 @@ const findAllState = async (req, res) => {
     return res.success({ data: datas });
   } catch (error) {
     console.log(error);
-    return res.internalServerError({ data: error.message });
+    return res.failure({ message: error.message || 'Error fetching state' });
   }
 };
 
@@ -381,7 +377,7 @@ const operatorList = async (req, res) => {
     return res.success({ data: datas });
   } catch (error) {
     console.log(error);
-    return res.internalServerError({ data: error.message });
+    return res.failure({ message: error.message || 'Error fetching operator list' });
   }
 };
 

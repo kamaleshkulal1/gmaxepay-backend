@@ -4,10 +4,10 @@ const { Op } = require('sequelize');
 
 const getAllPayoutHistory = async (req, res) => {
     try {
- 
-       if(![1].includes(req.user.userRole)){
-        return res.failure({ message: 'You are not authorized to get all payout history' });
-       }
+
+        if (![1].includes(req.user.userRole)) {
+            return res.failure({ message: 'You are not authorized to get all payout history' });
+        }
         const dataToFind = req.body || {};
         let options = {};
         let query = {};
@@ -96,7 +96,7 @@ const getAllPayoutHistory = async (req, res) => {
     }
     catch (error) {
         console.log('Get all payout history error:', error);
-        return res.internalServerError({ message: error.message || 'Internal server error' });
+        return res.failure({ message: error.message || 'Internal server error' });
     }
 }
 

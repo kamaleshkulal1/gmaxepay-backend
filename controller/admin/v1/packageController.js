@@ -14,23 +14,20 @@ const registerPackage = async (req, res) => {
     if (!hasPermission) {
       return res.failure({ message: "User doesn't have Permission!" });
     }
-    // Only SUPER_ADMIN can create packages
     if (req.user?.userType !== USER_TYPES.SUPER_ADMIN) {
       return res.failure({ message: "Only SUPER_ADMIN can create packages" });
     }
 
-    // Allow companyId to be nullable or explicitly provided by SUPER_ADMIN
     const companyId = req.user?.companyId
     let dataToCreate = { ...(req.body || {}) };
-    // If SUPER_ADMIN passes companyId in body, honor it; otherwise keep computed value (may be null)
     const resolvedCompanyId =
       req.user?.userType === USER_TYPES.SUPER_ADMIN &&
-      Object.prototype.hasOwnProperty.call(dataToCreate, 'companyId')
+        Object.prototype.hasOwnProperty.call(dataToCreate, 'companyId')
         ? dataToCreate.companyId
         : companyId;
     dataToCreate = {
       ...dataToCreate,
-      companyId:req.user?.companyId,
+      companyId: req.user?.companyId,
       addedBy: req.user.id,
       type: req.user.userType,
       companyId: resolvedCompanyId
@@ -60,11 +57,11 @@ const registerPackage = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else if (error.name === 'SequelizeValidationError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error creating package' });
     }
   }
 };
@@ -88,7 +85,6 @@ const findAllPackage = async (req, res) => {
     if (dataToFind && dataToFind.query) {
       query = dataToFind.query;
     }
-    // Apply company filter only when companyId is not null
     if (companyId !== null && companyId !== undefined) {
       query = { ...query, companyId };
     }
@@ -97,7 +93,7 @@ const findAllPackage = async (req, res) => {
       let countOptions = { ...query };
       foundPackage = await dbService.count(model.packages, countOptions);
       if (!foundPackage) {
-        return res.recordNotFound();
+        return res.failure({ message: 'No Package Found exists!' });
       }
       foundPackage = { totalRecords: foundPackage };
       return res.success({ data: foundPackage });
@@ -165,7 +161,7 @@ const findAllPackage = async (req, res) => {
     );
 
     if (!foundPackage || foundPackage.length === 0) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No Package Found exists!' });
     }
 
     const allServices = await dbService.findAll(
@@ -203,11 +199,11 @@ const findAllPackage = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else if (error.name === 'SequelizeValidationError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error fetching package list' });
     }
   }
 };
@@ -230,12 +226,12 @@ const getPackage = async (req, res) => {
     });
 
     if (!foundPackage) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No Package Found exists!' });
     }
     return res.success({ data: foundPackage });
   } catch (error) {
     console.log(error);
-    return res.internalServerError({ message: error.message });
+    return res.failure({ message: error.message || 'Error fetching package' });
   }
 };
 
@@ -286,11 +282,11 @@ const partialUpdatePackage = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else if (error.name === 'SequelizeValidationError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error.message || 'Error updating package' });
     }
   }
 };
@@ -312,7 +308,7 @@ const deletePackage = async (req, res) => {
     });
 
     if (!foundApi) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No Package Found exists!' });
     }
 
     let dataToUpdate = {
@@ -335,7 +331,7 @@ const deletePackage = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.internalServerError();
+    return res.failure({ message: error.message || 'Error deleting package' });
   }
 };
 
@@ -348,7 +344,7 @@ const getUserPackage = async (req, res) => {
   });
 
   if (!foundApi) {
-    return res.badRequest({ message: 'No Data Found!' });
+    return res.failure({ message: 'No Data Found!' });
   }
 
   return res.success({ data: foundApi });

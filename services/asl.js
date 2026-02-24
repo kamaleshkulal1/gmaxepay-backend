@@ -9,17 +9,16 @@ const aslApiUserId = process.env.ASL_USER_ID;
 const FILE_DOWNLOAD_TIMEOUT_MS = Number(process.env.ASL_FILE_DOWNLOAD_TIMEOUT_MS || 10000);
 const FILE_DOWNLOAD_MAX_BYTES = Number(process.env.ASL_FILE_DOWNLOAD_MAX_BYTES || 5 * 1024 * 1024);
 
-// HTTP agents with keepAlive for connection pooling (reuses connections for faster downloads)
-const httpAgent = new http.Agent({ 
-  keepAlive: true, 
+const httpAgent = new http.Agent({
+  keepAlive: true,
   keepAliveMsecs: 30000,
   maxSockets: 50,
   maxFreeSockets: 10,
   timeout: 60000
 });
 
-const httpsAgent = new https.Agent({ 
-  keepAlive: true, 
+const httpsAgent = new https.Agent({
+  keepAlive: true,
   keepAliveMsecs: 30000,
   maxSockets: 50,
   maxFreeSockets: 10,
@@ -54,7 +53,7 @@ const getFileNameFromUrl = (url, fallback) => {
       return segments.pop();
     }
   } catch (error) {
-    // ignore and fallback
+    console.log("error", error);
   }
   return fallback;
 };
@@ -100,12 +99,11 @@ const appendFormField = async (formData, key, value, sizeTracker = null) => {
     typeof value === 'number'
       ? value.toString()
       : typeof value === 'boolean'
-      ? value ? 'true' : 'false'
-      : value;
+        ? value ? 'true' : 'false'
+        : value;
   formData.append(key, normalizedValue);
 };
 
-// ASL AEPS Onboarding
 const aslAepsOnboarding = async (data) => {
   try {
     const payload = {
@@ -118,7 +116,7 @@ const aslAepsOnboarding = async (data) => {
 
     const formData = new FormData();
     const fileSizeTracker = { total: 0 };
-    
+
     await Promise.all(
       Object.entries(payload).map(async ([key, value]) => {
         await appendFormField(formData, key, value, fileSizeTracker);
@@ -132,7 +130,7 @@ const aslAepsOnboarding = async (data) => {
           ...formData.getHeaders()
         }
       });
-    console.log("response",response);
+    console.log("response", response);
     return response.data;
   } catch (error) {
     return error.response?.data || { status: 'error', message: 'Unable to reach ASL onboarding API' };
@@ -141,7 +139,7 @@ const aslAepsOnboarding = async (data) => {
 
 
 const aslAepsValidateAgentOtp = async (data) => {
-  try{
+  try {
     const payload = {
       associateId: aslAssociateId,
       apiToken: aslApiToken,
@@ -156,17 +154,16 @@ const aslAepsValidateAgentOtp = async (data) => {
         'Content-Type': 'application/json'
       }
     });
-    console.log("response.data",response.data);
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
+    console.log("error", error);
     return error.response.data;
   }
 }
 
-// ASL AEPS Validate Agent Biometric
 const aslAepsValidateAgentBiometric = async (data) => {
-  try{
+  try {
     const payload = {
       associateId: aslAssociateId,
       apiToken: aslApiToken,
@@ -174,25 +171,24 @@ const aslAepsValidateAgentBiometric = async (data) => {
     };
     console.log("Complete Payload:", JSON.stringify(payload, null, 2));
     const response = await axios.post(`${aslUrl}/aeps/v1/biometricValidate`,
-        payload, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
+      payload, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
-    return error.response?.data || { 
-      status: 'ERROR', 
+    console.log("error", error);
+    return error.response?.data || {
+      status: 'ERROR',
       message: error.message || 'Network error occurred',
       error: error.code || 'UNKNOWN_ERROR'
     };
   }
 }
 
-// ASL AEPS 2FA
 const aslAeps2FA = async (data) => {
   try {
     const payload = {
@@ -209,8 +205,8 @@ const aslAeps2FA = async (data) => {
         }
       }
     );
-    console.log("response",response);
-    console.log("response.data",response.data);
+    console.log("response", response);
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
     console.error('ASL AEPS 2FA error:', error.message);
@@ -228,161 +224,158 @@ const aslAeps2FA = async (data) => {
   }
 }
 
-// ASL AEPS Bank KYC Send OTP
 const aslAepsBankKycSendOtp = async (data) => {
-  try{
-    
+  try {
+
     const response = await axios.post(`${aslUrl}/aeps/v1/bankKycSendOtp`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
-    return response.data;
-  } catch (error) {
-    console.log("error",error);
-    return error.response.data;
-  }
-}
-// ASL AEPS Bank KYC Validate OTP
-const aslAepsBankKycValidateOtp = async (data) => {
-  try{
-    const response = await axios.post(`${aslUrl}/aeps/v1/bankKycOtpValidate`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
-            headers: {
-              'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
-    return response.data;
-  } catch (error) {
-    console.log("error",error);
-    return error.response.data;
-  }
-}
-// ASL AEPS Bank KYC Biometric Validate
-const aslAepsBankKycBiometricValidate = async (data) => {
-  try{
-    const payload = {
+      {
         associateId: aslAssociateId,
         apiToken: aslApiToken,
         ...data
-    };
-    console.log("Complete Payload:", JSON.stringify(payload, null, 2));
-    const response = await axios.post(`${aslUrl}/aeps/v1/bankKycBiometricValidate`,
-        payload, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
-    return error.response.data;
-  }
-}
-// ASL AEPS Transaction
-const aslAepsTransaction = async (data) => {
-  try{
-    const response = await axios.post(`${aslUrl}/aeps/v1/aepsTransaction`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            Service: 'AEPS',
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
-    return response.data;
-  } catch (error) {
-    console.log("error",error);
+    console.log("error", error);
     return error.response.data;
   }
 }
 
-// ASL AEPS Check Status
-const aslAepsCheckStatus = async (data) => {
-  try{
-    const response = await axios.post(`${aslUrl}/aeps/v1/checkStatus`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
+const aslAepsBankKycValidateOtp = async (data) => {
+  try {
+    const response = await axios.post(`${aslUrl}/aeps/v1/bankKycOtpValidate`,
+      {
+        associateId: aslAssociateId,
+        apiToken: aslApiToken,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
+    console.log("error", error);
     return error.response.data;
   }
 }
-// ASL AEPS Receive OTP
-const aslAepsReceiveOtp = async (data) => {
-  try{
-    const response = await axios.post(`${aslUrl}/aeps/v1/receiveOTP`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response",response);
-    console.log("response.data",response.data);
+
+const aslAepsBankKycBiometricValidate = async (data) => {
+  try {
+    const payload = {
+      associateId: aslAssociateId,
+      apiToken: aslApiToken,
+      ...data
+    };
+    console.log("Complete Payload:", JSON.stringify(payload, null, 2));
+    const response = await axios.post(`${aslUrl}/aeps/v1/bankKycBiometricValidate`,
+      payload, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
+    console.log("error", error);
+    return error.response.data;
+  }
+}
+
+const aslAepsTransaction = async (data) => {
+  try {
+    const response = await axios.post(`${aslUrl}/aeps/v1/aepsTransaction`,
+      {
+        associateId: aslAssociateId,
+        apiToken: aslApiToken,
+        Service: 'AEPS',
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response.data;
+  }
+}
+
+const aslAepsCheckStatus = async (data) => {
+  try {
+    const response = await axios.post(`${aslUrl}/aeps/v1/checkStatus`,
+      {
+        associateId: aslAssociateId,
+        apiToken: aslApiToken,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response.data;
+  }
+}
+
+const aslAepsReceiveOtp = async (data) => {
+  try {
+    const response = await axios.post(`${aslUrl}/aeps/v1/receiveOTP`,
+      {
+        associateId: aslAssociateId,
+        apiToken: aslApiToken,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
     return error.response.data;
   }
 }
 
 const aslAepsResendOtp = async (data) => {
-  try{
+  try {
     const response = await axios.post(`${aslUrl}/aeps/v1/resendOTP`,
-        {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,
-            ...data
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    console.log("response.data",response.data);
+      {
+        associateId: aslAssociateId,
+        apiToken: aslApiToken,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error);
+    console.log("error", error);
     return error.response.data;
   }
 }
 
-// ASL AEPS Pay Out
 const aslAepsPayOut = async (data) => {
-  try{
+  try {
     const payload = {
       associateId: aslAssociateId,
       apiToken: aslApiToken,
@@ -395,260 +388,249 @@ const aslAepsPayOut = async (data) => {
         'Content-Type': 'application/json'
       }
     });
-    console.log("response.data",response.data);
+    console.log("response.data", response.data);
     return response.data;
   } catch (error) {
-    console.log("error",error?.response?.data || error.message);
+    console.log("error", error?.response?.data || error.message);
     return error.response?.data || { status: 'error', message: 'Unable to reach ASL Payout API' };
   }
 }
 
-// ASL DMT Sender Registration
 const aslDmtSenderRegistration = async (data) => {
-    try{
-        const formData = new FormData();
-        formData.append('apiToken', aslApiToken);
-        formData.append('apiUserId', aslApiUserId);
-        
-        Object.entries(data).forEach(([key, value]) => {
-            if(value !== undefined && value !== null && value !== '') {
-                formData.append(key, value);
-            }
-        });
+  try {
+    const formData = new FormData();
+    formData.append('apiToken', aslApiToken);
+    formData.append('apiUserId', aslApiUserId);
 
-        const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/senderregistration`,
-            formData,
-            {
-                headers: {
-                    ...formData.getHeaders()
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
-    }
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        formData.append(key, value);
+      }
+    });
+
+    const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/senderregistration`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders()
+        }
+      });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
+  }
 }
 
-// ASL DMT Receive OTP
 const aslDmtReceiveOtp = async (data) => {
-    try{
-        const formData = new FormData();
-        formData.append('apiToken', aslApiToken);
-        formData.append('apiUserId', aslApiUserId);
-        
-        Object.entries(data).forEach(([key, value]) => {
-            if(value !== undefined && value !== null && value !== '') {
-                formData.append(key, value);
-            }
-        });
+  try {
+    const formData = new FormData();
+    formData.append('apiToken', aslApiToken);
+    formData.append('apiUserId', aslApiUserId);
 
-        const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/receiveotp`,
-            formData,
-            {
-                headers: {
-                    ...formData.getHeaders()
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
-    }
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        formData.append(key, value);
+      }
+    });
+
+    const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/receiveotp`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders()
+        }
+      });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
+  }
 }
 
-// ASL DMT Verify OTP
 const aslDmtVerifyOtp = async (data) => {
-    try{
-        const formData = new FormData();
-        formData.append('apiToken', aslApiToken);
-        formData.append('apiUserId', aslApiUserId);
-        
-        Object.entries(data).forEach(([key, value]) => {
-            if(value !== undefined && value !== null && value !== '') {
-                formData.append(key, value);
-            }
-        });
+  try {
+    const formData = new FormData();
+    formData.append('apiToken', aslApiToken);
+    formData.append('apiUserId', aslApiUserId);
 
-        const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/verifyotp`,
-            formData,
-            {
-                headers: {
-                    ...formData.getHeaders()
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
-    }
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        formData.append(key, value);
+      }
+    });
+
+    const response = await axios.post(`${aslUrl}/apipartner/apiservice/dmt/verifyotp`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders()
+        }
+      });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response?.data || { status: 'error', message: error.message || 'Unable to reach ASL DMT API' };
+  }
 }
 
-// ASL DMT Add Beneficiary
 const aslDmtAddBeneficiary = async (data) => {
-    try{
-        const response = await axios.post(`${aslUrl}/dmt/addBeneficiary`,
-            {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response.data;
-    }
+  try {
+    const response = await axios.post(`${aslUrl}/dmt/addBeneficiary`,
+      {
+        apiToken: aslApiToken,
+        apiUserId: aslApiUserId,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response.data;
+  }
 }
 
-// ASL DMT Get Beneficiary
 const aslDmtGetBeneficiary = async (data) => {
-    try{
-        const response = await axios.post(`${aslUrl}/dmt/getbeneficiary`,
-            {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response.data;
-    }
+  try {
+    const response = await axios.post(`${aslUrl}/dmt/getbeneficiary`,
+      {
+        apiToken: aslApiToken,
+        apiUserId: aslApiUserId,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response.data;
+  }
 }
 
-// ASL DMT Get Beneficiary Details
 const aslDmtBeneficiaryDetails = async (data) => {
-    try{
-        const response = await axios.post(`${aslUrl}/dmt/getbeneficiarydetails`,
-            {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response.data;
-    }
+  try {
+    const response = await axios.post(`${aslUrl}/dmt/getbeneficiarydetails`,
+      {
+        apiToken: aslApiToken,
+        apiUserId: aslApiUserId,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response.data;
+  }
 }
 
-// ASL DMT Get Beneficiary Names
 const aslDmtGetBeneficiaryNames = async (data) => {
-    try{
-        const response = await axios.post(`${aslUrl}/dmt/getbeneficiaryname`,
-            {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response.data;
-    }
+  try {
+    const response = await axios.post(`${aslUrl}/dmt/getbeneficiaryname`,
+      {
+        apiToken: aslApiToken,
+        apiUserId: aslApiUserId,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response.data;
+  }
 }
 
-// ASL DMT Money Transfer
 const aslDmtMoneyTransfer = async (data) => {
-    try{
-        const response = await axios.post(`${aslUrl}/dmt/moneytransfer`,
-            {
-                apiToken : aslApiToken,
-                apiUserId: aslApiUserId,
-                ...data
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-        console.log("response",response);
-        console.log("response.data",response.data);
-        return response.data;
-    } catch (error) {
-        console.log("error",error);
-        return error.response.data;
-    }
+  try {
+    const response = await axios.post(`${aslUrl}/dmt/moneytransfer`,
+      {
+        apiToken: aslApiToken,
+        apiUserId: aslApiUserId,
+        ...data
+      }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log("response", response);
+    console.log("response.data", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("error", error);
+    return error.response.data;
+  }
 }
 
-const alsWallet = async()=>{
-    try{
-        // Use https agent for connection reuse (faster subsequent requests)
-        const isHttps = aslUrl?.startsWith('https');
-        const response = await axios.post(`${aslUrl}/check/walletBalance`, {
-            associateId: aslAssociateId,
-            apiToken: aslApiToken,   
-        }, {
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            timeout: 3000, // 3 second timeout to fail fast if API is slow
-            httpAgent: !isHttps ? httpAgent : undefined,
-            httpsAgent: isHttps ? httpsAgent : undefined
-        });  
-        return response.data;
-    }catch(error){
-        // Handle timeout and network errors
-        if(error.code === 'ECONNABORTED'){
-            throw new Error('Request timeout: ASL API did not respond in time');
-        }
-        // Return error response data if available, otherwise throw
-        if(error.response?.data){
-            return error.response.data;
-        }
-        throw error;
+const alsWallet = async () => {
+  try {
+    const isHttps = aslUrl?.startsWith('https');
+    const response = await axios.post(`${aslUrl}/check/walletBalance`, {
+      associateId: aslAssociateId,
+      apiToken: aslApiToken,
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 3000,
+      httpAgent: !isHttps ? httpAgent : undefined,
+      httpsAgent: isHttps ? httpsAgent : undefined
+    });
+    return response.data;
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Request timeout: ASL API did not respond in time');
     }
+    if (error.response?.data) {
+      return error.response.data;
+    }
+    throw error;
+  }
 }
 
 module.exports = {
-    aslAepsOnboarding,
-    aslAepsValidateAgentOtp,
-    aslAepsValidateAgentBiometric,
-    aslAepsBankKycSendOtp,
-    aslAepsBankKycValidateOtp,
-    aslAepsBankKycBiometricValidate,
-    aslAeps2FA,
-    aslAepsCheckStatus,
-    aslAepsTransaction,
-    aslAepsReceiveOtp,
-    aslAepsResendOtp,
-    aslAepsPayOut,
-    aslDmtSenderRegistration,
-    aslDmtReceiveOtp,
-    aslDmtVerifyOtp,
-    aslDmtAddBeneficiary,
-    aslDmtGetBeneficiary,
-    aslDmtBeneficiaryDetails,
-    aslDmtGetBeneficiaryNames,
-    aslDmtMoneyTransfer,
-    alsWallet
+  aslAepsOnboarding,
+  aslAepsValidateAgentOtp,
+  aslAepsValidateAgentBiometric,
+  aslAepsBankKycSendOtp,
+  aslAepsBankKycValidateOtp,
+  aslAepsBankKycBiometricValidate,
+  aslAeps2FA,
+  aslAepsCheckStatus,
+  aslAepsTransaction,
+  aslAepsReceiveOtp,
+  aslAepsResendOtp,
+  aslAepsPayOut,
+  aslDmtSenderRegistration,
+  aslDmtReceiveOtp,
+  aslDmtVerifyOtp,
+  aslDmtAddBeneficiary,
+  aslDmtGetBeneficiary,
+  aslDmtBeneficiaryDetails,
+  aslDmtGetBeneficiaryNames,
+  aslDmtMoneyTransfer,
+  alsWallet
 }

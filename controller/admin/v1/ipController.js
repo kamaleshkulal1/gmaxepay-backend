@@ -75,7 +75,7 @@ const listIp = async (req, res) => {
     foundData = await dbService.paginate(ipInfo, query, options);
 
     if (!foundData) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No IP Found exists!' });
     }
     return res.status(200).send({
       status: 'SUCCESS',
@@ -85,7 +85,7 @@ const listIp = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.internalServerError({ data: error.message });
+    return res.failure({ message: error.message || 'Error fetching IP' });
   }
 };
 
@@ -119,7 +119,7 @@ const updateIp = async (req, res) => {
       data: updatedIp
     });
   } catch (error) {
-    res.status(400).send({ message: 'Error updating IP' });
+    res.failure({ message: 'Error updating IP' });
   }
 };
 
@@ -136,7 +136,7 @@ const getIp = async (req, res) => {
       data: foundData
     });
   } catch (error) {
-    res.status(500).send({ message: 'Error fetching IP' });
+    res.failure({ message: 'Error fetching IP' });
   }
 };
 
@@ -145,7 +145,7 @@ const deleteIp = async (req, res) => {
     const id = req.params.id;
     const foundData = await dbService.findOne(ipInfo, { id: id });
     if (!foundData) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No IP Found exists!' });
     }
     const deletedIp = await dbService.destroy(ipInfo, { id: id });
 
@@ -154,7 +154,7 @@ const deleteIp = async (req, res) => {
       data: deletedIp
     });
   } catch (error) {
-    res.status(400).send({ message: 'Error deleting IP' });
+    res.failure({ message: 'Error deleting IP' });
   }
 };
 
@@ -162,7 +162,7 @@ const listType = async (req, res) => {
   try {
     const foundData = await dbService.findAll(ipListType);
     if (!foundData) {
-      return res.recordNotFound();
+      return res.failure({ message: 'No IP Type Found exists!' });
     }
 
     return res.success({
@@ -170,7 +170,7 @@ const listType = async (req, res) => {
       data: foundData
     });
   } catch (error) {
-    res.status(400).send({ message: 'Error fetching IP' });
+    res.failure({ message: 'Error fetching IP' });
   }
 };
 
@@ -183,7 +183,7 @@ const showIp = async (req, res) => {
       data: ipAddress
     });
   } catch (error) {
-    res.status(400).send({ message: 'Error deleting IP' });
+    res.failure({ message: 'Error deleting IP' });
   }
 };
 

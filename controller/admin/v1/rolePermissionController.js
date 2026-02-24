@@ -126,9 +126,9 @@ const updatePermission = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error });
     }
   }
 };
@@ -148,18 +148,12 @@ const getPermissionByRoleId = async (req, res) => {
 
     const { roleId } = req.params;
 
-    /**
-     * We want the full list of permissions (parents + children),
-     * and for each permission show this role's read/write (true/false).
-     * So we start from `permission` and LEFT JOIN `rolePermission` filtered by roleId.
-     */
-
     const options = {
       include: [
         {
           model: rolePermission,
           attributes: ['id', 'roleId', 'permissionId', 'read', 'write'],
-          required: false, // left join – return permissions even if rolePermission row doesn't exist
+          required: false,
           query: { roleId: Number(roleId) }
         }
       ]
@@ -171,7 +165,6 @@ const getPermissionByRoleId = async (req, res) => {
       return res.recordNotFound();
     }
 
-    // Build a map of parent permissions and attach children under each parent
     const permissionMap = {};
 
     allPermissions.forEach((perm) => {
@@ -180,13 +173,11 @@ const getPermissionByRoleId = async (req, res) => {
 
       if (!parentId) return;
 
-      // Role-specific flags (if any rolePermission rows exist)
       let read = false;
       let write = false;
       let roleIdForPerm = Number(roleId);
 
       if (Array.isArray(perm.rolePermissions) && perm.rolePermissions.length) {
-        // If multiple rolePermission rows exist for some reason, use the first one
         const rp = perm.rolePermissions[0];
         read = Boolean(rp.read);
         write = Boolean(rp.write);
@@ -204,7 +195,6 @@ const getPermissionByRoleId = async (req, res) => {
         permissionId: perm.id
       };
 
-      // Ensure parent entry exists
       if (!permissionMap[parentId]) {
         permissionMap[parentId] = {
           id: parentId,
@@ -220,14 +210,12 @@ const getPermissionByRoleId = async (req, res) => {
       }
 
       if (isParent) {
-        // Update parent details & its own read/write
         permissionMap[parentId] = {
           ...permissionMap[parentId],
           ...permData,
           children: permissionMap[parentId].children || []
         };
       } else {
-        // Child permission – assign moduleName to parent if not set
         if (!permissionMap[parentId].moduleName) {
           permissionMap[parentId].moduleName = perm.moduleName;
         }
@@ -244,9 +232,9 @@ const getPermissionByRoleId = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error.message });
+      return res.failure({ message: error.message });
     }
   }
 };
@@ -284,9 +272,9 @@ const createPermission = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error });
     }
   }
 };
@@ -334,9 +322,9 @@ const createRolePermission = async (req, res) => {
   } catch (error) {
     console.log(error);
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.validationError({ message: error.errors[0].message });
+      return res.failure({ message: error.errors[0].message });
     } else {
-      return res.internalServerError({ message: error });
+      return res.failure({ message: error });
     }
   }
 };
