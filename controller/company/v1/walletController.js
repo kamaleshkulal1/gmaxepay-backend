@@ -42,6 +42,7 @@ const walletHistory = async (req, res) => {
         const user = req.user;
 
         let query = {
+            refId: user.id,
             companyId: user.companyId
         };
 
@@ -75,9 +76,6 @@ const walletHistory = async (req, res) => {
                 query.transactionId = {
                     [Op.iLike]: `%${dataToFind.customSearch.transactionId}%`
                 };
-            }
-            if (dataToFind.customSearch.userId) {
-                query.refId = dataToFind.customSearch.userId;
             }
         }
 

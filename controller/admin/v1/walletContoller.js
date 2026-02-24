@@ -134,8 +134,10 @@ const bbpsWallet = async (req, res) => {
 const walletHistory = async (req, res) => {
     try {
         const dataToFind = req.body;
-
-        let query = {};
+        const user = req.user;
+        let query = {
+            refId: user.id
+        };
 
         // Merge request query
         if (dataToFind.query) {
@@ -163,12 +165,6 @@ const walletHistory = async (req, res) => {
 
         // Handle Custom Search
         if (dataToFind.customSearch) {
-            if (dataToFind.customSearch.companyId) {
-                query.companyId = dataToFind.customSearch.companyId;
-            }
-            if (dataToFind.customSearch.userId) {
-                query.refId = dataToFind.customSearch.userId;
-            }
             if (dataToFind.customSearch.transactionId) {
                 query.transactionId = {
                     [Op.iLike]: `%${dataToFind.customSearch.transactionId}%`
