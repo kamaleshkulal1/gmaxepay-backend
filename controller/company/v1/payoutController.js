@@ -572,6 +572,7 @@ const payout = async (req, res) => {
                         closingAmt: aepsClosingBalance,
                         transactionId: transactionID,
                         paymentStatus: 'SUCCESS',
+                        operator: 'moveToWallet',
                         remark: `Internal transfer: ${normalizedAepsType} to Main Wallet`,
                         addedBy: user.id,
                         updatedBy: user.id
@@ -587,6 +588,7 @@ const payout = async (req, res) => {
                         closingAmt: mainWalletClosingBalance,
                         transactionId: transactionID,
                         paymentStatus: 'SUCCESS',
+                        operator: 'moveToWallet',
                         remark: `Internal transfer: From ${normalizedAepsType} Wallet`,
                         addedBy: user.id,
                         updatedBy: user.id
