@@ -800,7 +800,7 @@ const loginUser = async (
 
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
-    const expireOTP = moment().add(120, 'seconds').toISOString() // 2 minutes;
+    const expireOTP = moment().add(180, 'seconds').toISOString() // 3 minutes;
 
     await dbService.update(
       model.user,
