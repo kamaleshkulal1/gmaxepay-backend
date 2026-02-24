@@ -4,11 +4,6 @@ const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
 const User = require('./user');
 
-/**
- * aepsHistory.js
- * @description :: sequelize model of database table aepsHistory
- * Separate history for AEPS transactions (in addition to walletHistory ledger entries).
- */
 let AepsHistory = sequelize.define(
   'aepsHistory',
   {
@@ -114,12 +109,10 @@ let AepsHistory = sequelize.define(
       type: DataTypes.FLOAT,
       allowNull: true
     },
-    // Convenience flattened address string
     transactionCompleteAddress: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    // Wallet snapshot for AEPS wallet crediting
     openingAepsWallet: {
       type: DataTypes.FLOAT,
       allowNull: true
@@ -133,7 +126,6 @@ let AepsHistory = sequelize.define(
       allowNull: true,
       defaultValue: 0
     },
-    // --- AEPS Commission Breakdown (nullable) ---
     superadminComm: {
       type: DataTypes.FLOAT,
       allowNull: true
@@ -154,7 +146,6 @@ let AepsHistory = sequelize.define(
       type: DataTypes.FLOAT,
       allowNull: true
     },
-    // --- TDS on Commission (nullable, calculated only for SUCCESS transactions) ---
     superadminCommTDS: {
       type: DataTypes.FLOAT,
       allowNull: true
@@ -177,23 +168,23 @@ let AepsHistory = sequelize.define(
     },
     superAdminAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     whitelabelAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     masterDistributorAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     distributorAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
     retailerAvail: {
       type: DataTypes.BOOLEAN,
-      default: false
+      defaultValue: false
     },
 
     addedBy: {

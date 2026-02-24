@@ -730,8 +730,14 @@ const payout = async (req, res) => {
         const payoutHistory = await dbService.createOne(model.payoutHistory, payoutHistoryData);
 
         if (mode === 'bank' && gstAmount > 0) {
-            const gstOpening = aepsOpeningBalance - payoutAmount;
-            const gstClosing = gstOpening - gstAmount;
+            let gstOpening = aepsOpeningBalance - payoutAmount;
+            let gstClosing = gstOpening - gstAmount;
+
+            if (payoutHistoryData.status === 'FAILED') {
+                gstOpening = aepsOpeningBalance;
+                gstClosing = aepsOpeningBalance;
+            }
+
             await dbService.createOne(model.gstHistory, {
                 refId: user.id,
                 companyId: user.companyId,
