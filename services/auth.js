@@ -19,7 +19,7 @@ const loadUserPermissions = async (userRole) => {
     if (!userRole) {
       return [];
     }
-    
+
     const rolePermissions = await dbService.findAll(
       model.rolePermission,
       { roleId: userRole },
@@ -33,17 +33,17 @@ const loadUserPermissions = async (userRole) => {
         order: [['permissionId', 'ASC']]
       }
     );
-    
+
     // First, map all permissions with their data
     const allPermissions = rolePermissions
       .map((rp) => {
         const permissionMeta = rp.permission
           ? {
-              id: rp.permission.id,
-              moduleName: rp.permission.moduleName,
-              isParent: rp.permission.isParent,
-              parentId: rp.permission.parentId
-            }
+            id: rp.permission.id,
+            moduleName: rp.permission.moduleName,
+            isParent: rp.permission.isParent,
+            parentId: rp.permission.parentId
+          }
           : null;
 
         return {
@@ -56,11 +56,11 @@ const loadUserPermissions = async (userRole) => {
         };
       })
       .filter((permission) => permission.read === true || permission.write === true);
-    
+
     // Separate parents and children
     const parents = allPermissions.filter(p => p.parentId === null);
     const children = allPermissions.filter(p => p.parentId !== null);
-    
+
     // Build hierarchical structure
     const hierarchicalPermissions = parents.map(parent => {
       // Find all children for this parent
@@ -75,7 +75,7 @@ const loadUserPermissions = async (userRole) => {
           moduleName: child.moduleName,
           isParent: child.isParent
         }));
-      
+
       // Return parent with children nested, no dataValues for parent
       const parentObj = {
         permissionId: parent.permissionId,
@@ -85,15 +85,15 @@ const loadUserPermissions = async (userRole) => {
         moduleName: parent.moduleName,
         isParent: parent.isParent
       };
-      
+
       // Only add children array if there are children
       if (parentChildren.length > 0) {
         parentObj.children = parentChildren;
       }
-      
+
       return parentObj;
     }).sort((a, b) => a.permissionId - b.permissionId);
-    
+
     return hierarchicalPermissions;
   } catch (error) {
     console.error('Error loading user permissions:', error);
@@ -123,7 +123,7 @@ const determineSecurityMethod = async (user) => {
       requiresSetupMPIN: true
     };
   }
-  
+
   // If 2FA is enabled (both flags true)
   if (user.is2FAenabled === true && user.is2faEnabledActive === true) {
     // If key2Fa is null, need to setup 2FA
@@ -142,7 +142,7 @@ const determineSecurityMethod = async (user) => {
       requires2FA: true
     };
   }
-  
+
   // Default fallback to MPIN
   if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
     return {
@@ -174,7 +174,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
     // Decrypt dataToken to get user details
     const tokenData = JSON.parse(Buffer.from(dataToken, 'base64').toString());
     const decryptedData = decrypt(tokenData.data, Buffer.from(tokenData.key, 'hex'));
-    
+
     if (!decryptedData) {
       return {
         isValid: false,
@@ -188,11 +188,11 @@ const validateAndDecryptDataToken = async (dataToken) => {
     // Check if dataToken has expired using SIGNATURE_TOKEN_EXPIRY from env
     const currentTime = Date.now();
     const tokenAge = currentTime - timestamp;
-    
+
     // Parse the expiry time from environment (e.g., '10m' = 10 minutes)
     const expiryTime = JWT.SIGNATURE_TOKEN_EXPIRY;
     let expiryInMs;
-    
+
     if (expiryTime.endsWith('m')) {
       expiryInMs = parseInt(expiryTime) * 60 * 1000; // Convert minutes to milliseconds
     } else if (expiryTime.endsWith('h')) {
@@ -202,7 +202,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
     } else {
       expiryInMs = parseInt(expiryTime) * 60 * 1000; // Default to minutes if no unit specified
     }
-    
+
     if (tokenAge > expiryInMs) {
       return {
         isValid: false,
@@ -214,7 +214,7 @@ const validateAndDecryptDataToken = async (dataToken) => {
     const existingUser = await dbService.findOne(model.user, { id: userId, isDeleted: false });
     if (existingUser && existingUser.isActive === false) {
       // If user is inactive and KYC shows FULL_KYC but steps are not 7, block with specific message
-      if (existingUser.kycStatus === 'FULL_KYC' ||  existingUser.kycSteps !== 7) {
+      if (existingUser.kycStatus === 'FULL_KYC' || existingUser.kycSteps !== 7) {
         return {
           isValid: false,
           error: 'KYC status is Incomplete. Please complete your KYC to login.'
@@ -323,10 +323,10 @@ const generateToken = (user, secret) => {
 const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
   const now = Date.now();
   const loginTs = typeof loginTimestamp === 'number' ? loginTimestamp : now;
-  
+
   // Access token expires in 2 minutes from now
   const accessTokenExpiry = JWT.EXPIRES_IN * 60; // 2 minutes in seconds
-  
+
   // Refresh token expires exactly 28 minutes from login timestamp
   const refreshTokenExpiryMs = 28 * 60 * 1000; // 28 minutes in milliseconds
   const refreshTokenExpiryTime = loginTs + refreshTokenExpiryMs;
@@ -483,11 +483,11 @@ const refreshAccessToken = async (token) => {
     // Get original login timestamp from refresh token payload
     // If not present (old tokens), use current time as fallback
     const loginTimestamp = payload.loginTimestamp || Date.now();
-    
+
     // Generate new access token (2 minutes) and refresh token with same expiry
     // based on original login timestamp to preserve 30-minute session limit
     const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-    
+
     return {
       flag: false,
       msg: 'Token refreshed successfully',
@@ -517,19 +517,19 @@ const loginUser = async (
       isDeleted: false,
       mobileNo: mobileNo
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
     let options = {};
-    
+
     if (!longitude || !latitude) {
       return {
         flag: true,
         msg: 'Please allow the Location access!'
       };
     }
-    
+
     const user = await dbService.findOne(model.user, where, options);
     if (!user) {
       return {
@@ -537,7 +537,7 @@ const loginUser = async (
         msg: 'Invalid credentials!'
       };
     }
-    
+
     // Update user's last known coordinates
     try {
       await dbService.update(
@@ -558,7 +558,7 @@ const loginUser = async (
         msg: `Account is locked due to multiple failed login attempts. Please contact admin for assistance.`
       };
     }
-    
+
     if (user.userType !== parseInt(userType)) {
       return {
         flag: true,
@@ -572,10 +572,10 @@ const loginUser = async (
       if (!isPasswordMatched) {
         // Increment login attempts and potentially lock account
         await user.incrementLoginAttempts();
-        
+
         // Reload user to get updated loginAttempts and lock status
         const updatedUser = await dbService.findOne(model.user, { id: user.id });
-        
+
         // Check if account is now locked after this attempt
         if (updatedUser.isAccountLocked() || updatedUser.loginAttempts >= MAX_LOGIN_RETRY_LIMIT) {
           return {
@@ -583,13 +583,13 @@ const loginUser = async (
             msg: 'Account locked due to multiple failed login attempts. Please contact admin for assistance.'
           };
         }
-        
+
         // Calculate remaining attempts (MAX_LOGIN_RETRY_LIMIT = 3)
         // After 1st wrong: loginAttempts = 1, remaining = 2
         // After 2nd wrong: loginAttempts = 2, remaining = 1
         // After 3rd wrong: account is locked (handled above)
         const remainingAttempts = MAX_LOGIN_RETRY_LIMIT - updatedUser.loginAttempts;
-        
+
         // Ensure remaining attempts is never negative
         if (remainingAttempts <= 0) {
           return {
@@ -597,22 +597,22 @@ const loginUser = async (
             msg: 'Account locked due to multiple failed login attempts. Please contact admin for assistance.'
           };
         }
-        
+
         return {
           flag: true,
           msg: `Incorrect Password. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before account lock.`
         };
       }
-      
+
       // Reset login attempts on successful password verification
       await user.resetLoginAttempts();
     }
 
 
     const ip = req.headers['x-forwarded-for']?.split(',')[0] ||
-              req.connection?.remoteAddress ||
-              req.socket?.remoteAddress ||
-              req.ip;
+      req.connection?.remoteAddress ||
+      req.socket?.remoteAddress ||
+      req.ip;
     const userAgent = req.headers['user-agent'];
 
     // Create sensitive data for encryption
@@ -626,7 +626,7 @@ const loginUser = async (
       ip: ip,
       timestamp: Date.now()
     };
-    
+
     const encryptionKey = crypto.randomBytes(32);
     const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
 
@@ -648,13 +648,13 @@ const loginUser = async (
           }
         };
       }
-      
+
       // Reset all lock attempts in development environment for easier testing
       await user.resetAllLockAttempts();
 
       // Determine security method based on user settings
       const securityMethod = await determineSecurityMethod(user);
-      
+
       if (securityMethod.requiresSetup2FA) {
         return {
           flag: false,
@@ -666,7 +666,7 @@ const loginUser = async (
           }
         };
       }
-      
+
       if (securityMethod.requires2FA) {
         return {
           flag: false,
@@ -677,7 +677,7 @@ const loginUser = async (
           }
         };
       }
-      
+
       if (securityMethod.requiresSetupMPIN) {
         return {
           flag: false,
@@ -688,7 +688,7 @@ const loginUser = async (
           }
         };
       }
-      
+
       if (securityMethod.requiresMPIN) {
         return {
           flag: false,
@@ -710,15 +710,15 @@ const loginUser = async (
         }
       };
     }
-    
+
 
     // Production environment - Check if OTP login is required (once per day)
     // Check if user already logged in with OTP today (IST)
     const todayIST = aepsDailyLoginService.getIndianDateOnly(); // Returns YYYY-MM-DD in IST
-    const lastOtpDate = user.lastOtpLoginDate 
+    const lastOtpDate = user.lastOtpLoginDate
       ? moment(user.lastOtpLoginDate).utcOffset('+05:30').format('YYYY-MM-DD')
       : null;
-    
+
     const otpAlreadyDoneToday = lastOtpDate === todayIST;
 
     // If OTP was already done today, skip OTP and go directly to security method (MPIN/2FA)
@@ -737,7 +737,7 @@ const loginUser = async (
 
       // Determine security method based on user settings
       const securityMethod = await determineSecurityMethod(user);
-      
+
       if (securityMethod.requiresSetup2FA) {
         return {
           flag: false,
@@ -749,7 +749,7 @@ const loginUser = async (
           }
         };
       }
-      
+
       if (securityMethod.requires2FA) {
         return {
           flag: false,
@@ -760,7 +760,7 @@ const loginUser = async (
           }
         };
       }
-      
+
       if (securityMethod.requiresSetupMPIN) {
         return {
           flag: false,
@@ -771,7 +771,7 @@ const loginUser = async (
           }
         };
       }
-      
+
       if (securityMethod.requiresMPIN) {
         return {
           flag: false,
@@ -797,11 +797,11 @@ const loginUser = async (
     // OTP not done today - Generate OTP for mobile verification
     // Reset login attempts when generating new OTP
     await user.resetLoginAttempts();
-    
+
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(120, 'seconds').toISOString() // 2 minutes;
-    
+
     await dbService.update(
       model.user,
       { id: user.id },
@@ -856,7 +856,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
       isDeleted: false,
       mobileNo
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
@@ -868,7 +868,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
         msg: 'User does not exist!'
       };
     }
-    
+
     // Check if account is locked due to failed login attempts (password or OTP)
     if (user.isAccountLocked()) {
       return {
@@ -903,17 +903,17 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
       if (isOtpValid) {
         // Reset login attempts on successful verification
         await user.resetLoginAttempts();
-        
+
         // Update lastOtpLoginDate to today (IST) - OTP done once per day
         const todayIST = aepsDailyLoginService.getIndianDateOnly(); // Returns YYYY-MM-DD in IST
         const todayISTMidnight = new Date(`${todayIST}T00:00:00+05:30`);
-        
+
         await dbService.update(
           model.user,
           { id: user.id },
           { lastOtpLoginDate: todayISTMidnight }
         );
-        
+
         // Check if password reset is required
         if (user.isResetPassword || !user.password) {
           return {
@@ -928,7 +928,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
 
         // Determine security method based on user settings
         const securityMethod = await determineSecurityMethod(user);
-        
+
         if (securityMethod.requiresSetup2FA) {
           return {
             flag: false,
@@ -940,7 +940,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
             }
           };
         }
-        
+
         if (securityMethod.requires2FA) {
           return {
             flag: false,
@@ -951,7 +951,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
             }
           };
         }
-        
+
         if (securityMethod.requiresSetupMPIN) {
           return {
             flag: false,
@@ -962,7 +962,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
             }
           };
         }
-        
+
         if (securityMethod.requiresMPIN) {
           return {
             flag: false,
@@ -986,7 +986,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
       } else {
         // Increment OTP attempts and potentially lock OTP verification
         await user.incrementOtpAttempts();
-        
+
         // Check if OTP verification is now locked after this attempt
         const updatedUser = await dbService.findOne(model.user, { id: user.id });
         if (updatedUser.isOtpLocked()) {
@@ -995,7 +995,7 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
             msg: 'OTP verification locked due to multiple failed attempts. Please contact admin for assistance.'
           };
         }
-        
+
         const remainingAttempts = 3 - updatedUser.loginAttempts;
         return {
           flag: true,
@@ -1330,7 +1330,7 @@ const resendOTP = async (mobileNo, companyId) => {
         msg: 'User does not exist!'
       };
     }
-    
+
     // Check if OTP attempts are locked
     if (user.isOtpLocked()) {
       return {
@@ -1338,10 +1338,10 @@ const resendOTP = async (mobileNo, companyId) => {
         msg: `Cannot resend OTP. Account is locked due to multiple failed attempts. Please contact admin for assistance.`
       };
     }
-    
+
     // Reset OTP attempts when resending OTP
     await user.resetOtpAttempts();
-    
+
     let code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(120, 'seconds').toISOString() // 2 minutes;
@@ -1394,11 +1394,11 @@ const resendMobileOTP = async (token, companyId) => {
       isDeleted: false,
       mobileNo
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
-    
+
     const user = await dbService.findOne(model.user, where);
     if (!user) {
       return {
@@ -1406,7 +1406,7 @@ const resendMobileOTP = async (token, companyId) => {
         msg: 'User does not exist!'
       };
     }
-    
+
     // Check if OTP attempts are locked
     if (user.isOtpLocked()) {
       return {
@@ -1414,25 +1414,25 @@ const resendMobileOTP = async (token, companyId) => {
         msg: `Cannot resend OTP. Account is locked due to multiple failed attempts. Please contact admin for assistance.`
       };
     }
-    
+
     // Reset OTP attempts when resending OTP
     await user.resetOtpAttempts();
-    
+
     // Generate new OTP
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(120, 'seconds').toISOString(); // 2 minutes
-    
+
     await dbService.update(
       model.user,
       { id: user.id },
       { otpMobile: hashedCode + '~' + expireOTP }
     );
-    
+
     // Send SMS
     const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;
     const smsSend = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
-    
+
     if (smsSend) {
       return {
         flag: false,
@@ -1653,7 +1653,7 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
       isActive: true,
       isDeleted: false
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
@@ -1671,12 +1671,12 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
       const tempPassword = random.randomNumber(6);
       const hashedPassword = await bcrypt.hash(tempPassword, 10);
       const expireTime = moment().add(10, 'minutes').toISOString(); // 10 minutes validity
-      
+
       // Store temporary password with expiry time
       await dbService.update(
         model.user,
         { id: user.id },
-        { 
+        {
           password: hashedPassword + '~' + expireTime,
           tokenVersion: getRandomNumber()
         }
@@ -1711,7 +1711,7 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
       };
     }
 
-    if(!user.isResetPassword) {
+    if (!user.isResetPassword) {
       return {
         flag: true,
         msg: 'User is already reset password!'
@@ -1729,12 +1729,12 @@ const resetPassword = async (token, newPassword, confirmPassword, companyId) => 
 
     // Hash new password with bcrypt for maximum security
     const hashedPassword = await bcrypt.hash(newPassword, 12);
-    
+
     // Update password and reset flag
     await dbService.update(
       model.user,
       { id: user.id },
-      { 
+      {
         password: hashedPassword,
         isResetPassword: false,
         tokenVersion: getRandomNumber()
@@ -1824,7 +1824,7 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
       isActive: true,
       isDeleted: false
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
@@ -1838,7 +1838,7 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
 
     // Check if user already has an MPIN set up
     if (user.secureKey && !user.isMpinSetup && user.isMpinEnabled === true) {
-      return { 
+      return {
         flag: true,
         msg: 'MPIN already set. Please use verify MPIN to login.'
       };
@@ -1851,18 +1851,18 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
     await dbService.update(
       model.user,
       { id: user.id },
-      { 
+      {
         secureKey: hashedMPIN,
-        isMpinSetup: false,  
-        isMpinEnabled: true 
+        isMpinSetup: false,
+        isMpinEnabled: true
       }
     );
-    
+
     // Update user object
     user.secureKey = hashedMPIN;
     user.isMpinSetup = false;
     user.isMpinEnabled = true;
-    
+
     // Generate new dataToken for MPIN verification step
     const ip = userDetail?.ip || '';
     const userAgent = userDetail?.userAgent || '';
@@ -1876,7 +1876,7 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
       ip: ip,
       timestamp: loginTimestamp || Date.now()
     };
-    
+
     const encryptionKey = crypto.randomBytes(32);
     const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
     const newDataToken = Buffer.from(JSON.stringify({
@@ -1924,7 +1924,7 @@ const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAdd
       isActive: true,
       isDeleted: false
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
@@ -1965,10 +1965,10 @@ const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAdd
     if (!isMPINValid) {
       // Increment login attempts and potentially lock account
       await user.incrementLoginAttempts();
-      
+
       // Reload user to get updated loginAttempts and lock status
       const updatedUser = await dbService.findOne(model.user, { id: user.id });
-      
+
       // Check if account is now locked after this attempt
       if (updatedUser.isAccountLocked() || updatedUser.loginAttempts >= MAX_LOGIN_RETRY_LIMIT) {
         return {
@@ -1976,13 +1976,13 @@ const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAdd
           msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
         };
       }
-      
+
       // Calculate remaining attempts (MAX_LOGIN_RETRY_LIMIT = 3)
       // After 1st wrong: loginAttempts = 1, remaining = 2
       // After 2nd wrong: loginAttempts = 2, remaining = 1
       // After 3rd wrong: account is locked (handled above)
       const remainingAttempts = MAX_LOGIN_RETRY_LIMIT - updatedUser.loginAttempts;
-      
+
       // Ensure remaining attempts is never negative
       if (remainingAttempts <= 0) {
         return {
@@ -1990,13 +1990,13 @@ const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAdd
           msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
         };
       }
-      
+
       return {
         flag: true,
         msg: `Invalid MPIN. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before account lock.`
       };
     }
-    
+
     // Reset login attempts on successful MPIN verification
     await user.resetLoginAttempts();
 
@@ -2007,10 +2007,10 @@ const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAdd
       { id: user.id },
       { tokenVersion: getTokenVersion, loggedIn: true }
     );
-    
+
     // Update user object with new tokenVersion
     user.tokenVersion = getTokenVersion;
-    
+
     // Generate final tokens after MPIN verification
     const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
@@ -2078,7 +2078,7 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       isActive: true,
       isDeleted: false
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
@@ -2097,55 +2097,55 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       };
     }
 
-      // In development environment, skip OTP verification
-      if (process.env.NODE_ENV === 'development') {
-        // Update user login status FIRST
-        const getTokenVersion = getRandomNumber();
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { tokenVersion: getTokenVersion, loggedIn: true }
-        );
-        
-        // Update user object with new tokenVersion
-        user.tokenVersion = getTokenVersion;
-        
-        // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+    // In development environment, skip OTP verification
+    if (process.env.NODE_ENV === 'development') {
+      // Update user login status FIRST
+      const getTokenVersion = getRandomNumber();
+      await dbService.update(
+        model.user,
+        { id: user.id },
+        { tokenVersion: getTokenVersion, loggedIn: true }
+      );
 
-        // Create userLogin record for successful 2FA verification
-        const userLoginRecord = await dbService.createOne(model.userLogin, {
-          user_id: user.id,
-          user_type: user.userRole,
-          isLoggedIn: true,
-          latitude: latitude || null ,
-          longitude: longitude|| null,
-          ipAddress: ipAddress|| null,
-          companyId: user.companyId
-        });
+      // Update user object with new tokenVersion
+      user.tokenVersion = getTokenVersion;
 
-        // Load user permissions
-        const permissions = await loadUserPermissions(user.userRole);
+      // Generate final tokens after 2FA verification
+      const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
-        return {
-          flag: false,
-          msg: '2FA verification successful!',
-          data: {
-            accessToken,
-            refreshToken,
-            user: {
-              id: user.id,
-              name: user.name,
-              mobileNo: user.mobileNo,
-              userRole: user.userRole,
-              outletName: user.outletName,
-              companyId: user.companyId
-            },
-            userLogin: userLoginRecord,
-            permissions
-          }
-        };
-      }
+      // Create userLogin record for successful 2FA verification
+      const userLoginRecord = await dbService.createOne(model.userLogin, {
+        user_id: user.id,
+        user_type: user.userRole,
+        isLoggedIn: true,
+        latitude: latitude || null,
+        longitude: longitude || null,
+        ipAddress: ipAddress || null,
+        companyId: user.companyId
+      });
+
+      // Load user permissions
+      const permissions = await loadUserPermissions(user.userRole);
+
+      return {
+        flag: false,
+        msg: '2FA verification successful!',
+        data: {
+          accessToken,
+          refreshToken,
+          user: {
+            id: user.id,
+            name: user.name,
+            mobileNo: user.mobileNo,
+            userRole: user.userRole,
+            outletName: user.outletName,
+            companyId: user.companyId
+          },
+          userLogin: userLoginRecord,
+          permissions
+        }
+      };
+    }
 
     // Production environment - Verify OTP
     const verificationResult = verifyOTP(otp, user);
@@ -2157,10 +2157,10 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
         { id: user.id },
         { tokenVersion: getTokenVersion, loggedIn: true }
       );
-      
+
       // Update user object with new tokenVersion
       user.tokenVersion = getTokenVersion;
-      
+
       // Generate final tokens after 2FA verification
       const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
@@ -2234,7 +2234,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
       isActive: true,
       isDeleted: false
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
@@ -2264,7 +2264,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
 
       // Generate final tokens after 2FA setup
       const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-      
+
       // Update user login status
       const getTokenVersion = getRandomNumber();
       await dbService.update(
@@ -2278,7 +2278,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
         user_id: user.id,
         user_type: user.userRole,
         isLoggedIn: true,
-        latitude:  null, // Will be updated if available
+        latitude: null, // Will be updated if available
         longitude: null, // Will be updated if available
         ipAddress: null, // Will be updated if available
         companyId: user.companyId
@@ -2319,7 +2319,7 @@ const setup2FA = async (dataToken, otp, companyId) => {
 
       // Generate final tokens after 2FA setup
       const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-      
+
       // Update user login status
       const getTokenVersion = getRandomNumber();
       await dbService.update(
@@ -2399,7 +2399,7 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
       isActive: true,
       isDeleted: false
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
@@ -2414,7 +2414,7 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
     // Auto-detect security method: prefer 2FA if enabled, otherwise use MPIN
     let useMPIN = false;
     let use2FA = false;
-    
+
     if (securityType === 'auto') {
       // If 2FA is explicitly enabled, use 2FA
       if (user.is2FAenabled && user.key2Fa) {
@@ -2453,7 +2453,7 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
           msg: `Account is locked due to multiple failed login attempts. Please contact admin for assistance.`
         };
       }
-      
+
       // Check if MPIN setup is required first
       if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
         return {
@@ -2461,7 +2461,7 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
           msg: 'MPIN is not set up. Please set up MPIN first.'
         };
       }
-      
+
       if (!user.secureKey || !user.isMpinEnabled) {
         return {
           flag: true,
@@ -2483,10 +2483,10 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
       if (!isMPINValid) {
         // Increment login attempts and potentially lock account
         await user.incrementLoginAttempts();
-        
+
         // Reload user to get updated loginAttempts and lock status
         const updatedUser = await dbService.findOne(model.user, { id: user.id });
-        
+
         // Check if account is now locked after this attempt
         if (updatedUser.isAccountLocked() || updatedUser.loginAttempts >= MAX_LOGIN_RETRY_LIMIT) {
           return {
@@ -2494,13 +2494,13 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
             msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
           };
         }
-        
+
         // Calculate remaining attempts (MAX_LOGIN_RETRY_LIMIT = 3)
         // After 1st wrong: loginAttempts = 1, remaining = 2
         // After 2nd wrong: loginAttempts = 2, remaining = 1
         // After 3rd wrong: account is locked (handled above)
         const remainingAttempts = MAX_LOGIN_RETRY_LIMIT - updatedUser.loginAttempts;
-        
+
         // Ensure remaining attempts is never negative
         if (remainingAttempts <= 0) {
           return {
@@ -2508,13 +2508,13 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
             msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
           };
         }
-        
+
         return {
           flag: true,
           msg: `Invalid MPIN. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before account lock.`
         };
       }
-      
+
       // Reset login attempts on successful MPIN verification
       await user.resetLoginAttempts();
 
@@ -2525,9 +2525,9 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
         { id: user.id },
         { tokenVersion: getTokenVersion, loggedIn: true }
       );
-      
+
       user.tokenVersion = getTokenVersion;
-      
+
       // Generate final tokens after MPIN verification
       const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
@@ -2575,237 +2575,237 @@ const handleSecurity = async (dataToken, code, companyId, latitude, longitude, i
       if (shouldVerify) {
         // Verify existing 2FA
         if (process.env.NODE_ENV === 'development') {
-        // Update user login status FIRST
-        const getTokenVersion = getRandomNumber();
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { tokenVersion: getTokenVersion, loggedIn: true }
-        );
-        
-        // Update user object with new tokenVersion
-        user.tokenVersion = getTokenVersion;
-        
-        // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+          // Update user login status FIRST
+          const getTokenVersion = getRandomNumber();
+          await dbService.update(
+            model.user,
+            { id: user.id },
+            { tokenVersion: getTokenVersion, loggedIn: true }
+          );
 
-        // Create userLogin record for successful 2FA verification
-        const userLoginRecord = await dbService.createOne(model.userLogin, {
-          user_id: user.id,
-          user_type: user.userRole,
-          isLoggedIn: true,
-          latitude: latitude,
-          longitude: longitude, 
-          ipAddress: ipAddress, 
-          companyId: user.companyId
-        });
+          // Update user object with new tokenVersion
+          user.tokenVersion = getTokenVersion;
 
-        // Load user permissions
-        const permissions = await loadUserPermissions(user.userRole);
+          // Generate final tokens after 2FA verification
+          const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
-        return {
-          flag: false,
-          msg: '2FA verification successful!',
-          data: {
-            accessToken,
-            refreshToken,
-            user: {
-              id: user.id,
-              name: user.name,
-              mobileNo: user.mobileNo,
-              userRole: user.userRole,
-              outletName: user.outletName,
-              companyId: user.companyId
-            },
-            userLogin: userLoginRecord,
-            permissions
-          }
-        };
-      }
+          // Create userLogin record for successful 2FA verification
+          const userLoginRecord = await dbService.createOne(model.userLogin, {
+            user_id: user.id,
+            user_type: user.userRole,
+            isLoggedIn: true,
+            latitude: latitude,
+            longitude: longitude,
+            ipAddress: ipAddress,
+            companyId: user.companyId
+          });
 
-      // Production environment - Verify OTP
-      const verificationResult = verifyOTP(code, user);
-      if (verificationResult) {
-        // Update user login status FIRST
-        const getTokenVersion = getRandomNumber();
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { tokenVersion: getTokenVersion, loggedIn: true }
-        );
-        
-        // Update user object with new tokenVersion
-        user.tokenVersion = getTokenVersion;
-        
-        // Generate final tokens after 2FA verification
-        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+          // Load user permissions
+          const permissions = await loadUserPermissions(user.userRole);
 
-        // Create userLogin record for successful 2FA verification
-        const userLoginRecord = await dbService.createOne(model.userLogin, {
-          user_id: user.id,
-          user_type: user.userRole,
-          isLoggedIn: true,
-          latitude: latitude|| null, 
-          longitude: longitude|| null, 
-          ipAddress: ipAddress|| null,
-          companyId: user.companyId
-        });
+          return {
+            flag: false,
+            msg: '2FA verification successful!',
+            data: {
+              accessToken,
+              refreshToken,
+              user: {
+                id: user.id,
+                name: user.name,
+                mobileNo: user.mobileNo,
+                userRole: user.userRole,
+                outletName: user.outletName,
+                companyId: user.companyId
+              },
+              userLogin: userLoginRecord,
+              permissions
+            }
+          };
+        }
 
-        // Load user permissions
-        const permissions = await loadUserPermissions(user.userRole);
+        // Production environment - Verify OTP
+        const verificationResult = verifyOTP(code, user);
+        if (verificationResult) {
+          // Update user login status FIRST
+          const getTokenVersion = getRandomNumber();
+          await dbService.update(
+            model.user,
+            { id: user.id },
+            { tokenVersion: getTokenVersion, loggedIn: true }
+          );
 
-        return {
-          flag: false,
-          msg: '2FA verification successful!',
-          data: {
-            accessToken,
-            refreshToken,
-            user: {
-              id: user.id,
-              name: user.name,
-              mobileNo: user.mobileNo,
-              userRole: user.userRole,
-              outletName: user.outletName,
-              companyId: user.companyId
-            },
-            userLogin: userLoginRecord,
-            permissions
-          }
-        };
+          // Update user object with new tokenVersion
+          user.tokenVersion = getTokenVersion;
+
+          // Generate final tokens after 2FA verification
+          const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+
+          // Create userLogin record for successful 2FA verification
+          const userLoginRecord = await dbService.createOne(model.userLogin, {
+            user_id: user.id,
+            user_type: user.userRole,
+            isLoggedIn: true,
+            latitude: latitude || null,
+            longitude: longitude || null,
+            ipAddress: ipAddress || null,
+            companyId: user.companyId
+          });
+
+          // Load user permissions
+          const permissions = await loadUserPermissions(user.userRole);
+
+          return {
+            flag: false,
+            msg: '2FA verification successful!',
+            data: {
+              accessToken,
+              refreshToken,
+              user: {
+                id: user.id,
+                name: user.name,
+                mobileNo: user.mobileNo,
+                userRole: user.userRole,
+                outletName: user.outletName,
+                companyId: user.companyId
+              },
+              userLogin: userLoginRecord,
+              permissions
+            }
+          };
+        } else {
+          return {
+            flag: true,
+            msg: '2FA verification failed. Please try again.'
+          };
+        }
       } else {
-        return {
-          flag: true,
-          msg: '2FA verification failed. Please try again.'
-        };
+        // Setup 2FA - Generate QR code if not exists
+        if (!user.key2Fa) {
+          const qrCodeData = await generateQRCodeURL(user);
+          return {
+            flag: false,
+            msg: 'Please scan QR code and enter the 2FA code to complete setup.',
+            data: {
+              qrCode: qrCodeData,
+              requiresSetup: true
+            }
+          };
+        }
+
+        // Verify OTP and enable 2FA
+        if (process.env.NODE_ENV === 'development') {
+          // Enable 2FA for the user
+          await dbService.update(
+            model.user,
+            { id: user.id },
+            { is2FAenabled: true }
+          );
+
+          // Generate final tokens after 2FA setup
+          const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+
+          // Update user login status
+          const getTokenVersion = getRandomNumber();
+          await dbService.update(
+            model.user,
+            { id: user.id },
+            { tokenVersion: getTokenVersion, loggedIn: true }
+          );
+
+          // Create userLogin record for successful 2FA setup
+          const userLoginRecord = await dbService.createOne(model.userLogin, {
+            user_id: user.id,
+            user_type: user.userRole,
+            isLoggedIn: true,
+            latitude: latitude || null,
+            longitude: longitude || null,
+            ipAddress: ipAddress || null,
+            companyId: user.companyId
+          });
+
+          // Load user permissions
+          const permissions = await loadUserPermissions(user.userRole);
+
+          return {
+            flag: false,
+            msg: '2FA setup successful!',
+            data: {
+              accessToken,
+              refreshToken,
+              user: {
+                id: user.id,
+                name: user.name,
+                mobileNo: user.mobileNo,
+                userRole: user.userRole,
+                outletName: user.outletName,
+                companyId: user.companyId
+              },
+              userLogin: userLoginRecord,
+              permissions
+            }
+          };
+        }
+
+        // Production environment - Verify OTP and setup
+        const verificationResult = verifyOTP(code, user);
+        if (verificationResult) {
+          // Enable 2FA for the user
+          await dbService.update(
+            model.user,
+            { id: user.id },
+            { is2FAenabled: true }
+          );
+
+          // Generate final tokens after 2FA setup
+          const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
+
+          // Update user login status
+          const getTokenVersion = getRandomNumber();
+          await dbService.update(
+            model.user,
+            { id: user.id },
+            { tokenVersion: getTokenVersion, loggedIn: true }
+          );
+
+          // Create userLogin record for successful 2FA setup
+          const userLoginRecord = await dbService.createOne(model.userLogin, {
+            user_id: user.id,
+            user_type: user.userRole,
+            isLoggedIn: true,
+            latitude: latitude || null,
+            longitude: longitude || null,
+            ipAddress: ipAddress || null,
+            companyId: user.companyId
+          });
+
+          // Load user permissions
+          const permissions = await loadUserPermissions(user.userRole);
+
+          return {
+            flag: false,
+            msg: '2FA setup successful!',
+            data: {
+              accessToken,
+              refreshToken,
+              user: {
+                id: user.id,
+                name: user.name,
+                mobileNo: user.mobileNo,
+                userRole: user.userRole,
+                outletName: user.outletName,
+                companyId: user.companyId
+              },
+              userLogin: userLoginRecord,
+              permissions
+            }
+          };
+        } else {
+          return {
+            flag: true,
+            msg: '2FA setup failed. Please try again.'
+          };
+        }
       }
-    } else {
-      // Setup 2FA - Generate QR code if not exists
-      if (!user.key2Fa) {
-        const qrCodeData = await generateQRCodeURL(user);
-        return {
-          flag: false,
-          msg: 'Please scan QR code and enter the 2FA code to complete setup.',
-          data: {
-            qrCode: qrCodeData,
-            requiresSetup: true
-          }
-        };
-      }
-
-      // Verify OTP and enable 2FA
-      if (process.env.NODE_ENV === 'development') {
-        // Enable 2FA for the user
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { is2FAenabled: true }
-        );
-
-        // Generate final tokens after 2FA setup
-        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-        
-        // Update user login status
-        const getTokenVersion = getRandomNumber();
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { tokenVersion: getTokenVersion, loggedIn: true }
-        );
-
-        // Create userLogin record for successful 2FA setup
-        const userLoginRecord = await dbService.createOne(model.userLogin, {
-          user_id: user.id,
-          user_type: user.userRole,
-          isLoggedIn: true,
-          latitude: latitude|| null, 
-          longitude: longitude|| null, 
-          ipAddress: ipAddress|| null, 
-          companyId: user.companyId
-        });
-
-        // Load user permissions
-        const permissions = await loadUserPermissions(user.userRole);
-
-        return {
-          flag: false,
-          msg: '2FA setup successful!',
-          data: {
-            accessToken,
-            refreshToken,
-            user: {
-              id: user.id,
-              name: user.name,
-              mobileNo: user.mobileNo,
-              userRole: user.userRole,
-              outletName: user.outletName,
-              companyId: user.companyId
-            },
-            userLogin: userLoginRecord,
-            permissions
-          }
-        };
-      }
-
-      // Production environment - Verify OTP and setup
-      const verificationResult = verifyOTP(code, user);
-      if (verificationResult) {
-        // Enable 2FA for the user
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { is2FAenabled: true }
-        );
-
-        // Generate final tokens after 2FA setup
-        const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-        
-        // Update user login status
-        const getTokenVersion = getRandomNumber();
-        await dbService.update(
-          model.user,
-          { id: user.id },
-          { tokenVersion: getTokenVersion, loggedIn: true }
-        );
-
-        // Create userLogin record for successful 2FA setup
-        const userLoginRecord = await dbService.createOne(model.userLogin, {
-          user_id: user.id,
-          user_type: user.userRole,
-          isLoggedIn: true,
-          latitude: latitude  || null, 
-          longitude: longitude|| null,
-          ipAddress: ipAddress|| null,
-          companyId: user.companyId
-        });
-
-        // Load user permissions
-        const permissions = await loadUserPermissions(user.userRole);
-
-        return {
-          flag: false,
-          msg: '2FA setup successful!',
-          data: {
-            accessToken,
-            refreshToken,
-            user: {
-              id: user.id,
-              name: user.name,
-              mobileNo: user.mobileNo,
-              userRole: user.userRole,
-              outletName: user.outletName,
-              companyId: user.companyId
-            },
-            userLogin: userLoginRecord,
-            permissions
-          }
-        };
-      } else {
-        return {
-          flag: true,
-          msg: '2FA setup failed. Please try again.'
-        };
-      }
-    }
     }
   } catch (error) {
     console.error('Error handling security:', error);
@@ -2882,7 +2882,7 @@ const resendMPINOTP = async (mobileNo, companyId, req) => {
     );
 
     // Send SMS for MPIN reset
-    const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;;
+    const msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`;
     const smsResult = await amezesmsApi.sendSmsLogin(user.mobileNo, msg);
 
     // Build dataToken for OTP verification & MPIN reset flow
@@ -3050,7 +3050,8 @@ const verifyForgetMPINOTP = async (token, otp, companyId) => {
     await dbService.update(
       model.user,
       { id: user.id },
-      { isMpinSetup: true,
+      {
+        isMpinSetup: true,
         secureKey: null
       }
     );
@@ -3092,7 +3093,7 @@ const verifyForgetMPINOTP = async (token, otp, companyId) => {
   }
 };
 
-const resendTemporaryPassword = async(mobileNo, companyId, req)=>{
+const resendTemporaryPassword = async (mobileNo, companyId, req) => {
   try {
     if (!mobileNo) {
       return {
@@ -3144,7 +3145,7 @@ const resendTemporaryPassword = async(mobileNo, companyId, req)=>{
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(120, 'seconds').toISOString(); // 2 minutes
-    
+
     await dbService.update(
       model.user,
       { id: user.id },
@@ -3157,9 +3158,9 @@ const resendTemporaryPassword = async(mobileNo, companyId, req)=>{
 
     // Generate token for OTP verification
     const ip = req?.headers['x-forwarded-for']?.split(',')[0] ||
-              req?.connection?.remoteAddress ||
-              req?.socket?.remoteAddress ||
-              req?.ip || '';
+      req?.connection?.remoteAddress ||
+      req?.socket?.remoteAddress ||
+      req?.ip || '';
     const userAgent = req?.headers['user-agent'] || '';
 
     const sensitiveData = {
@@ -3173,7 +3174,7 @@ const resendTemporaryPassword = async(mobileNo, companyId, req)=>{
       timestamp: Date.now(),
       purpose: 'forgot_password_otp'
     };
-    
+
     const encryptionKey = crypto.randomBytes(32);
     const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
 
@@ -3197,7 +3198,7 @@ const resendTemporaryPassword = async(mobileNo, companyId, req)=>{
         msg: 'Error sending OTP!'
       };
     }
-  }catch(error){
+  } catch (error) {
     console.error('Error resending forgot password OTP:', error);
     return {
       flag: true,
@@ -3241,11 +3242,11 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
       isDeleted: false,
       mobileNo
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
-    
+
     const user = await dbService.findOne(model.user, where);
     if (!user) {
       return {
@@ -3253,7 +3254,7 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
         msg: 'User does not exist!'
       };
     }
-    
+
     // Check if account is locked
     if (user.isAccountLocked && user.isAccountLocked()) {
       return {
@@ -3272,14 +3273,14 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
 
     const [hashedOtp, expireOTP] = user.otpMobile.split('~');
     const currentTime = moment().toISOString();
-    
+
     if (moment(currentTime).isAfter(expireOTP)) {
       return {
         flag: true,
         msg: 'OTP has expired. Please request a new OTP.'
       };
     }
-    
+
     if (otp.length !== 6) {
       return {
         flag: true,
@@ -3293,7 +3294,7 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
       if (user.incrementOtpAttempts) {
         await user.incrementOtpAttempts();
       }
-      
+
       const updatedUser = await dbService.findOne(model.user, { id: user.id });
       if (updatedUser.isOtpLocked && updatedUser.isOtpLocked()) {
         return {
@@ -3301,7 +3302,7 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
           msg: 'OTP verification locked due to multiple failed attempts. Please contact admin for assistance.'
         };
       }
-      
+
       const remainingAttempts = 3 - (updatedUser.loginAttempts || 0);
       return {
         flag: true,
@@ -3325,7 +3326,7 @@ const verifyForgotPasswordOTP = async (token, otp, companyId) => {
       timestamp: Date.now(),
       purpose: 'forgot_password_reset'
     };
-    
+
     const encryptionKey = crypto.randomBytes(32);
     const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
 
@@ -3404,7 +3405,7 @@ const requestResendTemporaryPassword = async (phoneNumber, companyId, req) => {
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(120, 'seconds').toISOString(); // 2 minutes
-    
+
     await dbService.update(
       model.user,
       { id: user.id },
@@ -3418,9 +3419,9 @@ const requestResendTemporaryPassword = async (phoneNumber, companyId, req) => {
     console.log('smsResult', smsResult);
     // Generate token for OTP verification
     const ip = req?.headers['x-forwarded-for']?.split(',')[0] ||
-              req?.connection?.remoteAddress ||
-              req?.socket?.remoteAddress ||
-              req?.ip || '';
+      req?.connection?.remoteAddress ||
+      req?.socket?.remoteAddress ||
+      req?.ip || '';
     const userAgent = req?.headers['user-agent'] || '';
 
     const sensitiveData = {
@@ -3434,7 +3435,7 @@ const requestResendTemporaryPassword = async (phoneNumber, companyId, req) => {
       timestamp: Date.now(),
       purpose: 'resend_temp_password_otp'
     };
-    
+
     const encryptionKey = crypto.randomBytes(32);
     const encryptedData = doubleEncrypt(JSON.stringify(sensitiveData), encryptionKey);
 
@@ -3502,11 +3503,11 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
       isDeleted: false,
       mobileNo
     };
-    
+
     if (companyId !== null) {
       where.companyId = companyId;
     }
-    
+
     const user = await dbService.findOne(model.user, where);
     if (!user) {
       return {
@@ -3521,7 +3522,7 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
         msg: 'User email not found. Cannot send temporary password!'
       };
     }
-    
+
     // Check if account is locked
     if (user.isAccountLocked && user.isAccountLocked()) {
       return {
@@ -3540,14 +3541,14 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
 
     const [hashedOtp, expireOTP] = user.otpMobile.split('~');
     const currentTime = moment().toISOString();
-    
+
     if (moment(currentTime).isAfter(expireOTP)) {
       return {
         flag: true,
         msg: 'OTP has expired. Please request a new OTP.'
       };
     }
-    
+
     if (otp.length !== 6) {
       return {
         flag: true,
@@ -3561,7 +3562,7 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
       if (user.incrementOtpAttempts) {
         await user.incrementOtpAttempts();
       }
-      
+
       const updatedUser = await dbService.findOne(model.user, { id: user.id });
       if (updatedUser.isOtpLocked && updatedUser.isOtpLocked()) {
         return {
@@ -3569,7 +3570,7 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
           msg: 'OTP verification locked due to multiple failed attempts. Please contact admin for assistance.'
         };
       }
-      
+
       const remainingAttempts = 3 - (updatedUser.loginAttempts || 0);
       return {
         flag: true,
@@ -3586,12 +3587,12 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
     const tempPassword = random.randomNumber(8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
     const expireTime = moment().add(10, 'minutes').toISOString(); // 10 minutes validity
-    
+
     // Store temporary password with expiry time
     await dbService.update(
       model.user,
       { id: user.id },
-      { 
+      {
         password: hashedPassword + '~' + expireTime,
         tokenVersion: getRandomNumber()
       }
@@ -3599,8 +3600,8 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
 
     // Send temporary password to registered email
     const logoUrl = process.env.BASE_URL ? `${process.env.BASE_URL}/gmaxepay.png` : '';
-    const illustrationUrl = process.env.BASE_URL? `${process.env.BASE_URL}/tempPassword.png` : '';
-    
+    const illustrationUrl = process.env.BASE_URL ? `${process.env.BASE_URL}/tempPassword.png` : '';
+
     try {
       await emailService.sendTempPasswordEmail({
         to: user.email,
@@ -3609,7 +3610,7 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
         logoUrl: logoUrl,
         illustrationUrl: illustrationUrl
       });
-      
+
       // Update isResetPassword to true after successful email send
       await dbService.update(
         model.user,
