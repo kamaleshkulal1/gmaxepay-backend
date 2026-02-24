@@ -1844,7 +1844,7 @@ const sendOldChangeMobileNoOtp = async (req, res) => {
     if (!user) {
       return res.failure({ message: 'User not found' });
     }
-
+    const mobileNo = user?.mobileNo;
     const code = random.randomNumber(6);
     const hashedCode = await bcrypt.hash(code, 10);
     const expireOTP = moment().add(3, 'minutes').toISOString();
@@ -1854,9 +1854,11 @@ const sendOldChangeMobileNoOtp = async (req, res) => {
       { id: user.id },
       { otpMobile: hashedCode + '~' + expireOTP }
     );
-
+    console.log('code', code);
+    console.log('user.mobileNo', user.mobileNo);
+    console.log('mobileNo', mobileNo);
     let msg = `user, your OTP for account login is ${code}. Team Gmaxepay`
-    await amezesmsApi.sendSmsOtp(user.mobileNo, msg);
+    await amezesmsApi.sendSmsOtp(mobileNo, msg);
 
     return res.success({ message: 'OTP sent to your current mobile number' });
   } catch (error) {
