@@ -1857,7 +1857,7 @@ const sendOldChangeMobileNoOtp = async (req, res) => {
     console.log('code', code);
     console.log('user.mobileNo', user.mobileNo);
     console.log('mobileNo', mobileNo);
-    let msg = `user, your OTP for account login is ${code}. Team Gmaxepay`
+    let msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`
     await amezesmsApi.sendSmsOtp(mobileNo, msg);
 
     return res.success({ message: 'OTP sent to your current mobile number' });
@@ -1965,7 +1965,7 @@ const sendNewChangeMobileNoOtp = async (req, res) => {
       { otpMobile: hashedCode + '~' + expireOTP + '~' + newMobileNo }
     );
 
-    let msg = `user, your OTP for account login is ${code}. Team Gmaxepay`
+    let msg = `Dear user, your OTP for account login is ${code}. Team Gmaxepay`
     await amezesmsApi.sendSmsOtp(newMobileNo, msg);
 
     return res.success({ message: 'OTP sent to your new mobile number' });
