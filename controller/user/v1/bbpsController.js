@@ -504,98 +504,179 @@ const payBill = async (req, res) => {
           if (commData.users.retailer && commData.wallets.retailerWallet) {
             const rWallet = commData.wallets.retailerWallet;
             const rOpening = round4(rWallet.mainWallet);
-            const rClosing = round4(rOpening - debit + commData.amounts.retailerComm);
+            const rMid = round4(rOpening - debit);
+            const rClosing = round4(rMid + commData.amounts.retailerComm);
+
             walletUpdates.push(dbService.update(model.wallet, { id: rWallet.id }, { mainWallet: rClosing, updatedBy: userId }));
             historyPromises.push(dbService.createOne(model.walletHistory, {
               refId: userId, companyId: finalCompanyId,
               remark: remarkText, operator: foundOperator.operatorName,
-              amount: billAmount, comm: commData.amounts.retailerComm, surcharge: 0,
-              openingAmt: rOpening, closingAmt: rClosing,
-              credit: commData.amounts.retailerComm, debit,
-              transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+              amount: billAmount, comm: 0, surcharge: 0,
+              openingAmt: rOpening, closingAmt: rMid,
+              credit: 0, debit: debit,
+              transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
               paymentStatus: billStatus.toUpperCase(), addedBy: userId, updatedBy: userId
             }));
+            if (commData.amounts.retailerComm > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: userId, companyId: finalCompanyId,
+                remark: `${remarkText} - commission`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: commData.amounts.retailerComm, surcharge: 0,
+                openingAmt: rMid, closingAmt: rClosing,
+                credit: commData.amounts.retailerComm, debit: 0,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: userId, updatedBy: userId
+              }));
+            }
           }
 
           // B. Distributor
           if (commData.users.distributor && commData.wallets.distributorWallet) {
             const dWallet = commData.wallets.distributorWallet;
             const dOpening = round4(dWallet.mainWallet);
-            let dClosing, dDebit, dRemark;
+
+            let dDebitAmt = 0;
+            let dCreditAmt = commData.amounts.distComm;
+            let dRemarkDebit = '';
+
             if (user.userRole === 4) {
-              dClosing = round4(dOpening - debit + commData.amounts.distComm);
-              dDebit = debit;
-              dRemark = remarkText;
+              dDebitAmt = debit;
+              dRemarkDebit = remarkText;
             } else {
-              const dNet = commData.amounts.distComm - commData.amounts.distShortfall;
-              dClosing = round4(dOpening + dNet);
-              dDebit = commData.amounts.distShortfall;
-              dRemark = `${remarkText} - dist comm`;
+              dDebitAmt = commData.amounts.distShortfall;
+              dRemarkDebit = `${remarkText} - dist shortfall`;
             }
+
+            const dMid = round4(dOpening - dDebitAmt);
+            const dClosing = round4(dMid + dCreditAmt);
+
             walletUpdates.push(dbService.update(model.wallet, { id: dWallet.id }, { mainWallet: dClosing, updatedBy: commData.users.distributor.id }));
-            historyPromises.push(dbService.createOne(model.walletHistory, {
-              refId: commData.users.distributor.id, companyId: finalCompanyId,
-              remark: dRemark, operator: foundOperator.operatorName,
-              amount: billAmount, comm: commData.amounts.distComm, surcharge: 0,
-              openingAmt: dOpening, closingAmt: dClosing,
-              credit: commData.amounts.distComm, debit: dDebit,
-              transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
-              paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id
-            }));
+
+            if (dDebitAmt > 0 || user.userRole === 4) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.distributor.id, companyId: finalCompanyId,
+                remark: dRemarkDebit, operator: foundOperator.operatorName,
+                amount: billAmount, comm: 0, surcharge: 0,
+                openingAmt: dOpening, closingAmt: dMid,
+                credit: 0, debit: dDebitAmt,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id
+              }));
+            }
+
+            if (dCreditAmt > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.distributor.id, companyId: finalCompanyId,
+                remark: user.userRole === 4 ? `${remarkText} - commission` : `${remarkText} - dist comm`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: dCreditAmt, surcharge: 0,
+                openingAmt: dMid, closingAmt: dClosing,
+                credit: dCreditAmt, debit: 0,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id
+              }));
+            }
           }
 
           // C. Master Distributor
           if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
             const mWallet = commData.wallets.masterDistributorWallet;
             const mOpening = round4(mWallet.mainWallet);
-            const mNet = commData.amounts.mdComm - commData.amounts.mdShortfall;
-            const mClosing = round4(mOpening + mNet);
+            const mMid = round4(mOpening - commData.amounts.mdShortfall);
+            const mClosing = round4(mMid + commData.amounts.mdComm);
+
             walletUpdates.push(dbService.update(model.wallet, { id: mWallet.id }, { mainWallet: mClosing, updatedBy: commData.users.masterDistributor.id }));
-            historyPromises.push(dbService.createOne(model.walletHistory, {
-              refId: commData.users.masterDistributor.id, companyId: finalCompanyId,
-              remark: `${remarkText} - md comm`, operator: foundOperator.operatorName,
-              amount: billAmount, comm: commData.amounts.mdComm, surcharge: 0,
-              openingAmt: mOpening, closingAmt: mClosing,
-              credit: commData.amounts.mdComm, debit: commData.amounts.mdShortfall,
-              transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
-              paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id
-            }));
+
+            if (commData.amounts.mdShortfall > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.masterDistributor.id, companyId: finalCompanyId,
+                remark: `${remarkText} - md shortfall`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: 0, surcharge: 0,
+                openingAmt: mOpening, closingAmt: mMid,
+                credit: 0, debit: commData.amounts.mdShortfall,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id
+              }));
+            }
+
+            if (commData.amounts.mdComm > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.masterDistributor.id, companyId: finalCompanyId,
+                remark: `${remarkText} - md comm`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: commData.amounts.mdComm, surcharge: 0,
+                openingAmt: mMid, closingAmt: mClosing,
+                credit: commData.amounts.mdComm, debit: 0,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id
+              }));
+            }
           }
 
           // D. Company (WL)
           if (commData.wallets.companyWallet) {
             const cWallet = commData.wallets.companyWallet;
             const cOpening = round4(cWallet.mainWallet);
-            const cNet = commData.amounts.companyComm - commData.amounts.wlShortfall;
-            const cClosing = round4(cOpening + cNet);
+            const cMid = round4(cOpening - commData.amounts.wlShortfall);
+            const cClosing = round4(cMid + commData.amounts.companyComm);
+
             walletUpdates.push(dbService.update(model.wallet, { id: cWallet.id }, { mainWallet: cClosing, updatedBy: commData.users.companyAdmin.id }));
-            historyPromises.push(dbService.createOne(model.walletHistory, {
-              refId: commData.users.companyAdmin.id, companyId: finalCompanyId,
-              remark: `${remarkText} - company comm`, operator: foundOperator.operatorName,
-              amount: billAmount, comm: commData.amounts.companyComm, surcharge: 0,
-              openingAmt: cOpening, closingAmt: cClosing,
-              credit: commData.amounts.companyComm, debit: commData.amounts.wlShortfall,
-              transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
-              paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id
-            }));
+
+            if (commData.amounts.wlShortfall > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.companyAdmin.id, companyId: finalCompanyId,
+                remark: `${remarkText} - company shortfall`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: 0, surcharge: 0,
+                openingAmt: cOpening, closingAmt: cMid,
+                credit: 0, debit: commData.amounts.wlShortfall,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id
+              }));
+            }
+
+            if (commData.amounts.companyComm > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.companyAdmin.id, companyId: finalCompanyId,
+                remark: `${remarkText} - company comm`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: commData.amounts.companyComm, surcharge: 0,
+                openingAmt: cMid, closingAmt: cClosing,
+                credit: commData.amounts.companyComm, debit: 0,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id
+              }));
+            }
           }
 
           // E. Super Admin
           if (commData.wallets.superAdminWallet) {
             const saWallet = commData.wallets.superAdminWallet;
             const saOpening = round4(saWallet.mainWallet);
-            const saNet = commData.amounts.superAdminComm - commData.amounts.saShortfall;
-            const saClosing = round4(saOpening + saNet);
+            const saMid = round4(saOpening - commData.amounts.saShortfall);
+            const saClosing = round4(saMid + commData.amounts.superAdminComm);
+
             walletUpdates.push(dbService.update(model.wallet, { id: saWallet.id }, { mainWallet: saClosing, updatedBy: commData.users.superAdmin.id }));
-            historyPromises.push(dbService.createOne(model.walletHistory, {
-              refId: commData.users.superAdmin.id, companyId: 1,
-              remark: `${remarkText} - admin comm`, operator: foundOperator.operatorName,
-              amount: billAmount, comm: commData.amounts.superAdminComm, surcharge: 0,
-              openingAmt: saOpening, closingAmt: saClosing,
-              credit: commData.amounts.superAdminComm, debit: commData.amounts.saShortfall,
-              transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
-              paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id
-            }));
+
+            if (commData.amounts.saShortfall > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.superAdmin.id, companyId: 1,
+                remark: `${remarkText} - admin shortfall`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: 0, surcharge: 0,
+                openingAmt: saOpening, closingAmt: saMid,
+                credit: 0, debit: commData.amounts.saShortfall,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id
+              }));
+            }
+
+            if (commData.amounts.superAdminComm > 0) {
+              historyPromises.push(dbService.createOne(model.walletHistory, {
+                refId: commData.users.superAdmin.id, companyId: 1,
+                remark: `${remarkText} - admin comm`, operator: foundOperator.operatorName,
+                amount: billAmount, comm: commData.amounts.superAdminComm, surcharge: 0,
+                openingAmt: saMid, closingAmt: saClosing,
+                credit: commData.amounts.superAdminComm, debit: 0,
+                transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
+                paymentStatus: billStatus.toUpperCase(), addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id
+              }));
+            }
           }
 
           await Promise.all([...walletUpdates, ...historyPromises]);
@@ -610,7 +691,7 @@ const payBill = async (req, res) => {
             operator: foundOperator.operatorName, amount: billAmount, comm: 0, surcharge: 0,
             openingAmt: currentWalletBalance, closingAmt: fallbackClosing,
             credit: 0, debit,
-            transactionId: parsedResponse?.txnRefId?.toString() || transactionID,
+            transactionId: transactionID || parsedResponse?.txnRefId?.toString(),
             paymentStatus: billStatus.toUpperCase(), addedBy: userId, updatedBy: userId
           });
         }
