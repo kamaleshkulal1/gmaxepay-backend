@@ -268,27 +268,27 @@ const payout = async (req, res) => {
             // --- END: Commercials & Validation ---
 
             // Call ASL API for bank payout
-            // aslResponse = await asl.aslAepsPayOut({
-            //     mobile: user.mobileNo,
-            //     accountNumber: customerBank.accountNumber,
-            //     beneficiaryName: customerBank.beneficiaryName,
-            //     bankName: customerBank.bankName,
-            //     ifscCode: customerBank.ifsc,
-            //     amount: payoutAmount.toString(),
-            //     paymentMode: paymentMode,
-            //     latitude: latitude,
-            //     longitude: longitude,
-            //     agentTransactionId: transactionID
-            // });
+            aslResponse = await asl.aslAepsPayOut({
+                mobile: user.mobileNo,
+                accountNumber: customerBank.accountNumber,
+                beneficiaryName: customerBank.beneficiaryName,
+                bankName: customerBank.bankName,
+                ifscCode: customerBank.ifsc,
+                amount: payoutAmount.toString(),
+                paymentMode: paymentMode,
+                latitude: latitude,
+                longitude: longitude,
+                agentTransactionId: transactionID
+            });
 
             // Custom response for testing
-            aslResponse = {
-                status: 'SUCCESS',
-                orderid: 'PAY1723565406',
-                bankref: '604221395191',
-                remark: 'Transaction was Successfull',
-                agentTransactionId: transactionID
-            };
+            // aslResponse = {
+            //     status: 'SUCCESS',
+            //     orderid: 'PAY1723565406',
+            //     bankref: '604221395191',
+            //     remark: 'Transaction was Successfull',
+            //     agentTransactionId: transactionID
+            // };
 
             payoutHistoryData.apiResponse = aslResponse;
             payoutHistoryData.agentTransactionId = aslResponse.agentTransactionId || transactionID;

@@ -741,7 +741,7 @@ const addCustomerBank = async (req, res) => {
                 transactionId: transactionId,
                 amount: commData.amounts.saSurcharge,
                 service: 'BANK VERIFICATION',
-                operatorType: pOpName,
+                operatorType: pOpName || 'BANK VERIFICATION',
                 addedBy: commData.users.superAdmin.id
             });
         }
@@ -780,7 +780,7 @@ const addCustomerBank = async (req, res) => {
                 transactionId: transactionId,
                 amount: commData.amounts.saBankCharge,
                 service: 'BANK VERIFICATION',
-                operatorType: pOpName,
+                operatorType: pOpName || 'BANK VERIFICATION',
                 addedBy: commData.users.superAdmin.id
             });
         }
