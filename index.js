@@ -153,9 +153,10 @@ function name() {
 
 async function connectRedis() {
   try {
-    await redisClient.connect();
+    await redisClient.ping();
+    console.log('Redis Cluster ping successful');
   } catch (err) {
-    console.error('Redis connection failed:', err.message);
+    console.error('Redis Cluster ping failed:', err.message);
   }
 }
 
