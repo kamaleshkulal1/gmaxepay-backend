@@ -26,7 +26,7 @@ const getCurrentISTTime = () => {
         second: '2-digit',
         hour12: false
     });
-    
+
     const parts = istFormatter.formatToParts(now);
     const year = parseInt(parts.find(p => p.type === 'year').value);
     const month = parseInt(parts.find(p => p.type === 'month').value) - 1;
@@ -34,7 +34,7 @@ const getCurrentISTTime = () => {
     const hour = parseInt(parts.find(p => p.type === 'hour').value);
     const minute = parseInt(parts.find(p => p.type === 'minute').value);
     const second = parseInt(parts.find(p => p.type === 'second').value);
-    
+
     const istDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}+05:30`;
     return new Date(istDateStr);
 };
@@ -51,28 +51,28 @@ const getNextMidnightIST = () => {
 const logoutPreviousDaySessions = async (userId = null, companyId = null) => {
     const todayDateStr = getIndianDateOnly();
     const now = getCurrentISTTime();
-    
+
     const whereClause = {
         isLoggedIn: true,
         loginDate: { [Op.ne]: todayDateStr }
     };
-    
+
     if (userId) {
         whereClause.refId = userId;
     }
-    
+
     if (companyId) {
         whereClause.companyId = companyId;
     }
-    
+
     const activeLogins = await dbService.findAll(model.aepsDailyLogin, whereClause);
-    
+
     if (activeLogins && activeLogins.length > 0) {
         for (const login of activeLogins) {
             await dbService.update(
                 model.aepsDailyLogin,
                 { id: login.id },
-                { 
+                {
                     isLoggedIn: false,
                     logoutTime: now
                 }
@@ -80,7 +80,7 @@ const logoutPreviousDaySessions = async (userId = null, companyId = null) => {
         }
         return activeLogins.length;
     }
-    
+
     return 0;
 };
 
@@ -94,19 +94,19 @@ const logoutAllUsersAtMidnight = async () => {
     try {
         const todayDateStr = getIndianDateOnly();
         const now = getCurrentISTTime();
-        
+
         const activeLogins = await dbService.findAll(model.aepsDailyLogin, {
             isLoggedIn: true
         });
-        
+
         let loggedOutCount = 0;
-        
+
         if (activeLogins && activeLogins.length > 0) {
             for (const login of activeLogins) {
                 await dbService.update(
                     model.aepsDailyLogin,
                     { id: login.id },
-                    { 
+                    {
                         isLoggedIn: false,
                         logoutTime: now
                     }
@@ -114,9 +114,9 @@ const logoutAllUsersAtMidnight = async () => {
                 loggedOutCount++;
             }
         }
-        
+
         console.log(`[AEPS Daily Login] Midnight IST logout completed. Logged out ${loggedOutCount} users.`);
-        
+
         return {
             success: true,
             loggedOutCount,
@@ -131,17 +131,16 @@ const logoutAllUsersAtMidnight = async () => {
 
 
 const getTimeUntilNextMidnightIST = () => {
+    // Use plain new Date() (UTC ms since epoch) for subtraction.
+    // tomorrowISTMidnight is also constructed as a proper Date from an ISO+05:30 string,
+    // so both sides are UTC-based and the difference is always correct.
     const now = new Date();
     const todayIST = getIndianDateOnly();
     const todayISTMidnight = new Date(`${todayIST}T00:00:00+05:30`);
     const tomorrowISTMidnight = new Date(todayISTMidnight.getTime() + (24 * 60 * 60 * 1000));
-    
-    // Get current time in IST
-    const currentIST = getCurrentISTTime();
-    
-    // Calculate time until next midnight IST
-    const timeUntilMidnight = tomorrowISTMidnight.getTime() - currentIST.getTime();
-    
+
+    const timeUntilMidnight = tomorrowISTMidnight.getTime() - now.getTime();
+
     return timeUntilMidnight;
 };
 

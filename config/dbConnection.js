@@ -22,8 +22,8 @@ const isProduction = process.env.NODE_ENV === 'production';
 const useSSL = process.env.DB_USE_SSL === 'true' || (process.env.DB_USE_SSL !== 'false' && isProduction);
 // Allow self-signed certificates in development (set DB_REJECT_UNAUTHORIZED=true to enforce strict SSL in dev)
 // Default to false in development to allow self-signed certs, true only in production or if explicitly set
-const rejectUnauthorized = isProduction 
-  ? (process.env.DB_REJECT_UNAUTHORIZED !== 'false') 
+const rejectUnauthorized = isProduction
+  ? (process.env.DB_REJECT_UNAUTHORIZED !== 'false')
   : (process.env.DB_REJECT_UNAUTHORIZED === 'true');
 
 // Build SSL configuration

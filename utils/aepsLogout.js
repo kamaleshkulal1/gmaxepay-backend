@@ -11,14 +11,14 @@ const resetOtpLoginRequirement = async () => {
   try {
     const result = await dbService.update(
       model.user,
-      { 
+      {
         isActive: true,
         isDeleted: false,
         lastOtpLoginDate: { [Op.ne]: null }
       },
       { lastOtpLoginDate: null }
     );
-    
+
     const resetCount = Array.isArray(result) ? result.length : 0;
     console.log(`[OTP Reset] Reset OTP login requirement for ${resetCount} users at midnight IST`);
     return { success: true, resetCount };
@@ -35,9 +35,15 @@ const resetOtpLoginRequirement = async () => {
 const aepsLogout = () => {
   // Function to schedule next midnight IST logout and OTP reset
   const scheduleNextMidnightLogout = () => {
-    const timeUntilMidnight = aepsDailyLoginService.getTimeUntilNextMidnightIST();
+    let timeUntilMidnight = aepsDailyLoginService.getTimeUntilNextMidnightIST();
+    // Safety guard: if value is invalid, NaN, or <= 0, fall back to 24 hours
+    // This prevents an instant runaway loop if the calculation ever returns a bad value.
+    if (!timeUntilMidnight || isNaN(timeUntilMidnight) || timeUntilMidnight <= 0) {
+      console.warn('[AEPS Daily Login] Invalid timeUntilMidnight detected, defaulting to 24h');
+      timeUntilMidnight = 24 * 60 * 60 * 1000;
+    }
     console.log(`[AEPS Daily Login] Scheduled midnight IST logout and OTP reset in ${Math.round(timeUntilMidnight / 1000 / 60)} minutes`);
-    
+
     setTimeout(async () => {
       try {
         // Logout all users and reset OTP requirement at midnight IST
@@ -54,7 +60,7 @@ const aepsLogout = () => {
       }
     }, timeUntilMidnight);
   };
-  
+
   // Start the scheduler
   scheduleNextMidnightLogout();
   console.log('[AEPS Daily Login] Midnight IST auto-logout and OTP reset scheduler initialized');
