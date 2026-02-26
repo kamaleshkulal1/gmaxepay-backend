@@ -428,4 +428,130 @@ const deleteCompany = async (req, res) => {
 };
 
 
-module.exports = { getCompanyDetails, updateCompany, getAllCompanyImages, deleteCompany };
+const getSupportContacts = async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.failure({ message: 'Company ID is required' });
+
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) return res.failure({ message: 'Company not found' });
+
+    return res.success({
+      message: 'Support contacts fetched successfully',
+      data: {
+        customerSupportEmail: company.customerSupportEmail || null,
+        supportPhoneNumbers: company.supportPhoneNumbers || []
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching support contacts:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+
+const updateSupportEmail = async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    const { email } = req.body;
+
+    if (!companyId) return res.failure({ message: 'Company ID is required' });
+    if (!email) return res.failure({ message: 'email is required' });
+
+    // Basic email format check
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.failure({ message: 'Invalid email format' });
+    }
+
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) return res.failure({ message: 'Company not found' });
+
+    await dbService.update(model.company, { id: companyId }, { customerSupportEmail: email });
+
+    return res.success({ message: 'Support email updated successfully', data: { customerSupportEmail: email } });
+  } catch (error) {
+    console.error('Error updating support email:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+
+const addSupportPhone = async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    const { phone } = req.body;
+
+    if (!companyId) return res.failure({ message: 'Company ID is required' });
+    if (!phone) return res.failure({ message: 'phone is required' });
+
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    if (!phoneRegex.test(phone)) {
+      return res.failure({ message: 'Invalid phone number format' });
+    }
+
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) return res.failure({ message: 'Company not found' });
+
+    const existing = Array.isArray(company.supportPhoneNumbers) ? company.supportPhoneNumbers : [];
+
+    if (existing.includes(phone)) {
+      return res.failure({ message: 'Phone number already exists' });
+    }
+
+    if (existing.length >= 2) {
+      return res.failure({ message: 'Maximum 2 support phone numbers are allowed' });
+    }
+
+    const updated = [...existing, phone];
+    await dbService.update(model.company, { id: companyId }, { supportPhoneNumbers: updated });
+
+    return res.success({ message: 'Support phone number added successfully', data: { supportPhoneNumbers: updated } });
+  } catch (error) {
+    console.error('Error adding support phone:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+
+const removeSupportPhone = async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    const { phone } = req.body;
+
+    if (!companyId) return res.failure({ message: 'Company ID is required' });
+    if (!phone) return res.failure({ message: 'phone is required' });
+
+    const company = await dbService.findOne(model.company, { id: companyId });
+    if (!company) return res.failure({ message: 'Company not found' });
+
+    const existing = Array.isArray(company.supportPhoneNumbers) ? company.supportPhoneNumbers : [];
+
+    if (!existing.includes(phone)) {
+      return res.failure({ message: 'Phone number not found' });
+    }
+
+    if (existing.length <= 1) {
+      return res.failure({ message: 'At least 1 support phone number is required' });
+    }
+
+    const updated = existing.filter(p => p !== phone);
+    await dbService.update(model.company, { id: companyId }, { supportPhoneNumbers: updated });
+
+    return res.success({ message: 'Support phone number removed successfully', data: { supportPhoneNumbers: updated } });
+  } catch (error) {
+    console.error('Error removing support phone:', error);
+    return res.failure({ message: error.message });
+  }
+};
+
+module.exports = {
+  getCompanyDetails,
+  updateCompany,
+  getAllCompanyImages,
+  deleteCompany,
+  getSupportContacts,
+  updateSupportEmail,
+  addSupportPhone,
+  removeSupportPhone
+};

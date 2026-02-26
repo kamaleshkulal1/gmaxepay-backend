@@ -1,8 +1,3 @@
-/**
- * company.js
- * @description :: Sequelize model of database table company (for white-label tenants)
- */
-
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const { reusableModelAttribute } = require('../utils/common');
@@ -59,11 +54,11 @@ let Company = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true
     },
-    singupPageDesign:{
+    singupPageDesign: {
       type: DataTypes.INTEGER,
       defaultValue: 1,
     },
-    navigationBar:{
+    navigationBar: {
       type: DataTypes.STRING,
       defaultValue: 'HORIZONTAL',
       attribute: ['HORIZONTAL', 'VERTICAL'],

@@ -81,7 +81,7 @@ async function createBasicPackage() {
 
       // Get all services
       let allServices = await dbService.findAll(model.services, {});
-      
+
       if (allServices && allServices.length > 0) {
         // Create package-service relationships for all services
         let packageServiceData = allServices.map(service => ({
@@ -273,7 +273,7 @@ async function permissions() {
           isDeleted: false
         },
         {
-        moduleName: 'TXN_HISTORY',
+          moduleName: 'TXN_HISTORY',
           isParent: true,
           parentId: null,
           isActive: true,
@@ -376,18 +376,18 @@ async function insertPermissions() {
 async function rolePermission() {
   try {
     console.log('Starting rolePermission seeder...');
-    
+
     let rolesPermission = await dbService.findOne(model.rolePermission, {
       id: 1
     });
 
     if (!rolesPermission) {
       console.log('No existing rolePermission found, inserting new data...');
-      
+
       // First, let's get all existing permissions to ensure we only reference valid IDs
       let existingPermissions = await dbService.findAll(model.permission, {});
       console.log(`Found ${existingPermissions.length} existing permissions`);
-      
+
       let rolesPermissionToInsert = [
         // For Role SUPERADMIN
         {
@@ -5188,7 +5188,7 @@ async function rolePermission() {
         //   isDeleted: false
         // }
       ];
-      
+
       console.log(`Inserting ${rolesPermissionToInsert.length} rolePermission records...`);
       await dbService.createMany(model.rolePermission, rolesPermissionToInsert);
       console.log('RolePermission data inserted successfully.');
@@ -5254,7 +5254,7 @@ async function servicePush() {
           isActive: true,
           serviceName: 'AEPS Cash Withdrawal'
         },
-       {
+        {
           isActive: true,
           serviceName: 'Issuance'
         }
@@ -5269,7 +5269,7 @@ async function OperatorType() {
   try {
     let existingDoc = await dbService.findOne(model.operatorType, { id: 1 });
     if (!existingDoc) {
-      let datas = [{ name: 'PayIn' }, { name: 'PayOut' },{name:'Prepaid'},{name:'DTH 1'},{name:'DTH 2'},{name:'UPI DMT'}, {name:'BBPS'}, {name:'Credit Card 1'}, {name:'Credit Card 2'}, {name:'CMS 1'}, {name:'CMS 2'}, {name:'MATM'}, {name:'IndoNepal'}, {name:'AEPS Cash Withdrawal'}, {name:'Insurance'}];
+      let datas = [{ name: 'PayIn' }, { name: 'PayOut' }, { name: 'Prepaid' }, { name: 'DTH 1' }, { name: 'DTH 2' }, { name: 'UPI DMT' }, { name: 'BBPS' }, { name: 'Credit Card 1' }, { name: 'Credit Card 2' }, { name: 'CMS 1' }, { name: 'CMS 2' }, { name: 'MATM' }, { name: 'IndoNepal' }, { name: 'AEPS Cash Withdrawal' }, { name: 'Insurance' }];
 
       await dbService.createMany(model.operatorType, datas);
     }
@@ -13375,61 +13375,61 @@ async function services() {
   try {
     let existingDoc = await dbService.findOne(model.services, { id: 1 });
     if (!existingDoc) {
-      const initialStateData = [        
-       
-          {
-            isActive: true,
-            serviceName: 'AEPS 1'
-          },
-          {
-            isActive: true,
-            serviceName: 'AEPS 2'
-          },
-          {
-            isActive: true,
-            serviceName: 'DMT 1'
-          },
-          {
-            isActive: true,
-            serviceName: 'DMT 2'
-          },
-          {
-            isActive: true,
-            serviceName: 'BBPS'
-          },
-          {
-            isActive: true,
-            serviceName: 'Credit Card 1'
-          },
-          {
-            isActive: true,
-            serviceName: 'Credit Card 2'
-          },
-          {
-            isActive: true,
-            serviceName: 'CMS 1'
-          },
-          {
-            isActive: true,
-            serviceName: 'CMS 2'
-          },
-          {
-            isActive: true,
-            serviceName: 'MATM'
-          },
-          {
-            isActive: true,
-            serviceName: 'IndoNepal'
-          },
-          {
-            isActive: true,
-            serviceName: 'AEPS Cash Withdrawal'
-          },
-         {
-            isActive: true,
-            serviceName: 'Issuance'
-          }
-        
+      const initialStateData = [
+
+        {
+          isActive: true,
+          serviceName: 'AEPS 1'
+        },
+        {
+          isActive: true,
+          serviceName: 'AEPS 2'
+        },
+        {
+          isActive: true,
+          serviceName: 'DMT 1'
+        },
+        {
+          isActive: true,
+          serviceName: 'DMT 2'
+        },
+        {
+          isActive: true,
+          serviceName: 'BBPS'
+        },
+        {
+          isActive: true,
+          serviceName: 'Credit Card 1'
+        },
+        {
+          isActive: true,
+          serviceName: 'Credit Card 2'
+        },
+        {
+          isActive: true,
+          serviceName: 'CMS 1'
+        },
+        {
+          isActive: true,
+          serviceName: 'CMS 2'
+        },
+        {
+          isActive: true,
+          serviceName: 'MATM'
+        },
+        {
+          isActive: true,
+          serviceName: 'IndoNepal'
+        },
+        {
+          isActive: true,
+          serviceName: 'AEPS Cash Withdrawal'
+        },
+        {
+          isActive: true,
+          serviceName: 'Issuance'
+        }
+
       ];
 
       await dbService.createMany(model.services, initialStateData);
@@ -13453,7 +13453,7 @@ async function cardType() {
 
       await dbService.createMany(model.cardType, initialStateData);
     }
-    console.log('Card type Inserted');x
+    console.log('Card type Inserted'); x
   } catch (error) {
     console.log('Failed to update card type due to:', error.message);
   }
@@ -13548,7 +13548,7 @@ async function seedPgCommercials() {
       { select: ['id', 'name'] }
     );
 
-    const roleTypes = [5,4,3,2,1];
+    const roleTypes = [5, 4, 3, 2, 1];
     const roleNames = {
       5: 'RE',
       4: 'DI',
@@ -13629,7 +13629,7 @@ async function seedRangeCharges() {
       { select: ['id', 'operatorName', 'operatorType'] }
     );
 
-    const roleTypes = [5,4,3,2];
+    const roleTypes = [5, 4, 3, 2];
     const roleNames = {
       5: 'RE',
       4: 'DI',
@@ -13692,7 +13692,7 @@ async function seedRangeComm() {
       { select: ['id', 'operatorName', 'operatorType'] }
     );
 
-    const roleTypes = [5,4,3,2,1];
+    const roleTypes = [5, 4, 3, 2, 1];
     const roleNames = {
       5: 'RE',
       4: 'DI',
@@ -13751,15 +13751,15 @@ async function seedRangeComm() {
 async function seedCompany() {
   try {
     // Check if company already exists
-    const existingCompany = await dbService.findOne(model.company, { 
-      companyPan: 'NGEPK6607L' 
+    const existingCompany = await dbService.findOne(model.company, {
+      companyPan: 'NGEPK6607L'
     });
 
     if (!existingCompany) {
       const companyData = {
-        companyName: 'GmaxePay',
-        companyPan: 'NGEPK6607L',
-        customDomain: 'app.gmaxepay.in',
+        companyName: 'Gmaxepay Fintech Solutions Pvt Ltd',
+        companyPan: 'AALCG3349Q',
+        customDomain: 'app.gmaxepay.com',
         remark: 'Company registration remarks',
         singupPageDesign: 1,
         navigationBar: 'HORIZONTAL',
@@ -13784,20 +13784,21 @@ async function seedCompany() {
 async function seedUsers(companyId) {
   try {
     // Check if user already exists
-    const existingUser = await dbService.findOne(model.user, { 
-      email: 'gmaxepay@gmail.com' 
+    const existingUser = await dbService.findOne(model.user, {
+      email: 'admin@gmaxepay.in'
     });
 
     let user;
     if (!existingUser) {
       const userData = {
         name: 'Gmaxepay Admin',
-        email: 'gmaxepay@gmail.com',
-        mobileNo: '9071138349',
-        password: '12345678',
-        userRole: 1, // Super Admin
-        kycStatus: 1, // Approved
-        userType: 1, // Admin type
+        email: 'admin@gmaxepay.in',
+        mobileNo: '7676161966',
+        password: 'GmaxePlay1!',
+        userRole: 1,
+        kycStatus: 'FULL_KYC',
+        kycSteps: 7,
+        userType: 1,
         companyId: companyId,
         isActive: true,
         isDeleted: false,
@@ -13821,8 +13822,8 @@ async function seedUsers(companyId) {
 
     // Create wallet for the user
     if (user && user.id) {
-      const existingWallet = await dbService.findOne(model.wallet, { 
-        refId: user.id 
+      const existingWallet = await dbService.findOne(model.wallet, {
+        refId: user.id
       });
 
       if (!existingWallet) {
@@ -13852,22 +13853,21 @@ async function seedUsers(companyId) {
 async function serviceCharges() {
   try {
     console.log('Seeding service charges...');
-    
+
     // Get all active services
     const services = await dbService.findAll(model.services, { isActive: true });
-    
+
     if (!services || services.length === 0) {
       console.log('No services found to create charges for');
       return;
     }
 
-    // Role types: 1=SUPER_ADMIN, 2=ADMIN, 3=MASTER_DISTRIBUTOR, 4=DISTRIBUTOR, 5=RETAILER
     const roleCharges = {
-      1: 0,    // SUPER_ADMIN - no charge
-      2: 100,  // ADMIN - ₹100 per service
-      3: 80,   // MASTER_DISTRIBUTOR - ₹80 per service
-      4: 60,   // DISTRIBUTOR - ₹60 per service
-      5: 40    // RETAILER - ₹40 per service
+      1: 0,
+      2: 100,
+      3: 80,
+      4: 60,
+      5: 40
     };
 
     const serviceChargeData = [];
@@ -13886,7 +13886,7 @@ async function serviceCharges() {
             roleType: parseInt(roleType),
             chargeAmount: chargeAmount,
             isActive: true,
-            addedBy: 1 // Assuming user ID 1 is the system user
+            addedBy: 1
           });
         }
       }
@@ -13905,32 +13905,32 @@ async function serviceCharges() {
 }
 
 async function seedData() {
-  
-  //  await roles();
-  //  await permissions();
-  //  await insertPermissions();
-  //  await rolePermission();
-  //  await rechargeStateCode();
-  //  await KycDocumentSettings();
-  //  await createBasicPackage();
+
+  // await roles();
+  // await permissions();
+  // await insertPermissions();
+  // await rolePermission();
+  // await rechargeStateCode();
+  // await KycDocumentSettings();
+  // await createBasicPackage();
   // //  await servicePush();
-  //  await OperatorType();
-  //  await state();
-  //  await gstState();
-  //  await rechargeStateCode();
-  //  await bank();
-    // await services();
-   
-  //  await cardType();
-  //  await paymentInsturment();
-  //  await seedPgCommercials();
-  //  await seedRangeComm();
-  //  await seedRangeCharges();
-   
-  //  // Create company first, then user and wallet
-  //  const company = await seedCompany();
-  //  if (company && company.id) {
-  //    await seedUsers(company.id);
-  //  }
+  // await OperatorType();
+  // await state();
+  // await gstState();
+  // await rechargeStateCode();
+  // await bank();
+  // await services();
+
+  // await cardType();
+  // await paymentInsturment();
+  // await seedPgCommercials();
+  // await seedRangeComm();
+  // await seedRangeCharges();
+
+  // // Create company first, then user and wallet
+  // const company = await seedCompany();
+  // if (company && company.id) {
+  //   await seedUsers(company.id);
+  // }
 }
 module.exports = seedData;
