@@ -22,6 +22,7 @@ const {
 } = require('./middleware/security');
 const aepsLogout = require('./utils/aepsLogout');
 const { generalLimit } = require('./middleware/ratelimiter');
+const redisClient = require('./config/redisClient');
 
 const app = express();
 app.use(
@@ -150,15 +151,24 @@ function name() {
   console.log('Router is Working!');
 }
 
+async function connectRedis() {
+  try {
+    await redisClient.connect();
+  } catch (err) {
+    console.error('Redis connection failed:', err.message);
+  }
+}
+
 if (process.env.NODE_ENV !== 'test') {
   models.sequelize
     .sync({ alter: true })
     .then(() => { })
-    .finally(() => {
+    .finally(async () => {
       app.use(routes);
       // seeder();
       name();
       aepsLogout();
+      connectRedis();
     });
   // app.use(routes);
   httpServer.listen(process.env.PORT, () => {

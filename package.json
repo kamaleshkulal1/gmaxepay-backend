@@ -27,6 +27,7 @@
     "form-data": "^4.0.4",
     "helmet": "^8.1.0",
     "i": "^0.3.7",
+    "ioredis": "^5.9.3",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
