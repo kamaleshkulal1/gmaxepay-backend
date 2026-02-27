@@ -275,11 +275,19 @@ jobs:
             --instance-ids "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --parameters 'commands=[
-              "cd /home/ec2-user/gmaxepay-backend",
-              "git pull origin main",
-              "npm install",
-              "pm2 restart gmaxepay-backend",
-              "pm2 save"
+              "set -e",
+              "REPO_DIR=/home/ec2-user/gmaxepay-backend",
+              "echo \"📂 Entering repo directory...\"",
+              "cd $REPO_DIR || { echo \"❌ Directory not found: $REPO_DIR\"; exit 1; }",
+              "echo \"🔄 Pulling latest code from main...\"",
+              "git fetch origin main",
+              "git reset --hard origin/main",
+              "echo \"📦 Installing dependencies...\"",
+              "npm install --production",
+              "echo \"🔄 Restarting application via PM2...\"",
+              "pm2 restart gmaxepay-backend || pm2 start index.js --name gmaxepay-backend --node-args=\"--max-old-space-size=4096\"",
+              "pm2 save",
+              "echo \"✅ Deploy script completed successfully!\""
             ]' \
             --region ${{ secrets.PROD_AWS_REGION }} \
             --query "Command.CommandId" \
@@ -293,6 +301,25 @@ jobs:
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --region ${{ secrets.PROD_AWS_REGION }}
+
+          # Always print EC2 stdout/stderr for debugging
+          DEPLOY_OUTPUT=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --region ${{ secrets.PROD_AWS_REGION }} \
+            --query "StandardOutputContent" --output text)
+          DEPLOY_ERROR=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --region ${{ secrets.PROD_AWS_REGION }} \
+            --query "StandardErrorContent" --output text)
+
+          echo "📋 EC2 Deploy Output:"
+          echo "$DEPLOY_OUTPUT"
+          if [ -n "$DEPLOY_ERROR" ]; then
+            echo "⚠️ EC2 Deploy Errors:"
+            echo "$DEPLOY_ERROR"
+          fi
 
           STATUS=$(aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
