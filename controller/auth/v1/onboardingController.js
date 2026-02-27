@@ -43,6 +43,9 @@ const isAllowedOrigin = (origin) => {
       return protocol === 'https:';
     }
 
+    if (hostname === 'app.gmaxepay.com') {
+      return protocol === 'https:';
+    }
 
     return false;
   } catch (error) {
