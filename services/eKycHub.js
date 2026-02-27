@@ -162,6 +162,7 @@ const bankVerification = async (account_number, ifsc) => {
   return axios
     .request(config)
     .then((response) => {
+      console.log('eKycHub bankVerification raw response:', JSON.stringify(response.data));
       return response.data;
     })
     .catch((error) => {

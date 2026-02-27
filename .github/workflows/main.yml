@@ -2,7 +2,7 @@ name: Gmaxepay Backend Deployments
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, main]
 
 jobs:     
   build-and-deploy:
@@ -247,3 +247,39 @@ jobs:
           }
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ────────────────────────────────────────────────
+  # Production deployment – triggered only on `main`
+  # ────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production EC2
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.PROD_AWS_REGION }}
+
+      - name: Deploy via SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=[
+              "cd /home/ec2-user/gmaxepay-backend",
+              "git pull origin main",
+              "npm install --production",
+              "pm2 restart gmaxepay-backend",
+              "pm2 save"
+            ]' \
+            --region ${{ secrets.PROD_AWS_REGION }}
+
+      - name: Done
+        run: echo "✅ Production deployment complete!"

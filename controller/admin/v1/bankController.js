@@ -28,7 +28,7 @@ const createBank = async (req, res) => {
       id: req.user.id,
       isActive: true
     });
-    if(!existingUser || existingUser.userRole !== 1){
+    if (!existingUser || existingUser.userRole !== 1) {
       return res.failure({ message: 'Unauthorized access' });
     }
     const bankName = (dataToCreate.bankName || '').trim();
@@ -41,7 +41,7 @@ const createBank = async (req, res) => {
     if (!bankIIN) {
       return res.validationError({ message: 'bankIIN is required' });
     }
-   
+
     const dupWhere = [{ bankName: { [Op.iLike]: bankName } }];
     dupWhere.push({ bankIIN });
 
@@ -99,7 +99,7 @@ const updateBank = async (req, res) => {
       id: req.user.id,
       isActive: true
     });
-    if(!existingUser || existingUser.userRole !== 1){
+    if (!existingUser || existingUser.userRole !== 1) {
       return res.failure({ message: 'Unauthorized access' });
     }
 
@@ -107,7 +107,7 @@ const updateBank = async (req, res) => {
       bankIIN: bankId,
       isDeleted: false
     });
-    if(!existingBank){
+    if (!existingBank) {
       return res.failure({ message: 'Bank not found' });
     }
 
@@ -180,7 +180,7 @@ const deleteBank = async (req, res) => {
       id: req.user.id,
       isActive: true
     });
-    if(!existingUser || existingUser.userRole !== 1){
+    if (!existingUser || existingUser.userRole !== 1) {
       return res.failure({ message: 'Unauthorized access' });
     }
 
@@ -188,7 +188,7 @@ const deleteBank = async (req, res) => {
       bankIIN: bankId,
       isDeleted: false
     });
-    if(!existingBank){
+    if (!existingBank) {
       return res.failure({ message: 'Bank not found' });
     }
 
@@ -403,7 +403,7 @@ const addBank = async (req, res) => {
             companyId: companyId || null,
             addedBy: userId
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
 
