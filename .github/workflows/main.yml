@@ -4,261 +4,300 @@ on:
   push:
     branches: [dev, main]
 
-jobs:     
+jobs:
+
   build-and-deploy:
+    name: Deploy to Dev EC2
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
+
     steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v3
-      
-    - name: 📋 Get commit info
-      id: commit
-      run: |
-        echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
-        echo "author_email=${{ github.event.head_commit.author.email }}" >> $GITHUB_OUTPUT
-        echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-        echo "time=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-        
-        # Handle commit message with proper escaping for multi-line
-        {
-          echo 'message<<EOF'
-          echo '${{ github.event.head_commit.message }}'
-          echo 'EOF'
-        } >> $GITHUB_OUTPUT
-        
-        # Handle author name with proper escaping
-        {
-          echo 'author<<EOF'
-          echo '${{ github.event.head_commit.author.name }}'
-          echo 'EOF'
-        } >> $GITHUB_OUTPUT
-        
-    - name: 📢 Notify Slack - Started
-      uses: 8398a7/action-slack@v3
-      with:
-        status: custom
-        custom_payload: |
-          {
-            "text": "🚀 Deployment Started",
-            "attachments": [{
-              "color": "good",
-              "fields": [
-                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
-                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
-                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
-              ]
-            }]
-          }
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
 
-    - name: 🚀 Deploy to EC2
-      id: deploy
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_PEM_KEY }}
-        port: 22
-        timeout: 30s
-        command_timeout: 5m
-        script: |
-          set -e
-          REPO_DIR="/home/${{ secrets.EC2_USERNAME }}/gmaxepay-backend"
-          REPO_URL="https://github.com/kamaleshkulal1/gmaxepay-backend.git"
-          
-          echo "🚀 Starting deployment..."
-          
-          # Update code
-          if [ ! -d "$REPO_DIR" ]; then
-            echo "📥 Cloning repository..."
-            git clone $REPO_URL $REPO_DIR
-          else
-            echo "🔄 Pulling latest changes..."
-            cd $REPO_DIR
-            
-            # Reset any local changes (except .env if it exists)
-            echo "🧹 Cleaning working directory..."
-            git fetch origin ${{ github.ref_name }}
-            
-            # Force clean the working directory
-            git clean -fd
-            git reset --hard HEAD
-            
-            # Preserve .env file if it exists
-            if [ -f .env ]; then
-              cp .env /tmp/.env.backup
-              echo "💾 Backed up .env file"
-            fi
-            
-            # Hard reset to latest branch
-            git reset --hard origin/${{ github.ref_name }}
-            
-            # Restore .env file
-            if [ -f /tmp/.env.backup ]; then
-              cp /tmp/.env.backup .env
-              rm /tmp/.env.backup
-              echo "✅ Restored .env File"
-            fi
-            
-            echo "✅ Updated to latest code from ${{ github.ref_name }} branch"
-          fi
-          
-          cd $REPO_DIR
-          echo "📦 Installing dependencies...."
-          npm install --silent
-          
-          # Setup PM2
-          if ! command -v pm2 &> /dev/null; then
-            echo "⚙️ Installing PM2..."
-            npm install -g pm2 --silent
-          fi
-          
-          echo "🔄 Restarting application..."
-          pm2 delete gmaxepay-backend 2>/dev/null || true
-          pm2 start index.js --name gmaxepay-backend --node-args="--max-old-space-size=4096" --silent
-          pm2 save --silent
-          
-          echo "⏳ Waiting for startup..."
-          sleep 20
-          
-          echo "🔍 Checking PM2 status..."
-          pm2 list
-          
-          echo "🏥 Health check..."
-          echo "⏳ Attempting health check with retries..."
-          
-          # Health check with retries and proper status validation
-          HEALTH_CHECK_SUCCESS=false
-          MAX_RETRIES=5
-          RETRY_DELAY=10
-          
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "🔄 Health check attempt $i/$MAX_RETRIES..."
-            
-            # Make health check request and capture both status code and response
-            HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:8005/health")
-            HTTP_STATUS=$(echo "$HEALTH_RESPONSE" | tail -n1)
-            RESPONSE_BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
-            
-            echo "📊 HTTP Status: $HTTP_STATUS"
-            echo "📄 Response: $RESPONSE_BODY"
-            
-            # Check if HTTP status is 200 and JSON status is 'ok'
-            if [ "$HTTP_STATUS" = "200" ]; then
-              # Check if JSON response contains status: 'ok'
-              if echo "$RESPONSE_BODY" | grep -q '"status":"ok"'; then
-                echo "✅ Health check successful! Status: OK"
-                HEALTH_CHECK_SUCCESS=true
-                break
-              else
-                echo "⚠️ HTTP  200 but JSON status not 'ok': $RESPONSE_BODY"
-              fi
+      - name: 📋 Get commit info
+        id: commit
+        run: |
+          echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "author_email=${{ github.event.head_commit.author.email }}" >> $GITHUB_OUTPUT
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "time=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
+          # Handle commit message with proper escaping for multi-line
+          {
+            echo 'message<<EOF'
+            echo '${{ github.event.head_commit.message }}'
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+          # Handle author name with proper escaping
+          {
+            echo 'author<<EOF'
+            echo '${{ github.event.head_commit.author.name }}'
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: 📢 Notify Slack - Started
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              "text": "🚀 Deployment Started",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                  {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                  {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
+                  {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: 🚀 Deploy to EC2
+        id: deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_PEM_KEY }}
+          port: 22
+          timeout: 30s
+          command_timeout: 5m
+          script: |
+            set -e
+            REPO_DIR="/home/${{ secrets.EC2_USERNAME }}/gmaxepay-backend"
+            REPO_URL="https://github.com/kamaleshkulal1/gmaxepay-backend.git"
+
+            echo "🚀 Starting deployment..."
+
+            # Update code
+            if [ ! -d "$REPO_DIR" ]; then
+              echo "📥 Cloning repository..."
+              git clone $REPO_URL $REPO_DIR
             else
-              echo "❌ HTTP status not 200: $HTTP_STATUS"
+              echo "🔄 Pulling latest changes..."
+              cd $REPO_DIR
+
+              # Reset any local changes (except .env if it exists)
+              echo "🧹 Cleaning working directory..."
+              git fetch origin ${{ github.ref_name }}
+
+              # Force clean the working directory
+              git clean -fd
+              git reset --hard HEAD
+
+              # Preserve .env file if it exists
+              if [ -f .env ]; then
+                cp .env /tmp/.env.backup
+                echo "💾 Backed up .env file"
+              fi
+
+              # Hard reset to latest branch
+              git reset --hard origin/${{ github.ref_name }}
+
+              # Restore .env file
+              if [ -f /tmp/.env.backup ]; then
+                cp /tmp/.env.backup .env
+                rm /tmp/.env.backup
+                echo "✅ Restored .env File"
+              fi
+
+              echo "✅ Updated to latest code from ${{ github.ref_name }} branch"
             fi
-            
-            if [ $i -lt $MAX_RETRIES ]; then
-              echo "⏳ Waiting $RETRY_DELAY seconds before retry..."
-              sleep $RETRY_DELAY
+
+            cd $REPO_DIR
+            echo "📦 Installing dependencies...."
+            npm install --silent
+
+            # Setup PM2
+            if ! command -v pm2 &> /dev/null; then
+              echo "⚙️ Installing PM2..."
+              npm install -g pm2 --silent
             fi
-          done
-          
-          if [ "$HEALTH_CHECK_SUCCESS" = "true" ]; then
-            echo "✅ Deployment successful!"
-            exit 0
-          else
-            echo "❌ Health check failed after $MAX_RETRIES attempts"
-            echo "📋 PM2 Status:"
+
+            echo "🔄 Restarting application..."
+            pm2 delete gmaxepay-backend 2>/dev/null || true
+            pm2 start index.js --name gmaxepay-backend --node-args="--max-old-space-size=4096" --silent
+            pm2 save --silent
+
+            echo "⏳ Waiting for startup..."
+            sleep 20
+
+            echo "🔍 Checking PM2 status..."
             pm2 list
-            echo "📋 Recent Logs:"
-            pm2 logs gmaxepay-backend --lines 20
-            echo "📋 Environment Check:"
-            echo "PORT: $PORT"
-            echo "NODE_ENV: $NODE_ENV"
-            # Health check failed - exit code will indicate failure
-            exit 1
-          fi
-          
-    - name: ✅ Notify Slack - Success
-      uses: 8398a7/action-slack@v3
-      if: success()
-      with:
-        status: success
-        custom_payload: |
-          {
-            "text": "🎉 Deployment Successful",
-            "attachments": [{
-              "color": "good",
-              "fields": [
-                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
-                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
-                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
-                {"title": "URL", "value": "http://${{ secrets.EC2_HOST }}", "short": false}
-              ]
-            }]
-          }
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-    - name: 🏥 Health Check Failure Notification
-      uses: 8398a7/action-slack@v3
-      if: failure() && steps.deploy.outcome == 'failure'
-      with:
-        status: failure
-        custom_payload: |
-          {
-            "text": "🏥 Health Check Failed",
-            "attachments": [{
-              "color": "warning",
-              "fields": [
-                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
-                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
-                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
-                {"title": "Error", "value": "Application deployed but health check failed", "short": false},
-                {"title": "Action", "value": "Check application logs and database connection", "short": false}
-              ]
-            }]
-          }
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+            echo "🏥 Health check..."
+            echo "⏳ Attempting health check with retries..."
 
-    - name: ❌ Notify Slack - Failed
-      uses: 8398a7/action-slack@v3
-      if: failure()
-      with:
-        status: failure
-        custom_payload: |
-          {
-            "text": "🚨 Deployment Failed",
-            "attachments": [{
-              "color": "danger",
-              "fields": [
-                {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
-                {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
-                {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
-                {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
-                {"title": "Action", "value": "Check GitHub Actions logs for details", "short": false}
-              ]
-            }]
-          }
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+            # Health check with retries and proper status validation
+            HEALTH_CHECK_SUCCESS=false
+            MAX_RETRIES=5
+            RETRY_DELAY=10
 
-  # ────────────────────────────────────────────────
-  # Production deployment – triggered only on `main`
-  # ────────────────────────────────────────────────
+            for i in $(seq 1 $MAX_RETRIES); do
+              echo "🔄 Health check attempt $i/$MAX_RETRIES..."
+
+              # Make health check request and capture both status code and response
+              HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:8005/health")
+              HTTP_STATUS=$(echo "$HEALTH_RESPONSE" | tail -n1)
+              RESPONSE_BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
+
+              echo "📊 HTTP Status: $HTTP_STATUS"
+              echo "📄 Response: $RESPONSE_BODY"
+
+              # Check if HTTP status is 200 and JSON status is 'ok'
+              if [ "$HTTP_STATUS" = "200" ]; then
+                # Check if JSON response contains status: 'ok'
+                if echo "$RESPONSE_BODY" | grep -q '"status":"ok"'; then
+                  echo "✅ Health check successful! Status: OK"
+                  HEALTH_CHECK_SUCCESS=true
+                  break
+                else
+                  echo "⚠️ HTTP  200 but JSON status not 'ok': $RESPONSE_BODY"
+                fi
+              else
+                echo "❌ HTTP status not 200: $HTTP_STATUS"
+              fi
+
+              if [ $i -lt $MAX_RETRIES ]; then
+                echo "⏳ Waiting $RETRY_DELAY seconds before retry..."
+                sleep $RETRY_DELAY
+              fi
+            done
+
+            if [ "$HEALTH_CHECK_SUCCESS" = "true" ]; then
+              echo "✅ Deployment successful!"
+              exit 0
+            else
+              echo "❌ Health check failed after $MAX_RETRIES attempts"
+              echo "📋 PM2 Status:"
+              pm2 list
+              echo "📋 Recent Logs:"
+              pm2 logs gmaxepay-backend --lines 20
+              echo "📋 Environment Check:"
+              echo "PORT: $PORT"
+              echo "NODE_ENV: $NODE_ENV"
+              exit 1
+            fi
+
+      - name: ✅ Notify Slack - Success
+        uses: 8398a7/action-slack@v3
+        if: success()
+        with:
+          status: success
+          custom_payload: |
+            {
+              "text": "🎉 Deployment Successful",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                  {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                  {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
+                  {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
+                  {"title": "URL", "value": "http://${{ secrets.EC2_HOST }}", "short": false}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: 🏥 Health Check Failure Notification
+        uses: 8398a7/action-slack@v3
+        if: failure() && steps.deploy.outcome == 'failure'
+        with:
+          status: failure
+          custom_payload: |
+            {
+              "text": "🏥 Health Check Failed",
+              "attachments": [{
+                "color": "warning",
+                "fields": [
+                  {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                  {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                  {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
+                  {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
+                  {"title": "Error", "value": "Application deployed but health check failed", "short": false},
+                  {"title": "Action", "value": "Check application logs and database connection", "short": false}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: ❌ Notify Slack - Failed
+        uses: 8398a7/action-slack@v3
+        if: failure()
+        with:
+          status: failure
+          custom_payload: |
+            {
+              "text": "🚨 Deployment Failed",
+              "attachments": [{
+                "color": "danger",
+                "fields": [
+                  {"title": "Branch", "value": "${{ steps.commit.outputs.branch }}", "short": true},
+                  {"title": "Author", "value": "${{ steps.commit.outputs.author }} <${{ steps.commit.outputs.author_email }}>", "short": true},
+                  {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
+                  {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true},
+                  {"title": "Action", "value": "Check GitHub Actions logs for details", "short": false}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ────────────────────────────────────────────────────
+  # PRODUCTION deployment — triggered only on `main`
+  # ────────────────────────────────────────────────────
   deploy-production:
     name: Deploy to Production EC2
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v3
+
+      - name: 📋 Get commit info
+        id: commit
+        run: |
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "time=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          {
+            echo 'author<<EOF'
+            echo '${{ github.event.head_commit.author.name }}'
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+          {
+            echo 'sha<<EOF'
+            echo '${{ github.sha }}'
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: 📢 Notify Slack - Prod Started
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              "text": "🚀 Production Deployment Started",
+              "attachments": [{
+                "color": "warning",
+                "fields": [
+                  {"title": "Branch", "value": "main", "short": true},
+                  {"title": "Author", "value": "${{ steps.commit.outputs.author }}", "short": true},
+                  {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
+                  {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -276,50 +315,46 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --parameters 'commands=[
               "set -e",
-              "REPO_DIR=/home/ec2-user/gmaxepay-backend",
-              "echo \"📂 Entering repo directory...\"",
-              "cd $REPO_DIR || { echo \"❌ Directory not found: $REPO_DIR\"; exit 1; }",
-              "echo \"🔄 Pulling latest code from main...\"",
+              "cd /home/ec2-user/gmaxepay-backend || exit 1",
+              "echo Backing up .env...",
+              "[ -f .env ] && cp .env /tmp/.env.prod.backup",
+              "echo Fetching latest main code...",
               "git fetch origin main",
+              "git clean -fd",
               "git reset --hard origin/main",
-              "echo \"📦 Installing dependencies...\"",
+              "echo Restoring .env...",
+              "[ -f /tmp/.env.prod.backup ] && cp /tmp/.env.prod.backup .env && rm /tmp/.env.prod.backup",
+              "echo Installing dependencies...",
               "npm install --production",
-              "echo \"🔄 Restarting application via PM2...\"",
-              "pm2 restart gmaxepay-backend || pm2 start index.js --name gmaxepay-backend --node-args=\"--max-old-space-size=4096\"",
+              "echo Restarting PM2...",
+              "pm2 restart gmaxepay-backend || pm2 start index.js --name gmaxepay-backend --node-args=--max-old-space-size=4096",
               "pm2 save",
-              "echo \"✅ Deploy script completed successfully!\""
+              "echo Deploy script completed!"
             ]' \
             --region ${{ secrets.PROD_AWS_REGION }} \
             --query "Command.CommandId" \
             --output text)
 
-          echo "📋 SSM Command ID: $COMMAND_ID"
           echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
+          echo "📋 SSM Command ID: $COMMAND_ID"
 
-          echo "⏳ Waiting for SSM command to complete..."
+          echo "⏳ Waiting for command to complete..."
           aws ssm wait command-executed \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --region ${{ secrets.PROD_AWS_REGION }}
 
-          # Always print EC2 stdout/stderr for debugging
-          DEPLOY_OUTPUT=$(aws ssm get-command-invocation \
+          OUTPUT=$(aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --region ${{ secrets.PROD_AWS_REGION }} \
             --query "StandardOutputContent" --output text)
-          DEPLOY_ERROR=$(aws ssm get-command-invocation \
+
+          ERROR=$(aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --region ${{ secrets.PROD_AWS_REGION }} \
             --query "StandardErrorContent" --output text)
-
-          echo "📋 EC2 Deploy Output:"
-          echo "$DEPLOY_OUTPUT"
-          if [ -n "$DEPLOY_ERROR" ]; then
-            echo "⚠️ EC2 Deploy Errors:"
-            echo "$DEPLOY_ERROR"
-          fi
 
           STATUS=$(aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
@@ -327,52 +362,43 @@ jobs:
             --region ${{ secrets.PROD_AWS_REGION }} \
             --query "Status" --output text)
 
-          echo "📊 SSM Command Status: $STATUS"
+          echo "� EC2 Deploy Output:"
+          echo "$OUTPUT"
+          [ -n "$ERROR" ] && echo "⚠️ EC2 Errors: $ERROR"
+          echo "📊 Status: $STATUS"
 
           if [ "$STATUS" != "Success" ]; then
-            echo "❌ Deployment command failed with status: $STATUS"
+            echo "❌ Deployment failed: $STATUS"
             exit 1
           fi
 
-          echo "✅ Deployment command completed successfully!"
+          echo "✅ Deployment command successful!"
 
       - name: 🏥 Health Check via SSM
         run: |
-          echo "⏳ Waiting 20s for application to start..."
+          echo "⏳ Waiting 20s for app to start..."
           sleep 20
 
-          echo "🔍 Sending health check command via SSM..."
-          HC_COMMAND_ID=$(aws ssm send-command \
+          HC_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --parameters 'commands=[
               "HEALTH_CHECK_SUCCESS=false",
-              "MAX_RETRIES=5",
-              "RETRY_DELAY=10",
-              "for i in $(seq 1 $MAX_RETRIES); do",
-              "  echo \"🔄 Health check attempt $i/$MAX_RETRIES...\"",
-              "  HEALTH_RESPONSE=$(curl -s -w \"\\n%{http_code}\" \"http://localhost:8005/health\")",
-              "  HTTP_STATUS=$(echo \"$HEALTH_RESPONSE\" | tail -n1)",
-              "  RESPONSE_BODY=$(echo \"$HEALTH_RESPONSE\" | head -n -1)",
-              "  echo \"📊 HTTP Status: $HTTP_STATUS\"",
-              "  echo \"📄 Response: $RESPONSE_BODY\"",
-              "  if [ \"$HTTP_STATUS\" = \"200\" ]; then",
-              "    if echo \"$RESPONSE_BODY\" | grep -q '\"status\":\"ok\"'; then",
-              "      echo \"✅ Health check passed!\"",
-              "      HEALTH_CHECK_SUCCESS=true",
-              "      break",
-              "    else",
-              "      echo \"⚠️ HTTP 200 but JSON status not ok\"",
-              "    fi",
-              "  else",
-              "    echo \"❌ HTTP status not 200: $HTTP_STATUS\"",
+              "for i in 1 2 3 4 5; do",
+              "  RESP=$(curl -s -w \"\n%{http_code}\" http://localhost:8005/health)",
+              "  STATUS=$(echo \"$RESP\" | tail -n1)",
+              "  BODY=$(echo \"$RESP\" | head -n -1)",
+              "  echo \"Attempt $i - HTTP: $STATUS\"",
+              "  if [ \"$STATUS\" = \"200\" ]; then",
+              "    echo Health check passed!",
+              "    HEALTH_CHECK_SUCCESS=true",
+              "    break",
               "  fi",
-              "  if [ $i -lt $MAX_RETRIES ]; then sleep $RETRY_DELAY; fi",
+              "  echo Retry $i failed. Waiting 10s...",
+              "  sleep 10",
               "done",
               "if [ \"$HEALTH_CHECK_SUCCESS\" != \"true\" ]; then",
-              "  echo \"❌ Health check failed after $MAX_RETRIES attempts\"",
-              "  pm2 list",
-              "  pm2 logs gmaxepay-backend --lines 20",
+              "  pm2 logs gmaxepay-backend --lines 30",
               "  exit 1",
               "fi"
             ]' \
@@ -380,22 +406,21 @@ jobs:
             --query "Command.CommandId" \
             --output text)
 
-          echo "📋 Health Check SSM Command ID: $HC_COMMAND_ID"
+          echo "📋 Health Check SSM Command ID: $HC_ID"
 
-          echo "⏳ Waiting for health check to complete..."
           aws ssm wait command-executed \
-            --command-id "$HC_COMMAND_ID" \
+            --command-id "$HC_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --region ${{ secrets.PROD_AWS_REGION }}
 
           HC_STATUS=$(aws ssm get-command-invocation \
-            --command-id "$HC_COMMAND_ID" \
+            --command-id "$HC_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --region ${{ secrets.PROD_AWS_REGION }} \
             --query "Status" --output text)
 
           HC_OUTPUT=$(aws ssm get-command-invocation \
-            --command-id "$HC_COMMAND_ID" \
+            --command-id "$HC_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --region ${{ secrets.PROD_AWS_REGION }} \
             --query "StandardOutputContent" --output text)
@@ -410,5 +435,43 @@ jobs:
 
           echo "✅ Production health check passed!"
 
-      - name: ✅ Done
-        run: echo "✅ Production deployment complete and healthy!"
+      - name: ✅ Notify Slack - Prod Success
+        uses: 8398a7/action-slack@v3
+        if: success()
+        with:
+          status: success
+          custom_payload: |
+            {
+              "text": "🎉 Production Deployment Successful!",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Branch", "value": "main", "short": true},
+                  {"title": "Author", "value": "${{ steps.commit.outputs.author }}", "short": true},
+                  {"title": "Commit", "value": "${{ steps.commit.outputs.sha }}", "short": true},
+                  {"title": "Time", "value": "${{ steps.commit.outputs.time }}", "short": true}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: ❌ Notify Slack - Prod Failed
+        uses: 8398a7/action-slack@v3
+        if: failure()
+        with:
+          status: failure
+          custom_payload: |
+            {
+              "text": "🚨 Production Deployment Failed!",
+              "attachments": [{
+                "color": "danger",
+                "fields": [
+                  {"title": "Branch", "value": "main", "short": true},
+                  {"title": "Author", "value": "${{ steps.commit.outputs.author }}", "short": true},
+                  {"title": "Action", "value": "Check GitHub Actions logs immediately!", "short": false}
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
