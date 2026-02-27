@@ -408,7 +408,7 @@ const addBank = async (req, res) => {
     }
 
     if (!bankVerification || bankVerification.status !== 'Success') {
-      return res.failure({ message: 'Bank verification failed' });
+      return res.failure({ message: bankVerification?.message || 'Bank verification failed' });
     }
 
     const operator = await dbService.findOne(model.operator, {
