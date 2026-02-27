@@ -311,7 +311,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands='["#!/bin/bash","set -e","echo === Running as: $(whoami) ===","echo === Switching to ec2-user for full deploy ===","runuser -l ec2-user -c \"set -e && cd /home/ec2-user/gmaxepay-backend && echo Step1: git safe dir && git config --global --add safe.directory /home/ec2-user/gmaxepay-backend && echo Step2: backup env && ([ -f .env ] && cp .env /tmp/.env.prod.bak && echo env backed up || echo no env found) && echo Step3: git fetch && git fetch origin main && echo Step4: git reset && git clean -fd && git reset --hard origin/main && echo Step5: restore env && ([ -f /tmp/.env.prod.bak ] && cp /tmp/.env.prod.bak .env && rm /tmp/.env.prod.bak && echo env restored || echo no backup found) && echo Step6: npm install && npm install --production && echo Step7: pm2 restart && (pm2 restart gmaxepay-backend || pm2 start index.js --name gmaxepay-backend --node-args=--max-old-space-size=4096) && pm2 save && echo === Deploy Done ===\""]' \
+            --parameters commands='["#!/bin/bash","set -e","echo === Running as: $(whoami) ===","echo === Switching to ec2-user for full deploy ===","runuser -l ec2-user -c \"set -e && cd /home/ec2-user/gmaxepay-backend && echo Step1: git safe dir && git config --global --add safe.directory /home/ec2-user/gmaxepay-backend && echo Step2: backup env && ([ -f .env ] && cp .env /home/ec2-user/.env.prod.bak && echo env backed up || echo no env found) && echo Step3: git fetch && git fetch origin main && echo Step4: git reset && git clean -fd && git reset --hard origin/main && echo Step5: restore env && ([ -f /home/ec2-user/.env.prod.bak ] && cp /home/ec2-user/.env.prod.bak .env && rm /home/ec2-user/.env.prod.bak && echo env restored || echo no backup found) && echo Step6: npm install && npm install --production && echo Step7: pm2 restart && (pm2 restart gmaxepay-backend || pm2 start index.js --name gmaxepay-backend --node-args=--max-old-space-size=4096) && pm2 save && echo === Deploy Done ===\""]' \
             --region "${{ secrets.PROD_AWS_REGION }}" \
             --query "Command.CommandId" \
             --output text)
@@ -319,8 +319,11 @@ jobs:
           echo "📋 SSM Command ID: $COMMAND_ID"
           echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
 
-          echo "⏳ Waiting 90s for deploy to finish..."
-          sleep 90
+          echo "⏳ Waiting for deploy to complete (polls every 5s)..."
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --region "${{ secrets.PROD_AWS_REGION }}"
 
           STATUS=$(aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
@@ -371,8 +374,11 @@ jobs:
 
           echo "📋 HC Command ID: $HC_ID"
 
-          echo "⏳ Waiting 90s for health check..."
-          sleep 90
+          echo "⏳ Waiting for health check to complete (polls every 5s)..."
+          aws ssm wait command-executed \
+            --command-id "$HC_ID" \
+            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --region "${{ secrets.PROD_AWS_REGION }}"
 
           HC_STATUS=$(aws ssm get-command-invocation \
             --command-id "$HC_ID" \

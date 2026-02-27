@@ -96,7 +96,7 @@ app.get('/favicon.ico', (req, res) => {
 // app.use(require('./middleware/hostCheck'));
 
 app.get('/', (req, res) => {
-  res.send(`gmaxepay is running successfully!`);
+  res.send(`gmaxepay is running successfully`);
 });
 
 app.get('/health', (req, res) => {
