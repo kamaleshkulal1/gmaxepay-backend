@@ -103,7 +103,7 @@ app.get('/health', (req, res) => {
   try {
     const healthStatus = {
       status: 'ok',
-      message: 'gmaxepay is running beautifully',
+      message: 'gmaxepay is running beautifully!',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development'
@@ -166,7 +166,7 @@ if (process.env.NODE_ENV !== 'test') {
     .then(() => { })
     .finally(async () => {
       app.use(routes);
-      // seeder();
+      seeder();
       name();
       aepsLogout();
       connectRedis();
