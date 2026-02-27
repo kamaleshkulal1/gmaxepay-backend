@@ -70,13 +70,13 @@ const ensureAllowedOrigin = (req) => {
 const isAllowedCompanyDomain = (domain) => {
   if (!domain) return false;
   const normalizedDomain = domain.toString().trim().toLowerCase();
-  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in';
+  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in' || normalizedDomain === 'app.gmaxepay.com';
 };
 
 const getRequestedDomain = (req) => {
   const d = req.get('x-company-domain') || '';
   const domain = (d || '').toString().trim().toLowerCase();
-  return domain || 'app.gmaxepay.in';
+  return domain || 'app.gmaxepay.in' || 'app.gmaxepay.com';
 };
 
 const ensureDomainMatches = (req, company) => {
@@ -86,7 +86,7 @@ const ensureDomainMatches = (req, company) => {
     return false;
   }
   // If the request is coming from core allowed domains, allow regardless of company's customDomain
-  if (requested === 'app.gmaxepay.in' || requested === 'localhost') {
+  if (requested === 'app.gmaxepay.in' || requested === 'localhost' || requested === 'app.gmaxepay.com') {
     return true;
   }
   // Otherwise, if company has a customDomain stored, validate against it
