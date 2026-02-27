@@ -2,27 +2,37 @@ const cors = require('cors');
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return false;
-  
+
   try {
     const url = new URL(origin);
     const hostname = url.hostname.toLowerCase();
     const protocol = url.protocol.toLowerCase();
-    
+
     // Allow localhost with any port (http://localhost:*, http://127.0.0.1:*, http://::1:*)
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
       return protocol === 'http:' || protocol === 'https:';
     }
-    
+
     // Allow https://app.gmaxepay.in
     if (hostname === 'app.gmaxepay.in') {
       return protocol === 'https:';
     }
-    
+
     // Allow subdomains of app.gmaxepay.in (e.g., www.app.gmaxepay.in)
     if (hostname.endsWith('app.gmaxepay.in')) {
       return protocol === 'https:';
     }
-    
+
+    // Allow https://app.gmaxepay.com
+    if (hostname === 'app.gmaxepay.com') {
+      return protocol === 'https:';
+    }
+
+    // Allow subdomains of app.gmaxepay.com
+    if (hostname.endsWith('app.gmaxepay.com')) {
+      return protocol === 'https:';
+    }
+
     return false;
   } catch (error) {
     // If origin is not a valid URL, deny access
@@ -47,7 +57,7 @@ const onboardingCorsOptions = {
       callback(new Error('Not allowed by CORS'));
       return;
     }
-    
+
     if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
