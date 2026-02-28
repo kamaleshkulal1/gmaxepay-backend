@@ -1111,6 +1111,7 @@ const getDigilockerDocuments = async (req, res) => {
     } else {
       // Fetch from API
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
+      console.log("response", response);
 
       const responseStatus = (response?.status || '').toString().toUpperCase();
       const isSuccess = responseStatus === 'SUCCESS' || responseStatus === 'SUCCEED' || responseStatus === 'Success';
