@@ -705,6 +705,9 @@ const findMobileNumberOperator = async (req, res) => {
 const findAllRechargePlanFetch = async (req, res) => {
     try {
         const { mobileNumber, opCode, circle } = req.body;
+        console.log('mobileNumber', mobileNumber);
+        console.log('opCode', opCode);
+        console.log('circle', circle);
         if (!mobileNumber) {
             return res.failure({ message: 'Mobile number is required' });
         }
