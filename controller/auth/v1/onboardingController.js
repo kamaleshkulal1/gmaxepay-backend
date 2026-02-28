@@ -1051,6 +1051,7 @@ const getDigilockerDocuments = async (req, res) => {
     }, {
       sort: { id: -1 }
     });
+    console.log("allDigilockerDocuments", allDigilockerDocuments);
 
     if (!allDigilockerDocuments || allDigilockerDocuments.length === 0) {
       return res.failure({ message: `Please connect your ${docTypeLabel} to digilocker first` });
@@ -2749,7 +2750,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
             photoLinkBase64ForRekognition,
             extractedPhotoBase64ForRekognition
           );
-          console.log("faceComparison", faceComparison);
+          console.log(`[uploadFrontBackAadharDocuments] faceComparison for user ${ctx.user.id}:`, JSON.stringify(faceComparison));
 
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
           if (!validationResults.photoMatch) {
@@ -3023,6 +3024,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
               aadhaarBuffer.toString('base64'),
               panBuffer.toString('base64')
             );
+            console.log(`[uploadFrontBackPanDocuments] faceComparison for user ${ctx.user.id}:`, JSON.stringify(faceComparisonResult));
 
             if (faceComparisonResult?.success && faceComparisonResult?.matched) {
               verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';
