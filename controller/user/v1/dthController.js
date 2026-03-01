@@ -101,7 +101,7 @@ const dthRecharge = async (req, res) => {
             return res.failure({ message: 'Operator not found' });
         }
 
-        const operatorType = operator.operatorType || 'DTH';
+        const operatorType = operator.operatorType || 'DTH1';
 
         // Our own custom transaction ID 
         const transactionId = generateTransactionID(existingCompany?.companyName);

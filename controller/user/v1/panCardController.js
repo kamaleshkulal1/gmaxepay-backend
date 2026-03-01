@@ -47,7 +47,7 @@ const panCardActions = async (req, res) => {
 
     const [existingUser, operator, existingCompany] = await Promise.all([
       dbService.findOne(model.user, { id: userId }),
-      dbService.findOne(model.operator, { operatorType: 'PAN' }),
+      dbService.findOne(model.operator, { operatorType: 'PAN1' }),
       dbService.findOne(model.company, { id: companyId })
     ]);
 
@@ -59,7 +59,7 @@ const panCardActions = async (req, res) => {
       return res.failure({ message: 'Operator not found' });
     }
 
-    const operatorType = operator.operatorType || 'PAN';
+    const operatorType = operator.operatorType || 'PAN1';
 
     const transactionId = generateTransactionID(existingCompany?.companyName);
 

@@ -57,7 +57,7 @@ const recharge = async (req, res) => {
             return res.failure({ message: 'Operator not found' });
         }
 
-        const operatorType = operator.operatorType || 'RECHARGE';
+        const operatorType = operator.operatorType || 'RECHARGE1';
 
         // Our own custom transaction ID (separate from provider orderid / txid)
         const transactionId = generateTransactionID(existingCompany?.companyName);
@@ -705,9 +705,6 @@ const findMobileNumberOperator = async (req, res) => {
 const findAllRechargePlanFetch = async (req, res) => {
     try {
         const { mobileNumber, opCode, circle } = req.body;
-        console.log('mobileNumber', mobileNumber);
-        console.log('opCode', opCode);
-        console.log('circle', circle);
         if (!mobileNumber) {
             return res.failure({ message: 'Mobile number is required' });
         }
