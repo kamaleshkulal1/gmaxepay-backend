@@ -9,7 +9,7 @@ router.post('/rechargeReports', authentication, recharge2Controller.getRecharge2
 router.post('/getUserRechargeReports', authentication, recharge2Controller.getDownlineRecharge2Reports);
 router.post('/recent-history', authentication, recharge2Controller.recentRechargeHistory);
 router.post('/find-mobile-operator', authentication, recharge2Controller.findMobileNumberOperator);
-router.post('/recharge-plan', authentication, recharge2Controller.findAllRechargePlanFetch);
+router.post('/find-recharge-plan', authentication, recharge2Controller.findAllRechargePlanFetch);
 router.post('/recharge-offer', authentication, recharge2Controller.findRechargeOfferFetch);
 
 module.exports = router;
