@@ -59,7 +59,7 @@ const getDashboard = async (req, res) => {
     if (userRole === 5) {
       const nsdlPanWhere = {
         ...baseWhere,
-        serviceType: 'Pan'
+        serviceType: 'Pan1'
       };
 
       const aeps1Where = {
@@ -77,7 +77,7 @@ const getDashboard = async (req, res) => {
 
       const dthWhere = {
         ...baseWhere,
-        serviceType: 'DTHRecharge'
+        serviceType: 'DTH1Recharge'
       };
 
       const payoutWhere = {
