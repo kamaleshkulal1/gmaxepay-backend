@@ -1,8 +1,3 @@
-/**
- * companyImage.js
- * @description :: Sequelize model of database table companyImage
- */
-
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 
