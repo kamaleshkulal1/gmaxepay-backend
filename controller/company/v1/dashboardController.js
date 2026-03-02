@@ -11,9 +11,9 @@ const roundToTwo = (num) => {
 };
 
 const getDashboard = async (req, res) => {
-    try {
-        const companyId = req.user.companyId;
-    
+  try {
+    const companyId = req.user.companyId;
+
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
     }
@@ -86,7 +86,7 @@ const getDashboard = async (req, res) => {
 
     const nsdlPanWhere = {
       ...dateWhere,
-      serviceType: 'Pan'
+      serviceType: 'Pan1'
     };
 
     const aeps1Where = {
@@ -99,12 +99,12 @@ const getDashboard = async (req, res) => {
 
     const mobileWhere = {
       ...dateWhere,
-      serviceType: 'MobileRecharge'
+      serviceType: 'Mobile1Recharge'
     };
 
     const dthWhere = {
       ...dateWhere,
-      serviceType: 'DTHRecharge'
+      serviceType: 'DTH1Recharge'
     };
 
     const bbpsWhere = {
@@ -114,6 +114,11 @@ const getDashboard = async (req, res) => {
     const payoutWhere = {
       ...dateWhere
     };
+
+    // A1 Top where clauses (from service1Transaction)
+    const a1topMobileWhere = { ...dateWhere, serviceType: 'Mobile2Recharge' };
+    const a1topDthWhere = { ...dateWhere, serviceType: 'DTH2Recharge' };
+    const a1topPanWhere = { ...dateWhere, serviceType: 'Pan2' };
 
     const [
       nsdlPanTotalVolume,
@@ -156,7 +161,27 @@ const getDashboard = async (req, res) => {
       walletCommission,
       walletWhitelabelCommission,
       serviceTransactionWhitelabelComm,
-      aeps1WhitelabelComm
+      aeps1WhitelabelComm,
+      // A1 Top Mobile
+      a1topMobileTotalVolume,
+      a1topMobileTotalCount,
+      a1topMobileSuccessCount,
+      a1topMobilePendingCount,
+      a1topMobileFailedCount,
+      // A1 Top DTH
+      a1topDthTotalVolume,
+      a1topDthTotalCount,
+      a1topDthSuccessCount,
+      a1topDthPendingCount,
+      a1topDthFailedCount,
+      // A1 Top PAN
+      a1topPanTotalVolume,
+      a1topPanTotalCount,
+      a1topPanSuccessCount,
+      a1topPanPendingCount,
+      a1topPanFailedCount,
+      // A1 Top whitelabel comm
+      a1topWhitelabelComm
     ] = await Promise.all([
       model.serviceTransaction.sum('amount', { where: nsdlPanWhere }),
       model.serviceTransaction.count({ where: nsdlPanWhere }),
@@ -276,6 +301,28 @@ const getDashboard = async (req, res) => {
           ...aeps1Where,
           status: 'SUCCESS'
         }
+      }),
+      // A1 Top Mobile
+      model.service1Transaction.sum('amount', { where: a1topMobileWhere }),
+      model.service1Transaction.count({ where: a1topMobileWhere }),
+      model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'SUCCESS' } }),
+      model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'PENDING' } }),
+      model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'FAILURE' } }),
+      // A1 Top DTH
+      model.service1Transaction.sum('amount', { where: a1topDthWhere }),
+      model.service1Transaction.count({ where: a1topDthWhere }),
+      model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'SUCCESS' } }),
+      model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'PENDING' } }),
+      model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'FAILURE' } }),
+      // A1 Top PAN
+      model.service1Transaction.sum('amount', { where: a1topPanWhere }),
+      model.service1Transaction.count({ where: a1topPanWhere }),
+      model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'SUCCESS' } }),
+      model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'PENDING' } }),
+      model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'FAILURE' } }),
+      // A1 Top whitelabel comm
+      model.service1Transaction.sum('whitelabelComm', {
+        where: { ...dateWhere, status: 'SUCCESS' }
       })
     ]);
 
@@ -284,7 +331,8 @@ const getDashboard = async (req, res) => {
       (bbpsWhitelabelComm || 0) +
       (walletWhitelabelCommission || 0) +
       (serviceTransactionWhitelabelComm || 0) +
-      (aeps1WhitelabelComm || 0)
+      (aeps1WhitelabelComm || 0) +
+      (a1topWhitelabelComm || 0)
     );
     const walletCommissionValue = roundToTwo(walletCommission || 0);
     const totalCommission = roundToTwo(
@@ -320,8 +368,8 @@ const getDashboard = async (req, res) => {
           totalCommission
         },
         services: {
-          nsdlPan: {
-            label: 'NSDL Pan',
+          inspayPan: {
+            label: 'Inspay PAN',
             totalVolume: roundToTwo(nsdlPanTotalVolume || 0),
             totalCount: nsdlPanTotalCount || 0,
             successCount: nsdlPanSuccessCount || 0,
@@ -344,16 +392,16 @@ const getDashboard = async (req, res) => {
             pendingCount: aeps2PendingCount || 0,
             failedCount: aeps2FailedCount || 0
           },
-          mobile: {
-            label: 'Mobile',
+          inspayMobile: {
+            label: 'Inspay Mobile Recharge',
             totalVolume: roundToTwo(mobileTotalVolume || 0),
             totalCount: mobileTotalCount || 0,
             successCount: mobileSuccessCount || 0,
             pendingCount: mobilePendingCount || 0,
             failedCount: mobileFailedCount || 0
           },
-          dth: {
-            label: 'DTH',
+          inspayDth: {
+            label: 'Inspay DTH Recharge',
             totalVolume: roundToTwo(dthTotalVolume || 0),
             totalCount: dthTotalCount || 0,
             successCount: dthSuccessCount || 0,
@@ -375,14 +423,38 @@ const getDashboard = async (req, res) => {
             successCount: payoutSuccessCount || 0,
             pendingCount: payoutPendingCount || 0,
             failedCount: payoutFailedCount || 0
+          },
+          a1topMobile: {
+            label: 'A1 Top Mobile Recharge',
+            totalVolume: roundToTwo(a1topMobileTotalVolume || 0),
+            totalCount: a1topMobileTotalCount || 0,
+            successCount: a1topMobileSuccessCount || 0,
+            pendingCount: a1topMobilePendingCount || 0,
+            failedCount: a1topMobileFailedCount || 0
+          },
+          a1topDth: {
+            label: 'A1 Top DTH Recharge',
+            totalVolume: roundToTwo(a1topDthTotalVolume || 0),
+            totalCount: a1topDthTotalCount || 0,
+            successCount: a1topDthSuccessCount || 0,
+            pendingCount: a1topDthPendingCount || 0,
+            failedCount: a1topDthFailedCount || 0
+          },
+          a1topPan: {
+            label: 'A1 Top PAN',
+            totalVolume: roundToTwo(a1topPanTotalVolume || 0),
+            totalCount: a1topPanTotalCount || 0,
+            successCount: a1topPanSuccessCount || 0,
+            pendingCount: a1topPanPendingCount || 0,
+            failedCount: a1topPanFailedCount || 0
           }
         }
       }
     });
   } catch (error) {
-        console.error('Error in getDashboard', error);
-        return res.failure({ message: error.message });
-    }
+    console.error('Error in getDashboard', error);
+    return res.failure({ message: error.message });
+  }
 };
 
 module.exports = {

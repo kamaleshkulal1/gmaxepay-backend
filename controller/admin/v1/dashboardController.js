@@ -85,14 +85,14 @@ const getDashboard = async (req, res) => {
     // --- AEPS1 (ASL) stats from aepsHistory ---
     const aeps1SuccessWhere = {
       ...dateWhere,
-    //   ...companyFilter,
+      //   ...companyFilter,
       status: 'SUCCESS'
     };
 
     // --- AEPS2 (Practomind) stats from practomindAepsHistory ---
     const practomindSuccessWhere = {
       ...dateWhere,
-    //   ...companyFilter,
+      //   ...companyFilter,
       // Treat truthy status / successful transactionStatus as success; filter basic status=true here
       status: true
     };
@@ -107,13 +107,13 @@ const getDashboard = async (req, res) => {
     // --- Inspay (Mobile/DTH/PAN) stats from serviceTransaction ---
     const inspayMobileWhere = {
       ...dateWhere,
-      serviceType: 'MobileRecharge',
+      serviceType: 'Mobile1Recharge',
       status: 'SUCCESS'
     };
 
     const inspayDthWhere = {
       ...dateWhere,
-      serviceType: 'DTHRecharge',
+      serviceType: 'DTH1Recharge',
       status: 'SUCCESS'
     };
 
@@ -140,6 +140,14 @@ const getDashboard = async (req, res) => {
       serviceType: 'Pan',
       status: { [Op.in]: ['SUCCESS', 'PENDING'] }
     };
+
+    // --- A1 Top (Mobile2/DTH2/Pan2) stats from service1Transaction ---
+    const a1topMobileWhere = { ...dateWhere, serviceType: 'Mobile2Recharge', status: 'SUCCESS' };
+    const a1topDthWhere = { ...dateWhere, serviceType: 'DTH2Recharge', status: 'SUCCESS' };
+    const a1topPanWhere = { ...dateWhere, serviceType: 'Pan2', status: 'SUCCESS' };
+    const a1topMobileVolumeWhere = { ...dateWhere, serviceType: 'Mobile2Recharge', status: { [Op.in]: ['SUCCESS', 'PENDING'] } };
+    const a1topDthVolumeWhere = { ...dateWhere, serviceType: 'DTH2Recharge', status: { [Op.in]: ['SUCCESS', 'PENDING'] } };
+    const a1topPanVolumeWhere = { ...dateWhere, serviceType: 'Pan2', status: { [Op.in]: ['SUCCESS', 'PENDING'] } };
 
     const aeps1VolumeWhere = {
       ...dateWhere,
@@ -223,6 +231,18 @@ const getDashboard = async (req, res) => {
       inspayPanTotalAmount,
       inspayPanTotalSuperadminComm,
       inspayPanSuccessCount,
+      // A1 Top Mobile
+      a1topMobileTotalAmount,
+      a1topMobileTotalSuperadminComm,
+      a1topMobileSuccessCount,
+      // A1 Top DTH
+      a1topDthTotalAmount,
+      a1topDthTotalSuperadminComm,
+      a1topDthSuccessCount,
+      // A1 Top PAN
+      a1topPanTotalAmount,
+      a1topPanTotalSuperadminComm,
+      a1topPanSuccessCount,
       // Previous period wallet totals (for comparison)
       prevWalletTotalSuperadminComm,
       prevWalletTotalSuccessAmount,
@@ -235,6 +255,8 @@ const getDashboard = async (req, res) => {
       bbpsPendingCount,
       inspayFailedCount,
       inspayPendingCount,
+      a1topFailedCount,
+      a1topPendingCount,
       payoutFailedCount,
       payoutPendingCount
     ] = await Promise.all([
@@ -285,6 +307,19 @@ const getDashboard = async (req, res) => {
         where: inspayPanWhere
       }),
       model.serviceTransaction.count({ where: inspayPanWhere }),
+
+      // A1 Top Mobile
+      model.service1Transaction.sum('amount', { where: a1topMobileVolumeWhere }),
+      model.service1Transaction.sum('superadminComm', { where: a1topMobileWhere }),
+      model.service1Transaction.count({ where: a1topMobileWhere }),
+      // A1 Top DTH
+      model.service1Transaction.sum('amount', { where: a1topDthVolumeWhere }),
+      model.service1Transaction.sum('superadminComm', { where: a1topDthWhere }),
+      model.service1Transaction.count({ where: a1topDthWhere }),
+      // A1 Top PAN
+      model.service1Transaction.sum('amount', { where: a1topPanVolumeWhere }),
+      model.service1Transaction.sum('superadminComm', { where: a1topPanWhere }),
+      model.service1Transaction.count({ where: a1topPanWhere }),
 
       // Previous period wallet aggregates
       model.walletHistory.sum('credit', {
@@ -337,6 +372,14 @@ const getDashboard = async (req, res) => {
         where: { ...dateWhere, status: 'PENDING' }
       }),
 
+      // A1 Top failures & pendings from service1Transaction
+      model.service1Transaction.count({
+        where: { ...dateWhere, status: 'FAILURE' }
+      }),
+      model.service1Transaction.count({
+        where: { ...dateWhere, status: 'PENDING' }
+      }),
+
       // Payout failures & pendings from payoutHistory
       model.payoutHistory.count({
         where: { ...dateWhere, status: 'FAILED' }
@@ -355,13 +398,17 @@ const getDashboard = async (req, res) => {
       (bbpsSuccessCount || 0) +
       (inspayMobileSuccessCount || 0) +
       (inspayDthSuccessCount || 0) +
-      (inspayPanSuccessCount || 0);
+      (inspayPanSuccessCount || 0) +
+      (a1topMobileSuccessCount || 0) +
+      (a1topDthSuccessCount || 0) +
+      (a1topPanSuccessCount || 0);
 
     const totalFailedCount =
       (aeps1FailedCount || 0) +
       (practomindFailedCount || 0) +
       (bbpsFailedCount || 0) +
       (inspayFailedCount || 0) +
+      (a1topFailedCount || 0) +
       (payoutFailedCount || 0);
 
     const totalPendingCount =
@@ -369,6 +416,7 @@ const getDashboard = async (req, res) => {
       (practomindPendingCount || 0) +
       (bbpsPendingCount || 0) +
       (inspayPendingCount || 0) +
+      (a1topPendingCount || 0) +
       (payoutPendingCount || 0);
 
     const currentWalletAmount = Number(walletTotalSuccessAmount || 0);
@@ -377,7 +425,7 @@ const getDashboard = async (req, res) => {
     const walletChangePercent =
       previousWalletAmount > 0
         ? Math.round(((walletChangeAmount / previousWalletAmount) * 100 + Number.EPSILON) * 100) /
-          100
+        100
         : null;
 
     return res.success({
@@ -446,7 +494,7 @@ const getDashboard = async (req, res) => {
                 (inspayPanSuccessCount || 0)
             },
             mobile: {
-              label: 'Inspay Mobile',
+              label: 'Inspay Mobile Recharge',
               totalAmountSuccess: Number(inspayMobileTotalAmount || 0),
               totalSuperadminCommission: Number(
                 inspayMobileTotalSuperadminComm || 0
@@ -454,7 +502,7 @@ const getDashboard = async (req, res) => {
               successCount: inspayMobileSuccessCount || 0
             },
             dth: {
-              label: 'Inspay DTH',
+              label: 'Inspay DTH Recharge',
               totalAmountSuccess: Number(inspayDthTotalAmount || 0),
               totalSuperadminCommission: Number(
                 inspayDthTotalSuperadminComm || 0
@@ -469,16 +517,52 @@ const getDashboard = async (req, res) => {
               ),
               successCount: inspayPanSuccessCount || 0
             }
+          },
+          // A1 Top grouped by service
+          a1top: {
+            total: {
+              label: 'A1 Top',
+              totalAmountSuccess:
+                Number(a1topMobileTotalAmount || 0) +
+                Number(a1topDthTotalAmount || 0) +
+                Number(a1topPanTotalAmount || 0),
+              totalSuperadminCommission:
+                Number(a1topMobileTotalSuperadminComm || 0) +
+                Number(a1topDthTotalSuperadminComm || 0) +
+                Number(a1topPanTotalSuperadminComm || 0),
+              successCount:
+                (a1topMobileSuccessCount || 0) +
+                (a1topDthSuccessCount || 0) +
+                (a1topPanSuccessCount || 0)
+            },
+            mobile: {
+              label: 'A1 Top Mobile Recharge',
+              totalAmountSuccess: Number(a1topMobileTotalAmount || 0),
+              totalSuperadminCommission: Number(a1topMobileTotalSuperadminComm || 0),
+              successCount: a1topMobileSuccessCount || 0
+            },
+            dth: {
+              label: 'A1 Top DTH Recharge',
+              totalAmountSuccess: Number(a1topDthTotalAmount || 0),
+              totalSuperadminCommission: Number(a1topDthTotalSuperadminComm || 0),
+              successCount: a1topDthSuccessCount || 0
+            },
+            pan: {
+              label: 'A1 Top PAN',
+              totalAmountSuccess: Number(a1topPanTotalAmount || 0),
+              totalSuperadminCommission: Number(a1topPanTotalSuperadminComm || 0),
+              successCount: a1topPanSuccessCount || 0
+            }
           }
         }
       }
     });
-    } catch (error) {
-        console.error('Error in getDashboard', error);
-        return res.failure({ message: error.message });
-    }
+  } catch (error) {
+    console.error('Error in getDashboard', error);
+    return res.failure({ message: error.message });
+  }
 };
 
 module.exports = {
-    getDashboard
+  getDashboard
 };

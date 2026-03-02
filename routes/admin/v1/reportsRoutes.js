@@ -5,7 +5,8 @@ const reportController = require('../../../controller/admin/v1/reportController'
 
 router.post('/aeps1Reports', authentication, reportController.getAeps1Reports);
 router.post('/aeps1/transactionDetails/:id', authentication, reportController.getAepsTransactionDetailsById);
-router.post('/rechargeReports', authentication, reportController.getRechargeReports);
+router.post('/recharge1Reports', authentication, reportController.getRecharge1Reports);
+router.post('/recharge2Reports', authentication, reportController.getRecharge2Reports);
 router.post('/aeps2Reports', authentication, reportController.getAeps2Reports);
 router.post('/aeps2/transactionDetails/:id', authentication, reportController.getAeps2TransactionDetailsById);
 router.post('/surRecReports', authentication, reportController.getSurRecReports);
