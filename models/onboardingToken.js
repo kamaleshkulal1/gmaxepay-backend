@@ -1,8 +1,3 @@
-/**
- * onboardingToken.js
- * @description :: Sequelize model of database table onboardingToken
- */
-
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const { reusableModelAttribute } = require('../utils/common');
