@@ -1,7 +1,4 @@
-/**
- * digilockerDocument.js
- * @description :: sequelize model of database table digilocker_documents
- */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
