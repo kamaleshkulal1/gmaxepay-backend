@@ -560,7 +560,7 @@ const dthRecharge = async (req, res) => {
             const serviceTransactionData = {
                 refId: user.id,
                 companyId: user.companyId,
-                serviceType: 'DTHRecharge',
+                serviceType: 'DTH1Recharge',
                 dthNumber: dth_number,
                 opcode,
                 amount: amountNumber,
@@ -588,7 +588,7 @@ const dthRecharge = async (req, res) => {
             const serviceTransactionData = {
                 refId: user.id,
                 companyId: user.companyId,
-                serviceType: 'DTHRecharge',
+                serviceType: 'DTH1Recharge',
                 dthNumber: dth_number,
                 opcode,
                 amount: amountNumber,

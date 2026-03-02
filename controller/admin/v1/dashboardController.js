@@ -119,25 +119,25 @@ const getDashboard = async (req, res) => {
 
     const inspayPanWhere = {
       ...dateWhere,
-      serviceType: 'Pan',
+      serviceType: 'Pan1',
       status: 'SUCCESS'
     };
 
     const inspayMobileVolumeWhere = {
       ...dateWhere,
-      serviceType: 'MobileRecharge',
+      serviceType: 'Mobile1Recharge',
       status: { [Op.in]: ['SUCCESS', 'PENDING'] }
     };
 
     const inspayDthVolumeWhere = {
       ...dateWhere,
-      serviceType: 'DTHRecharge',
+      serviceType: 'DTH1Recharge',
       status: { [Op.in]: ['SUCCESS', 'PENDING'] }
     };
 
     const inspayPanVolumeWhere = {
       ...dateWhere,
-      serviceType: 'Pan',
+      serviceType: 'Pan1',
       status: { [Op.in]: ['SUCCESS', 'PENDING'] }
     };
 
