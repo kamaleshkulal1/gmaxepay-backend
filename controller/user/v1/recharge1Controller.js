@@ -678,8 +678,10 @@ const findMobileNumberOperator = async (req, res) => {
         }
 
         const operatorNameUpper = operatorName.toUpperCase();
+        console.log("operatorNameUpper", operatorNameUpper);
         if (operatorNameUpper !== 'BSNL') {
             const operator = await dbService.findOne(model.operator, { operatorName: operatorNameUpper });
+            console.log("operator", operator);
             if (!operator) {
                 return res.failure({ message: 'Operator not found' });
             }
