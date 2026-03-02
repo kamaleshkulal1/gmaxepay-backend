@@ -13,7 +13,8 @@ let Operator = sequelize.define(
     },
     operatorCode: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
+      unique: false
     },
     custConvFee: {
       type: DataTypes.INTEGER,
