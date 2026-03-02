@@ -29,12 +29,12 @@ let ServiceTransaction = sequelize.define(
       },
       allowNull: false
     },
-    // Service type: 'MobileRecharge', 'DTHRecharge', 'Pan'
+    // Service type: 'Mobile1Recharge', 'DTHRecharge', 'Pan'
     serviceType: {
       type: DataTypes.STRING,
       allowNull: false,
       validate: {
-        isIn: [['MobileRecharge', 'DTHRecharge', 'Pan']]
+        isIn: [['Mobile1Recharge', 'DTH1Recharge', 'Pan1']]
       },
       index: true
     },

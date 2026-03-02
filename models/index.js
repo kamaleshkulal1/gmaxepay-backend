@@ -74,6 +74,7 @@ db.gstHistory = require('./gstHistory');
 // db.recharge = require('./recharge');
 // db.dthRecharge = require('./dthRecharge');
 db.serviceTransaction = require('./serviceTransaction');
+db.service1Transaction = require('./service1Transaction');
 db.fundRequest = require('./fundRequest');
 db.fundHistory = require('./fundHistrory');
 

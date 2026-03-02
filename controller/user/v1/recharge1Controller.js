@@ -45,7 +45,7 @@ const recharge = async (req, res) => {
         // 1. Fetch User, Operator, Company
         const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
-            dbService.findOne(model.operator, { operatorCode: opcode }),
+            dbService.findOne(model.operator, { operatorType: "RECHARGE1", operatorCode: opcode }),
             dbService.findOne(model.company, { id: user.companyId })
         ]);
 
@@ -551,7 +551,7 @@ const recharge = async (req, res) => {
             const serviceTransactionData = {
                 refId: user.id,
                 companyId: user.companyId,
-                serviceType: 'MobileRecharge',
+                serviceType: 'Mobile1Recharge',
                 mobileNumber,
                 opcode,
                 circle: circle || null,
@@ -583,7 +583,7 @@ const recharge = async (req, res) => {
             const serviceTransactionData = {
                 refId: user.id,
                 companyId: user.companyId,
-                serviceType: 'MobileRecharge',
+                serviceType: 'Mobile1Recharge',
                 mobileNumber,
                 opcode,
                 circle: circle || null,
@@ -714,7 +714,7 @@ const findAllRechargePlanFetch = async (req, res) => {
         if (!circle) {
             return res.failure({ message: 'Circle is required' });
         }
-        const operator = await dbService.findOne(model.operator, { operatorCode: opCode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "RECHARGE1", operatorCode: opCode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
@@ -766,7 +766,7 @@ const findRechargeOfferFetch = async (req, res) => {
         if (!circle) {
             return res.failure({ message: 'Circle is required' });
         }
-        const operator = await dbService.findOne(model.operator, { operatorCode: opCode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "RECHARGE1", operatorCode: opCode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
@@ -810,7 +810,7 @@ const getRechargeHistory = async (req, res) => {
         const rechargeHistory = await dbService.findAll(model.serviceTransaction, {
             refId: req.user?.id,
             companyId: req.user?.companyId,
-            serviceType: 'MobileRecharge'
+            serviceType: 'Mobile1Recharge'
         }, {
             order: [['createdAt', 'DESC']]
         });
@@ -951,7 +951,7 @@ const recentRechargeHistory = async (req, res) => {
             const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
             const serviceType = transactionData.serviceType;
 
-            if (serviceType === 'MobileRecharge') {
+            if (serviceType === 'Mobile1Recharge') {
                 return {
                     mobileNumber: transactionData.mobileNumber || null,
                     amount: transactionData.amount || null,
@@ -962,7 +962,7 @@ const recentRechargeHistory = async (req, res) => {
                 };
             }
 
-            if (serviceType === 'DTHRecharge') {
+            if (serviceType === 'DTH1Recharge') {
                 return {
                     dthNumber: transactionData.dthNumber || null,
                     amount: transactionData.amount || null,
@@ -973,7 +973,7 @@ const recentRechargeHistory = async (req, res) => {
                 };
             }
 
-            if (serviceType === 'Pan') {
+            if (serviceType === 'Pan1') {
                 return {
                     mobileNumber: transactionData.mobile_number || null,
                     redirect_url: transactionData.redirect_url || null,
@@ -1007,7 +1007,7 @@ const recentRechargeHistory = async (req, res) => {
     }
 };
 
-const getDownlineRechargeReports = async (req, res) => {
+const getDownlineRecharge1Reports = async (req, res) => {
     try {
         if (![3, 4].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to access this resource' });
@@ -1203,7 +1203,7 @@ const getDownlineRechargeReports = async (req, res) => {
     }
 };
 
-const getRechargeReports = async (req, res) => {
+const getRecharge1Reports = async (req, res) => {
     try {
         if (!req.user.companyId) {
             return res.failure({ message: 'Company ID is required' });
@@ -1347,8 +1347,8 @@ module.exports = {
     getRechargeHistory,
     findAllRechargePlanFetch,
     findRechargeOfferFetch,
-    getDownlineRechargeReports,
-    getRechargeReports,
+    getDownlineRecharge1Reports,
+    getRecharge1Reports,
     recentRechargeHistory,
     deleteOldRechargePlan
 };

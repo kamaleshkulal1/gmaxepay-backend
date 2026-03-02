@@ -12,8 +12,8 @@ const roundToTwo = (num) => {
 
 const getDashboard = async (req, res) => {
   try {
-    const userId =  req.user.id;
-    const companyId =  req.user.companyId;
+    const userId = req.user.id;
+    const companyId = req.user.companyId;
     const userRole = req.user.userRole;
 
     if (!userId) {
@@ -56,7 +56,7 @@ const getDashboard = async (req, res) => {
       }
     };
 
-    if (userRole === 5 ) {
+    if (userRole === 5) {
       const nsdlPanWhere = {
         ...baseWhere,
         serviceType: 'Pan'
@@ -72,7 +72,7 @@ const getDashboard = async (req, res) => {
 
       const mobileWhere = {
         ...baseWhere,
-        serviceType: 'MobileRecharge'
+        serviceType: 'Mobile1Recharge'
       };
 
       const dthWhere = {
@@ -83,6 +83,10 @@ const getDashboard = async (req, res) => {
       const payoutWhere = {
         ...baseWhere
       };
+
+      const a1topMobileWhere = { ...baseWhere, serviceType: 'Mobile2Recharge' };
+      const a1topDthWhere = { ...baseWhere, serviceType: 'DTH2Recharge' };
+      const a1topPanWhere = { ...baseWhere, serviceType: 'Pan2' };
 
       const [
         nsdlPanTotalVolume,
@@ -118,7 +122,28 @@ const getDashboard = async (req, res) => {
         payoutTotalCount,
         payoutSuccessCount,
         payoutPendingCount,
-        payoutFailedCount
+        payoutFailedCount,
+        // A1 Top Mobile
+        a1topMobileTotalVolume,
+        a1topMobileTotalCount,
+        a1topMobileSuccessCount,
+        a1topMobilePendingCount,
+        a1topMobileFailedCount,
+        a1topMobileRetailerComm,
+        // A1 Top DTH
+        a1topDthTotalVolume,
+        a1topDthTotalCount,
+        a1topDthSuccessCount,
+        a1topDthPendingCount,
+        a1topDthFailedCount,
+        a1topDthRetailerComm,
+        // A1 Top PAN
+        a1topPanTotalVolume,
+        a1topPanTotalCount,
+        a1topPanSuccessCount,
+        a1topPanPendingCount,
+        a1topPanFailedCount,
+        a1topPanRetailerComm
       ] = await Promise.all([
         // NSDL PAN
         model.serviceTransaction.sum('amount', { where: nsdlPanWhere }),
@@ -220,7 +245,28 @@ const getDashboard = async (req, res) => {
         }),
         model.payoutHistory.count({
           where: { ...payoutWhere, status: 'FAILED' }
-        })
+        }),
+        // A1 Top Mobile
+        model.service1Transaction.sum('amount', { where: a1topMobileWhere }),
+        model.service1Transaction.count({ where: a1topMobileWhere }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('retailerCom', { where: { ...a1topMobileWhere, status: 'SUCCESS' } }),
+        // A1 Top DTH
+        model.service1Transaction.sum('amount', { where: a1topDthWhere }),
+        model.service1Transaction.count({ where: a1topDthWhere }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('retailerCom', { where: { ...a1topDthWhere, status: 'SUCCESS' } }),
+        // A1 Top PAN
+        model.service1Transaction.sum('amount', { where: a1topPanWhere }),
+        model.service1Transaction.count({ where: a1topPanWhere }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('retailerCom', { where: { ...a1topPanWhere, status: 'SUCCESS' } })
       ]);
 
       // Calculate total retailer commission from all services
@@ -228,7 +274,10 @@ const getDashboard = async (req, res) => {
         (nsdlPanRetailerComm || 0) +
         (aeps1RetailerComm || 0) +
         (mobileRetailerComm || 0) +
-        (dthRetailerComm || 0)
+        (dthRetailerComm || 0) +
+        (a1topMobileRetailerComm || 0) +
+        (a1topDthRetailerComm || 0) +
+        (a1topPanRetailerComm || 0)
       );
 
       return res.success({
@@ -245,8 +294,8 @@ const getDashboard = async (req, res) => {
             totalCommission: retailerCommission
           },
           services: {
-            nsdlPan: {
-              label: 'NSDL Pan',
+            inspayPan: {
+              label: 'Inspay PAN',
               totalVolume: roundToTwo(nsdlPanTotalVolume || 0),
               totalCount: nsdlPanTotalCount || 0,
               successCount: nsdlPanSuccessCount || 0,
@@ -269,16 +318,16 @@ const getDashboard = async (req, res) => {
               pendingCount: aeps2PendingCount || 0,
               failedCount: aeps2FailedCount || 0
             },
-            mobile: {
-              label: 'Mobile',
+            inspayMobile: {
+              label: 'Inspay Mobile Recharge',
               totalVolume: roundToTwo(mobileTotalVolume || 0),
               totalCount: mobileTotalCount || 0,
               successCount: mobileSuccessCount || 0,
               pendingCount: mobilePendingCount || 0,
               failedCount: mobileFailedCount || 0
             },
-            dth: {
-              label: 'DTH',
+            inspayDth: {
+              label: 'Inspay DTH Recharge',
               totalVolume: roundToTwo(dthTotalVolume || 0),
               totalCount: dthTotalCount || 0,
               successCount: dthSuccessCount || 0,
@@ -292,12 +341,36 @@ const getDashboard = async (req, res) => {
               successCount: payoutSuccessCount || 0,
               pendingCount: payoutPendingCount || 0,
               failedCount: payoutFailedCount || 0
+            },
+            a1topMobile: {
+              label: 'A1 Top Mobile Recharge',
+              totalVolume: roundToTwo(a1topMobileTotalVolume || 0),
+              totalCount: a1topMobileTotalCount || 0,
+              successCount: a1topMobileSuccessCount || 0,
+              pendingCount: a1topMobilePendingCount || 0,
+              failedCount: a1topMobileFailedCount || 0
+            },
+            a1topDth: {
+              label: 'A1 Top DTH Recharge',
+              totalVolume: roundToTwo(a1topDthTotalVolume || 0),
+              totalCount: a1topDthTotalCount || 0,
+              successCount: a1topDthSuccessCount || 0,
+              pendingCount: a1topDthPendingCount || 0,
+              failedCount: a1topDthFailedCount || 0
+            },
+            a1topPan: {
+              label: 'A1 Top PAN',
+              totalVolume: roundToTwo(a1topPanTotalVolume || 0),
+              totalCount: a1topPanTotalCount || 0,
+              successCount: a1topPanSuccessCount || 0,
+              pendingCount: a1topPanPendingCount || 0,
+              failedCount: a1topPanFailedCount || 0
             }
           }
         }
       });
     }
-    else if(userRole === 4){
+    else if (userRole === 4) {
       // Get all downline users (retailers) reporting to this distributor
       const downlineUsers = await model.user.findAll({
         where: {
@@ -338,7 +411,7 @@ const getDashboard = async (req, res) => {
 
       const nsdlPanWhere = {
         ...combinedBaseWhere,
-        serviceType: 'Pan'
+        serviceType: 'Pan1'
       };
 
       const aeps1Where = {
@@ -351,17 +424,22 @@ const getDashboard = async (req, res) => {
 
       const mobileWhere = {
         ...combinedBaseWhere,
-        serviceType: 'MobileRecharge'
+        serviceType: 'Mobile1Recharge'
       };
 
       const dthWhere = {
         ...combinedBaseWhere,
-        serviceType: 'DTHRecharge'
+        serviceType: 'DTH1Recharge'
       };
 
       const payoutWhere = {
         ...combinedBaseWhere
       };
+
+      // A1 Top where clauses (from service1Transaction)
+      const a1topMobileWhere = { ...combinedBaseWhere, serviceType: 'Mobile2Recharge' };
+      const a1topDthWhere = { ...combinedBaseWhere, serviceType: 'DTH2Recharge' };
+      const a1topPanWhere = { ...combinedBaseWhere, serviceType: 'Pan2' };
 
       const [
         nsdlPanTotalVolume,
@@ -397,7 +475,28 @@ const getDashboard = async (req, res) => {
         payoutTotalCount,
         payoutSuccessCount,
         payoutPendingCount,
-        payoutFailedCount
+        payoutFailedCount,
+        // A1 Top Mobile
+        a1topMobileTotalVolume,
+        a1topMobileTotalCount,
+        a1topMobileSuccessCount,
+        a1topMobilePendingCount,
+        a1topMobileFailedCount,
+        a1topMobileDistributorComm,
+        // A1 Top DTH
+        a1topDthTotalVolume,
+        a1topDthTotalCount,
+        a1topDthSuccessCount,
+        a1topDthPendingCount,
+        a1topDthFailedCount,
+        a1topDthDistributorComm,
+        // A1 Top PAN
+        a1topPanTotalVolume,
+        a1topPanTotalCount,
+        a1topPanSuccessCount,
+        a1topPanPendingCount,
+        a1topPanFailedCount,
+        a1topPanDistributorComm
       ] = await Promise.all([
         // NSDL PAN
         model.serviceTransaction.sum('amount', { where: nsdlPanWhere }),
@@ -499,7 +598,28 @@ const getDashboard = async (req, res) => {
         }),
         model.payoutHistory.count({
           where: { ...payoutWhere, status: 'FAILED' }
-        })
+        }),
+        // A1 Top Mobile
+        model.service1Transaction.sum('amount', { where: a1topMobileWhere }),
+        model.service1Transaction.count({ where: a1topMobileWhere }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('distributorCom', { where: { ...a1topMobileWhere, status: 'SUCCESS' } }),
+        // A1 Top DTH
+        model.service1Transaction.sum('amount', { where: a1topDthWhere }),
+        model.service1Transaction.count({ where: a1topDthWhere }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('distributorCom', { where: { ...a1topDthWhere, status: 'SUCCESS' } }),
+        // A1 Top PAN
+        model.service1Transaction.sum('amount', { where: a1topPanWhere }),
+        model.service1Transaction.count({ where: a1topPanWhere }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('distributorCom', { where: { ...a1topPanWhere, status: 'SUCCESS' } })
       ]);
 
       // Calculate total distributor commission from all services
@@ -508,7 +628,10 @@ const getDashboard = async (req, res) => {
         (nsdlPanDistributorComm || 0) +
         (aeps1DistributorComm || 0) +
         (mobileDistributorComm || 0) +
-        (dthDistributorComm || 0)
+        (dthDistributorComm || 0) +
+        (a1topMobileDistributorComm || 0) +
+        (a1topDthDistributorComm || 0) +
+        (a1topPanDistributorComm || 0)
       );
 
       return res.success({
@@ -527,8 +650,8 @@ const getDashboard = async (req, res) => {
             totalCommission: distributorCommission
           },
           services: {
-            nsdlPan: {
-              label: 'NSDL Pan',
+            inspayPan: {
+              label: 'Inspay PAN',
               totalVolume: roundToTwo(nsdlPanTotalVolume || 0),
               totalCount: nsdlPanTotalCount || 0,
               successCount: nsdlPanSuccessCount || 0,
@@ -551,16 +674,16 @@ const getDashboard = async (req, res) => {
               pendingCount: aeps2PendingCount || 0,
               failedCount: aeps2FailedCount || 0
             },
-            mobile: {
-              label: 'Mobile',
+            inspayMobile: {
+              label: 'Inspay Mobile Recharge',
               totalVolume: roundToTwo(mobileTotalVolume || 0),
               totalCount: mobileTotalCount || 0,
               successCount: mobileSuccessCount || 0,
               pendingCount: mobilePendingCount || 0,
               failedCount: mobileFailedCount || 0
             },
-            dth: {
-              label: 'DTH',
+            inspayDth: {
+              label: 'Inspay DTH Recharge',
               totalVolume: roundToTwo(dthTotalVolume || 0),
               totalCount: dthTotalCount || 0,
               successCount: dthSuccessCount || 0,
@@ -574,12 +697,36 @@ const getDashboard = async (req, res) => {
               successCount: payoutSuccessCount || 0,
               pendingCount: payoutPendingCount || 0,
               failedCount: payoutFailedCount || 0
+            },
+            a1topMobile: {
+              label: 'A1 Top Mobile Recharge',
+              totalVolume: roundToTwo(a1topMobileTotalVolume || 0),
+              totalCount: a1topMobileTotalCount || 0,
+              successCount: a1topMobileSuccessCount || 0,
+              pendingCount: a1topMobilePendingCount || 0,
+              failedCount: a1topMobileFailedCount || 0
+            },
+            a1topDth: {
+              label: 'A1 Top DTH Recharge',
+              totalVolume: roundToTwo(a1topDthTotalVolume || 0),
+              totalCount: a1topDthTotalCount || 0,
+              successCount: a1topDthSuccessCount || 0,
+              pendingCount: a1topDthPendingCount || 0,
+              failedCount: a1topDthFailedCount || 0
+            },
+            a1topPan: {
+              label: 'A1 Top PAN',
+              totalVolume: roundToTwo(a1topPanTotalVolume || 0),
+              totalCount: a1topPanTotalCount || 0,
+              successCount: a1topPanSuccessCount || 0,
+              pendingCount: a1topPanPendingCount || 0,
+              failedCount: a1topPanFailedCount || 0
             }
           }
         }
       });
     }
-    else if(userRole === 3){
+    else if (userRole === 3) {
       // Master Distributor statistics: include own transactions + distributors + retailers under them
 
       // 1. Get all distributors directly reporting to this master distributor
@@ -655,7 +802,7 @@ const getDashboard = async (req, res) => {
 
       const nsdlPanWhere = {
         ...combinedBaseWhere,
-        serviceType: 'Pan'
+        serviceType: 'Pan1'
       };
 
       const aeps1Where = {
@@ -668,17 +815,22 @@ const getDashboard = async (req, res) => {
 
       const mobileWhere = {
         ...combinedBaseWhere,
-        serviceType: 'MobileRecharge'
+        serviceType: 'Mobile1Recharge'
       };
 
       const dthWhere = {
         ...combinedBaseWhere,
-        serviceType: 'DTHRecharge'
+        serviceType: 'DTH1Recharge'
       };
 
       const payoutWhere = {
         ...combinedBaseWhere
       };
+
+      // A1 Top where clauses (from service1Transaction)
+      const a1topMobileWhere = { ...combinedBaseWhere, serviceType: 'Mobile2Recharge' };
+      const a1topDthWhere = { ...combinedBaseWhere, serviceType: 'DTH2Recharge' };
+      const a1topPanWhere = { ...combinedBaseWhere, serviceType: 'Pan2' };
 
       const [
         nsdlPanTotalVolume,
@@ -714,7 +866,28 @@ const getDashboard = async (req, res) => {
         payoutTotalCount,
         payoutSuccessCount,
         payoutPendingCount,
-        payoutFailedCount
+        payoutFailedCount,
+        // A1 Top Mobile
+        a1topMobileTotalVolume,
+        a1topMobileTotalCount,
+        a1topMobileSuccessCount,
+        a1topMobilePendingCount,
+        a1topMobileFailedCount,
+        a1topMobileMasterDistributorComm,
+        // A1 Top DTH
+        a1topDthTotalVolume,
+        a1topDthTotalCount,
+        a1topDthSuccessCount,
+        a1topDthPendingCount,
+        a1topDthFailedCount,
+        a1topDthMasterDistributorComm,
+        // A1 Top PAN
+        a1topPanTotalVolume,
+        a1topPanTotalCount,
+        a1topPanSuccessCount,
+        a1topPanPendingCount,
+        a1topPanFailedCount,
+        a1topPanMasterDistributorComm
       ] = await Promise.all([
         // NSDL PAN
         model.serviceTransaction.sum('amount', { where: nsdlPanWhere }),
@@ -816,7 +989,28 @@ const getDashboard = async (req, res) => {
         }),
         model.payoutHistory.count({
           where: { ...payoutWhere, status: 'FAILED' }
-        })
+        }),
+        // A1 Top Mobile
+        model.service1Transaction.sum('amount', { where: a1topMobileWhere }),
+        model.service1Transaction.count({ where: a1topMobileWhere }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topMobileWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('masterDistributorCom', { where: { ...a1topMobileWhere, status: 'SUCCESS' } }),
+        // A1 Top DTH
+        model.service1Transaction.sum('amount', { where: a1topDthWhere }),
+        model.service1Transaction.count({ where: a1topDthWhere }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topDthWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('masterDistributorCom', { where: { ...a1topDthWhere, status: 'SUCCESS' } }),
+        // A1 Top PAN
+        model.service1Transaction.sum('amount', { where: a1topPanWhere }),
+        model.service1Transaction.count({ where: a1topPanWhere }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'SUCCESS' } }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'PENDING' } }),
+        model.service1Transaction.count({ where: { ...a1topPanWhere, status: 'FAILURE' } }),
+        model.service1Transaction.sum('masterDistributorCom', { where: { ...a1topPanWhere, status: 'SUCCESS' } })
       ]);
 
       // Calculate total master distributor commission from all services
@@ -825,7 +1019,10 @@ const getDashboard = async (req, res) => {
         (nsdlPanMasterDistributorComm || 0) +
         (aeps1MasterDistributorComm || 0) +
         (mobileMasterDistributorComm || 0) +
-        (dthMasterDistributorComm || 0)
+        (dthMasterDistributorComm || 0) +
+        (a1topMobileMasterDistributorComm || 0) +
+        (a1topDthMasterDistributorComm || 0) +
+        (a1topPanMasterDistributorComm || 0)
       );
 
       return res.success({
@@ -851,8 +1048,8 @@ const getDashboard = async (req, res) => {
             totalCommission: masterDistributorCommission
           },
           services: {
-            nsdlPan: {
-              label: 'NSDL Pan',
+            inspayPan: {
+              label: 'Inspay PAN',
               totalVolume: roundToTwo(nsdlPanTotalVolume || 0),
               totalCount: nsdlPanTotalCount || 0,
               successCount: nsdlPanSuccessCount || 0,
@@ -875,16 +1072,16 @@ const getDashboard = async (req, res) => {
               pendingCount: aeps2PendingCount || 0,
               failedCount: aeps2FailedCount || 0
             },
-            mobile: {
-              label: 'Mobile',
+            inspayMobile: {
+              label: 'Inspay Mobile Recharge',
               totalVolume: roundToTwo(mobileTotalVolume || 0),
               totalCount: mobileTotalCount || 0,
               successCount: mobileSuccessCount || 0,
               pendingCount: mobilePendingCount || 0,
               failedCount: mobileFailedCount || 0
             },
-            dth: {
-              label: 'DTH',
+            inspayDth: {
+              label: 'Inspay DTH Recharge',
               totalVolume: roundToTwo(dthTotalVolume || 0),
               totalCount: dthTotalCount || 0,
               successCount: dthSuccessCount || 0,
@@ -898,6 +1095,30 @@ const getDashboard = async (req, res) => {
               successCount: payoutSuccessCount || 0,
               pendingCount: payoutPendingCount || 0,
               failedCount: payoutFailedCount || 0
+            },
+            a1topMobile: {
+              label: 'A1 Top Mobile Recharge',
+              totalVolume: roundToTwo(a1topMobileTotalVolume || 0),
+              totalCount: a1topMobileTotalCount || 0,
+              successCount: a1topMobileSuccessCount || 0,
+              pendingCount: a1topMobilePendingCount || 0,
+              failedCount: a1topMobileFailedCount || 0
+            },
+            a1topDth: {
+              label: 'A1 Top DTH Recharge',
+              totalVolume: roundToTwo(a1topDthTotalVolume || 0),
+              totalCount: a1topDthTotalCount || 0,
+              successCount: a1topDthSuccessCount || 0,
+              pendingCount: a1topDthPendingCount || 0,
+              failedCount: a1topDthFailedCount || 0
+            },
+            a1topPan: {
+              label: 'A1 Top PAN',
+              totalVolume: roundToTwo(a1topPanTotalVolume || 0),
+              totalCount: a1topPanTotalCount || 0,
+              successCount: a1topPanSuccessCount || 0,
+              pendingCount: a1topPanPendingCount || 0,
+              failedCount: a1topPanFailedCount || 0
             }
           }
         }

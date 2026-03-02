@@ -102,9 +102,7 @@ const loadUserPermissions = async (userRole) => {
 };
 
 const determineSecurityMethod = async (user) => {
-  // If 2FA is disabled (both flags false), use MPIN as default
   if (user.is2FAenabled === false && user.is2faEnabledActive === false) {
-    // Check MPIN status
     if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
       return {
         method: 'setupMPIN',
@@ -117,18 +115,14 @@ const determineSecurityMethod = async (user) => {
         requiresMPIN: true
       };
     }
-    // Default to MPIN setup
     return {
       method: 'setupMPIN',
       requiresSetupMPIN: true
     };
   }
 
-  // If 2FA is enabled (both flags true)
   if (user.is2FAenabled === true && user.is2faEnabledActive === true) {
-    // If key2Fa is null, need to setup 2FA
     if (!user.key2Fa) {
-      // Generate QR code for 2FA setup
       const qrCodeData = await generateQRCodeURL(user);
       return {
         method: 'setup2FA',
@@ -136,14 +130,12 @@ const determineSecurityMethod = async (user) => {
         qrCode: qrCodeData
       };
     }
-    // If key2Fa exists, verify 2FA
     return {
       method: 'verify2FA',
       requires2FA: true
     };
   }
 
-  // Default fallback to MPIN
   if (user.isMpinSetup === true || (user.isMpinSetup === null && !user.secureKey)) {
     return {
       method: 'setupMPIN',
@@ -171,7 +163,6 @@ const validateAndDecryptDataToken = async (dataToken) => {
       };
     }
 
-    // Decrypt dataToken to get user details
     const tokenData = JSON.parse(Buffer.from(dataToken, 'base64').toString());
     const decryptedData = decrypt(tokenData.data, Buffer.from(tokenData.key, 'hex'));
 
@@ -185,7 +176,6 @@ const validateAndDecryptDataToken = async (dataToken) => {
     const userDetail = JSON.parse(decryptedData);
     const { userId, timestamp } = userDetail;
 
-    // Check if dataToken has expired using SIGNATURE_TOKEN_EXPIRY from env
     const currentTime = Date.now();
     const tokenAge = currentTime - timestamp;
 
@@ -635,24 +625,30 @@ const loginUser = async (
       key: encryptionKey.toString('hex')
     };
 
-    // In development environment, skip mobile OTP but check security method
+    const nowIST = moment().utcOffset('+05:30');
+    const tokenGeneratedTime = nowIST.format('YYYY-MM-DD HH:mm:ss');
+    const expiryTime = nowIST.clone().add(30, 'minutes').format('YYYY-MM-DD HH:mm:ss');
+
+    const basicResponseData = {
+      tokenGeneratedTime,
+      expiryTime
+    };
+
     if (process.env.NODE_ENV === 'development') {
-      // Check if password reset is required
       if (user.isResetPassword || !user.password) {
         return {
           flag: false,
           msg: 'Please reset your password',
           data: {
+            ...basicResponseData,
             requiresPasswordReset: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
         };
       }
 
-      // Reset all lock attempts in development environment for easier testing
       await user.resetAllLockAttempts();
 
-      // Determine security method based on user settings
       const securityMethod = await determineSecurityMethod(user);
 
       if (securityMethod.requiresSetup2FA) {
@@ -660,6 +656,7 @@ const loginUser = async (
           flag: false,
           msg: 'Please scan QR code and enter the 2FA code to complete setup.',
           data: {
+            ...basicResponseData,
             requiresSetup2FA: true,
             qrCode: securityMethod.qrCode,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
@@ -672,6 +669,7 @@ const loginUser = async (
           flag: false,
           msg: 'Please enter your 2FA code',
           data: {
+            ...basicResponseData,
             requires2FA: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
@@ -683,6 +681,7 @@ const loginUser = async (
           flag: false,
           msg: 'Please set up MPIN to secure your account.',
           data: {
+            ...basicResponseData,
             requiresSetupMPIN: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
@@ -694,48 +693,44 @@ const loginUser = async (
           flag: false,
           msg: 'Please enter your MPIN',
           data: {
+            ...basicResponseData,
             requiresMPIN: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
         };
       }
 
-      // Fallback: If neither MPIN nor 2FA is set, default to MPIN setup
       return {
         flag: false,
         msg: 'Please set up MPIN to secure your account.',
         data: {
+          ...basicResponseData,
           requiresSetupMPIN: true,
           token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
         }
       };
     }
 
-
-    // Production environment - Check if OTP login is required (once per day)
-    // Check if user already logged in with OTP today (IST)
-    const todayIST = aepsDailyLoginService.getIndianDateOnly(); // Returns YYYY-MM-DD in IST
+    const todayIST = aepsDailyLoginService.getIndianDateOnly();
     const lastOtpDate = user.lastOtpLoginDate
       ? moment(user.lastOtpLoginDate).utcOffset('+05:30').format('YYYY-MM-DD')
       : null;
 
     const otpAlreadyDoneToday = lastOtpDate === todayIST;
 
-    // If OTP was already done today, skip OTP and go directly to security method (MPIN/2FA)
     if (otpAlreadyDoneToday) {
-      // Check if password reset is required
       if (user.isResetPassword || !user.password) {
         return {
           flag: false,
           msg: 'Please reset your password',
           data: {
+            ...basicResponseData,
             requiresPasswordReset: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
         };
       }
 
-      // Determine security method based on user settings
       const securityMethod = await determineSecurityMethod(user);
 
       if (securityMethod.requiresSetup2FA) {
@@ -743,6 +738,7 @@ const loginUser = async (
           flag: false,
           msg: 'Please scan QR code and enter the 2FA code to complete setup.',
           data: {
+            ...basicResponseData,
             requiresSetup2FA: true,
             qrCode: securityMethod.qrCode,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
@@ -755,6 +751,7 @@ const loginUser = async (
           flag: false,
           msg: 'Please enter your 2FA code',
           data: {
+            ...basicResponseData,
             requires2FA: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
@@ -766,6 +763,7 @@ const loginUser = async (
           flag: false,
           msg: 'Please set up MPIN to secure your account.',
           data: {
+            ...basicResponseData,
             requiresSetupMPIN: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
@@ -777,6 +775,7 @@ const loginUser = async (
           flag: false,
           msg: 'Please enter your MPIN',
           data: {
+            ...basicResponseData,
             requiresMPIN: true,
             token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
           }
@@ -788,6 +787,7 @@ const loginUser = async (
         flag: false,
         msg: 'Please set up MPIN to secure your account.',
         data: {
+          ...basicResponseData,
           requiresSetupMPIN: true,
           token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
         }
@@ -817,6 +817,7 @@ const loginUser = async (
       flag: false,
       msg: 'Please Enter OTP',
       data: {
+        ...basicResponseData,
         requiresOtpVerify: true,
         token: Buffer.from(JSON.stringify(dataToken)).toString('base64')
       }

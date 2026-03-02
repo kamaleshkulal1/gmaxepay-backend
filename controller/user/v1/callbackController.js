@@ -22,9 +22,9 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
     const currentStatus = existingTransaction.status;
     const serviceType = existingTransaction.serviceType;
 
-    const isMobileRecharge = serviceType === 'MobileRecharge';
-    const isDTHRecharge = serviceType === 'DTHRecharge';
-    const isPan = serviceType === 'Pan';
+    const isMobileRecharge = serviceType === 'Mobile1Recharge';
+    const isDTHRecharge = serviceType === 'DTH1Recharge';
+    const isPan = serviceType === 'Pan1';
     const isRefundableService = isMobileRecharge || isDTHRecharge || isPan;
 
     const updateData = {
@@ -161,12 +161,67 @@ const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyI
     };
 };
 
-const paymentCallback = async (req, res) => {
+const updateService1TransactionStatus = async (orderid, newStatus, opid, companyId = null) => {
+    const whereClause = { orderid };
+    if (companyId) whereClause.companyId = companyId;
+
+    const existingTransaction = await dbService.findOne(model.service1Transaction, whereClause);
+    if (!existingTransaction) return { success: false, message: 'Service1 transaction not found' };
+
+    const currentStatus = existingTransaction.status;
+    const serviceType = existingTransaction.serviceType;
+    const isMobileRecharge = serviceType === 'Mobile2Recharge';
+    const isDTHRecharge = serviceType === 'DTH2Recharge';
+    const isPan = serviceType === 'Pan2';
+    const isRefundableService = isMobileRecharge || isDTHRecharge || isPan;
+
+    const updateData = { status: newStatus, opid: opid || existingTransaction.opid, updatedBy: existingTransaction.refId };
+
+    if (isRefundableService) {
+        if (newStatus === 'FAILURE' && (currentStatus === 'SUCCESS' || currentStatus === 'PENDING')) {
+            const histories = await dbService.findAll(model.walletHistory, { transactionId: existingTransaction.orderid, paymentStatus: currentStatus });
+            if (histories && histories.length > 0) {
+                for (const history of histories) {
+                    const refundAmount = round4((history.debit || 0) - (history.credit || 0));
+                    if (refundAmount !== 0) {
+                        const walletUser = await dbService.findOne(model.wallet, { refId: history.refId, companyId: history.companyId });
+                        if (walletUser) {
+                            const currentBalance = round4(walletUser.mainWallet || 0);
+                            const newBalance = round4(currentBalance + refundAmount);
+                            await dbService.update(model.wallet, { id: walletUser.id }, { mainWallet: newBalance, updatedBy: existingTransaction.refId });
+                            await dbService.createOne(model.walletHistory, { refId: history.refId, companyId: history.companyId, walletType: history.walletType || 'mainWallet', operator: history.operator || 'Unknown', remark: `Reversal - ${serviceType} Failed`, amount: history.amount || 0, comm: 0, surcharge: 0, openingAmt: currentBalance, closingAmt: newBalance, credit: history.debit || 0, debit: history.credit || 0, transactionId: existingTransaction.orderid, paymentStatus: 'REFUNDED', addedBy: existingTransaction.refId, updatedBy: existingTransaction.refId });
+                        }
+                    }
+                }
+            } else {
+                const amountToRefund = existingTransaction.amount || 0;
+                if (amountToRefund > 0) {
+                    const walletUser = await dbService.findOne(model.wallet, { refId: existingTransaction.refId, companyId: existingTransaction.companyId });
+                    if (walletUser) {
+                        const currentBalance = round4(walletUser.mainWallet || 0);
+                        const newBalance = round4(currentBalance + amountToRefund);
+                        await dbService.update(model.wallet, { id: walletUser.id }, { mainWallet: newBalance, updatedBy: existingTransaction.refId });
+                        await dbService.createOne(model.walletHistory, { refId: existingTransaction.refId, companyId: existingTransaction.companyId, walletType: 'mainWallet', operator: 'Unknown', remark: `Reversal - ${serviceType} Failed`, amount: amountToRefund, comm: 0, surcharge: 0, openingAmt: currentBalance, closingAmt: newBalance, credit: amountToRefund, debit: 0, transactionId: existingTransaction.orderid, paymentStatus: 'REFUNDED', addedBy: existingTransaction.refId, updatedBy: existingTransaction.refId });
+                    }
+                }
+            }
+            updateData.superadminComm = 0; updateData.whitelabelComm = 0; updateData.masterDistributorCom = 0; updateData.distributorCom = 0; updateData.retailerCom = 0;
+        } else {
+            updateData.superadminComm = existingTransaction.superadminComm; updateData.whitelabelComm = existingTransaction.whitelabelComm;
+            updateData.masterDistributorCom = existingTransaction.masterDistributorCom; updateData.distributorCom = existingTransaction.distributorCom; updateData.retailerCom = existingTransaction.retailerCom;
+        }
+    }
+
+    await dbService.update(model.service1Transaction, { id: existingTransaction.id }, updateData);
+    return { success: true, message: 'Status updated successfully', record: existingTransaction, serviceType };
+};
+
+const inspayCallback = async (req, res) => {
     try {
         const { txid, status, opid } = req.query;
 
         if (!txid || !status) {
-            console.error('[Payment Callback] Missing required parameters:', { txid, status });
+            console.error('[Inspay Callback] Missing required parameters:', { txid, status });
             return res.send('OK');
         }
 
@@ -180,7 +235,7 @@ const paymentCallback = async (req, res) => {
 
         if (result.success) {
             const serviceType = result.serviceType || result.record?.serviceType;
-            console.log('[Payment Callback] Status updated successfully:', {
+            console.log('[Inspay Callback] Status updated successfully:', {
                 txid,
                 status: newStatus,
                 opid: operatorId,
@@ -188,7 +243,7 @@ const paymentCallback = async (req, res) => {
                 previousStatus: result.record?.status
             });
         } else {
-            console.error('[Payment Callback] Failed to update status:', result.message, {
+            console.error('[Inspay Callback] Failed to update status:', result.message, {
                 txid,
                 status: newStatus
             });
@@ -196,7 +251,7 @@ const paymentCallback = async (req, res) => {
 
         return res.send('OK');
     } catch (error) {
-        console.error('[Payment Callback] Error:', error, {
+        console.error('[Inspay Callback] Error:', error, {
             txid: req.query.txid,
             status: req.query.status,
             opid: req.query.opid
@@ -666,8 +721,76 @@ const aslAEPSCallback = async (req, res) => {
     }
 };
 
+const a1topupCallback = async (req, res) => {
+    try {
+        const payload = req.body || {};
+        console.log('[A1 TopUp Callback] Incoming payload:', JSON.stringify(payload));
+
+        // A1 Top callback fields: txid, status, opid, number, amount, orderid
+        const {
+            txid,
+            status,
+            opid,
+            orderid,
+            number,
+            amount
+        } = payload;
+
+        // orderid is our system reference (the order id we sent to A1 Top)
+        const systemOrderId = orderid || txid;
+
+        if (!systemOrderId || !status) {
+            console.error('[A1 TopUp Callback] Missing required parameters:', { txid, status, orderid });
+            return res.send('OK');
+        }
+
+        const statusStr = String(status).toUpperCase();
+        let newStatus;
+        if (statusStr === 'SUCCESS' || statusStr === '1') {
+            newStatus = 'SUCCESS';
+        } else if (statusStr === 'PENDING' || statusStr === '2') {
+            newStatus = 'PENDING';
+        } else {
+            newStatus = 'FAILURE';
+        }
+
+        const operatorId = opid && String(opid).trim() !== '' ? opid : null;
+
+        // Update service1Transaction (A1 Top table) only
+        const result = await updateService1TransactionStatus(systemOrderId, newStatus, operatorId);
+
+        if (result.success) {
+            const serviceType = result.serviceType || result.record?.serviceType;
+            console.log('[A1 TopUp Callback] Status updated successfully:', {
+                orderid: systemOrderId,
+                txid,
+                status: newStatus,
+                opid: operatorId,
+                serviceType,
+                previousStatus: result.record?.status,
+                number,
+                amount
+            });
+        } else {
+            console.error('[A1 TopUp Callback] Failed to update status:', result.message, {
+                orderid: systemOrderId,
+                txid,
+                status: newStatus
+            });
+        }
+
+        return res.send('OK');
+    } catch (error) {
+        console.error('[A1 TopUp Callback] Error:', error, {
+            body: req.body
+        });
+        return res.send('OK');
+    }
+};
+
 module.exports = {
-    paymentCallback,
+    inspayCallback,
     aslPayoutCallback,
-    aslAEPSCallback
+    aslAEPSCallback,
+    a1topupCallback
 };

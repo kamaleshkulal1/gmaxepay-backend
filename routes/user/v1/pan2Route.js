@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const pan1Controller = require('../../../controller/user/v1/pan1Controller');
+const pan2Controller = require('../../../controller/user/v1/pan2Controller');
 const authentication = require('../../../middleware/authentication');
 
-router.post('/actions', authentication, pan1Controller.panCardActions);
+router.post('/actions', authentication, pan2Controller.panCard2Actions);
 
 module.exports = router;
-
