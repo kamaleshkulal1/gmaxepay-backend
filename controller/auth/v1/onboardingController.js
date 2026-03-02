@@ -43,6 +43,9 @@ const isAllowedOrigin = (origin) => {
       return protocol === 'https:';
     }
 
+    if (hostname === 'app.gmaxepay.com') {
+      return protocol === 'https:';
+    }
 
     return false;
   } catch (error) {
@@ -67,13 +70,13 @@ const ensureAllowedOrigin = (req) => {
 const isAllowedCompanyDomain = (domain) => {
   if (!domain) return false;
   const normalizedDomain = domain.toString().trim().toLowerCase();
-  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in';
+  return normalizedDomain === 'localhost' || normalizedDomain === 'app.gmaxepay.in' || normalizedDomain === 'app.gmaxepay.com';
 };
 
 const getRequestedDomain = (req) => {
   const d = req.get('x-company-domain') || '';
   const domain = (d || '').toString().trim().toLowerCase();
-  return domain || 'app.gmaxepay.in';
+  return domain || 'app.gmaxepay.in' || 'app.gmaxepay.com';
 };
 
 const ensureDomainMatches = (req, company) => {
@@ -83,7 +86,7 @@ const ensureDomainMatches = (req, company) => {
     return false;
   }
   // If the request is coming from core allowed domains, allow regardless of company's customDomain
-  if (requested === 'app.gmaxepay.in' || requested === 'localhost') {
+  if (requested === 'app.gmaxepay.in' || requested === 'localhost' || requested === 'app.gmaxepay.com') {
     return true;
   }
   // Otherwise, if company has a customDomain stored, validate against it
@@ -1048,6 +1051,7 @@ const getDigilockerDocuments = async (req, res) => {
     }, {
       sort: { id: -1 }
     });
+    console.log("allDigilockerDocuments", allDigilockerDocuments);
 
     if (!allDigilockerDocuments || allDigilockerDocuments.length === 0) {
       return res.failure({ message: `Please connect your ${docTypeLabel} to digilocker first` });
@@ -1107,6 +1111,7 @@ const getDigilockerDocuments = async (req, res) => {
     } else {
       // Fetch from API
       response = await ekycHub.getDocuments(verification_id, reference_id, document_type);
+      console.log("response", response);
 
       const responseStatus = (response?.status || '').toString().toUpperCase();
       const isSuccess = responseStatus === 'SUCCESS' || responseStatus === 'SUCCEED' || responseStatus === 'Success';
@@ -2746,7 +2751,7 @@ const uploadFrontBackAadharDocuments = async (req, res) => {
             photoLinkBase64ForRekognition,
             extractedPhotoBase64ForRekognition
           );
-          console.log("faceComparison", faceComparison);
+          console.log(`[uploadFrontBackAadharDocuments] faceComparison for user ${ctx.user.id}:`, JSON.stringify(faceComparison));
 
           validationResults.photoMatch = faceComparison.success && faceComparison.matched;
           if (!validationResults.photoMatch) {
@@ -3020,6 +3025,7 @@ const uploadFrontBackPanDocuments = async (req, res) => {
               aadhaarBuffer.toString('base64'),
               panBuffer.toString('base64')
             );
+            console.log(`[uploadFrontBackPanDocuments] faceComparison for user ${ctx.user.id}:`, JSON.stringify(faceComparisonResult));
 
             if (faceComparisonResult?.success && faceComparisonResult?.matched) {
               verificationMessage = panExistsInDigilocker ? 'PAN verification success' : 'PAN card processed successfully';

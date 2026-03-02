@@ -59,7 +59,7 @@ const panCardActions = async (req, res) => {
       return res.failure({ message: 'Operator not found' });
     }
 
-    const operatorType = operator.operatorType || 'PAN';
+    const operatorType = operator.operatorType || 'PAN1';
 
     const transactionId = generateTransactionID(existingCompany?.companyName);
 

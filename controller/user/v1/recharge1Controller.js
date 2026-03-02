@@ -650,7 +650,7 @@ const findMobileNumberOperator = async (req, res) => {
         if (existingRecord) {
             const response = existingRecord.response;
             const operatorName = response?.company || response?.operatorName;
-
+            console.log("operatorName", operatorName);
             if (operatorName) {
                 const operatorNameUpper = operatorName.toUpperCase();
                 if (operatorNameUpper !== 'BSNL') {
@@ -672,6 +672,7 @@ const findMobileNumberOperator = async (req, res) => {
         }
 
         const operatorName = response?.company || response?.operatorName;
+        console.log("operatorName", operatorName);
         if (!operatorName) {
             return res.failure({ message: response.message || 'Operator name not found in response' });
         }

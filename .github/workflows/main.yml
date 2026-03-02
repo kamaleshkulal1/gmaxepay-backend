@@ -251,9 +251,6 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-  # ────────────────────────────────────────────────────
-  # PRODUCTION deployment — triggered only on `main`
-  # ────────────────────────────────────────────────────
   deploy-production:
     name: Deploy to Production EC2
     runs-on: ubuntu-latest
@@ -310,126 +307,108 @@ jobs:
         id: ssm_deploy
         run: |
           echo "📤 Sending SSM deploy command..."
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=[
-              "set -e",
-              "cd /home/ec2-user/gmaxepay-backend || exit 1",
-              "echo Backing up .env...",
-              "[ -f .env ] && cp .env /tmp/.env.prod.backup",
-              "echo Fetching latest main code...",
-              "git fetch origin main",
-              "git clean -fd",
-              "git reset --hard origin/main",
-              "echo Restoring .env...",
-              "[ -f /tmp/.env.prod.backup ] && cp /tmp/.env.prod.backup .env && rm /tmp/.env.prod.backup",
-              "echo Installing dependencies...",
-              "npm install --production",
-              "echo Restarting PM2...",
-              "pm2 restart gmaxepay-backend || pm2 start index.js --name gmaxepay-backend --node-args=--max-old-space-size=4096",
-              "pm2 save",
-              "echo Deploy script completed!"
-            ]' \
-            --region ${{ secrets.PROD_AWS_REGION }} \
+            --parameters commands='["#!/bin/bash","set -e","echo === Running as: $(whoami) ===","echo === Switching to ec2-user for full deploy ===","runuser -l ec2-user -c \"set -e && cd /home/ec2-user/gmaxepay-backend && echo Step1: git safe dir && git config --global --add safe.directory /home/ec2-user/gmaxepay-backend && echo Step2: backup env && ([ -f .env ] && cp .env /home/ec2-user/.env.prod.bak && echo env backed up || echo no env found) && echo Step3: git fetch && git fetch origin main && echo Step4: git reset && git clean -fd && git reset --hard origin/main && echo Step5: restore env && ([ -f /home/ec2-user/.env.prod.bak ] && cp /home/ec2-user/.env.prod.bak .env && rm /home/ec2-user/.env.prod.bak && echo env restored || echo no backup found) && echo Step6: npm install && npm install --production && echo Step7: pm2 restart && (pm2 restart gmaxepay-backend || pm2 start index.js --name gmaxepay-backend --node-args=--max-old-space-size=4096) && pm2 save && echo === Deploy Done ===\""]' \
+            --region "${{ secrets.PROD_AWS_REGION }}" \
             --query "Command.CommandId" \
             --output text)
 
-          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
           echo "📋 SSM Command ID: $COMMAND_ID"
+          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
 
-          echo "⏳ Waiting for command to complete..."
+          echo "⏳ Waiting for deploy to complete (polls every 5s)..."
           aws ssm wait command-executed \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.PROD_AWS_REGION }}
-
-          OUTPUT=$(aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.PROD_AWS_REGION }} \
-            --query "StandardOutputContent" --output text)
-
-          ERROR=$(aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.PROD_AWS_REGION }} \
-            --query "StandardErrorContent" --output text)
+            --region "${{ secrets.PROD_AWS_REGION }}"
 
           STATUS=$(aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.PROD_AWS_REGION }} \
-            --query "Status" --output text)
+            --region "${{ secrets.PROD_AWS_REGION }}" \
+            --query "Status" \
+            --output text)
 
-          echo "� EC2 Deploy Output:"
+          OUTPUT=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --region "${{ secrets.PROD_AWS_REGION }}" \
+            --query "StandardOutputContent" \
+            --output text)
+
+          ERROR=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --region "${{ secrets.PROD_AWS_REGION }}" \
+            --query "StandardErrorContent" \
+            --output text)
+
+          echo "====== EC2 OUTPUT ======"
           echo "$OUTPUT"
-          [ -n "$ERROR" ] && echo "⚠️ EC2 Errors: $ERROR"
-          echo "📊 Status: $STATUS"
+          echo "====== EC2 ERRORS ======"
+          echo "$ERROR"
+          echo "====== FINAL STATUS: $STATUS ======"
 
           if [ "$STATUS" != "Success" ]; then
             echo "❌ Deployment failed: $STATUS"
             exit 1
           fi
 
-          echo "✅ Deployment command successful!"
+          echo "✅ SSM Deploy successful!"
 
       - name: 🏥 Health Check via SSM
         run: |
-          echo "⏳ Waiting 20s for app to start..."
+          echo "⏳ Waiting 20s for app startup..."
           sleep 20
 
           HC_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=[
-              "HEALTH_CHECK_SUCCESS=false",
-              "for i in 1 2 3 4 5; do",
-              "  RESP=$(curl -s -w \"\n%{http_code}\" http://localhost:8005/health)",
-              "  STATUS=$(echo \"$RESP\" | tail -n1)",
-              "  BODY=$(echo \"$RESP\" | head -n -1)",
-              "  echo \"Attempt $i - HTTP: $STATUS\"",
-              "  if [ \"$STATUS\" = \"200\" ]; then",
-              "    echo Health check passed!",
-              "    HEALTH_CHECK_SUCCESS=true",
-              "    break",
-              "  fi",
-              "  echo Retry $i failed. Waiting 10s...",
-              "  sleep 10",
-              "done",
-              "if [ \"$HEALTH_CHECK_SUCCESS\" != \"true\" ]; then",
-              "  pm2 logs gmaxepay-backend --lines 30",
-              "  exit 1",
-              "fi"
-            ]' \
-            --region ${{ secrets.PROD_AWS_REGION }} \
+            --parameters commands='["#!/bin/bash","for i in 1 2 3 4 5; do","  echo Health check attempt $i...","  HTTP=$(curl -s -o /tmp/hc.txt -w \"%{http_code}\" http://localhost:8005/health)","  BODY=$(cat /tmp/hc.txt)","  echo HTTP Status: $HTTP","  echo Response: $BODY","  if [ \"$HTTP\" = \"200\" ]; then","    echo Health check PASSED!","    exit 0","  fi","  echo Failed. Waiting 10s...","  sleep 10","done","echo FAILED after 5 attempts","pm2 logs gmaxepay-backend --lines 20 --nostream","exit 1"]' \
+            --region "${{ secrets.PROD_AWS_REGION }}" \
             --query "Command.CommandId" \
             --output text)
 
-          echo "📋 Health Check SSM Command ID: $HC_ID"
+          echo "📋 HC Command ID: $HC_ID"
 
+          echo "⏳ Waiting for health check to complete (polls every 5s)..."
           aws ssm wait command-executed \
             --command-id "$HC_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.PROD_AWS_REGION }}
+            --region "${{ secrets.PROD_AWS_REGION }}"
 
           HC_STATUS=$(aws ssm get-command-invocation \
             --command-id "$HC_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.PROD_AWS_REGION }} \
-            --query "Status" --output text)
+            --region "${{ secrets.PROD_AWS_REGION }}" \
+            --query "Status" \
+            --output text)
 
           HC_OUTPUT=$(aws ssm get-command-invocation \
             --command-id "$HC_ID" \
             --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.PROD_AWS_REGION }} \
-            --query "StandardOutputContent" --output text)
+            --region "${{ secrets.PROD_AWS_REGION }}" \
+            --query "StandardOutputContent" \
+            --output text)
 
-          echo "📋 Health Check Output:"
+          HC_ERROR=$(aws ssm get-command-invocation \
+            --command-id "$HC_ID" \
+            --instance-id "${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --region "${{ secrets.PROD_AWS_REGION }}" \
+            --query "StandardErrorContent" \
+            --output text)
+
+          echo "====== HC OUTPUT ======"
           echo "$HC_OUTPUT"
+          echo "====== HC ERRORS ======"
+          echo "$HC_ERROR"
+          echo "====== HC STATUS: $HC_STATUS ======"
 
           if [ "$HC_STATUS" != "Success" ]; then
-            echo "❌ Production health check failed!"
+            echo "❌ Health check failed!"
             exit 1
           fi
 
