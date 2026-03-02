@@ -650,11 +650,11 @@ const findMobileNumberOperator = async (req, res) => {
         if (existingRecord) {
             const response = existingRecord.response;
             const operatorName = response?.company || response?.operatorName;
-            console.log("operatorName", operatorName);
             if (operatorName) {
                 const operatorNameUpper = operatorName.toUpperCase();
                 if (operatorNameUpper !== 'BSNL') {
-                    const operator = await dbService.findOne(model.operator, { operatorName: operatorNameUpper });
+                    const searchOperatorName = operatorNameUpper === 'VODAFONE IDEA' ? 'VI' : operatorNameUpper;
+                    const operator = await dbService.findOne(model.operator, { operatorName: searchOperatorName });
                     if (operator) {
                         response.operatorCode = operator.operatorCode;
                     }
@@ -666,29 +666,25 @@ const findMobileNumberOperator = async (req, res) => {
 
         const response = await inspayService.operatorFetch(mobileNumber);
 
-        // console.log('response', response);
         if (!response) {
             return res.failure({ message: 'Failed to fetch operator information' });
         }
 
         const operatorName = response?.company || response?.operatorName;
-        console.log("operatorName", operatorName);
         if (!operatorName) {
             return res.failure({ message: response.message || 'Operator name not found in response' });
         }
 
         const operatorNameUpper = operatorName.toUpperCase();
-        console.log("operatorNameUpper", operatorNameUpper);
         if (operatorNameUpper !== 'BSNL') {
-            const operator = await dbService.findOne(model.operator, { operatorName: operatorNameUpper });
-            console.log("operator", operator);
+            const searchOperatorName = operatorNameUpper === 'VODAFONE IDEA' ? 'VI' : operatorNameUpper;
+            const operator = await dbService.findOne(model.operator, { operatorName: searchOperatorName });
             if (!operator) {
                 return res.failure({ message: 'Operator not found' });
             }
             response.operatorCode = operator.operatorCode;
         }
 
-        // Store in database
         await dbService.createOne(model.findMobileOperators, {
             mobileNumber,
             response
