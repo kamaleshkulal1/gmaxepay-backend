@@ -13,8 +13,7 @@ let Operator = sequelize.define(
     },
     operatorCode: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
+      allowNull: false
     },
     custConvFee: {
       type: DataTypes.INTEGER,
@@ -164,7 +163,13 @@ let Operator = sequelize.define(
     ...reusableSMSAttribute
   },
   {
-    freezeTableName: true
+    freezeTableName: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ['operatorCode', 'operatorType']
+      }
+    ]
   }
 );
 
