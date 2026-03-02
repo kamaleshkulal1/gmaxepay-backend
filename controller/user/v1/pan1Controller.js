@@ -296,7 +296,7 @@ const panCardActions = async (req, res) => {
         // Retailer (User)
         commData.amounts.retailerComm = retSlabAmount;
 
-        console.log('[PAN] Final Distribution Amounts:', JSON.stringify(commData.amounts, null, 2));
+        console.log('[PAN1] Final Distribution Amounts:', JSON.stringify(commData.amounts, null, 2));
       }
     }
 
@@ -361,7 +361,7 @@ const panCardActions = async (req, res) => {
           const historyPromises = [];
           const walletUpdates = [];
           const remarkStatus = isPending ? ` Pending-${operator.operatorName}` : `-${operator.operatorName}`;
-          const remarkText = `PAN Card${remarkStatus}`;
+          const remarkText = `PAN1 Card${remarkStatus}`;
 
           // A. Retailer Update (User)
           if (commData.users.retailer && commData.wallets.retailerWallet) {
@@ -540,7 +540,7 @@ const panCardActions = async (req, res) => {
           companyId: user.companyId,
           walletType: 'mainWallet',
           operator: operator.operatorName,
-          remark: `PAN Card${remarkStatus}`,
+          remark: `PAN1 Card${remarkStatus}`,
           amount: amountNumber,
           comm: 0,
           surcharge: 0,
@@ -560,7 +560,7 @@ const panCardActions = async (req, res) => {
       const serviceTransactionData = {
         refId: userId,
         companyId: companyId,
-        serviceType: 'Pan',
+        serviceType: 'Pan1',
         orderid: orderid,
         transactionId: transactionId,
         txid: response?.txid ? String(response.txid) : null,
@@ -591,7 +591,7 @@ const panCardActions = async (req, res) => {
       const serviceTransactionData = {
         refId: userId,
         companyId: companyId,
-        serviceType: 'Pan',
+        serviceType: 'Pan1',
         orderid: orderid,
         transactionId: transactionId,
         txid: response?.txid ? String(response.txid) : null,
@@ -622,22 +622,22 @@ const panCardActions = async (req, res) => {
 
     if (isSuccess) {
       return res.success({
-        message: response.message || 'PAN redirection URL created successfully',
+        message: response.message || 'PAN1 redirection URL created successfully',
         data: response
       });
     } else if (isPending) {
       return res.success({
-        message: response.message || 'PAN redirection URL creation in process',
+        message: response.message || 'PAN1 redirection URL creation in process',
         data: response
       });
     } else {
       return res.failure({
-        message: response.message || 'Failed to create PAN redirection URL',
+        message: response.message || 'Failed to create PAN1 redirection URL',
         data: response
       });
     }
   } catch (error) {
-    console.error('PAN redirection error:', error);
+    console.error('PAN1 redirection error:', error);
     return res.internalServerError({ message: error.message });
   }
 };
