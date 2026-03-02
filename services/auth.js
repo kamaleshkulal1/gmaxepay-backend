@@ -634,9 +634,7 @@ const loginUser = async (
       expiryTime
     };
 
-    // In development environment, skip mobile OTP but check security method
     if (process.env.NODE_ENV === 'development') {
-      // Check if password reset is required
       if (user.isResetPassword || !user.password) {
         return {
           flag: false,
@@ -649,10 +647,8 @@ const loginUser = async (
         };
       }
 
-      // Reset all lock attempts in development environment for easier testing
       await user.resetAllLockAttempts();
 
-      // Determine security method based on user settings
       const securityMethod = await determineSecurityMethod(user);
 
       if (securityMethod.requiresSetup2FA) {
@@ -704,7 +700,6 @@ const loginUser = async (
         };
       }
 
-      // Fallback: If neither MPIN nor 2FA is set, default to MPIN setup
       return {
         flag: false,
         msg: 'Please set up MPIN to secure your account.',
@@ -716,19 +711,14 @@ const loginUser = async (
       };
     }
 
-
-    // Production environment - Check if OTP login is required (once per day)
-    // Check if user already logged in with OTP today (IST)
-    const todayIST = aepsDailyLoginService.getIndianDateOnly(); // Returns YYYY-MM-DD in IST
+    const todayIST = aepsDailyLoginService.getIndianDateOnly();
     const lastOtpDate = user.lastOtpLoginDate
       ? moment(user.lastOtpLoginDate).utcOffset('+05:30').format('YYYY-MM-DD')
       : null;
 
     const otpAlreadyDoneToday = lastOtpDate === todayIST;
 
-    // If OTP was already done today, skip OTP and go directly to security method (MPIN/2FA)
     if (otpAlreadyDoneToday) {
-      // Check if password reset is required
       if (user.isResetPassword || !user.password) {
         return {
           flag: false,
@@ -741,7 +731,6 @@ const loginUser = async (
         };
       }
 
-      // Determine security method based on user settings
       const securityMethod = await determineSecurityMethod(user);
 
       if (securityMethod.requiresSetup2FA) {
