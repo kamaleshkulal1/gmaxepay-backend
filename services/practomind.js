@@ -6,10 +6,10 @@ const PRACTOMIND_SECRET_KEY = process.env.PRACTOMIND_SECRET_KEY;
 const PRACTOMIND_API_KEY = process.env.PRACTOMIND_API_KEY;
 
 // Practomind AEPS Onboarding
-const practomindAepsOnboarding = async (data , merchantLoginId) => {
+const practomindAepsOnboarding = async (data, merchantLoginId) => {
   let payload = null;
   let token = null;
-  
+
   try {
     if (!PRACTOMIND_SECRET_KEY || !PRACTOMIND_API_KEY) {
       throw new Error('Practomind API credentials not configured');
@@ -18,9 +18,9 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
     const tokenPayload = {
       merchantLoginId
     };
-    
+
     token = generatePractomindToken(tokenPayload, PRACTOMIND_SECRET_KEY, 3600);
-    
+
     payload = {
       ...data,
       Apikey: PRACTOMIND_API_KEY
@@ -31,11 +31,27 @@ const practomindAepsOnboarding = async (data , merchantLoginId) => {
         'Content-Type': 'application/json'
       }
     });
-    console.log("Response", response)
+    console.log("Practomind Onboarding Response Status:", response.status);
     return response.data;
   } catch (error) {
-    console.error("Practomind AEPS Error", error)
-    return  error.response.data
+    console.error("Practomind AEPS Error:", error.message);
+
+    if (error.response) {
+      console.error("Practomind Response Data:", error.response.data);
+      console.error("Practomind Response Status:", error.response.status);
+
+      // Handle HTML error responses (like 413 from Apache)
+      if (typeof error.response.data === 'string' && error.response.data.includes('<html>')) {
+        return {
+          status: false,
+          message: `API Error ${error.response.status}: ${error.response.statusText || 'Request Entity Too Large'}`
+        };
+      }
+
+      return error.response.data || { status: false, message: 'Practomind API responded with an error' };
+    }
+
+    return { status: false, message: error.message || 'Unable to reach Practomind onboarding API' };
   }
 };
 
@@ -177,12 +193,12 @@ const practomindEkycSubmit = async (data) => {
       Apikey: PRACTOMIND_API_KEY,
       txtPidData: data.txtPidData
     };
-   console.log("tokenPayload",tokenPayload);
-   console.log("txtPidData", data.txtPidData);
-   console.log("Type of txtPidData", typeof data.txtPidData);
-   console.log("payload", payload);
-   console.log("token", token);
-   
+    console.log("tokenPayload", tokenPayload);
+    console.log("txtPidData", data.txtPidData);
+    console.log("Type of txtPidData", typeof data.txtPidData);
+    console.log("payload", payload);
+    console.log("token", token);
+
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsubmit`, payload, {
       headers: {
         'Authorization': token,

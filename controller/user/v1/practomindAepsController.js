@@ -1,4 +1,4 @@
-
+const sharp = require('sharp');
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const practomindService = require('../../../services/practomind');
@@ -8,16 +8,29 @@ const imageService = require('../../../services/imageService');
 const { Op, Transaction } = require('sequelize');
 const sequelize = require('../../../config/dbConnection');
 
-const convertImageToBase64 = async (imageData) => {
+const convertImageToBase64 = async (imageData, compress = false) => {
     try {
         if (!imageData) return null;
 
-        // Extract S3 key
         const s3Key = imageService.extractS3Key(imageData);
         if (!s3Key) return null;
 
-        // Get image buffer from S3
-        const imageBuffer = await imageService.getImageFromS3(s3Key);
+        let imageBuffer = await imageService.getImageFromS3(s3Key);
+
+        if (compress) {
+            try {
+                imageBuffer = await sharp(imageBuffer)
+                    .resize(1000, 1000, {
+                        fit: 'inside',
+                        withoutEnlargement: true
+                    })
+                    .jpeg({ quality: 80 })
+                    .toBuffer();
+                console.log(`Compressed image: ${s3Key}, size: ${imageBuffer.length} bytes`);
+            } catch (sharpError) {
+                console.error('Error compressing image with sharp:', sharpError);
+            }
+        }
 
         // Convert buffer to base64
         return imageBuffer.toString('base64');
@@ -257,9 +270,9 @@ const createPractomindAepsOnboarding = async (req, res) => {
         }
 
         const [maskedAadharImageBase64, backgroundImageOfShopBase64, merchantPanImageBase64] = await Promise.all([
-            convertImageToBase64(existingUser.aadharBackImage),
-            convertImageToBase64(existingOutlet.shopImage),
-            convertImageToBase64(existingUser.panCardFrontImage)
+            convertImageToBase64(existingUser.aadharBackImage, true),
+            convertImageToBase64(existingOutlet.shopImage, true),
+            convertImageToBase64(existingUser.panCardFrontImage, true)
         ]);
 
         const onboardingData = {
