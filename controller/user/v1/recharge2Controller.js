@@ -372,6 +372,8 @@ const findAllRechargePlanFetch = async (req, res) => {
         if (!circle) return res.failure({ message: 'Circle is required' });
 
         const operator = await dbService.findOne(model.operator, { operatorType: "RECHARGE2", operatorCode: opCode });
+        console.log("operator", operator);
+
         if (!operator) return res.failure({ message: 'Operator not found' });
 
         // Check cache
