@@ -45,7 +45,7 @@ const recharge = async (req, res) => {
         // 1. Fetch User, Operator, Company
         const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
-            dbService.findOne(model.operator, { operatorCode: opcode }),
+            dbService.findOne(model.operator, { operatorType: "RECHARGE1", operatorCode: opcode }),
             dbService.findOne(model.company, { id: user.companyId })
         ]);
 
@@ -714,7 +714,7 @@ const findAllRechargePlanFetch = async (req, res) => {
         if (!circle) {
             return res.failure({ message: 'Circle is required' });
         }
-        const operator = await dbService.findOne(model.operator, { operatorCode: opCode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "RECHARGE1", operatorCode: opCode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
@@ -766,7 +766,7 @@ const findRechargeOfferFetch = async (req, res) => {
         if (!circle) {
             return res.failure({ message: 'Circle is required' });
         }
-        const operator = await dbService.findOne(model.operator, { operatorCode: opCode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "RECHARGE1", operatorCode: opCode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }

@@ -29,7 +29,7 @@ const dthPlanFetch = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        const operator = await dbService.findOne(model.operator, { operatorCode: opcode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "DTH1", operatorCode: opcode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
@@ -53,7 +53,7 @@ const customerInfo = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        const operator = await dbService.findOne(model.operator, { operatorCode: opcode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "DTH1", operatorCode: opcode });
         if (!operator) {
             return res.failure({ message: 'Operator not found' });
         }
@@ -89,7 +89,7 @@ const dthRecharge = async (req, res) => {
         // 1. Fetch User, Operator, Company
         const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
-            dbService.findOne(model.operator, { operatorCode: opcode }),
+            dbService.findOne(model.operator, { operatorType: "DTH1", operatorCode: opcode }),
             dbService.findOne(model.company, { id: user.companyId })
         ]);
 

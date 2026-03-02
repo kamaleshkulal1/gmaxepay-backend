@@ -12,7 +12,7 @@ const dthPlanFetch = async (req, res) => {
         const { dth_number, opcode } = req.body;
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if (!existingUser) return res.failure({ message: 'User not found' });
-        const operator = await dbService.findOne(model.operator, { operatorCode: opcode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "DTH2", operatorCode: opcode });
         if (!operator) return res.failure({ message: 'Operator not found' });
         const response = await a1topService.DTHPlanFetch(dth_number, opcode);
         if (response.status === 'Success') return res.success({ message: 'DTH plan fetched successfully', data: response });
@@ -28,7 +28,7 @@ const customerInfo = async (req, res) => {
         const { dth_number, opcode } = req.body;
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if (!existingUser) return res.failure({ message: 'User not found' });
-        const operator = await dbService.findOne(model.operator, { operatorCode: opcode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "DTH2", operatorCode: opcode });
         if (!operator) return res.failure({ message: 'Operator not found' });
         const response = await a1topService.DTHCustomerInfo(dth_number, opcode);
         if (response.status === 'Success') return res.success({ message: 'Customer info fetched successfully', data: response });
@@ -51,7 +51,7 @@ const dthRecharge = async (req, res) => {
 
         const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
-            dbService.findOne(model.operator, { operatorCode: opcode }),
+            dbService.findOne(model.operator, { operatorType: "DTH2", operatorCode: opcode }),
             dbService.findOne(model.company, { id: user.companyId })
         ]);
         if (!existingUser) return res.failure({ message: 'User not found' });
