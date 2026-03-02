@@ -1,4 +1,5 @@
 const sharp = require('sharp');
+const axios = require('axios');
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const practomindService = require('../../../services/practomind');
@@ -15,7 +16,19 @@ const convertImageToBase64 = async (imageData, compress = false) => {
         const s3Key = imageService.extractS3Key(imageData);
         if (!s3Key) return null;
 
-        let imageBuffer = await imageService.getImageFromS3(s3Key);
+        let imageBuffer;
+        const baseCdnUrl = process.env.AWS_CDN_URL ? process.env.AWS_CDN_URL.replace(/\/$/, '') : 'https://assets.gmaxepay.in';
+        const imageUrl = `${baseCdnUrl}/${s3Key.replace(/^\//, '')}`;
+
+        try {
+            const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+            imageBuffer = Buffer.from(response.data);
+        } catch (fetchError) {
+            console.error(`Error fetching image from CDN: ${imageUrl}, falling back to S3 direct.`, fetchError.message);
+            imageBuffer = await imageService.getImageFromS3(s3Key);
+        }
+
+        if (!imageBuffer) return null;
 
         if (compress) {
             try {
@@ -388,7 +401,6 @@ const sendEkycOtp = async (req, res) => {
             return res.failure({ message: 'Please complete onboarding first' });
         }
 
-        // Validate required fields from onboarding
         if (!existingOnboarding.userPan || !existingOnboarding.aadhaarNumber) {
             return res.failure({ message: 'PAN and Aadhaar details are required from onboarding' });
         }
