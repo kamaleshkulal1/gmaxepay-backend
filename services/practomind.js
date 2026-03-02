@@ -31,27 +31,11 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
         'Content-Type': 'application/json'
       }
     });
-    console.log("Practomind Onboarding Response Status:", response.status);
+    console.log("Response", response)
     return response.data;
   } catch (error) {
-    console.error("Practomind AEPS Error:", error.message);
-
-    if (error.response) {
-      console.error("Practomind Response Data:", error.response.data);
-      console.error("Practomind Response Status:", error.response.status);
-
-      // Handle HTML error responses (like 413 from Apache)
-      if (typeof error.response.data === 'string' && error.response.data.includes('<html>')) {
-        return {
-          status: false,
-          message: `API Error ${error.response.status}: ${error.response.statusText || 'Request Entity Too Large'}`
-        };
-      }
-
-      return error.response.data || { status: false, message: 'Practomind API responded with an error' };
-    }
-
-    return { status: false, message: error.message || 'Unable to reach Practomind onboarding API' };
+    console.error("Practomind AEPS Error", error)
+    return error.response.data
   }
 };
 
