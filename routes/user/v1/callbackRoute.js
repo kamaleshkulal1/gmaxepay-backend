@@ -5,5 +5,5 @@ const callbackController = require('../../../controller/user/v1/callbackControll
 router.get('/payment-callback', callbackController.inspayCallback);
 router.post('/payout-callback', callbackController.aslPayoutCallback);
 router.post('/aeps-callback', callbackController.aslAEPSCallback);
-router.post('/a1topup-callback', callbackController.a1topupCallback);
+router.get('/a1topup-callback', callbackController.a1topupCallback);
 module.exports = router;
