@@ -19,6 +19,7 @@ const convertImageToBase64 = async (imageData, compress = false) => {
         let imageBuffer;
         const baseCdnUrl = process.env.AWS_CDN_URL ? process.env.AWS_CDN_URL.replace(/\/$/, '') : 'https://assets.gmaxepay.in';
         const imageUrl = `${baseCdnUrl}/${s3Key.replace(/^\//, '')}`;
+        console.log(`Image URL for ${s3Key}: ${imageUrl}`);
 
         try {
             const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
@@ -318,6 +319,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             backgroundImageOfShop: backgroundImageOfShopBase64,
             merchantPanImage: merchantPanImageBase64
         };
+        console.log("onboardingData", onboardingData);
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         const isSuccess = response?.status === true || response?.status === 'true' ||
             (response?.result && (response.result.status === true || response.result.status === 'true'));
