@@ -1,7 +1,3 @@
-/**
- * practomindState.js
- * @description :: sequelize model of database table practomindState
- */
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');

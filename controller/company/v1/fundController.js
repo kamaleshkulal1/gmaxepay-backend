@@ -317,6 +317,7 @@ const approveFundRequest = async (req, res) => {
                 walletType: 'FUND_TRANSFER',
                 remark: `Fund transfer to user ID: ${fundRequest.refId} - ${fundRequest.transactionId}`,
                 amount: transferAmount,
+                operator: 'FUND TRANSFER',
                 openingAmt: approverOpeningBalance,
                 closingAmt: approverClosingBalance,
                 credit: 0,
