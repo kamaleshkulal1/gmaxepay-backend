@@ -3055,7 +3055,8 @@ const uploadFrontBackPanDocuments = async (req, res) => {
               const updateData = {
                 panCardFrontImage: frontImageS3Key,
                 panCardBackImage: backImageS3Key,
-                panVerify: true
+                panVerify: true,
+                isPanUploaded: true
               };
 
               const updatePromises = [

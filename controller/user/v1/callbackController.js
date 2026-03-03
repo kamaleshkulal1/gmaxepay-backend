@@ -725,9 +725,6 @@ const a1topupCallback = async (req, res) => {
     try {
         const payload = req.query || {};
         console.log('[A1 TopUp Callback] Incoming query:', JSON.stringify(payload));
-
-        // A1 Top callback fields: txid, status, opid, number, amount, orderid
-        // Provider Doc: txid=YOUR ORDER ID, status=Success/Failure, opid=OPERATOR ID
         const {
             txid,
             status,
@@ -737,8 +734,7 @@ const a1topupCallback = async (req, res) => {
             amount
         } = payload;
 
-        // txid is our system reference (the order id we sent to A1 Top)
-        // Note: Doc says "txid=Unique recharge id provided by you"
+
         const systemOrderId = txid || orderid;
 
         if (!systemOrderId || !status) {
@@ -758,7 +754,6 @@ const a1topupCallback = async (req, res) => {
 
         const operatorId = opid && String(opid).trim() !== '' ? opid : null;
 
-        // Update service1Transaction (A1 Top table) only
         const result = await updateService1TransactionStatus(systemOrderId, newStatus, operatorId);
 
         if (result.success) {

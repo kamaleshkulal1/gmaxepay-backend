@@ -1,7 +1,3 @@
-/**
- * panCard.js
- * @description :: sequelize model of database table pan_cards
- */
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
@@ -31,9 +27,9 @@ const PanCard = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true
     },
-    pan_front_image:{
-        type: DataTypes.TEXT,
-        allowNull: true
+    pan_front_image: {
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     dob: {
       type: DataTypes.STRING,
