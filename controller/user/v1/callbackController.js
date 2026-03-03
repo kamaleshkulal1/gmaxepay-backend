@@ -723,10 +723,11 @@ const aslAEPSCallback = async (req, res) => {
 
 const a1topupCallback = async (req, res) => {
     try {
-        const payload = req.body || {};
-        console.log('[A1 TopUp Callback] Incoming payload:', JSON.stringify(payload));
+        const payload = req.query || {};
+        console.log('[A1 TopUp Callback] Incoming query:', JSON.stringify(payload));
 
         // A1 Top callback fields: txid, status, opid, number, amount, orderid
+        // Provider Doc: txid=YOUR ORDER ID, status=Success/Failure, opid=OPERATOR ID
         const {
             txid,
             status,
@@ -736,8 +737,9 @@ const a1topupCallback = async (req, res) => {
             amount
         } = payload;
 
-        // orderid is our system reference (the order id we sent to A1 Top)
-        const systemOrderId = orderid || txid;
+        // txid is our system reference (the order id we sent to A1 Top)
+        // Note: Doc says "txid=Unique recharge id provided by you"
+        const systemOrderId = txid || orderid;
 
         if (!systemOrderId || !status) {
             console.error('[A1 TopUp Callback] Missing required parameters:', { txid, status, orderid });
