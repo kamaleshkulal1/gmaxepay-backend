@@ -30,6 +30,7 @@ const Recharge = async (mobile, opcode, amount, circlecode, value1, value2, valu
             ...(value4 && { value4 })
         }
     };
+    console.log("config", config);
 
     return axios
         .request(config)
