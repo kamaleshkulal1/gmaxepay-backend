@@ -66,6 +66,7 @@ const DTHRecharge = async (dth_number, opcode, amount, transactionId) => {
             format: 'json'
         }
     };
+    console.log("config", config);
 
     return axios
         .request(config)
