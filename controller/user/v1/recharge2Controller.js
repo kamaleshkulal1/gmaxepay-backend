@@ -179,6 +179,7 @@ const recharge = async (req, res) => {
         }
 
         const response = await a1topService.Recharge(mobileNumber, opcode, amount, circle, value1, value2, value3, value4, transactionId);
+        console.log("response", response);
         const orderid = response.orderid || transactionId;
         const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
         const isPending = response.status === 'Pending' || response.status === 'PENDING';
