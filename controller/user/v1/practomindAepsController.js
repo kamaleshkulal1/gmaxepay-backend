@@ -319,6 +319,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             backgroundImageOfShop: backgroundImageOfShopBase64,
             merchantPanImage: merchantPanImageBase64
         };
+
         console.log("onboardingData", onboardingData);
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         const isSuccess = response?.status === true || response?.status === 'true' ||
