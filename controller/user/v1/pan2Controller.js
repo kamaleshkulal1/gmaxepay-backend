@@ -22,7 +22,7 @@ const panCard2Actions = async (req, res) => {
 
         const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: userId }),
-            dbService.findOne(model.operator, { operatorType: 'PAN2' }),
+            dbService.findOne(model.operator, { operatorType: 'EXPRESS PAN' }),
             dbService.findOne(model.company, { id: companyId })
         ]);
         if (!existingUser) return res.failure({ message: 'User not found' });

@@ -72,13 +72,13 @@ const recharge = async (req, res) => {
         const user = req.user;
         const [existingUser, operator, existingCompany] = await Promise.all([
             dbService.findOne(model.user, { id: user.id, companyId: user.companyId }),
-            dbService.findOne(model.operator, { operatorType: "RECHARGE2", operatorCode: opcode }),
+            dbService.findOne(model.operator, { operatorType: "EXPRESS RECHARGE", operatorCode: opcode }),
             dbService.findOne(model.company, { id: user.companyId })
         ]);
         if (!existingUser) return res.failure({ message: 'User not found' });
         if (!operator) return res.failure({ message: 'Operator not found' });
 
-        const operatorType = operator.operatorType || 'RECHARGE2';
+        const operatorType = operator.operatorType || 'EXPRESS RECHARGE';
         const transactionId = generateTransactionID(existingCompany?.companyName);
         const commData = buildCommData();
 
@@ -179,6 +179,7 @@ const recharge = async (req, res) => {
         }
 
         const response = await a1topService.Recharge(mobileNumber, opcode, amount, circle, value1, value2, value3, value4, transactionId);
+        console.log("response", response);
         const orderid = response.orderid || transactionId;
         const isSuccess = response.status === 'Success' || response.status === 'SUCCESS';
         const isPending = response.status === 'Pending' || response.status === 'PENDING';
@@ -371,9 +372,7 @@ const findAllRechargePlanFetch = async (req, res) => {
         if (!opCode) return res.failure({ message: 'Operator code is required' });
         if (!circle) return res.failure({ message: 'Circle is required' });
 
-        const operator = await dbService.findOne(model.operator, { operatorType: "RECHARGE2", operatorCode: opCode });
-        console.log("operator", operator);
-
+        const operator = await dbService.findOne(model.operator, { operatorType: "EXPRESS RECHARGE", operatorCode: opCode });
         if (!operator) return res.failure({ message: 'Operator not found' });
 
         // Check cache
@@ -401,7 +400,7 @@ const findRechargeOfferFetch = async (req, res) => {
         if (!opCode) return res.failure({ message: 'Operator code is required' });
         if (!circle) return res.failure({ message: 'Circle is required' });
 
-        const operator = await dbService.findOne(model.operator, { operatorType: "RECHARGE2", operatorCode: opCode });
+        const operator = await dbService.findOne(model.operator, { operatorType: "EXPRESS RECHARGE", operatorCode: opCode });
         if (!operator) return res.failure({ message: 'Operator not found' });
 
         // Check cache

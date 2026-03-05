@@ -820,6 +820,7 @@ const sendSmsMobile = async (req, res) => {
       }
     });
   } catch (error) {
+    console.log("error", error);
     return res.failure({ message: 'Failed to send SMS for mobile', error: error.message });
   }
 };

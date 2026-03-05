@@ -723,10 +723,8 @@ const aslAEPSCallback = async (req, res) => {
 
 const a1topupCallback = async (req, res) => {
     try {
-        const payload = req.body || {};
-        console.log('[A1 TopUp Callback] Incoming payload:', JSON.stringify(payload));
-
-        // A1 Top callback fields: txid, status, opid, number, amount, orderid
+        const payload = req.query || {};
+        console.log('[A1 TopUp Callback] Incoming query:', JSON.stringify(payload));
         const {
             txid,
             status,
@@ -736,8 +734,8 @@ const a1topupCallback = async (req, res) => {
             amount
         } = payload;
 
-        // orderid is our system reference (the order id we sent to A1 Top)
-        const systemOrderId = orderid || txid;
+
+        const systemOrderId = txid || orderid;
 
         if (!systemOrderId || !status) {
             console.error('[A1 TopUp Callback] Missing required parameters:', { txid, status, orderid });
@@ -756,7 +754,6 @@ const a1topupCallback = async (req, res) => {
 
         const operatorId = opid && String(opid).trim() !== '' ? opid : null;
 
-        // Update service1Transaction (A1 Top table) only
         const result = await updateService1TransactionStatus(systemOrderId, newStatus, operatorId);
 
         if (result.success) {

@@ -30,10 +30,12 @@ const Recharge = async (mobile, opcode, amount, circlecode, value1, value2, valu
             ...(value4 && { value4 })
         }
     };
+    console.log("config", config);
 
     return axios
         .request(config)
         .then((response) => {
+            console.log("Recharge", response)
             console.log('[A1Top] Recharge response:', response.data);
             return {
                 ...response.data,
@@ -60,10 +62,12 @@ const DTHRecharge = async (dth_number, opcode, amount, transactionId) => {
             operatorcode: opcode,
             number: dth_number,
             amount,
+            circlecode: "",
             orderid,
             format: 'json'
         }
     };
+    console.log("config", config);
 
     return axios
         .request(config)
