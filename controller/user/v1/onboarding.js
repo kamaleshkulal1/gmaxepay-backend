@@ -639,6 +639,7 @@ const validateReferralCodeAndDetermineRole = async (referCode, companyId, compan
 const sendSmsMobile = async (req, res) => {
   try {
     const companyCtx = await getCompanyFromHeaders(req);
+    console.log("companyCtx", companyCtx);
     if (companyCtx.error) {
       return res.failure({ message: companyCtx.error });
     }
@@ -829,6 +830,7 @@ const sendSmsMobile = async (req, res) => {
 const verifySmsOtp = async (req, res) => {
   try {
     const companyCtx = await getCompanyFromHeaders(req);
+    console.log("companyCtx", companyCtx);
     if (companyCtx.error) {
       return res.failure({ message: companyCtx.error });
     }
