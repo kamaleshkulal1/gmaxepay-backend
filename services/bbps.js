@@ -109,7 +109,7 @@ const fetchBill = async (billDetails) => {
 const fetchBillRequest = async (jsonData) => {
   try {
     const payload = buildSecurePayload({ jsonData });
-
+    console.log('payload', payload);
     const url = `${BBPS_URL}/billpay/extBillCntrl/billFetchRequest/json?accessCode=${payload.access_code}&requestId=${payload.requestId}&ver=${payload.version}&instituteId=${payload.bbpsInstituteId}&encRequest=${payload.enc_request}`;
 
     const response = await axios.post(url, {}, {
