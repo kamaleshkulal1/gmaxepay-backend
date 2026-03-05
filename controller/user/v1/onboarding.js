@@ -120,7 +120,6 @@ const loadUserContext = async (req, companyId) => {
   if (customer) {
     customerBank = await dbService.findOne(model.customerBank, { refId: customer.id, companyId: companyId });
   }
-  // Fallback: try with user.id for backward compatibility with old data
   if (!customerBank) {
     customerBank = await dbService.findOne(model.customerBank, { refId: user.id, companyId: companyId });
   }
@@ -779,7 +778,7 @@ const sendSmsMobile = async (req, res) => {
       isLoginOtp: true,
       tokenVersion: 0,
       loggedIn: false,
-      companyName: company.companyName, // Pass company name for userId generation (temporary field, not saved to DB)
+      companyName: company.companyName,
     };
 
     let newUser;
@@ -789,15 +788,13 @@ const sendSmsMobile = async (req, res) => {
     while (createAttempts < maxAttempts) {
       try {
         newUser = await dbService.createOne(model.user, userData);
-        break; // Success, exit loop
+        break;
       } catch (createError) {
         createAttempts++;
         if (createError.name === 'SequelizeUniqueConstraintError' && createError.fields && createError.fields.userId && createAttempts < maxAttempts) {
-          // If collision on userId, retry (the model hook will generate a new ID)
           console.log(`userId collision detected, retrying attempt ${createAttempts + 1}...`);
           continue;
         }
-        // If it's a different error or we've run out of attempts, throw it
         throw createError;
       }
     }
