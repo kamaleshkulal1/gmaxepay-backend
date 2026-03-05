@@ -1,5 +1,5 @@
 
-const { DataTypes } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
@@ -116,7 +116,7 @@ const applyDocumentDecryption = (record) => {
 // For STRING fields: stores as "encrypted_string"
 const encryptImageField = (imageData) => {
   if (!imageData) return null;
-  
+
   // If it's a JSON object, extract key and encrypt it
   if (typeof imageData === 'object') {
     const key = imageData.key || imageData;
@@ -126,7 +126,7 @@ const encryptImageField = (imageData) => {
     // If key is already encrypted or invalid, return as is
     return imageData;
   }
-  
+
   // If it's a string
   if (typeof imageData === 'string') {
     // Check if it's already JSON string
@@ -154,7 +154,7 @@ const encryptImageField = (imageData) => {
       return imageData;
     }
   }
-  
+
   return imageData;
 };
 
@@ -163,7 +163,7 @@ const encryptImageField = (imageData) => {
 // For STRING fields: expects "encrypted_string"
 const decryptImageField = (imageData) => {
   if (!imageData) return null;
-  
+
   try {
     // If it's a JSON object, decrypt the key
     if (typeof imageData === 'object') {
@@ -185,7 +185,7 @@ const decryptImageField = (imageData) => {
       }
       return imageData;
     }
-    
+
     // If it's a string, try to parse as JSON first (for JSON fields stored as string)
     if (typeof imageData === 'string') {
       try {
@@ -222,7 +222,7 @@ const decryptImageField = (imageData) => {
         return imageData;
       }
     }
-    
+
     return imageData;
   } catch (error) {
     // If decryption fails, return as is (backward compatibility)
@@ -324,7 +324,7 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
-    isMpinSetup:{
+    isMpinSetup: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
@@ -340,7 +340,7 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
-    is2faEnabledActive:{
+    is2faEnabledActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
@@ -615,14 +615,14 @@ const User = sequelize.define(
           // Get company name prefix (2-5 characters)
           let companyPrefix = '';
           let companyName = null;
-          
+
           // First, try to get company name from temporary field (passed from controller)
           if (user.companyName) {
             companyName = user.companyName;
             // Remove the temporary field so it doesn't get saved (not a User model field)
             delete user.companyName;
           }
-          
+
           // If not available, try to fetch from database
           if (!companyName && user.companyId) {
             try {
@@ -630,7 +630,7 @@ const User = sequelize.define(
                 where: { id: user.companyId },
                 attributes: ['companyName']
               });
-              
+
               if (company && company.companyName) {
                 companyName = company.companyName;
               }
@@ -638,13 +638,13 @@ const User = sequelize.define(
               // Continue without company prefix if error occurs
             }
           }
-          
+
           // Process company name to extract prefix
           if (companyName) {
             // Clean company name: remove spaces and special characters, keep only alphanumeric
             let cleanedName = companyName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
             const nameLength = cleanedName.length;
-            
+
             if (nameLength >= 5) {
               // Use first 5 characters
               companyPrefix = cleanedName.substring(0, 5);
@@ -659,17 +659,18 @@ const User = sequelize.define(
           }
 
           // Build search pattern: {COMPANY_PREFIX}{ROLE_PREFIX}%
-          const searchPattern = companyPrefix 
-            ? `${companyPrefix}${rolePrefix}%` 
+          const searchPattern = companyPrefix
+            ? `${companyPrefix}${rolePrefix}%`
             : `${rolePrefix}%`;
 
+          // Find the user with the highest userId for this specific prefix
           const lastUser = await User.findOne({
             where: {
               userId: {
                 [Op.like]: searchPattern
               }
             },
-            order: [['createdAt', 'DESC']]
+            order: [[Sequelize.fn('length', Sequelize.col('userId')), 'DESC'], ['userId', 'DESC']]
           });
 
           let newIdNumber = 1;
@@ -687,8 +688,8 @@ const User = sequelize.define(
           const formattedNumber = newIdNumber.toString().padStart(2, '0');
 
           // Generate userId: {COMPANY_PREFIX}{ROLE_PREFIX}{NUMBER}
-          user.userId = companyPrefix 
-            ? `${companyPrefix}${rolePrefix}${formattedNumber}` 
+          user.userId = companyPrefix
+            ? `${companyPrefix}${rolePrefix}${formattedNumber}`
             : `${rolePrefix}${formattedNumber}`;
         }
       ],
@@ -861,10 +862,10 @@ User.prototype.isPinMatch = async function (pin) {
 User.prototype.isAccountLocked = function () {
   // Check if account is locked based on lock status and expiry time
   const isLockedByStatus = !!(this.isLocked && this.lockUntil && this.lockUntil > Date.now());
-  
+
   // Also check if login attempts have exceeded the limit (additional safeguard)
   const isLockedByAttempts = (this.loginAttempts || 0) >= authConstantEnum.MAX_LOGIN_RETRY_LIMIT;
-  
+
   return isLockedByStatus || isLockedByAttempts;
 };
 
@@ -878,16 +879,16 @@ User.prototype.incrementLoginAttempts = async function () {
       isLocked: false
     });
   }
-  
+
   // Calculate new attempt count
   const newAttemptCount = (this.loginAttempts || 0) + 1;
   const updates = { loginAttempts: newAttemptCount };
-  
+
   if (newAttemptCount >= authConstantEnum.MAX_LOGIN_RETRY_LIMIT) {
     updates.lockUntil = Date.now() + authConstantEnum.LOGIN_LOCK_TIME * 60 * 1000; // 20 minutes
     updates.isLocked = true;
   }
-  
+
   return await this.update(updates);
 };
 

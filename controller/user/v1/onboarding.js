@@ -782,7 +782,25 @@ const sendSmsMobile = async (req, res) => {
       companyName: company.companyName, // Pass company name for userId generation (temporary field, not saved to DB)
     };
 
-    const newUser = await dbService.createOne(model.user, userData);
+    let newUser;
+    let createAttempts = 0;
+    const maxAttempts = 3;
+
+    while (createAttempts < maxAttempts) {
+      try {
+        newUser = await dbService.createOne(model.user, userData);
+        break; // Success, exit loop
+      } catch (createError) {
+        createAttempts++;
+        if (createError.name === 'SequelizeUniqueConstraintError' && createError.fields && createError.fields.userId && createAttempts < maxAttempts) {
+          // If collision on userId, retry (the model hook will generate a new ID)
+          console.log(`userId collision detected, retrying attempt ${createAttempts + 1}...`);
+          continue;
+        }
+        // If it's a different error or we've run out of attempts, throw it
+        throw createError;
+      }
+    }
 
     if (!newUser) {
       return res.failure({ message: 'Failed to create user account' });
