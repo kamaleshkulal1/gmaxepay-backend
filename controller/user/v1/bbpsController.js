@@ -910,7 +910,7 @@ const fetchBill = async (req, res) => {
 
     const finalCustomerInfo = {
       customerMobile: customerMobile,
-      customerEmail: existingUser.email,
+      customerEmail: existingUser?.email,
       customerAdhaar: aadharNumber,
       customerPan: panNumber
     };
@@ -948,6 +948,7 @@ const fetchBill = async (req, res) => {
           ip: agentIp,
           mac: agentMac
         },
+        REMITTER_NAME: 'GMAXPAY',
         customerInfo: finalCustomerInfo,
         billerId,
         inputParams: formattedInputParams
