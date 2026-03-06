@@ -33,16 +33,21 @@ const convertImageToBase64 = async (imageData, compress = false) => {
 
         if (compress) {
             try {
-                imageBuffer = await sharp(imageBuffer)
-                    .resize(1000, 1000, {
+                imageBuffer = await sharp(imageBuffer, { failOn: 'none' })
+                    .resize(800, 800, {
                         fit: 'inside',
                         withoutEnlargement: true
                     })
-                    .jpeg({ quality: 80 })
+                    .jpeg({
+                        quality: 60,
+                        chromaSubsampling: '4:2:0'
+                    })
+                    .withMetadata(false)
                     .toBuffer();
                 console.log(`Compressed image: ${s3Key}, size: ${imageBuffer.length} bytes`);
             } catch (sharpError) {
                 console.error('Error compressing image with sharp:', sharpError);
+                return null;
             }
         }
 
