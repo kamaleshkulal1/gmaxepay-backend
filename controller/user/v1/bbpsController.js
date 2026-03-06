@@ -960,7 +960,7 @@ const fetchBill = async (req, res) => {
     const { data: parsedResponse, requestId } = await bbpsService.fetchBillRequest(jsonData);
     payload = { requestId }; // Keep payload for error handling
 
-    console.log('reposeData', JSON.stringify(parsedResponse, null, 2));
+    console.log('response', JSON.stringify(parsedResponse, null, 2));
 
     if (parsedResponse.responseCode !== '000') {
       let errorMessage = 'Unable to fetch biller info. Please try again later.';
