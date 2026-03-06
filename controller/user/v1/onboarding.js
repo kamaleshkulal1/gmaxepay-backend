@@ -1954,6 +1954,7 @@ const postBankDetails = async (req, res) => {
       }
     } else {
       bankVerification = await ekycHub.bankVerification(account_number, ifsc);
+      console.log('bankVerification', bankVerification);
 
       // Only save if verification is successful
       if (bankVerification && bankVerification.status === 'Success') {
@@ -2039,6 +2040,7 @@ const postBankDetails = async (req, res) => {
 
     const nameSimilarityPercentage = calculateStringSimilarity(aadhaarName, bankBeneficiaryName);
 
+
     if (!bankBeneficiaryName) {
       return res.failure({
         message: 'Bank account holder name not found in verification response',
@@ -2049,8 +2051,9 @@ const postBankDetails = async (req, res) => {
         }
       });
     }
+    console.log('nameSimilarityPercentage', nameSimilarityPercentage);
 
-    if (nameSimilarityPercentage <= 60) {
+    if (nameSimilarityPercentage <= 40) {
       return res.failure({
         message: 'Your name does not match with the bank account holder name. Please verify your bank account details.',
         data: {
