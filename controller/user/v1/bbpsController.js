@@ -844,7 +844,7 @@ const fetchBill = async (req, res) => {
       model.user,
       { id: userId },
       {
-        attributes: ['aadharDetails', 'panDetails', 'bbpsAgentId']
+        attributes: ['aadharDetails', 'panDetails', 'bbpsAgentId', 'email']
       }
     );
 
