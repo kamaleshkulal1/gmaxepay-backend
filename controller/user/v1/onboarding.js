@@ -904,7 +904,7 @@ const verifySmsOtp = async (req, res) => {
     await dbService.update(model.user, { id: user.id }, {
       mobileVerify: true,
       otpMobile: null,
-      bbpsAgentId: 'CC01CC01513515340681'
+      bbpsAgentId: 'CC01RP60AGTU00000007'
     });
     await existingUser.resetOtpAttempts();
 
