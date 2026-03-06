@@ -948,7 +948,7 @@ const fetchBill = async (req, res) => {
           ip: agentIp,
           mac: agentMac
         },
-        REMITTER_NAME: 'GMAXPAY',
+        billerAdhoc: false,
         customerInfo: finalCustomerInfo,
         billerId,
         inputParams: formattedInputParams
