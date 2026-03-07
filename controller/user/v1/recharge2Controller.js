@@ -174,6 +174,19 @@ const recharge = async (req, res) => {
                     }
                 }
                 calcAmounts(operator, commData, amountNumber);
+
+                const currentRole = user.userRole;
+                let currentSlabId = null;
+
+                if (currentRole === 5) {
+                    currentSlabId = commData.slabs.retSlab?.id;
+                } else if (currentRole === 4) {
+                    currentSlabId = commData.slabs.distSlab?.id;
+                }
+
+                if (!currentSlabId) {
+                    return res.failure({ message: `Slab  not found  pls subscribe to the  schems` });
+                }
                 console.log('[Recharge2] Comm Amounts:', JSON.stringify(commData.amounts));
             }
         }

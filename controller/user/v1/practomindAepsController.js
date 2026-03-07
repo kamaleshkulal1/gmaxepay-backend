@@ -1014,7 +1014,7 @@ const cashWithdrawal = async (req, res) => {
                 }
 
                 if (!currentSlabId) {
-                    return res.failure({ message: `Commission slab not found for this amount range. Transaction blocked.` });
+                    return res.failure({ message: `Slab  not found  pls subscribe to the  schems` });
                 }
 
                 const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
