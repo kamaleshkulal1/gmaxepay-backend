@@ -803,6 +803,7 @@ const cashWithdrawal = async (req, res) => {
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if (!existingUser) return res.failure({ message: 'User not found' });
 
+
         const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
         if (!existingCompany) return res.failure({ message: 'Company not found' });
 
@@ -998,8 +999,23 @@ const cashWithdrawal = async (req, res) => {
                     }
                 }
 
-                // Retailer (User)
                 commData.amounts.retailerComm = retSlabAmount;
+
+                const currentRole = user.userRole;
+                let currentComm = 0;
+                let currentSlabId = null;
+
+                if (currentRole === 5) {
+                    currentComm = retSlabAmount;
+                    currentSlabId = commData.slabs.retSlab?.id;
+                } else if (currentRole === 4) {
+                    currentComm = distSlabAmount;
+                    currentSlabId = commData.slabs.distSlab?.id;
+                }
+
+                if (!currentSlabId) {
+                    return res.failure({ message: `Commission slab not found for this amount range. Transaction blocked.` });
+                }
 
                 const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
                 const tds = g => round4(g * TDS_RATE);
@@ -1061,7 +1077,8 @@ const cashWithdrawal = async (req, res) => {
         let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
         if (!wallet) wallet = await model.wallet.create({ refId: req.user.id, companyId: req.user.companyId, roleType: req.user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: req.user.id, updatedBy: req.user.id });
         const openingAeps2Wallet = round4(wallet.apes2Wallet || 0);
-        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerNetAmt : distNetAmt) : 0;
+        // Correct wallet credit: amount + (commission - TDS)
+        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? round4(amountNumber + retailerNetAmt) : round4(amountNumber + distNetAmt)) : 0;
         const closingAeps2Wallet = isSuccess ? round4(openingAeps2Wallet + initiatorCredit) : openingAeps2Wallet;
 
         if (isSuccess) {
@@ -1069,7 +1086,7 @@ const cashWithdrawal = async (req, res) => {
             const walletUpdates = [], historyPromises = [];
             if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
                 if (initiatorCredit > 0) walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { apes2Wallet: closingAeps2Wallet, updatedBy: req.user.id }));
-                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: amountNumber, comm: initiatorCredit, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId, paymentStatus, remark: remarkText, aepsTxnType: 'CW', bankiin: bankIIN, superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: amountNumber, comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId, paymentStatus, remark: remarkText, aepsTxnType: 'CW', bankiin: bankIIN, superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } }));
                 if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
                     const dW = commData.wallets.distributorWallet, dO = round4(dW.apes2Wallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
                     walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { apes2Wallet: dC, updatedBy: commData.users.distributor.id }));
