@@ -3,7 +3,7 @@ const dbService = require('../../../utils/dbService')
 const asl = require('../../../services/asl')
 const inspayService = require('../../../services/inspayService')
 const bbpsService = require('../../../services/bbps')
-const a1TopUpService = require('../../../services/a1TopService')
+const a1TopUpService = require('../../../services/a1topService')
 const { Op } = require('sequelize')
 
 const alsWallet = async (req, res) => {
