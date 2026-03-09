@@ -16,6 +16,6 @@ router.post('/mini-statement', authentication, practomindAepsController.miniStat
 router.post('/recent-banks', authentication, practomindAepsController.recentBanks);
 router.post('/bank-list', authentication, practomindAepsController.bankList);
 router.post('/transaction-history', authentication, practomindAepsController.aepsTransactionHistory);
-
+router.post('/aeps2TransactionDetailsById/:id', authentication, practomindAepsController.getAeps2TransactionDetailsById);
 module.exports = router;
 
