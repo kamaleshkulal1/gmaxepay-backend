@@ -1,6 +1,7 @@
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models/index');
 const { Op, Sequelize } = require('sequelize');
+const imageService = require('../../../services/imageService');
 
 const getAeps1Reports = async (req, res) => {
     try {
@@ -59,12 +60,42 @@ const getAeps1Reports = async (req, res) => {
             }
         }
 
+        // Prepare options with user include
+        const includeOptions = [
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
+                required: false
+            }
+        ];
+
+        options.include = includeOptions;
+
         // Use paginate for consistent pagination response
         const result = await dbService.paginate(model.aepsHistory, query, options);
 
+        // Map results to include userDetails
+        const mappedData = result?.data?.map((transaction) => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { user, ...restData } = transactionData;
+            const userData = user || {};
+
+            return {
+                ...restData,
+                userDetails: userData.id ? {
+                    name: userData.name || null,
+                    userRole: userData.userRole || null,
+                    profileImage: userData.profileImage ? imageService.getImageUrl(userData.profileImage, false) : null,
+                    mobileNo: userData.mobileNo || null,
+                    userId: userData.userId || null
+                } : null
+            };
+        }) || [];
+
         return res.success({
             message: 'AEPS reports retrieved successfully',
-            data: result?.data || [],
+            data: mappedData,
             total: result?.total || 0,
             paginator: result?.paginator
         });
@@ -130,11 +161,41 @@ const getAeps2Reports = async (req, res) => {
             }
         }
 
+        // Prepare options with user include
+        const includeOptions = [
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
+                required: false
+            }
+        ];
+
+        options.include = includeOptions;
+
         const result = await dbService.paginate(model.practomindAepsHistory, query, options);
+
+        // Map results to include userDetails
+        const mappedData = result?.data?.map((transaction) => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { user, ...restData } = transactionData;
+            const userData = user || {};
+
+            return {
+                ...restData,
+                userDetails: userData.id ? {
+                    name: userData.name || null,
+                    userRole: userData.userRole || null,
+                    profileImage: userData.profileImage ? imageService.getImageUrl(userData.profileImage, false) : null,
+                    mobileNo: userData.mobileNo || null,
+                    userId: userData.userId || null
+                } : null
+            };
+        }) || [];
 
         return res.success({
             message: 'AEPS2 reports retrieved successfully',
-            data: result?.data || [],
+            data: mappedData,
             total: result?.total || 0,
             paginator: result?.paginator
         });
@@ -288,7 +349,7 @@ const getRecharge1Reports = async (req, res) => {
             {
                 model: model.user,
                 as: 'user',
-                attributes: ['id', 'name', 'userId', 'mobileNo'],
+                attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
                 required: false
             }
         ];
@@ -309,10 +370,28 @@ const getRecharge1Reports = async (req, res) => {
             });
         }
 
+        // Map results to include userDetails
+        const mappedData = result?.data?.map((transaction) => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { user, ...restData } = transactionData;
+            const userData = user || {};
+
+            return {
+                ...restData,
+                userDetails: userData.id ? {
+                    name: userData.name || null,
+                    userRole: userData.userRole || null,
+                    profileImage: userData.profileImage ? imageService.getImageUrl(userData.profileImage, false) : null,
+                    mobileNo: userData.mobileNo || null,
+                    userId: userData.userId || null
+                } : null
+            };
+        }) || [];
+
         return res.status(200).send({
             status: 'SUCCESS',
             message: 'Recharge reports retrieved successfully',
-            data: result.data,
+            data: mappedData,
             total: result.total || 0,
             paginator: result.paginator
         });
@@ -462,7 +541,7 @@ const getRecharge2Reports = async (req, res) => {
             {
                 model: model.user,
                 as: 'user',
-                attributes: ['id', 'name', 'userId', 'mobileNo'],
+                attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
                 required: false
             }
         ];
@@ -483,10 +562,28 @@ const getRecharge2Reports = async (req, res) => {
             });
         }
 
+        // Map results to include userDetails
+        const mappedData = result?.data?.map((transaction) => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { user, ...restData } = transactionData;
+            const userData = user || {};
+
+            return {
+                ...restData,
+                userDetails: userData.id ? {
+                    name: userData.name || null,
+                    userRole: userData.userRole || null,
+                    profileImage: userData.profileImage ? imageService.getImageUrl(userData.profileImage, false) : null,
+                    mobileNo: userData.mobileNo || null,
+                    userId: userData.userId || null
+                } : null
+            };
+        }) || [];
+
         return res.status(200).send({
             status: 'SUCCESS',
             message: 'Recharge reports retrieved successfully',
-            data: result.data,
+            data: mappedData,
             total: result.total || 0,
             paginator: result.paginator
         });
@@ -635,7 +732,7 @@ const getBbpReports = async (req, res) => {
             {
                 model: model.user,
                 as: 'user',
-                attributes: ['id', 'name', 'userId', 'mobileNo'],
+                attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
                 required: false
             }
         ];
@@ -656,10 +753,28 @@ const getBbpReports = async (req, res) => {
             });
         }
 
+        // Map results to include userDetails
+        const mappedData = result?.data?.map((transaction) => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { user, ...restData } = transactionData;
+            const userData = user || {};
+
+            return {
+                ...restData,
+                userDetails: userData.id ? {
+                    name: userData.name || null,
+                    userRole: userData.userRole || null,
+                    profileImage: userData.profileImage ? imageService.getImageUrl(userData.profileImage, false) : null,
+                    mobileNo: userData.mobileNo || null,
+                    userId: userData.userId || null
+                } : null
+            };
+        }) || [];
+
         return res.status(200).send({
             status: 'SUCCESS',
             message: 'BBP reports retrieved successfully',
-            data: result.data,
+            data: mappedData,
             total: result.total || 0,
             paginator: result.paginator
         });
