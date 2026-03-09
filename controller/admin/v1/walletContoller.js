@@ -216,7 +216,7 @@ const walletHistory = async (req, res) => {
     }
 }
 
-const a1TopUpWallet = async (req, res) => {
+const a1TopupWallet = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, {
             id: req.user.id,
@@ -242,6 +242,6 @@ module.exports = {
     walletBalance,
     inspayWallet,
     bbpsWallet,
-    a1TopUpWallet,
+    a1TopupWallet,
     walletHistory
 };
