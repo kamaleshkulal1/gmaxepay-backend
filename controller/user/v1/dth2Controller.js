@@ -1,6 +1,6 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
-const a1topService = require('../../../services/a1topService');
+const a1topService = require('../../../services/a1TopService');
 const { Op } = require('sequelize');
 const { generateTransactionID } = require('../../../utils/transactionID');
 

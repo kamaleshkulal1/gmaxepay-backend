@@ -60,12 +60,18 @@ const getAeps1Reports = async (req, res) => {
             }
         }
 
-        // Prepare options with user include
+        // Prepare options with user and bank include
         const includeOptions = [
             {
                 model: model.user,
                 as: 'user',
                 attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
+                required: false
+            },
+            {
+                model: model.aslBankList,
+                as: 'bank',
+                attributes: ['bankName'],
                 required: false
             }
         ];
@@ -75,14 +81,16 @@ const getAeps1Reports = async (req, res) => {
         // Use paginate for consistent pagination response
         const result = await dbService.paginate(model.aepsHistory, query, options);
 
-        // Map results to include userDetails
+        // Map results to include userDetails and bankName
         const mappedData = result?.data?.map((transaction) => {
             const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
-            const { user, ...restData } = transactionData;
+            const { user, bank, ...restData } = transactionData;
             const userData = user || {};
+            const bankData = bank || {};
 
             return {
                 ...restData,
+                bankName: bankData.bankName || restData.bankName || null,
                 userDetails: userData.id ? {
                     name: userData.name || null,
                     userRole: userData.userRole || null,
@@ -161,12 +169,18 @@ const getAeps2Reports = async (req, res) => {
             }
         }
 
-        // Prepare options with user include
+        // Prepare options with user and bank include
         const includeOptions = [
             {
                 model: model.user,
                 as: 'user',
                 attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
+                required: false
+            },
+            {
+                model: model.practomindBankList,
+                as: 'bank',
+                attributes: ['bankName'],
                 required: false
             }
         ];
@@ -175,14 +189,16 @@ const getAeps2Reports = async (req, res) => {
 
         const result = await dbService.paginate(model.practomindAepsHistory, query, options);
 
-        // Map results to include userDetails
+        // Map results to include userDetails and bankName
         const mappedData = result?.data?.map((transaction) => {
             const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
-            const { user, ...restData } = transactionData;
+            const { user, bank, ...restData } = transactionData;
             const userData = user || {};
+            const bankData = bank || {};
 
             return {
                 ...restData,
+                bankName: bankData.bankName || restData.bankName || null,
                 userDetails: userData.id ? {
                     name: userData.name || null,
                     userRole: userData.userRole || null,
