@@ -118,11 +118,9 @@ const checkBalance = async () => {
             format: 'json'
         }
     };
-    console.log("config", config);
     return axios
         .request(config)
         .then((response) => {
-            console.log("response", response);
             console.log('[A1Top] checkBalance response:', response.data);
             return response.data;
         })
