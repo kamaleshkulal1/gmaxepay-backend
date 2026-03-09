@@ -25,9 +25,9 @@ const walletBalance = async (req, res) => {
             return res.failure({ message: 'Wallet not found' });
         }
         const response = {
-            mainWallet: wallet?.mainWallet.toFixed(2) || 0,
-            apes1Wallet: wallet?.apes1Wallet.toFixed(2) || 0,
-            apes2Wallet: wallet?.apes2Wallet.toFixed(2) || 0
+            mainWallet: wallet?.mainWallet.toFixed(4) || 0,
+            apes1Wallet: wallet?.apes1Wallet.toFixed(4) || 0,
+            apes2Wallet: wallet?.apes2Wallet.toFixed(4) || 0
         }
         return res.success({ message: 'Wallet balance fetched successfully', data: response });
     }
