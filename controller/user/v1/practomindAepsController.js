@@ -1018,14 +1018,8 @@ const cashWithdrawal = async (req, res) => {
                 }
 
                 const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
-                const tds = g => round4(Math.max(0, g) * TDS_RATE);
-                commData.tds = {
-                    superAdminTDS: tds(commData.amounts.superAdminComm),
-                    whitelabelTDS: tds(commData.amounts.companyComm),
-                    masterDistributorTDS: tds(commData.amounts.mdComm),
-                    distributorTDS: tds(commData.amounts.distComm),
-                    retailerTDS: tds(commData.amounts.retailerComm)
-                };
+                const tds = g => round4(g * TDS_RATE);
+                commData.tds = { superAdminTDS: tds(operatorCommissionAmount), whitelabelTDS: tds(wlSlabAmount), masterDistributorTDS: tds(mdSlabAmount), distributorTDS: tds(distSlabAmount), retailerTDS: tds(retSlabAmount) };
                 commData.avail = { superAdminAvail: Boolean(commData.users.superAdmin), whitelabelAvail: Boolean(commData.users.companyAdmin), masterDistributorAvail: Boolean(commData.users.masterDistributor), distributorAvail: Boolean(commData.users.distributor), retailerAvail: Boolean(commData.users.retailer) };
                 console.log('[AEPS2 CW] Scenario:', commData.scenario, '| Amounts:', JSON.stringify(commData.amounts));
             }
@@ -1083,187 +1077,40 @@ const cashWithdrawal = async (req, res) => {
         let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
         if (!wallet) wallet = await model.wallet.create({ refId: req.user.id, companyId: req.user.companyId, roleType: req.user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: req.user.id, updatedBy: req.user.id });
         const openingAeps2Wallet = round4(wallet.apes2Wallet || 0);
-        let initiatorNetComm = 0, initiatorGrossComm = 0, initiatorTDS = 0;
-        if (user.userRole === 5) {
-            initiatorNetComm = retailerNetAmt;
-            initiatorGrossComm = retailerCommAmt;
-            initiatorTDS = retailerTDS;
-        } else if (user.userRole === 4) {
-            initiatorNetComm = distNetAmt;
-            initiatorGrossComm = distCommAmt;
-            initiatorTDS = distributorTDS;
-        } else if (user.userRole === 3) {
-            initiatorNetComm = mdNetAmt;
-            initiatorGrossComm = mdCommAmt;
-            initiatorTDS = masterDistTDS;
-        }
-
-        const initiatorCredit = round4(amountNumber + initiatorNetComm);
+        // Correct wallet credit: amount + (commission - TDS)
+        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? round4(amountNumber + retailerNetAmt) : round4(amountNumber + distNetAmt)) : 0;
         const closingAeps2Wallet = isSuccess ? round4(openingAeps2Wallet + initiatorCredit) : openingAeps2Wallet;
 
         if (isSuccess) {
             const remarkText = `AEPS2 CW-${operator?.operatorName || practomindBank.bankName || bankIIN}`;
             const walletUpdates = [], historyPromises = [];
             if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
-                // Initiator Wallet Update (MD, Retailer or Distributor)
                 if (initiatorCredit > 0) walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { apes2Wallet: closingAeps2Wallet, updatedBy: req.user.id }));
-
-                historyPromises.push(dbService.createOne(model.walletHistory, {
-                    refId: req.user.id,
-                    companyId: req.user.companyId,
-                    walletType: 'AEPS2',
-                    operator: operator?.operatorName || bankIIN,
-                    amount: amountNumber,
-                    comm: initiatorGrossComm,
-                    surcharge: 0,
-                    openingAmt: openingAeps2Wallet,
-                    closingAmt: closingAeps2Wallet,
-                    credit: round4(amountNumber + initiatorGrossComm), // Gross Credit 
-                    debit: initiatorTDS, // TDS Debit
-                    merchantTransactionId,
-                    transactionId,
-                    paymentStatus,
-                    remark: remarkText,
-                    aepsTxnType: 'CW',
-                    bankiin: bankIIN,
-                    superadminComm: superAdminCommAmt,
-                    whitelabelComm: companyCommAmt,
-                    masterDistributorCom: mdCommAmt,
-                    distributorCom: distCommAmt,
-                    retailerCom: retailerCommAmt,
-                    superadminCommTDS: superAdminTDS,
-                    whitelabelCommTDS: whitelabelTDS,
-                    masterDistributorComTDS: masterDistTDS,
-                    distributorComTDS: distributorTDS,
-                    retailerComTDS: retailerTDS,
-                    addedBy: req.user.id,
-                    updatedBy: req.user.id,
-                    userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo }
-                }));
-
-                // Distributor Commission (if applicable)
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: amountNumber, comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId, paymentStatus, remark: remarkText, aepsTxnType: 'CW', bankiin: bankIIN, superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } }));
                 if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
-                    const dW = commData.wallets.distributorWallet, dO = round4(dW.apes2Wallet || 0);
-                    const dC = round4(dO + distNetAmt - distShortfallAmt);
+                    const dW = commData.wallets.distributorWallet, dO = round4(dW.apes2Wallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
                     walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { apes2Wallet: dC, updatedBy: commData.users.distributor.id }));
-                    historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.distributor.id,
-                        companyId: user.companyId,
-                        walletType: 'AEPS2',
-                        operator: operator?.operatorName || bankIIN,
-                        remark: `${remarkText} - dist comm`,
-                        amount: amountNumber,
-                        comm: distCommAmt,
-                        surcharge: 0,
-                        openingAmt: dO,
-                        closingAmt: dC,
-                        credit: distCommAmt, // Gross Comm
-                        debit: round4(distributorTDS + distShortfallAmt), // TDS + Shortfall
-                        merchantTransactionId,
-                        transactionId,
-                        paymentStatus,
-                        aepsTxnType: 'CW',
-                        bankiin: bankIIN,
-                        distributorCom: distCommAmt,
-                        distributorComTDS: distributorTDS,
-                        addedBy: commData.users.distributor.id,
-                        updatedBy: commData.users.distributor.id
-                    }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - dist comm`, amount: amountNumber, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt + distributorTDS, merchantTransactionId, transactionId, paymentStatus, aepsTxnType: 'CW', bankiin: bankIIN, distributorCom: distCommAmt, distributorComTDS: distributorTDS, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
                 }
-
-                // Master Distributor Commission (if applicable)
                 if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
-                    const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.apes2Wallet || 0);
-                    const mC = round4(mO + mdNetAmt - mdShortfallAmt);
+                    const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.apes2Wallet || 0), mC = round4(mO + mdNetAmt - mdShortfallAmt);
                     walletUpdates.push(dbService.update(model.wallet, { id: mW.id }, { apes2Wallet: mC, updatedBy: commData.users.masterDistributor.id }));
-                    historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.masterDistributor.id,
-                        companyId: user.companyId,
-                        walletType: 'AEPS2',
-                        operator: operator?.operatorName || bankIIN,
-                        remark: `${remarkText} - md comm`,
-                        amount: amountNumber,
-                        comm: mdCommAmt,
-                        surcharge: 0,
-                        openingAmt: mO,
-                        closingAmt: mC,
-                        credit: mdCommAmt, // Gross Comm
-                        debit: round4(masterDistTDS + mdShortfallAmt), // TDS + Shortfall
-                        merchantTransactionId,
-                        transactionId,
-                        paymentStatus,
-                        aepsTxnType: 'CW',
-                        bankiin: bankIIN,
-                        masterDistributorCom: mdCommAmt,
-                        masterDistributorComTDS: masterDistTDS,
-                        addedBy: commData.users.masterDistributor.id,
-                        updatedBy: commData.users.masterDistributor.id
-                    }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - md comm`, amount: amountNumber, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt + masterDistTDS, merchantTransactionId, transactionId, paymentStatus, aepsTxnType: 'CW', bankiin: bankIIN, masterDistributorCom: mdCommAmt, masterDistributorComTDS: masterDistTDS, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
                 }
-
-                // Company Commission (WL)
                 if (commData.wallets.companyWallet) {
-                    const cW = commData.wallets.companyWallet, cO = round4(cW.apes2Wallet || 0);
-                    const cC = round4(cO + companyNetAmt - wlShortfallAmt);
+                    const cW = commData.wallets.companyWallet, cO = round4(cW.apes2Wallet || 0), cC = round4(cO + companyNetAmt - wlShortfallAmt);
                     walletUpdates.push(dbService.update(model.wallet, { id: cW.id }, { apes2Wallet: cC, updatedBy: commData.users.companyAdmin.id }));
-                    historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.companyAdmin.id,
-                        companyId: user.companyId,
-                        walletType: 'AEPS2',
-                        operator: operator?.operatorName || bankIIN,
-                        remark: `${remarkText} - company comm`,
-                        amount: amountNumber,
-                        comm: companyCommAmt,
-                        surcharge: 0,
-                        openingAmt: cO,
-                        closingAmt: cC,
-                        credit: companyCommAmt, // Gross Comm
-                        debit: round4(whitelabelTDS + wlShortfallAmt), // TDS + Shortfall
-                        merchantTransactionId,
-                        transactionId,
-                        paymentStatus,
-                        aepsTxnType: 'CW',
-                        bankiin: bankIIN,
-                        whitelabelComm: companyCommAmt,
-                        whitelabelCommTDS: whitelabelTDS,
-                        addedBy: commData.users.companyAdmin.id,
-                        updatedBy: commData.users.companyAdmin.id
-                    }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - company comm`, amount: amountNumber, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt + whitelabelTDS, merchantTransactionId, transactionId, paymentStatus, aepsTxnType: 'CW', bankiin: bankIIN, whitelabelComm: companyCommAmt, whitelabelCommTDS: whitelabelTDS, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
                 }
-
-                // Super Admin Commission (AD)
                 if (commData.wallets.superAdminWallet) {
-                    const sW = commData.wallets.superAdminWallet, sO = round4(sW.apes2Wallet || 0);
-                    const sC = round4(sO + superAdminNetAmt - saShortfallAmt);
+                    const sW = commData.wallets.superAdminWallet, sO = round4(sW.apes2Wallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
                     walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { apes2Wallet: sC, updatedBy: commData.users.superAdmin.id }));
-                    historyPromises.push(dbService.createOne(model.walletHistory, {
-                        refId: commData.users.superAdmin.id,
-                        companyId: 1,
-                        walletType: 'AEPS2',
-                        operator: operator?.operatorName || bankIIN,
-                        remark: `${remarkText} - admin comm`,
-                        amount: amountNumber,
-                        comm: superAdminCommAmt,
-                        surcharge: 0,
-                        openingAmt: sO,
-                        closingAmt: sC,
-                        credit: superAdminCommAmt, // Gross Comm
-                        debit: round4(superAdminTDS + saShortfallAmt), // TDS + Shortfall
-                        merchantTransactionId,
-                        transactionId,
-                        paymentStatus,
-                        aepsTxnType: 'CW',
-                        bankiin: bankIIN,
-                        superadminComm: superAdminCommAmt,
-                        superadminCommTDS: superAdminTDS,
-                        addedBy: commData.users.superAdmin.id,
-                        updatedBy: commData.users.superAdmin.id
-                    }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId, transactionId, paymentStatus, aepsTxnType: 'CW', bankiin: bankIIN, superadminComm: superAdminCommAmt, superadminCommTDS: superAdminTDS, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
                 }
                 await Promise.all([...walletUpdates, ...historyPromises]);
             } else {
                 if (initiatorCredit > 0) walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { apes2Wallet: closingAeps2Wallet, updatedBy: req.user.id }));
-                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: amountNumber, comm: initiatorGrossComm, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: round4(amountNumber + initiatorGrossComm), debit: initiatorTDS, merchantTransactionId, transactionId, paymentStatus, remark: `AEPS2 CW-${bankIIN}`, aepsTxnType: 'CW', bankiin: bankIIN, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS2', operator: operator?.operatorName || bankIIN, amount: amountNumber, comm: 0, surcharge: 0, openingAmt: openingAeps2Wallet, closingAmt: closingAeps2Wallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId, paymentStatus, remark: `AEPS2 CW-${bankIIN}`, aepsTxnType: 'CW', bankiin: bankIIN, addedBy: req.user.id, updatedBy: req.user.id, userDetails: { id: existingUser.id, userType: existingUser.userType, mobileNo: existingUser.mobileNo } }));
                 await Promise.all([...walletUpdates, ...historyPromises]);
             }
         }
