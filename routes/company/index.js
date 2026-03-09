@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 router.use('/companyDetails', require('./v1/companyRoutes'));
-router.use('/images',require('./v1/imageRoutes'));
+router.use('/images', require('./v1/imageRoutes'));
 router.use('/onboarding', require('./v1/onboardingRoute'));
 router.use('/user', require('./v1/userRoutes'));
 router.use('/reports', require('./v1/reportsRoutes'));

@@ -800,12 +800,104 @@ const getBbpReports = async (req, res) => {
     }
 };
 
+const getAeps2TransactionDetailsById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) {
+            return res.failure({ message: 'Transaction ID is required' });
+        }
+
+        if (req.user.userRole !== 2) {
+            return res.failure({ message: 'Access denied. Only Company Admin can access transaction details.' });
+        }
+
+        // Fetch transaction and company admin in parallel
+        const [transaction, companyAdmin] = await Promise.all([
+            dbService.findOne(model.practomindAepsHistory, { id }),
+            dbService.findOne(model.user, {
+                companyId: req.user.companyId,
+                userRole: 2
+            })
+        ]);
+
+        if (!transaction) {
+            return res.failure({ message: 'Transaction not found' });
+        }
+
+        if (!companyAdmin) {
+            return res.failure({ message: 'Company admin details not found' });
+        }
+
+        // Fetch user details and bank details in parallel
+        const [existingUserDetails, existingBankDetails] = await Promise.all([
+            dbService.findOne(model.user, {
+                id: transaction.refId,
+                companyId: req.user.companyId,
+                isActive: true
+            }),
+            dbService.findOne(model.practomindBankList, {
+                aeps_bank_id: transaction.bankIin
+            })
+        ]);
+
+        if (!existingUserDetails) {
+            return res.failure({ message: 'User details not found' });
+        }
+
+        // Fetch parent details and company details in parallel
+        const [reportingUserDetails, companyDetails] = await Promise.all([
+            existingUserDetails.reportingTo ? dbService.findOne(model.user, {
+                id: existingUserDetails.reportingTo,
+                isActive: true
+            }) : Promise.resolve(null),
+            dbService.findOne(model.company, {
+                id: existingUserDetails.companyId
+            })
+        ]);
+
+        if (!companyDetails) {
+            return res.failure({ message: 'Company details not found' });
+        }
+
+        const data = {
+            userDetails: {
+                name: existingUserDetails.name,
+                userRole: existingUserDetails.userRole,
+                userId: existingUserDetails.userId,
+                mobileNo: existingUserDetails.mobileNo
+            },
+            reportingUserDetails: {
+                companyName: companyDetails.companyName,
+                parentName: reportingUserDetails?.name || companyAdmin.name,
+                parentRole: reportingUserDetails?.userRole || companyAdmin.userRole,
+                parentUserId: reportingUserDetails?.userId || companyAdmin.userId
+            },
+            transactionDetails: {
+                amount: transaction.transactionAmount,
+                bankName: existingBankDetails?.bankName || transaction.bankName || null,
+                aadharNumber: transaction.consumerAadhaarNumber,
+                commission: transaction.retailerCom || 0
+            },
+            transaction: transaction
+        };
+
+        return res.success({
+            message: 'AEPS2 transaction details retrieved successfully',
+            data
+        });
+    } catch (error) {
+        console.error('AEPS2 transaction details error', error);
+        return res.failure({
+            message: error.message || 'Unable to retrieve AEPS2 transaction details'
+        });
+    }
+};
 
 module.exports = {
     getAeps1Reports,
     getRecharge1Reports,
     getRecharge2Reports,
     getAeps2Reports,
-    getBbpReports
+    getBbpReports,
+    getAeps2TransactionDetailsById
 };
-

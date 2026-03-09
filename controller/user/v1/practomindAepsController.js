@@ -1919,6 +1919,98 @@ const aepsTransactionHistory = async (req, res) => {
     }
 };
 
+const getAeps2TransactionDetailsById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) {
+            return res.failure({ message: 'Transaction ID is required' });
+        }
+
+        const [existingUser, transaction] = await Promise.all([
+            dbService.findOne(model.user, {
+                id: req.user.id,
+                isActive: true
+            }),
+            dbService.findOne(model.practomindAepsHistory, { id })
+        ]);
+
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        if (existingUser.userRole !== 3 && existingUser.userRole !== 4) {
+            return res.failure({ message: 'Access denied. Unauthorized role.' });
+        }
+
+        if (!transaction) {
+            return res.failure({ message: 'Transaction not found' });
+        }
+
+        const [transactionUser, existingBankDetails] = await Promise.all([
+            dbService.findOne(model.user, {
+                id: transaction.refId,
+                companyId: transaction.companyId,
+                reportingTo: existingUser.id,
+                isActive: true
+            }),
+            dbService.findOne(model.practomindBankList, {
+                aeps_bank_id: transaction.bankIin
+            })
+        ]);
+
+        if (!transactionUser) {
+            return res.failure({ message: 'Transaction user details not found' });
+        }
+
+        const companyDetails = await dbService.findOne(model.company, {
+            id: transactionUser.companyId
+        });
+
+        if (!companyDetails) {
+            return res.failure({ message: 'Company details not found' });
+        }
+
+        let commission = 0;
+        if (existingUser.userRole === 3) {
+            commission = transaction.masterDistributorCom || 0;
+        } else if (existingUser.userRole === 4) {
+            commission = transaction.distributorCom || 0;
+        }
+
+        const data = {
+            userDetails: {
+                name: transactionUser.name,
+                userRole: transactionUser.userRole,
+                userId: transactionUser.userId,
+                mobileNo: transactionUser.mobileNo
+            },
+            reportingUserDetails: {
+                companyName: companyDetails.companyName,
+                parentName: existingUser.name,
+                parentRole: existingUser.userRole,
+                parentUserId: existingUser.userId
+            },
+            transactionDetails: {
+                amount: transaction.transactionAmount,
+                bankName: existingBankDetails?.bankName || transaction.bankName || null,
+                aadharNumber: transaction.consumerAadhaarNumber,
+                commission: commission
+            },
+            transaction: transaction
+        };
+
+        return res.success({
+            message: 'AEPS2 transaction details retrieved successfully',
+            data
+        });
+    } catch (error) {
+        console.error('AEPS2 transaction details error', error);
+        return res.failure({
+            message: error.message || 'Unable to retrieve AEPS2 transaction details'
+        });
+    }
+};
+
 module.exports = {
     getPractomindAepsOnboardingStatus,
     createPractomindAepsOnboarding,
@@ -1932,5 +2024,6 @@ module.exports = {
     miniStatement,
     bankList,
     recentBanks,
-    aepsTransactionHistory
+    aepsTransactionHistory,
+    getAeps2TransactionDetailsById
 };
