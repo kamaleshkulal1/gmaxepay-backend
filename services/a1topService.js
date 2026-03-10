@@ -118,7 +118,6 @@ const checkBalance = async () => {
             format: 'json'
         }
     };
-
     return axios
         .request(config)
         .then((response) => {
