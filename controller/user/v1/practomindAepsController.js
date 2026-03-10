@@ -1911,6 +1911,12 @@ const aepsTransactionHistory = async (req, res) => {
                 as: 'bank',
                 attributes: ['bankName'],
                 required: false
+            },
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['name', 'userRole'],
+                required: false
             }
         ];
 
@@ -1918,10 +1924,12 @@ const aepsTransactionHistory = async (req, res) => {
 
         const mappedData = result?.data?.map((transaction) => {
             const txData = transaction.toJSON ? transaction.toJSON() : transaction;
-            const { bank, ...restData } = txData;
+            const { bank, user, ...restData } = txData;
             return {
                 ...restData,
-                bankName: bank?.bankName || null
+                bankName: bank?.bankName || null,
+                name: user?.name || null,
+                userRole: user?.userRole || null
             };
         }) || [];
 
