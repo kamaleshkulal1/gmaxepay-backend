@@ -1,7 +1,4 @@
-/**
- * practomindBankList.js
- * @description :: sequelize model of database table practomindBankList
- */
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');

@@ -1905,11 +1905,29 @@ const aepsTransactionHistory = async (req, res) => {
             }
         }
 
+        options.include = [
+            {
+                model: model.practomindBankList,
+                as: 'bank',
+                attributes: ['bankName'],
+                required: false
+            }
+        ];
+
         const result = await dbService.paginate(model.practomindAepsHistory, query, options);
+
+        const mappedData = result?.data?.map((transaction) => {
+            const txData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { bank, ...restData } = txData;
+            return {
+                ...restData,
+                bankName: bank?.bankName || null
+            };
+        }) || [];
 
         return res.success({
             message: 'AEPS2 transaction history retrieved successfully',
-            data: result?.data || [],
+            data: mappedData,
             total: result?.total || 0,
             paginator: result?.paginator
         });
@@ -1938,7 +1956,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
-        if (existingUser.userRole !== 3 && existingUser.userRole !== 4) {
+        if (![3, 4, 5].includes(existingUser.userRole)) {
             return res.failure({ message: 'Access denied. Unauthorized role.' });
         }
 
@@ -1946,63 +1964,126 @@ const getAeps2TransactionDetailsById = async (req, res) => {
             return res.failure({ message: 'Transaction not found' });
         }
 
-        const [transactionUser, existingBankDetails] = await Promise.all([
-            dbService.findOne(model.user, {
-                id: transaction.refId,
-                companyId: transaction.companyId,
-                reportingTo: existingUser.id,
-                isActive: true
-            }),
-            dbService.findOne(model.practomindBankList, {
-                aeps_bank_id: transaction.bankIin
-            })
-        ]);
+        let transactionUser, existingBankDetails, parentUser, companyDetails;
 
-        if (!transactionUser) {
-            return res.failure({ message: 'Transaction user details not found' });
+        if (existingUser.userRole === 5) {
+            // Retailer: the transaction must belong to them
+            if (transaction.refId !== existingUser.id) {
+                return res.failure({ message: 'Access denied. Transaction does not belong to you.' });
+            }
+
+            [existingBankDetails, parentUser, companyDetails] = await Promise.all([
+                dbService.findOne(model.practomindBankList, {
+                    aeps_bank_id: transaction.bankIin
+                }),
+                existingUser.reportingTo ? dbService.findOne(model.user, {
+                    id: existingUser.reportingTo,
+                    isActive: true
+                }) : Promise.resolve(null),
+                dbService.findOne(model.company, {
+                    id: existingUser.companyId
+                })
+            ]);
+
+            if (!companyDetails) {
+                return res.failure({ message: 'Company details not found' });
+            }
+
+            // If no direct parent, fall back to Company Admin
+            if (!parentUser) {
+                parentUser = await dbService.findOne(model.user, {
+                    companyId: existingUser.companyId,
+                    userRole: 2
+                });
+            }
+
+            const data = {
+                userDetails: {
+                    name: existingUser.name,
+                    userRole: existingUser.userRole,
+                    userId: existingUser.userId,
+                    mobileNo: existingUser.mobileNo
+                },
+                reportingUserDetails: {
+                    companyName: companyDetails.companyName,
+                    parentName: parentUser?.name || null,
+                    parentRole: parentUser?.userRole || null,
+                    parentUserId: parentUser?.userId || null
+                },
+                transactionDetails: {
+                    amount: transaction.transactionAmount,
+                    bankName: existingBankDetails?.bankName || transaction.bankName || null,
+                    aadharNumber: transaction.consumerAadhaarNumber,
+                    commission: transaction.retailerCom || 0
+                },
+                transaction: transaction
+            };
+
+            return res.success({
+                message: 'AEPS2 transaction details retrieved successfully',
+                data
+            });
+
+        } else {
+            // Role 3 (MD) or 4 (Distributor): transaction user must report to them
+            [transactionUser, existingBankDetails] = await Promise.all([
+                dbService.findOne(model.user, {
+                    id: transaction.refId,
+                    companyId: transaction.companyId,
+                    reportingTo: existingUser.id,
+                    isActive: true
+                }),
+                dbService.findOne(model.practomindBankList, {
+                    aeps_bank_id: transaction.bankIin
+                })
+            ]);
+
+            if (!transactionUser) {
+                return res.failure({ message: 'Transaction user details not found' });
+            }
+
+            companyDetails = await dbService.findOne(model.company, {
+                id: transactionUser.companyId
+            });
+
+            if (!companyDetails) {
+                return res.failure({ message: 'Company details not found' });
+            }
+
+            let commission = 0;
+            if (existingUser.userRole === 3) {
+                commission = transaction.masterDistributorCom || 0;
+            } else if (existingUser.userRole === 4) {
+                commission = transaction.distributorCom || 0;
+            }
+
+            const data = {
+                userDetails: {
+                    name: transactionUser.name,
+                    userRole: transactionUser.userRole,
+                    userId: transactionUser.userId,
+                    mobileNo: transactionUser.mobileNo
+                },
+                reportingUserDetails: {
+                    companyName: companyDetails.companyName,
+                    parentName: existingUser.name,
+                    parentRole: existingUser.userRole,
+                    parentUserId: existingUser.userId
+                },
+                transactionDetails: {
+                    amount: transaction.transactionAmount,
+                    bankName: existingBankDetails?.bankName || transaction.bankName || null,
+                    aadharNumber: transaction.consumerAadhaarNumber,
+                    commission: commission
+                },
+                transaction: transaction
+            };
+
+            return res.success({
+                message: 'AEPS2 transaction details retrieved successfully',
+                data
+            });
         }
-
-        const companyDetails = await dbService.findOne(model.company, {
-            id: transactionUser.companyId
-        });
-
-        if (!companyDetails) {
-            return res.failure({ message: 'Company details not found' });
-        }
-
-        let commission = 0;
-        if (existingUser.userRole === 3) {
-            commission = transaction.masterDistributorCom || 0;
-        } else if (existingUser.userRole === 4) {
-            commission = transaction.distributorCom || 0;
-        }
-
-        const data = {
-            userDetails: {
-                name: transactionUser.name,
-                userRole: transactionUser.userRole,
-                userId: transactionUser.userId,
-                mobileNo: transactionUser.mobileNo
-            },
-            reportingUserDetails: {
-                companyName: companyDetails.companyName,
-                parentName: existingUser.name,
-                parentRole: existingUser.userRole,
-                parentUserId: existingUser.userId
-            },
-            transactionDetails: {
-                amount: transaction.transactionAmount,
-                bankName: existingBankDetails?.bankName || transaction.bankName || null,
-                aadharNumber: transaction.consumerAadhaarNumber,
-                commission: commission
-            },
-            transaction: transaction
-        };
-
-        return res.success({
-            message: 'AEPS2 transaction details retrieved successfully',
-            data
-        });
     } catch (error) {
         console.error('AEPS2 transaction details error', error);
         return res.failure({
