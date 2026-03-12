@@ -57,7 +57,7 @@ let PayoutHistory = sequelize.define('payoutHistory', {
     type: DataTypes.STRING,
     allowNull: true,
     validate: {
-      isIn: [['IMPS', 'NEFT']]
+      isIn: [['IMPS', 'NEFT', 'RTGS']]
     }
   },
   // Bank details (for external payouts)

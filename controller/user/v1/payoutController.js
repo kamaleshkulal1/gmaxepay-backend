@@ -1,14 +1,12 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
-const asl = require('../../../services/asl');
+const runpaisa = require('../../../services/runpaisa');
 const { Op } = require('sequelize');
 
-const round2 = (num) => {
+const round4 = (num) => {
     const n = Number(num);
-    return Number.isFinite(n)
-        ? Math.round((n + Number.EPSILON) * 100) / 100
-        : 0;
+    return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
 };
 
 const calcSlabAmount = (slab, baseAmount) => {
@@ -19,9 +17,9 @@ const calcSlabAmount = (slab, baseAmount) => {
 
     const amtType = (slab.amtType || 'fix').toLowerCase();
     if (amtType === 'per') {
-        return round2((base * rawComm) / 100);
+        return round4((base * rawComm) / 100);
     }
-    return round2(rawComm);
+    return round4(rawComm);
 };
 
 const payout = async (req, res) => {
@@ -89,9 +87,6 @@ const payout = async (req, res) => {
         console.log(`Current ${normalizedAepsType} Balance:`, currentAepsBalance);
 
         let gstAmount = 0;
-        if (mode === 'bank') {
-            gstAmount = parseFloat((payoutAmount * 0.18).toFixed(2));
-        }
 
         const initialRequired = payoutAmount + gstAmount;
 
@@ -143,9 +138,9 @@ const payout = async (req, res) => {
                 const opAmtType = (payoutOperator.amtType || 'fix').toLowerCase();
                 const opRawComm = Number(payoutOperator.comm || 0);
                 if (opAmtType === 'per') {
-                    commData.amounts.saBankCharge = round2((payoutAmount * opRawComm) / 100);
+                    commData.amounts.saBankCharge = round4((payoutAmount * opRawComm) / 100);
                 } else {
-                    commData.amounts.saBankCharge = round2(opRawComm);
+                    commData.amounts.saBankCharge = round4(opRawComm);
                 }
                 console.log('Payout Operator Found:', { name: payoutOperator.operatorName, charge: commData.amounts.saBankCharge });
             } else {
@@ -228,7 +223,7 @@ const payout = async (req, res) => {
 
                 // 4. Handle Shortfall
                 if (saToWlAmount > mdSlabAmount) {
-                    commData.amounts.wlShortfall = parseFloat((saToWlAmount - mdSlabAmount).toFixed(2));
+                    commData.amounts.wlShortfall = parseFloat((saToWlAmount - mdSlabAmount).toFixed(4));
                     console.log(`Shortfall Detected: ${commData.amounts.wlShortfall}. Debited from WL, Credited to SA.`);
                 } else {
                     commData.amounts.wlShortfall = 0;
@@ -242,6 +237,9 @@ const payout = async (req, res) => {
                 console.log(`Operator Charge (Cost to SA): ${commData.amounts.saBankCharge}`);
 
                 // Balance Check
+                if (mode === 'bank') {
+                    gstAmount = round4(commData.amounts.mdSurcharge * 0.18);
+                }
                 const totalRequired = payoutAmount + commData.amounts.mdSurcharge;
                 const mdBalance = parseFloat(commData.wallets.masterDistributorWallet[walletType] || 0);
                 console.log(`MD Balance Check (${walletType}): Required ${totalRequired}, Available ${mdBalance}`);
@@ -288,7 +286,7 @@ const payout = async (req, res) => {
 
                     // 3. Handle Shortfall 
                     if (saToWlAmount > distSlabAmount) {
-                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - distSlabAmount).toFixed(2));
+                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - distSlabAmount).toFixed(4));
                         console.log(`Shortfall Detected (DIST_DIRECT): ${commData.amounts.wlShortfall}. Debited from WL, Credited to SA.`);
                     } else {
                         commData.amounts.wlShortfall = 0;
@@ -339,7 +337,7 @@ const payout = async (req, res) => {
                     // 3. Handle Shortfalls
                     // WL Shortfall (SA charges WL more than WL charges MD)
                     if (saToWlAmount > wlToMdAmount) {
-                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
+                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(4));
                         console.log(`WL Shortfall Detected (DIST_MD): ${commData.amounts.wlShortfall}`);
                     } else {
                         commData.amounts.wlShortfall = 0;
@@ -350,7 +348,7 @@ const payout = async (req, res) => {
                     // This creates a situation where MD Margin is 0, and we need to debit the difference from MD Wallet.
                     // Let's call it mdShortfall.
                     if (wlToMdAmount > distSlabAmount) {
-                        commData.amounts.mdShortfall = parseFloat((wlToMdAmount - distSlabAmount).toFixed(2));
+                        commData.amounts.mdShortfall = parseFloat((wlToMdAmount - distSlabAmount).toFixed(4));
                         console.log(`MD Shortfall Detected (DIST_MD): ${commData.amounts.mdShortfall}. Debited from MD, Credited to WL.`);
                     } else {
                         commData.amounts.mdShortfall = 0;
@@ -368,6 +366,9 @@ const payout = async (req, res) => {
 
                 // Balance Check (From AEPS Wallet for Source)
                 // Source: Payout Amount + Surcharge must be available
+                if (mode === 'bank') {
+                    gstAmount = round4(commData.amounts.distSurcharge * 0.18);
+                }
                 const totalRequired = payoutAmount + commData.amounts.distSurcharge;
                 const distBalance = parseFloat(commData.wallets.distributorWallet[walletType] || 0); // AEPS Wallet Check
                 console.log(`Distributor Balance Check (${walletType}): Required ${totalRequired}, Available ${distBalance}`);
@@ -415,7 +416,7 @@ const payout = async (req, res) => {
                     commData.amounts.retailerSurcharge = retSlabAmount;
 
                     if (saToWlAmount > retSlabAmount) {
-                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - retSlabAmount).toFixed(2));
+                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - retSlabAmount).toFixed(4));
                     } else {
                         commData.amounts.wlShortfall = 0;
                     }
@@ -454,12 +455,12 @@ const payout = async (req, res) => {
                     commData.amounts.retailerSurcharge = retSlabAmount;
 
                     if (saToWlAmount > wlToMdAmount) {
-                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
+                        commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(4));
                     } else {
                         commData.amounts.wlShortfall = 0;
                     }
                     if (wlToMdAmount > retSlabAmount) {
-                        commData.amounts.mdShortfall = parseFloat((wlToMdAmount - retSlabAmount).toFixed(2));
+                        commData.amounts.mdShortfall = parseFloat((wlToMdAmount - retSlabAmount).toFixed(4));
                     } else {
                         commData.amounts.mdShortfall = 0;
                     }
@@ -512,14 +513,14 @@ const payout = async (req, res) => {
                         commData.amounts.distSurcharge = Math.max(0, retSlabAmount - mdToDistAmount);
                         commData.amounts.retailerSurcharge = retSlabAmount;
 
-                        if (saToWlAmount > wlToMdAmount) commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(2));
+                        if (saToWlAmount > wlToMdAmount) commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToMdAmount).toFixed(4));
                         else commData.amounts.wlShortfall = 0;
 
-                        if (wlToMdAmount > mdToDistAmount) commData.amounts.mdShortfall = parseFloat((wlToMdAmount - mdToDistAmount).toFixed(2));
+                        if (wlToMdAmount > mdToDistAmount) commData.amounts.mdShortfall = parseFloat((wlToMdAmount - mdToDistAmount).toFixed(4));
                         else commData.amounts.mdShortfall = 0;
 
                         if (mdToDistAmount > retSlabAmount) {
-                            commData.amounts.distShortfall = parseFloat((mdToDistAmount - retSlabAmount).toFixed(2));
+                            commData.amounts.distShortfall = parseFloat((mdToDistAmount - retSlabAmount).toFixed(4));
                         } else {
                             commData.amounts.distShortfall = 0;
                         }
@@ -553,11 +554,11 @@ const payout = async (req, res) => {
                         commData.amounts.distSurcharge = Math.max(0, retSlabAmount - wlToDistAmount);
                         commData.amounts.retailerSurcharge = retSlabAmount;
 
-                        if (saToWlAmount > wlToDistAmount) commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToDistAmount).toFixed(2));
+                        if (saToWlAmount > wlToDistAmount) commData.amounts.wlShortfall = parseFloat((saToWlAmount - wlToDistAmount).toFixed(4));
                         else commData.amounts.wlShortfall = 0;
 
                         if (wlToDistAmount > retSlabAmount) {
-                            commData.amounts.distShortfall = parseFloat((wlToDistAmount - retSlabAmount).toFixed(2));
+                            commData.amounts.distShortfall = parseFloat((wlToDistAmount - retSlabAmount).toFixed(4));
                         } else {
                             commData.amounts.distShortfall = 0;
                         }
@@ -569,6 +570,9 @@ const payout = async (req, res) => {
 
                 // Balance Check (From AEPS Wallet for Source)
                 // Source: Payout Amount + Surcharge must be available
+                if (mode === 'bank') {
+                    gstAmount = round4(commData.amounts.retailerSurcharge * 0.18);
+                }
                 const totalRequired = payoutAmount + commData.amounts.retailerSurcharge;
                 const retBalance = parseFloat(commData.wallets.retailerWallet[walletType] || 0); // AEPS Wallet Check
                 console.log(`Retailer Balance Check (${walletType}): Required ${totalRequired}, Available ${retBalance}`);
@@ -618,10 +622,10 @@ const payout = async (req, res) => {
         // Generate transaction ID and calculate balances
         const transactionID = generateTransactionID(company.companyName || company.name);
         // ... (existing balance calc logic)
-        const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
-        const aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount - gstAmount).toFixed(2));
-        const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
-        const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
+        const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(4));
+        const aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount - gstAmount).toFixed(4));
+        const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(4));
+        const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(4));
 
         // Initialize payout history data
         const payoutHistoryData = {
@@ -645,8 +649,8 @@ const payout = async (req, res) => {
         let aslResponse = null;
 
         if (mode === 'bank') {
-            if (!paymentMode || !['IMPS', 'NEFT'].includes(paymentMode)) {
-                return res.failure({ message: 'Valid paymentMode is required (IMPS or NEFT) for bank payout' });
+            if (!paymentMode || !['IMPS', 'NEFT', 'RTGS'].includes(paymentMode)) {
+                return res.failure({ message: 'Valid paymentMode is required (IMPS, NEFT or RTGS) for bank payout' });
             }
 
             payoutHistoryData.paymentMode = paymentMode;
@@ -683,46 +687,33 @@ const payout = async (req, res) => {
             payoutHistoryData.bankName = customerBank.bankName;
             payoutHistoryData.mobile = user.mobileNo || user.mobile || user.phone;
 
-            console.log('Sending Request to ASL API (MOCKED)');
-            // Call ASL API for bank payout
+            console.log('Sending Request to RunPaisa API');
+            // Call RunPaisa API for bank payout
 
-            aslResponse = await asl.aslAepsPayOut({
-                mobile: user.mobileNo,
+            const runpaisaResponse = await runpaisa.bankTransfer({
                 accountNumber: customerBank.accountNumber,
-                beneficiaryName: customerBank.beneficiaryName,
-                bankName: customerBank.bankName,
                 ifscCode: customerBank.ifsc,
-                amount: payoutAmount.toString(),
-                paymentMode: paymentMode,
-                latitude: latitude,
-                longitude: longitude,
-                agentTransactionId: transactionID
+                amount: payoutAmount,
+                orderId: transactionID,
+                beneficiaryName: customerBank.beneficiaryName,
+                paymentMode: paymentMode
             });
 
-            // aslResponse = {
-            //     status: 'SUCCESS',
-            //     orderid: 'PAY1723565406',
-            //     bankref: '604221395191',
-            //     remark: 'Transaction was Successfull',
-            //     agentTransactionId: transactionID
-            // };
-            console.log('ASL API Response:', aslResponse);
+            console.log('RunPaisa API Response:', runpaisaResponse);
 
             // Store API response and update status
-            payoutHistoryData.apiResponse = aslResponse;
+            payoutHistoryData.apiResponse = runpaisaResponse;
             payoutHistoryData.agentTransactionId = transactionID;
 
-            if (aslResponse?.status) {
-                const responseStatus = aslResponse.status.toUpperCase();
-                if (responseStatus === 'SUCCESS' || responseStatus === 'SUCCESSFUL') {
+            if (runpaisaResponse?.code) {
+                if (runpaisaResponse.code === 'RP000') {
                     payoutHistoryData.status = 'SUCCESS';
-                } else if (responseStatus === 'FAILED' || responseStatus === 'FAILURE') {
+                } else {
                     payoutHistoryData.status = 'FAILED';
                 }
-                if (aslResponse.utrn) payoutHistoryData.utrn = aslResponse.utrn;
-                if (aslResponse.orderId) payoutHistoryData.orderId = aslResponse.orderId;
-                if (aslResponse.referenceId) payoutHistoryData.referenceId = aslResponse.referenceId;
-                if (aslResponse.message) payoutHistoryData.statusMessage = aslResponse.message;
+                // For RunPaisa, we might get these fields in the response data or later via status/callback
+                if (runpaisaResponse.data?.order_id) payoutHistoryData.orderId = runpaisaResponse.data.order_id;
+                if (runpaisaResponse.message) payoutHistoryData.statusMessage = runpaisaResponse.message;
             }
         }
 
@@ -744,8 +735,8 @@ const payout = async (req, res) => {
                 transactionId: transactionID,
                 status: payoutHistoryData.status,
                 amount: gstAmount,
-                openingAmt: parseFloat(gstOpening.toFixed(2)),
-                closingAmt: parseFloat(gstClosing.toFixed(2)),
+                openingAmt: parseFloat(gstOpening.toFixed(4)),
+                closingAmt: parseFloat(gstClosing.toFixed(4)),
                 aepsType: normalizedAepsType,
                 addedBy: user.id,
                 updatedBy: user.id
@@ -1017,13 +1008,13 @@ const payout = async (req, res) => {
         // Prepare response data
         const responseData = {
             transactionID: transactionID,
-            status: payoutHistoryData?.status || aslResponse?.status,
-            orderId: aslResponse?.orderid,
-            bankref: aslResponse?.bankref || aslResponse?.txid || aslResponse?.referenceId || aslResponse?.utrn,
+            status: payoutHistoryData?.status,
+            orderId: payoutHistoryData?.orderId,
+            bankref: payoutHistoryData?.utrn || payoutHistoryData?.referenceId,
             bankName: customerBank?.bankName || null,
             beneficiaryName: customerBank?.beneficiaryName || null,
             aepsType: normalizedAepsType,
-            remark: aslResponse?.remark,
+            remark: payoutHistoryData?.statusMessage,
             [normalizedAepsType.toLowerCase()]: {
                 openingBalance: aepsOpeningBalance,
                 closingBalance: aepsClosingBalance
@@ -1306,8 +1297,141 @@ const getAllPayoutHistory = async (req, res) => {
     }
 }
 
+const checkPayoutStatus = async (req, res) => {
+    try {
+        const { transactionID, orderId } = req.body;
+        const targetOrderId = orderId || transactionID;
+
+        if (!targetOrderId) {
+            return res.failure({ message: 'transactionID or orderId is required' });
+        }
+
+        // Find the payout record
+        let existingPayout = await dbService.findOne(model.payoutHistory, { transactionID: targetOrderId });
+        if (!existingPayout) {
+            existingPayout = await dbService.findOne(model.payoutHistory, { orderId: targetOrderId });
+        }
+
+        if (!existingPayout) {
+            return res.failure({ message: 'Payout record not found' });
+        }
+
+        // Call RunPaisa Status API
+        const statusRes = await runpaisa.bankTransferStatus(existingPayout.orderId || existingPayout.transactionID);
+
+        if (statusRes && statusRes.status) {
+            const statusUpper = statusRes.status.toString().toUpperCase();
+            const newStatus = statusUpper === 'SUCCESS' ? 'SUCCESS'
+                : (statusUpper === 'PENDING' ? 'PENDING' : 'FAILED');
+
+            // Update local status if changed
+            if (newStatus !== existingPayout.status) {
+                // Reversal Logic if FAILED
+                if (newStatus === 'FAILED' && (existingPayout.status === 'SUCCESS' || existingPayout.status === 'PENDING')) {
+                    console.log(`[Check Payout Status] Reversing payout wallets for transactionID: ${existingPayout.transactionID}`);
+                    const txnId = existingPayout.transactionID;
+                    const aepsWalletCol = existingPayout.walletType || 'apes1Wallet';
+
+                    const allHistories = await dbService.findAll(model.walletHistory, { transactionId: txnId });
+                    const gstRecord = await dbService.findOne(model.gstHistory, { transactionId: txnId });
+
+                    if (allHistories && allHistories.length > 0) {
+                        for (const history of allHistories) {
+                            const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                            if (netImpact === 0) continue;
+
+                            const walletRecord = await dbService.findOne(model.wallet, { refId: history.refId, companyId: history.companyId });
+                            if (!walletRecord) continue;
+
+                            const walletCol = history.walletType && history.walletType !== 'mainWallet' ? history.walletType : aepsWalletCol;
+                            const currentBal = round4(walletRecord[walletCol] || 0);
+                            const newBal = round4(currentBal - netImpact);
+
+                            await dbService.update(model.wallet, { id: walletRecord.id }, { [walletCol]: newBal, updatedBy: req.user.id });
+                            await dbService.createOne(model.walletHistory, {
+                                refId: history.refId,
+                                companyId: history.companyId,
+                                walletType: walletCol,
+                                operator: history.operator || 'Payout1',
+                                remark: `Reversal - RunPaisa Status FAILED`,
+                                amount: history.amount || 0,
+                                comm: 0,
+                                surcharge: 0,
+                                openingAmt: currentBal,
+                                closingAmt: newBal,
+                                credit: history.debit || 0,
+                                debit: history.credit || 0,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: req.user.id,
+                                updatedBy: req.user.id
+                            });
+                        }
+                    }
+
+                    // Independent GST Reversal Logic
+                    if (gstRecord && gstRecord.amount > 0 && gstRecord.status !== 'FAILED') {
+                        console.log(`[Check Payout Status] Reversing GST for transactionID: ${txnId}, Amount: ${gstRecord.amount}`);
+                        const gstAmountToRefund = round4(gstRecord.amount);
+                        const walletRecord = await dbService.findOne(model.wallet, { refId: gstRecord.refId, companyId: gstRecord.companyId });
+                        if (walletRecord) {
+                            const currentBal = round4(walletRecord[aepsWalletCol] || 0);
+                            const newBal = round4(currentBal + gstAmountToRefund);
+                            await dbService.update(model.wallet, { id: walletRecord.id }, { [aepsWalletCol]: newBal, updatedBy: req.user.id });
+                            await dbService.createOne(model.walletHistory, {
+                                refId: gstRecord.refId,
+                                companyId: gstRecord.companyId,
+                                walletType: aepsWalletCol,
+                                operator: 'GST Reversal',
+                                remark: `Reversal - RunPaisa Status FAILED (GST Refund)`,
+                                amount: gstAmountToRefund,
+                                comm: 0, surcharge: 0,
+                                openingAmt: currentBal, closingAmt: newBal,
+                                credit: gstAmountToRefund, debit: 0,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: req.user.id,
+                                updatedBy: req.user.id
+                            });
+                            await dbService.update(model.gstHistory, { id: gstRecord.id }, { status: 'FAILED', updatedBy: req.user.id });
+                            console.log(`[Check Payout Status] GST reversed successfully for transactionID: ${txnId}`);
+                        }
+                    }
+                }
+
+                await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+                    status: newStatus,
+                    statusMessage: statusRes.message || existingPayout.statusMessage,
+                    utrn: statusRes.data?.utr || existingPayout.utrn,
+                    apiResponse: statusRes,
+                    updatedBy: req.user.id
+                });
+            }
+
+            return res.success({
+                message: 'Status retrieved successfully',
+                data: {
+                    transactionID: existingPayout.transactionID,
+                    status: newStatus,
+                    utrn: statusRes.data?.utr || existingPayout.utrn,
+                    message: statusRes.message
+                }
+            });
+        } else {
+            return res.failure({
+                message: statusRes.message || 'Failed to retrieve status from RunPaisa',
+                data: statusRes
+            });
+        }
+    } catch (error) {
+        console.error('Check Payout Status Error:', error);
+        return res.internalServerError({ message: error.message || 'Internal server error' });
+    }
+};
+
 module.exports = {
     payout,
     getPayoutBankList,
-    getAllPayoutHistory
+    getAllPayoutHistory,
+    checkPayoutStatus
 };

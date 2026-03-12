@@ -1,14 +1,12 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
-const asl = require('../../../services/asl');
+const runpaisa = require('../../../services/runpaisa');
 const { Op } = require('sequelize');
 
-const round2 = (num) => {
+const round4 = (num) => {
     const n = Number(num);
-    return Number.isFinite(n)
-        ? Math.round((n + Number.EPSILON) * 100) / 100
-        : 0;
+    return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
 };
 
 
@@ -63,9 +61,6 @@ const payout = async (req, res) => {
         const currentAepsBalance = parseFloat(wallet[walletType] || 0);
 
         let gstAmount = 0;
-        if (mode === 'bank') {
-            gstAmount = parseFloat((payoutAmount * 0.18).toFixed(2));
-        }
 
         const initialRequired = payoutAmount + gstAmount;
         if (currentAepsBalance < initialRequired) {
@@ -77,10 +72,10 @@ const payout = async (req, res) => {
         }
 
         const transactionID = generateTransactionID(company.companyName || company.name);
-        const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(2));
-        let aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount - gstAmount).toFixed(2));
-        const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(2));
-        const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(2));
+        const aepsOpeningBalance = parseFloat(currentAepsBalance.toFixed(4));
+        let aepsClosingBalance = parseFloat((aepsOpeningBalance - payoutAmount - gstAmount).toFixed(4));
+        const mainWalletOpeningBalance = parseFloat(parseFloat(wallet.mainWallet || 0).toFixed(4));
+        const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(4));
 
         const payoutHistoryData = {
             refId: user.id,
@@ -113,8 +108,8 @@ const payout = async (req, res) => {
         let superAdminWallet = null;
 
         if (mode === 'bank') {
-            if (!paymentMode || !['IMPS', 'NEFT'].includes(paymentMode)) {
-                return res.failure({ message: 'Valid paymentMode is required (IMPS or NEFT) for bank payout' });
+            if (!paymentMode || !['IMPS', 'NEFT', 'RTGS'].includes(paymentMode)) {
+                return res.failure({ message: 'Valid paymentMode is required (IMPS, NEFT or RTGS) for bank payout' });
             }
 
             payoutHistoryData.paymentMode = paymentMode;
@@ -200,9 +195,9 @@ const payout = async (req, res) => {
             const rawComm = Number(slabComm.commAmt || 0);
 
             if (amtType === 'per') {
-                calculatedAmount = round2((payoutAmount * rawComm) / 100);
+                calculatedAmount = round4((payoutAmount * rawComm) / 100);
             } else {
-                calculatedAmount = round2(rawComm);
+                calculatedAmount = round4(rawComm);
             }
 
             // 5. Calculate Admin Amount (For Logs/History)
@@ -210,9 +205,9 @@ const payout = async (req, res) => {
                 const adminAmtType = (adminSlabComm.amtType || 'fix').toLowerCase();
                 const adminRawComm = Number(adminSlabComm.commAmt || 0);
                 if (adminAmtType === 'per') {
-                    adminCommAmount = round2((payoutAmount * adminRawComm) / 100);
+                    adminCommAmount = round4((payoutAmount * adminRawComm) / 100);
                 } else {
-                    adminCommAmount = round2(adminRawComm);
+                    adminCommAmount = round4(adminRawComm);
                 }
             }
 
@@ -245,6 +240,10 @@ const payout = async (req, res) => {
                 if (!superAdminWallet) return res.failure({ message: 'Super admin wallet not found' });
 
                 const commType = (slabComm.commType || 'sur').toLowerCase();
+                if (mode === 'bank') {
+                    const surcharge = (commType === 'sur') ? calculatedAmount : 0;
+                    gstAmount = round4(surcharge * 0.18);
+                }
                 const totalRequired = payoutAmount + calculatedAmount;
                 const totalNet = payoutAmount - calculatedAmount;
 
@@ -267,44 +266,33 @@ const payout = async (req, res) => {
             }
             // --- END: Commercials & Validation ---
 
-            // Call ASL API for bank payout
-            aslResponse = await asl.aslAepsPayOut({
-                mobile: user.mobileNo,
+            console.log('Sending Request to RunPaisa API');
+            // Call RunPaisa API for bank payout
+
+            const runpaisaResponse = await runpaisa.bankTransfer({
                 accountNumber: customerBank.accountNumber,
-                beneficiaryName: customerBank.beneficiaryName,
-                bankName: customerBank.bankName,
                 ifscCode: customerBank.ifsc,
-                amount: payoutAmount.toString(),
-                paymentMode: paymentMode,
-                latitude: latitude,
-                longitude: longitude,
-                agentTransactionId: transactionID
+                amount: payoutAmount,
+                orderId: transactionID,
+                beneficiaryName: customerBank.beneficiaryName,
+                paymentMode: paymentMode
             });
 
-            // Custom response for testing
-            // aslResponse = {
-            //     status: 'SUCCESS',
-            //     orderid: 'PAY1723565406',
-            //     bankref: '604221395191',
-            //     remark: 'Transaction was Successfull',
-            //     agentTransactionId: transactionID
-            // };
+            console.log('RunPaisa API Response:', runpaisaResponse);
 
-            payoutHistoryData.apiResponse = aslResponse;
-            payoutHistoryData.agentTransactionId = aslResponse.agentTransactionId || transactionID;
+            // Store API response and update status
+            payoutHistoryData.apiResponse = runpaisaResponse;
+            payoutHistoryData.agentTransactionId = transactionID;
 
-            if (aslResponse?.status) {
-                const responseStatus = aslResponse.status.toUpperCase();
-                if (responseStatus === 'SUCCESS' || responseStatus === 'SUCCESSFUL') {
+            if (runpaisaResponse?.code) {
+                if (runpaisaResponse.code === 'RP000') {
                     payoutHistoryData.status = 'SUCCESS';
-                } else if (responseStatus === 'FAILED' || responseStatus === 'FAILURE') {
+                } else {
                     payoutHistoryData.status = 'FAILED';
                 }
-
-                if (aslResponse.utrn) payoutHistoryData.utrn = aslResponse.bankref;
-                if (aslResponse.orderid) payoutHistoryData.orderId = aslResponse.orderid;
-                if (aslResponse.referenceId) payoutHistoryData.referenceId = aslResponse.bankref;
-                if (aslResponse.remark) payoutHistoryData.statusMessage = aslResponse.remark;
+                // For RunPaisa, we might get these fields in the response data or later via status/callback
+                if (runpaisaResponse.data?.order_id) payoutHistoryData.orderId = runpaisaResponse.data.order_id;
+                if (runpaisaResponse.message) payoutHistoryData.statusMessage = runpaisaResponse.message;
             }
 
             if (payoutHistoryData.status === 'SUCCESS' && calculatedAmount > 0) {
@@ -318,7 +306,7 @@ const payout = async (req, res) => {
 
                     const surchargeDebit = calculatedAmount;
                     // Update global aepsClosingBalance to reflect additional deduction
-                    aepsClosingBalance = parseFloat((aepsClosingBalance - surchargeDebit).toFixed(2));
+                    aepsClosingBalance = parseFloat((aepsClosingBalance - surchargeDebit).toFixed(4));
 
                     // Super Admin Calculation: Income (Surcharge Credit) & Expense (Bank Charge Debit)
                     const saSurcharge = calculatedAmount;  // Income (Revenue)
@@ -329,9 +317,9 @@ const payout = async (req, res) => {
                         const opAmtType = (payoutOperator.amtType || 'fix').toLowerCase();
                         const opRawComm = Number(payoutOperator.comm || 0);
                         if (opAmtType === 'per') {
-                            saBankCharge = round2((payoutAmount * opRawComm) / 100);
+                            saBankCharge = round4((payoutAmount * opRawComm) / 100);
                         } else {
-                            saBankCharge = round2(opRawComm);
+                            saBankCharge = round4(opRawComm);
                         }
                     }
 
@@ -341,11 +329,11 @@ const payout = async (req, res) => {
 
                     // Transaction 1: Credit Surcharge
                     // Wallet Balance increases
-                    let saMid = parseFloat((saOpen + saSurcharge).toFixed(2));
+                    let saMid = parseFloat((saOpen + saSurcharge).toFixed(4));
 
                     // Transaction 2: Debit Bank Charge
                     // Wallet Balance decreases
-                    let saClose = parseFloat((saMid - saBankCharge).toFixed(2));
+                    let saClose = parseFloat((saMid - saBankCharge).toFixed(4));
 
                     // Update SuperAdmin Wallet (Dynamic Wallet Type) with Final Balance
                     await dbService.update(
@@ -416,7 +404,7 @@ const payout = async (req, res) => {
 
                     const commissionCredit = calculatedAmount;
                     // Update global aepsClosingBalance to reflect credit
-                    aepsClosingBalance = parseFloat((aepsClosingBalance + commissionCredit).toFixed(2));
+                    aepsClosingBalance = parseFloat((aepsClosingBalance + commissionCredit).toFixed(4));
 
                     // Super Admin Calculation:
                     // Debit: User Commission (calculatedAmount)
@@ -428,14 +416,14 @@ const payout = async (req, res) => {
                         const opAmtType = (payoutOperator.amtType || 'fix').toLowerCase();
                         const opRawComm = Number(payoutOperator.comm || 0);
                         if (opAmtType === 'per') {
-                            saDebitCharge = round2((payoutAmount * opRawComm) / 100);
+                            saDebitCharge = round4((payoutAmount * opRawComm) / 100);
                         } else {
-                            saDebitCharge = round2(opRawComm);
+                            saDebitCharge = round4(opRawComm);
                         }
                     }
                     const totalSaDebit = saDebitComm + saDebitCharge;
 
-                    const superAdminClosingBalance = parseFloat((superAdminOpeningBalance - totalSaDebit).toFixed(2));
+                    const superAdminClosingBalance = parseFloat((superAdminOpeningBalance - totalSaDebit).toFixed(4));
 
                     // Update SuperAdmin Wallet
                     await dbService.update(
@@ -454,7 +442,7 @@ const payout = async (req, res) => {
                         amount: calculatedAmount,
                         comm: calculatedAmount,
                         surcharge: 0,
-                        openingAmt: parseFloat((aepsClosingBalance - commissionCredit).toFixed(2)),
+                        openingAmt: parseFloat((aepsClosingBalance - commissionCredit).toFixed(4)),
                         closingAmt: aepsClosingBalance,
                         credit: calculatedAmount,
                         debit: 0,
@@ -480,7 +468,7 @@ const payout = async (req, res) => {
                         comm: saDebitComm,
                         surcharge: 0,
                         openingAmt: superAdminOpeningBalance,
-                        closingAmt: parseFloat((superAdminOpeningBalance - saDebitComm).toFixed(2)),
+                        closingAmt: parseFloat((superAdminOpeningBalance - saDebitComm).toFixed(4)),
                         credit: 0,
                         debit: saDebitComm,
                         transactionId: transactionID,
@@ -501,7 +489,7 @@ const payout = async (req, res) => {
                             amount: saDebitCharge,
                             comm: 0,
                             surcharge: saDebitCharge,
-                            openingAmt: parseFloat((superAdminOpeningBalance - saDebitComm).toFixed(2)),
+                            openingAmt: parseFloat((superAdminOpeningBalance - saDebitComm).toFixed(4)),
                             closingAmt: superAdminClosingBalance,
                             credit: 0,
                             debit: saDebitCharge,
@@ -544,8 +532,8 @@ const payout = async (req, res) => {
                 transactionId: transactionID,
                 status: payoutHistoryData.status,
                 amount: gstAmount,
-                openingAmt: parseFloat(gstOpening.toFixed(2)),
-                closingAmt: parseFloat(gstClosing.toFixed(2)),
+                openingAmt: parseFloat(gstOpening.toFixed(4)),
+                closingAmt: parseFloat(gstClosing.toFixed(4)),
                 aepsType: normalizedAepsType,
                 addedBy: user.id,
                 updatedBy: user.id
@@ -879,8 +867,141 @@ const getAllPayoutHistory = async (req, res) => {
     }
 };
 
+const checkPayoutStatus = async (req, res) => {
+    try {
+        const { transactionID, orderId } = req.body;
+        const targetOrderId = orderId || transactionID;
+
+        if (!targetOrderId) {
+            return res.failure({ message: 'transactionID or orderId is required' });
+        }
+
+        // Find the payout record
+        let existingPayout = await dbService.findOne(model.payoutHistory, { transactionID: targetOrderId });
+        if (!existingPayout) {
+            existingPayout = await dbService.findOne(model.payoutHistory, { orderId: targetOrderId });
+        }
+
+        if (!existingPayout) {
+            return res.failure({ message: 'Payout record not found' });
+        }
+
+        // Call RunPaisa Status API
+        const statusRes = await runpaisa.bankTransferStatus(existingPayout.orderId || existingPayout.transactionID);
+
+        if (statusRes && statusRes.status) {
+            const statusUpper = statusRes.status.toString().toUpperCase();
+            const newStatus = statusUpper === 'SUCCESS' ? 'SUCCESS'
+                : (statusUpper === 'PENDING' ? 'PENDING' : 'FAILED');
+
+            // Update local status if changed
+            if (newStatus !== existingPayout.status) {
+                // Reversal Logic if FAILED
+                if (newStatus === 'FAILED' && (existingPayout.status === 'SUCCESS' || existingPayout.status === 'PENDING')) {
+                    console.log(`[Check Payout Status] Reversing payout wallets for transactionID: ${existingPayout.transactionID}`);
+                    const txnId = existingPayout.transactionID;
+                    const aepsWalletCol = existingPayout.walletType || 'apes1Wallet';
+
+                    const allHistories = await dbService.findAll(model.walletHistory, { transactionId: txnId });
+                    const gstRecord = await dbService.findOne(model.gstHistory, { transactionId: txnId });
+
+                    if (allHistories && allHistories.length > 0) {
+                        for (const history of allHistories) {
+                            const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                            if (netImpact === 0) continue;
+
+                            const walletRecord = await dbService.findOne(model.wallet, { refId: history.refId, companyId: history.companyId });
+                            if (!walletRecord) continue;
+
+                            const walletCol = history.walletType && history.walletType !== 'mainWallet' ? history.walletType : aepsWalletCol;
+                            const currentBal = round4(walletRecord[walletCol] || 0);
+                            const newBal = round4(currentBal - netImpact);
+
+                            await dbService.update(model.wallet, { id: walletRecord.id }, { [walletCol]: newBal, updatedBy: req.user.id });
+                            await dbService.createOne(model.walletHistory, {
+                                refId: history.refId,
+                                companyId: history.companyId,
+                                walletType: walletCol,
+                                operator: history.operator || 'Payout1',
+                                remark: `Reversal - RunPaisa Status FAILED`,
+                                amount: history.amount || 0,
+                                comm: 0,
+                                surcharge: 0,
+                                openingAmt: currentBal,
+                                closingAmt: newBal,
+                                credit: history.debit || 0,
+                                debit: history.credit || 0,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: req.user.id,
+                                updatedBy: req.user.id
+                            });
+                        }
+                    }
+
+                    // Independent GST Reversal Logic
+                    if (gstRecord && gstRecord.amount > 0 && gstRecord.status !== 'FAILED') {
+                        console.log(`[Check Payout Status] Reversing GST for transactionID: ${txnId}, Amount: ${gstRecord.amount}`);
+                        const gstAmountToRefund = round4(gstRecord.amount);
+                        const walletRecord = await dbService.findOne(model.wallet, { refId: gstRecord.refId, companyId: gstRecord.companyId });
+                        if (walletRecord) {
+                            const currentBal = round4(walletRecord[aepsWalletCol] || 0);
+                            const newBal = round4(currentBal + gstAmountToRefund);
+                            await dbService.update(model.wallet, { id: walletRecord.id }, { [aepsWalletCol]: newBal, updatedBy: req.user.id });
+                            await dbService.createOne(model.walletHistory, {
+                                refId: gstRecord.refId,
+                                companyId: gstRecord.companyId,
+                                walletType: aepsWalletCol,
+                                operator: 'GST Reversal',
+                                remark: `Reversal - RunPaisa Status FAILED (GST Refund)`,
+                                amount: gstAmountToRefund,
+                                comm: 0, surcharge: 0,
+                                openingAmt: currentBal, closingAmt: newBal,
+                                credit: gstAmountToRefund, debit: 0,
+                                transactionId: txnId,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: req.user.id,
+                                updatedBy: req.user.id
+                            });
+                            await dbService.update(model.gstHistory, { id: gstRecord.id }, { status: 'FAILED', updatedBy: req.user.id });
+                            console.log(`[Check Payout Status] GST reversed successfully for transactionID: ${txnId}`);
+                        }
+                    }
+                }
+
+                await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+                    status: newStatus,
+                    statusMessage: statusRes.message || existingPayout.statusMessage,
+                    utrn: statusRes.data?.utr || existingPayout.utrn,
+                    apiResponse: statusRes,
+                    updatedBy: req.user.id
+                });
+            }
+
+            return res.success({
+                message: 'Status retrieved successfully',
+                data: {
+                    transactionID: existingPayout.transactionID,
+                    status: newStatus,
+                    utrn: statusRes.data?.utr || existingPayout.utrn,
+                    message: statusRes.message
+                }
+            });
+        } else {
+            return res.failure({
+                message: statusRes.message || 'Failed to retrieve status from RunPaisa',
+                data: statusRes
+            });
+        }
+    } catch (error) {
+        console.error('Check Payout Status Error:', error);
+        return res.internalServerError({ message: error.message || 'Internal server error' });
+    }
+};
+
 module.exports = {
     payout,
     getPayoutBankList,
-    getAllPayoutHistory
+    getAllPayoutHistory,
+    checkPayoutStatus
 };
