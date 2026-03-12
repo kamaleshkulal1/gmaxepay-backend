@@ -51,7 +51,7 @@ const bankTransfer = async (data) => {
                 amount: data.amount,
                 order_id: data.orderId,
                 beneficiary_name: data.beneficiaryName,
-                payment_mode: data.paymentMode // IMPS/NEFT/RTGS
+                payment_mode: data.paymentMode
             }
         };
 
