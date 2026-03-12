@@ -268,7 +268,16 @@ const payout = async (req, res) => {
 
             console.log('Sending Request to RunPaisa API');
             // Call RunPaisa API for bank payout
+            const payload = {
+                accountNumber: customerBank.accountNumber,
+                ifscCode: customerBank.ifsc,
+                amount: payoutAmount,
+                orderId: transactionID,
+                beneficiaryName: customerBank.beneficiaryName,
+                paymentMode: paymentMode
+            }
 
+            console.log("Payload", JSON.stringify(payload))
             const runpaisaResponse = await runpaisa.bankTransfer({
                 accountNumber: customerBank.accountNumber,
                 ifscCode: customerBank.ifsc,
