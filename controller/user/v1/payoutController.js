@@ -588,10 +588,6 @@ const payout = async (req, res) => {
             else if (user.userRole === 4) debitAmount = commData.amounts.distSurcharge;
             else if (user.userRole === 5) debitAmount = commData.amounts.retailerSurcharge;
 
-            if (debitAmount <= 0) {
-                console.log('Invalid Surcharge Config (<=0)');
-                return res.failure({ message: 'Invalid surcharge configuration' });
-            }
 
             let totalIncomes = commData.amounts.adminSurcharge + commData.amounts.companySurcharge;
             if (commData.users.masterDistributor && user.userRole !== 3) totalIncomes += commData.amounts.mdSurcharge;
