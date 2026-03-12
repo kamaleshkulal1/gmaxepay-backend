@@ -15,6 +15,7 @@ const generatePayoutToken = async () => {
                 'client_secret': runPaisaClientSecretKey
             }
         };
+        console.log("config", JSON.stringify(config))
 
         const response = await axios.request(config);
         console.log('RunPaisa Token Response:', response.data);
@@ -29,6 +30,8 @@ const generatePayoutToken = async () => {
 const bankTransfer = async (data) => {
     try {
         const tokenRes = await generatePayoutToken();
+        console.log('RunPaisa Token Response:', tokenRes);
+        console.log("tokenRes", JSON.stringify(tokenRes))
         if (tokenRes.code !== 'RP000') {
             return {
                 code: 'RP001',
@@ -51,9 +54,10 @@ const bankTransfer = async (data) => {
                 amount: data.amount,
                 order_id: data.orderId,
                 beneficiary_name: data.beneficiaryName,
-                payment_mode: data.paymentMode // IMPS/NEFT/RTGS
+                payment_mode: data.paymentMode
             }
         };
+        console.log("data", data)
 
         const response = await axios.request(config);
         console.log('RunPaisa Payout Response:', response.data);
