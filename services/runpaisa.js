@@ -1,29 +1,30 @@
 const axios = require('axios');
+const { error } = require('winston');
 
 const runPaisaPayoutUrl = process.env.RUNPAISA_PAYOUT_URL;
 const runPaisaPayoutClientId = process.env.RUNPAISA_PAYOUT_CLIENTID;
 const runPaisaClientSecretKey = process.env.RUNPAISA_CLIENT_SECRET_KEY;
 
 const generatePayoutToken = async () => {
-    try {
-        const config = {
-            method: 'post',
-            url: `${runPaisaPayoutUrl}/token`,
-            headers: {
-                'content-type': 'application/json',
-                'client_id': runPaisaPayoutClientId,
-                'client_secret': runPaisaClientSecretKey
-            }
-        };
-        console.log("config", JSON.stringify(config))
-
-        const response = await axios.request(config);
-        console.log('RunPaisa Token Response:', response.data);
-        return response.data;
-    } catch (error) {
-        console.error('RunPaisa Token Error:', error.response?.data || error.message);
-        return error.response?.data || { code: 'ERROR', message: error.message };
+    let config = {
+        method: 'post',
+        url: `${runPaisaPayoutUrl}/token`,
+        headers: {
+            'content-type': 'application/json',
+            client_id: runPaisaPayoutClientId,
+            client_secret: runPaisaClientSecretKey
+        }
     }
+
+    return axios
+        .request(config)
+        .then((response) => {
+            return response.data;
+        })
+        .catch((error) => {
+            console.log(error)
+            return error
+        })
 };
 
 
@@ -34,10 +35,7 @@ const bankTransfer = async (data) => {
         console.log("tokenRes", JSON.stringify(tokenRes))
         if (tokenRes.code !== 'RP000') {
             return {
-                code: 'RP001',
-                status: 'FAILED',
-                message: 'Token Generation Failed!',
-                errors: tokenRes.errors || { message: tokenRes.message }
+                message: "Token Generation Failed!"
             };
         }
 
