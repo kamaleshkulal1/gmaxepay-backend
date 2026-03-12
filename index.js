@@ -166,7 +166,7 @@ if (process.env.NODE_ENV !== 'test') {
     .then(() => { })
     .finally(async () => {
       app.use(routes);
-      seeder();
+      // seeder();
       name();
       aepsLogout();
       connectRedis();
