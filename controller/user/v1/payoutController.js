@@ -2,6 +2,8 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const runpaisa = require('../../../services/runpaisa');
+const paynidipro = require('../../../services/paynidipro');
+
 const { Op } = require('sequelize');
 
 const round4 = (num) => {
@@ -676,8 +678,6 @@ const payout = async (req, res) => {
             payoutHistoryData.mobile = user.mobileNo || user.mobile || user.phone;
 
             console.log('Sending Request to Paynidipro API instead of RunPaisa');
-            const paynidipro = require('../../../services/paynidipro');
-
             const payload = {
                 benIFSC: customerBank.ifsc,
                 benAccount: customerBank.accountNumber,
@@ -685,9 +685,10 @@ const payout = async (req, res) => {
                 amount: payoutAmount,
                 benMobile: user.mobileNo || user.mobile || user.phone || '9999999999',
                 bankName: customerBank.bankName || 'Bank',
-                agentId: transactionID,
+                agentId: process.env.PAYINDIPRO_AGENT_ID,
                 dmtMode: 1
             };
+            console.log("Payload", JSON.stringify(payload))
 
             /*
             console.log('Sending Request to RunPaisa API');
