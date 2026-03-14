@@ -1,8 +1,8 @@
 const axios = require('axios');
 const doSettlement = async (data) => {
-    const paynidiproUrl = (process.env.PAYINDIPRO_URL || '').trim();
-    const apiKey = (process.env.PAYINDIPRO_API_KEY || '').trim();
-    const token = process.env.PAYINDIPRO_TOKEN || '').trim();
+    const paynidiproUrl = process.env.PAYINDIPRO_URL;
+    const apiKey = process.env.PAYINDIPRO_API_KEY;
+    const token = process.env.PAYINDIPRO_TOKEN;
 
     if (!paynidiproUrl || !apiKey || !token) {
         console.error("[Paynidipro] Configuration missing. Please check .env file.");
