@@ -14,11 +14,11 @@ const doSettlement = async (data) => {
             benIFSC: data.benIFSC,
             benAccount: data.benAccount,
             benName: data.benName,
-            amount: Number(data.amount),
+            amount: data.amount,
             benMobile: data.benMobile,
             bankName: data.bankName,
             agentId: data.agentId,
-            dmtMode: Number(data.dmtMode || 1)
+            dmtMode: data.dmtMode || 1
         };
 
         const config = {
@@ -33,7 +33,6 @@ const doSettlement = async (data) => {
         };
 
         const response = await axios.request(config);
-        console.log('Paynidipro Response:', response);
         console.log('Paynidipro Response Data:', JSON.stringify(response.data));
 
         return response.data;

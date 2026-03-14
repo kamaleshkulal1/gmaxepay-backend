@@ -724,7 +724,12 @@ const payout = async (req, res) => {
             payoutHistoryData.agentTransactionId = transactionID;
 
             if (paynidiproResponse) {
-                if (paynidiproResponse.status === true || paynidiproResponse.status === 'SUCCESS' || paynidiproResponse.code === 200 || paynidiproResponse.code === '0x0200') {
+                // IMPORTANT: Paynidipro sometimes returns status: true for validation errors (with data: null)
+                // We must ensure data is present for a true SUCCESS.
+                const isSuccess = (paynidiproResponse.status === true || paynidiproResponse.status === 'SUCCESS' || paynidiproResponse.code === 200) &&
+                    (paynidiproResponse.data !== null && paynidiproResponse.data !== undefined);
+
+                if (isSuccess) {
                     payoutHistoryData.status = 'SUCCESS';
                 } else {
                     payoutHistoryData.status = 'FAILED';
