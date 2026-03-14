@@ -26,8 +26,8 @@ const doSettlement = async (data) => {
             url: `${paynidiproUrl}/ApiUser/doSettlement`,
             headers: {
                 'Content-Type': 'application/json',
-                'X-Customer-Id': apiKey,
-                'X-Token': token
+                'x-kay-client-id': apiKey,
+                'x-kay-client-token': token
             },
             data: payload
         };

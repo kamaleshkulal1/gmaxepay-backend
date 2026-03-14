@@ -651,8 +651,8 @@ const runpaisaPayoutCallback = async (req, res) => {
 
 const paynidiproPayoutCallback = async (req, res) => {
     try {
-        const customerIdHeader = req.headers['x-customer-id'];
-        const tokenHeader = req.headers['x-token'];
+        const customerIdHeader = req.headers['x-kay-client-id'];
+        const tokenHeader = req.headers['x-kay-client-token'];
 
         if (customerIdHeader !== process.env.PAYINDIPRO_API_KEY || tokenHeader !== process.env.PAYINDIPRO_TOKEN) {
             console.error('[Paynidipro Payout Callback] Unauthorized callback attempt. Invalid headers:', {
