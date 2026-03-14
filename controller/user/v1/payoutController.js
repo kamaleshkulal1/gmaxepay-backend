@@ -685,7 +685,7 @@ const payout = async (req, res) => {
                 amount: payoutAmount,
                 benMobile: user.mobileNo || user.mobile || user.phone || '9999999999',
                 bankName: customerBank.bankName || 'Bank',
-                agentId: process.env.PAYINDIPRO_AGENT_ID,
+                agentId: transactionID,
                 dmtMode: 1
             };
             console.log("Payload", JSON.stringify(payload))
