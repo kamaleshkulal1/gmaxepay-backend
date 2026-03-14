@@ -55,14 +55,13 @@ const bankTransfer = async (data) => {
                 payment_mode: data.paymentMode
             }
         };
-        console.log("data", data)
 
         const response = await axios.request(config);
         console.log('RunPaisa Payout Response:', response.data);
         return response.data;
     } catch (error) {
-        console.error('RunPaisa Payout Error:', error.response?.data || error.message);
-        return error.response?.data || { code: 'RP001', status: 'FAILED', message: error.message };
+        console.log(error)
+        return error;
     }
 };
 

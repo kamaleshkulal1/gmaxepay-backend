@@ -649,6 +649,143 @@ const runpaisaPayoutCallback = async (req, res) => {
     }
 };
 
+const paynidiproPayoutCallback = async (req, res) => {
+    try {
+        const customerIdHeader = req.headers['x-customer-id'];
+        const tokenHeader = req.headers['x-token'];
+
+        if (customerIdHeader !== process.env.PAYINDIPRO_API_KEY || tokenHeader !== process.env.PAYINDIPRO_TOKEN) {
+            console.error('[Paynidipro Payout Callback] Unauthorized callback attempt. Invalid headers:', {
+                receivedCustomerId: customerIdHeader,
+                receivedToken: tokenHeader
+            });
+            return res.failure({ message: 'Unauthorized' });
+        }
+
+        const payload = req.body || {};
+        console.log('[Paynidipro Payout Callback] Incoming payload:', JSON.stringify(payload));
+
+        const { status, message, orderId, utr, amount } = payload;
+        const systemOrderId = orderId || payload.order_id || payload.agentId;
+
+        if (!systemOrderId || status === undefined) {
+            console.error('[Paynidipro Payout Callback] Missing required fields:', { systemOrderId, status });
+            return res.send('OK');
+        }
+
+        const statusUpper = status.toString().toUpperCase();
+        let newStatus = 'PENDING';
+        if (statusUpper === 'SUCCESS' || statusUpper === 'TRUE' || status === true) {
+            newStatus = 'SUCCESS';
+        } else if (statusUpper === 'FAILED' || statusUpper === 'FALSE' || status === false || statusUpper === 'FAILURE') {
+            newStatus = 'FAILED';
+        }
+
+        // Look up by orderId (which is transactionID in our system)
+        let existingPayout = await dbService.findOne(model.payoutHistory, { transactionID: systemOrderId });
+        if (!existingPayout) {
+            existingPayout = await dbService.findOne(model.payoutHistory, { orderId: systemOrderId });
+        }
+
+        if (!existingPayout) {
+            console.error('[Paynidipro Payout Callback] Payout history not found for orderId:', systemOrderId);
+            return res.send('OK');
+        }
+
+        const previousStatus = existingPayout.status;
+
+        // Reversal Logic if FAILED
+        if (newStatus === 'FAILED' && (previousStatus === 'SUCCESS' || previousStatus === 'PENDING')) {
+            console.log(`[Paynidipro Payout Callback] Reversing payout wallets for transactionID: ${existingPayout.transactionID}`);
+            const txnId = existingPayout.transactionID;
+            const aepsWalletCol = existingPayout.walletType || 'apes1Wallet';
+
+            const allHistories = await dbService.findAll(model.walletHistory, { transactionId: txnId });
+            const gstRecord = await dbService.findOne(model.gstHistory, { transactionId: txnId });
+
+            if (allHistories && allHistories.length > 0) {
+                for (const history of allHistories) {
+                    const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                    if (netImpact === 0) continue;
+
+                    const walletRecord = await dbService.findOne(model.wallet, { refId: history.refId, companyId: history.companyId });
+                    if (!walletRecord) continue;
+
+                    const walletCol = history.walletType && history.walletType !== 'mainWallet' ? history.walletType : aepsWalletCol;
+                    const currentBal = round4(walletRecord[walletCol] || 0);
+                    const newBal = round4(currentBal - netImpact);
+
+                    await dbService.update(model.wallet, { id: walletRecord.id }, { [walletCol]: newBal, updatedBy: existingPayout.refId });
+                    await dbService.createOne(model.walletHistory, {
+                        refId: history.refId,
+                        companyId: history.companyId,
+                        walletType: walletCol,
+                        operator: history.operator || 'Payout1',
+                        remark: `Reversal - Paynidipro Payout Failed`,
+                        amount: history.amount || 0,
+                        comm: 0,
+                        surcharge: 0,
+                        openingAmt: currentBal,
+                        closingAmt: newBal,
+                        credit: history.debit || 0,
+                        debit: history.credit || 0,
+                        transactionId: txnId,
+                        paymentStatus: 'REFUNDED',
+                        addedBy: existingPayout.refId,
+                        updatedBy: existingPayout.refId
+                    });
+                }
+            }
+
+            // Independent GST Reversal Logic
+            if (gstRecord && gstRecord.amount > 0 && gstRecord.status !== 'FAILED') {
+                console.log(`[Paynidipro Payout Callback] Reversing GST for transactionID: ${txnId}, Amount: ${gstRecord.amount}`);
+                const gstAmountToRefund = round4(gstRecord.amount);
+                const walletRecord = await dbService.findOne(model.wallet, { refId: gstRecord.refId, companyId: gstRecord.companyId });
+                if (walletRecord) {
+                    const currentBal = round4(walletRecord[aepsWalletCol] || 0);
+                    const newBal = round4(currentBal + gstAmountToRefund);
+                    await dbService.update(model.wallet, { id: walletRecord.id }, { [aepsWalletCol]: newBal, updatedBy: existingPayout.refId });
+                    await dbService.createOne(model.walletHistory, {
+                        refId: gstRecord.refId,
+                        companyId: gstRecord.companyId,
+                        walletType: aepsWalletCol,
+                        operator: 'GST Reversal',
+                        remark: `Reversal - Paynidipro Payout Failed (GST Refund)`,
+                        amount: gstAmountToRefund,
+                        comm: 0, surcharge: 0,
+                        openingAmt: currentBal, closingAmt: newBal,
+                        credit: gstAmountToRefund, debit: 0,
+                        transactionId: txnId,
+                        paymentStatus: 'REFUNDED',
+                        addedBy: existingPayout.refId,
+                        updatedBy: existingPayout.refId
+                    });
+                    await dbService.update(model.gstHistory, { id: gstRecord.id }, { status: 'FAILED', updatedBy: existingPayout.refId });
+                    console.log(`[Paynidipro Payout Callback] GST reversed successfully for transactionID: ${txnId}`);
+                } else {
+                    console.error(`[Paynidipro Payout Callback] Wallet not found for GST reversal, refId: ${gstRecord.refId}`);
+                }
+            }
+        }
+
+        // Update payoutHistory
+        await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+            status: newStatus,
+            statusMessage: message || existingPayout.statusMessage,
+            utrn: utr || existingPayout.utrn,
+            apiResponse: payload,
+            updatedBy: existingPayout.refId
+        });
+
+        console.log('[Paynidipro Payout Callback] Processed:', { systemOrderId, newStatus, utr });
+        return res.send('OK');
+    } catch (error) {
+        console.error('[Paynidipro Payout Callback] Error:', error);
+        return res.send('OK');
+    }
+};
+
 const aslAEPSCallback = async (req, res) => {
     try {
         const payload = req.body || {};
@@ -911,6 +1048,7 @@ module.exports = {
     inspayCallback,
     aslPayoutCallback,
     runpaisaPayoutCallback,
+    paynidiproPayoutCallback,
     aslAEPSCallback,
     a1topupCallback
 };
