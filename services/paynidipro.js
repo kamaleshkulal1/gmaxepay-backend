@@ -2,7 +2,7 @@ const axios = require('axios');
 const doSettlement = async (data) => {
     const paynidiproUrl = (process.env.PAYINDIPRO_URL || '').trim();
     const apiKey = (process.env.PAYINDIPRO_API_KEY || '').trim();
-    const token = (process.env.PAYINDIPRO_TOKEN || '').trim();
+    const token = process.env.PAYINDIPRO_TOKEN || '').trim();
 
     if (!paynidiproUrl || !apiKey || !token) {
         console.error("[Paynidipro] Configuration missing. Please check .env file.");
@@ -32,20 +32,13 @@ const doSettlement = async (data) => {
             data: payload
         };
 
-        console.log(`[Paynidipro] Sending Request to: ${config.url}`);
-        console.log(`[Paynidipro] Headers: Content-Type: ${config.headers['Content-Type']}, X-Customer-Id: ${apiKey.substring(0, 4)}... (Length: ${apiKey.length}), X-Token: ${token.substring(0, 4)}... (Length: ${token.length})`);
-        console.log(`[Paynidipro] Payload: ${JSON.stringify(payload)}`);
-
         const response = await axios.request(config);
-        console.log('[Paynidipro] Response Data:', JSON.stringify(response.data));
+        console.log('Paynidipro Response', JSON.stringify(response));
+        console.log('Paynidipro Response Data', JSON.stringify(response.data));
 
         return response.data;
     } catch (error) {
-        console.error("[Paynidipro] Error Details:", {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status
-        });
+        console.error("[Paynidipro] Error:", error.response?.data || error.message);
         return error.response?.data || { status: false, message: error.message };
     }
 };
