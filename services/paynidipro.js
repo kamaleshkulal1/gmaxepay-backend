@@ -33,8 +33,8 @@ const doSettlement = async (data) => {
         };
 
         const response = await axios.request(config);
-        console.log('Paynidipro Response', JSON.stringify(response));
-        console.log('Paynidipro Response Data', JSON.stringify(response.data));
+        console.log('Paynidipro Response:', response);
+        console.log('Paynidipro Response Data:', JSON.stringify(response.data));
 
         return response.data;
     } catch (error) {
