@@ -1082,6 +1082,7 @@ const revertKycData = async (req, res) => {
 
       // Update user fields
       updateData.panVerify = false;
+      updateData.isPanUploaded = false;
       updateData.panCardFrontImage = null;
       updateData.panCardBackImage = null;
       updateData.panDetails = null;
@@ -1098,7 +1099,7 @@ const revertKycData = async (req, res) => {
         await dbService.destroy(model.digilockerDocument, {
           id: panDoc.id,
           companyId: companyId
-        });
+        }, { force: true });
       }
 
       revertMessages.push('PAN verification has been reverted');
@@ -1128,6 +1129,7 @@ const revertKycData = async (req, res) => {
 
       // Update user fields
       updateData.aadharVerify = false;
+      updateData.isAadharUploaded = false;
       updateData.aadharFrontImage = null;
       updateData.aadharBackImage = null;
       updateData.aadharDetails = null;
@@ -1144,7 +1146,7 @@ const revertKycData = async (req, res) => {
         await dbService.destroy(model.digilockerDocument, {
           id: aadhaarDoc.id,
           companyId: companyId
-        });
+        }, { force: true });
       }
 
       revertMessages.push('Aadhaar verification has been reverted');

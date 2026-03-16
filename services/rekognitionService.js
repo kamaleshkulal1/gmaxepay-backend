@@ -9,14 +9,8 @@ const rekognitionClient = new RekognitionClient({
 });
 
 const SIMILARITY_THRESHOLD = 80;
-const LIVENESS_CONFIDENCE_THRESHOLD = 10; // Minimum confidence for face detection
+const LIVENESS_CONFIDENCE_THRESHOLD = 10;
 
-/**
- * Detect liveness by checking if a face is detected in the image
- * This is a basic liveness check - for production, consider using Face Liveness Session API
- * @param {string} imageBase64 - Base64 encoded image
- * @returns {Promise<Object>} - Liveness detection result
- */
 const detectLiveness = async (imageBase64) => {
   try {
     const imageBuffer = Buffer.from(imageBase64, 'base64');
@@ -25,7 +19,7 @@ const detectLiveness = async (imageBase64) => {
       Image: {
         Bytes: imageBuffer
       },
-      Attributes: ['ALL'] // Get all face attributes including quality
+      Attributes: ['ALL']
     };
 
     const command = new DetectFacesCommand(params);
@@ -35,7 +29,7 @@ const detectLiveness = async (imageBase64) => {
     if (response.FaceDetails && response.FaceDetails.length > 0) {
       const face = response.FaceDetails[0];
       const confidence = face.Confidence || 0;
-      
+
       // Check if face quality is good enough
       const quality = face.Quality;
       let brightnessScore = null;

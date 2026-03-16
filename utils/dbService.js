@@ -38,10 +38,10 @@ const update = async (model, query, data) => {
 };
 
 // delete record(s) when query matches
-const destroy = async (model, query) => {
+const destroy = async (model, query, options = {}) => {
   query = queryBuilderParser(query);
   const result = await model.findAll({ where: query });
-  await model.destroy({ where: query });
+  await model.destroy({ where: query, ...options });
   return result;
 };
 

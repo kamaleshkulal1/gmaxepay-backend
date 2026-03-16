@@ -2,6 +2,8 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const runpaisa = require('../../../services/runpaisa');
+const paynidipro = require('../../../services/paynidipro');
+
 const { Op } = require('sequelize');
 
 const round4 = (num) => {
@@ -41,14 +43,6 @@ const payout = async (req, res) => {
         } = req.body;
 
         const user = req.user;
-        console.log('Request Details:', {
-            userId: user.id,
-            role: user.userRole,
-            amount,
-            mode,
-            aepsType,
-            paymentMode
-        });
 
         // Validate required fields
         const payoutAmount = parseFloat(amount);
@@ -588,10 +582,6 @@ const payout = async (req, res) => {
             else if (user.userRole === 4) debitAmount = commData.amounts.distSurcharge;
             else if (user.userRole === 5) debitAmount = commData.amounts.retailerSurcharge;
 
-            if (debitAmount <= 0) {
-                console.log('Invalid Surcharge Config (<=0)');
-                return res.failure({ message: 'Invalid surcharge configuration' });
-            }
 
             let totalIncomes = commData.amounts.adminSurcharge + commData.amounts.companySurcharge;
             if (commData.users.masterDistributor && user.userRole !== 3) totalIncomes += commData.amounts.mdSurcharge;
@@ -687,8 +677,32 @@ const payout = async (req, res) => {
             payoutHistoryData.bankName = customerBank.bankName;
             payoutHistoryData.mobile = user.mobileNo || user.mobile || user.phone;
 
+            console.log('Sending Request to Paynidipro API instead of RunPaisa');
+            const payload = {
+                benIFSC: customerBank.ifsc,
+                benAccount: customerBank.accountNumber,
+                benName: customerBank.beneficiaryName,
+                amount: payoutAmount,
+                benMobile: user.mobileNo || user.mobile || user.phone || '9999999999',
+                bankName: customerBank.bankName || 'Bank',
+                agentId: transactionID,
+                dmtMode: 1
+            };
+            console.log("Payload", JSON.stringify(payload))
+
+            /*
             console.log('Sending Request to RunPaisa API');
             // Call RunPaisa API for bank payout
+            const payloadRunpaisa = {
+                accountNumber: customerBank.accountNumber,
+                ifscCode: customerBank.ifsc,
+                amount: payoutAmount,
+                orderId: transactionID,
+                beneficiaryName: customerBank.beneficiaryName,
+                paymentMode: paymentMode
+            }
+
+            console.log("Payload", JSON.stringify(payloadRunpaisa))
 
             const runpaisaResponse = await runpaisa.bankTransfer({
                 accountNumber: customerBank.accountNumber,
@@ -700,20 +714,29 @@ const payout = async (req, res) => {
             });
 
             console.log('RunPaisa API Response:', runpaisaResponse);
+            */
+
+            const paynidiproResponse = await paynidipro.doSettlement(payload);
+            console.log('Paynidipro API Response:', paynidiproResponse);
 
             // Store API response and update status
-            payoutHistoryData.apiResponse = runpaisaResponse;
+            payoutHistoryData.apiResponse = paynidiproResponse;
             payoutHistoryData.agentTransactionId = transactionID;
 
-            if (runpaisaResponse?.code) {
-                if (runpaisaResponse.code === 'RP000') {
+            if (paynidiproResponse) {
+                // IMPORTANT: Paynidipro sometimes returns status: true for validation errors (with data: null)
+                // We must ensure data is present for a true SUCCESS.
+                const isSuccess = (paynidiproResponse.status === true || paynidiproResponse.status === 'SUCCESS' || paynidiproResponse.code === 200) &&
+                    (paynidiproResponse.data !== null && paynidiproResponse.data !== undefined);
+
+                if (isSuccess) {
                     payoutHistoryData.status = 'SUCCESS';
                 } else {
                     payoutHistoryData.status = 'FAILED';
                 }
-                // For RunPaisa, we might get these fields in the response data or later via status/callback
-                if (runpaisaResponse.data?.order_id) payoutHistoryData.orderId = runpaisaResponse.data.order_id;
-                if (runpaisaResponse.message) payoutHistoryData.statusMessage = runpaisaResponse.message;
+
+                if (paynidiproResponse.data?.order_id || paynidiproResponse.orderId) payoutHistoryData.orderId = paynidiproResponse.data?.order_id || paynidiproResponse.orderId;
+                if (paynidiproResponse.message) payoutHistoryData.statusMessage = paynidiproResponse.message;
             }
         }
 
