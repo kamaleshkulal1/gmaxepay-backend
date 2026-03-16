@@ -474,10 +474,10 @@ const revertKycVerification = async (userId, companyId, kycType) => {
       });
 
       if (panDoc) {
-        await dbService.update(
+        await dbService.destroy(
           model.digilockerDocument,
           { id: panDoc.id },
-          { isDeleted: true }
+          { force: true }
         );
       }
     } else if (kycType === 'aadhar' || kycType === 'aadhaar') {
@@ -497,10 +497,10 @@ const revertKycVerification = async (userId, companyId, kycType) => {
       });
 
       if (aadhaarDoc) {
-        await dbService.update(
+        await dbService.destroy(
           model.digilockerDocument,
           { id: aadhaarDoc.id },
-          { isDeleted: true }
+          { force: true }
         );
       }
     }

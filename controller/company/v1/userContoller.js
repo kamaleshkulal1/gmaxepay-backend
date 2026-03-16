@@ -1233,7 +1233,7 @@ const revertKycData = async (req, res) => {
         await dbService.destroy(model.digilockerDocument, {
           id: panDoc.id,
           companyId: companyId
-        });
+        }, { force: true });
       }
 
       revertMessages.push('PAN verification has been reverted');
@@ -1277,7 +1277,7 @@ const revertKycData = async (req, res) => {
         await dbService.destroy(model.digilockerDocument, {
           id: aadhaarDoc.id,
           companyId: companyId
-        });
+        }, { force: true });
       }
 
       revertMessages.push('Aadhaar verification has been reverted');
