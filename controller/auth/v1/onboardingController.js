@@ -460,6 +460,10 @@ const revertKycVerification = async (userId, companyId, kycType) => {
     if (kycType === 'pan') {
       // Revert PAN verification
       updateData.panVerify = false;
+      updateData.isPanUploaded = false;
+      updateData.panDetails = null;
+      updateData.panCardFrontImage = null;
+      updateData.panCardBackImage = null;
 
       // Delete PAN digilocker document
       const panDoc = await dbService.findOne(model.digilockerDocument, {
@@ -479,6 +483,10 @@ const revertKycVerification = async (userId, companyId, kycType) => {
     } else if (kycType === 'aadhar' || kycType === 'aadhaar') {
       // Revert Aadhaar verification
       updateData.aadharVerify = false;
+      updateData.isAadharUploaded = false;
+      updateData.aadharDetails = null;
+      updateData.aadharFrontImage = null;
+      updateData.aadharBackImage = null;
 
       // Delete Aadhaar digilocker document
       const aadhaarDoc = await dbService.findOne(model.digilockerDocument, {
@@ -1009,6 +1017,58 @@ const connectPanVerification = async (req, res) => {
   }
 }
 
+// Digilocker URL generation for Aadhaar/PAN
+const digilockerUrl = async (req, res) => {
+  try {
+    if (!ensureAllowedOrigin(req)) return res.failure({ message: 'Origin not allowed' });
+    const token = getTokenFromReq(req);
+    const ctx = await loadContextByToken(token);
+    if (ctx.error) return res.failure({ message: ctx.error });
+    if (!ensureDomainMatches(req, ctx.company)) {
+      return res.failure({ message: 'Invalid Domain' });
+    }
+
+    const { document_type, redirect_url } = req.body || {};
+    if (!document_type) return res.failure({ message: 'Document type is required (AADHAAR or PAN)' });
+    if (!redirect_url) return res.failure({ message: 'Redirect URL is required' });
+
+    const docType = document_type.toUpperCase();
+    if (docType !== 'AADHAAR' && docType !== 'PAN') {
+      return res.failure({ message: 'Invalid document type. Must be AADHAAR or PAN' });
+    }
+
+    let response;
+    if (docType === 'AADHAAR') {
+      response = await ekycHub.createAadharVerificationUrl(redirect_url);
+    } else {
+      response = await ekycHub.createPanVerificationUrl(redirect_url);
+    }
+
+    if (response && response.status === 'Success') {
+      const { verification_id, reference_id } = response;
+      if (verification_id) {
+        await dbService.createOne(model.digilockerDocument, {
+          refId: ctx.tokenData.userId,
+          companyId: ctx.tokenData.companyId,
+          documentType: docType,
+          verificationId: verification_id,
+          referenceId: reference_id || null,
+          status: response.status || null,
+          fullResponse: response,
+          addedBy: ctx.user.id,
+          isActive: true
+        });
+      }
+      return res.success({ message: `${docType} Connection Successful`, data: response });
+    } else {
+      return res.failure({ message: `Failed to connect ${docType} verification`, data: response });
+    }
+  } catch (error) {
+    console.error('Error in digilockerUrl:', error);
+    return res.failure({ message: 'Failed to generate Digilocker URL', error: error.message });
+  }
+};
+
 // Get Digilocker Both Pan and Aadhaar Documents
 const getDigilockerDocuments = async (req, res) => {
   try {
@@ -1184,13 +1244,10 @@ const getDigilockerDocuments = async (req, res) => {
         const errorCode = responseData.code || responseData.error_code || null;
         const errorMessage = (responseData.message || responseData.error_message || '').toLowerCase();
 
-        const isExpiredOrPending = errorCode === 'url_expired' ||
-          errorCode === 'validation_pending' ||
-          errorMessage.includes('url expired') ||
-          errorMessage.includes('expired') ||
-          errorMessage.includes('validation in process');
+        const isExpired = errorCode === 'url_expired' || errorMessage.includes('url expired') || errorMessage.includes('expired');
+        const isPending = errorCode === 'validation_pending' || errorMessage.includes('validation in process');
 
-        if (isExpiredOrPending) {
+        if (isExpired) {
           // Delete the latest document request
           await dbService.destroy(model.digilockerDocument, {
             id: existingDigilockerDocument.id,
@@ -1213,15 +1270,21 @@ const getDigilockerDocuments = async (req, res) => {
             panDoc: docType === 'PAN' ? null : ctx?.panDoc
           });
 
-          const errorMsg = errorCode === 'validation_pending'
-            ? `Validation is in process. Please reconnect your ${docTypeLabel}.`
-            : `Digilocker request URL has expired. Please reconnect your ${docTypeLabel}.`;
-
           return res.failure({
-            message: errorMsg,
+            message: `Digilocker request URL has expired. Please reconnect your ${docTypeLabel}.`,
             data: {
               ...responseData,
               requiresReconnect: true
+            }
+          });
+        }
+
+        if (isPending) {
+          return res.failure({
+            message: `Validation is in process. Please check again after some time.`,
+            data: {
+              ...responseData,
+              requiresReconnect: false
             }
           });
         }
@@ -3151,6 +3214,7 @@ module.exports = {
   connectAadhaarVerification,
   connectPanVerification,
   getDigilockerDocuments,
+  digilockerUrl,
   postShopDetails,
   postBankDetails,
   postProfile,

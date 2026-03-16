@@ -1082,6 +1082,7 @@ const revertKycData = async (req, res) => {
 
       // Update user fields
       updateData.panVerify = false;
+      updateData.isPanUploaded = false;
       updateData.panCardFrontImage = null;
       updateData.panCardBackImage = null;
       updateData.panDetails = null;
@@ -1128,6 +1129,7 @@ const revertKycData = async (req, res) => {
 
       // Update user fields
       updateData.aadharVerify = false;
+      updateData.isAadharUploaded = false;
       updateData.aadharFrontImage = null;
       updateData.aadharBackImage = null;
       updateData.aadharDetails = null;

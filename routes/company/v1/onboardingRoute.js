@@ -19,6 +19,7 @@ router.post('/:token/connectAadhaarVerification', onboardingCors, onboardingCont
 
 //step 4
 router.post('/:token/connectPanVerification', onboardingCors, onboardingController.connectPanVerification);
+router.post('/:token/digilockerUrl', onboardingCors, onboardingController.digilockerUrl);
 router.post('/:token/getDigilockerDocuments', onboardingCors, onboardingController.getDigilockerDocuments);
 
 router.post('/:token/uploadAadharDocuments', onboardingCors, uploadFields([
