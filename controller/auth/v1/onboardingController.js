@@ -199,6 +199,8 @@ const loadContextByToken = async (token) => {
     mobileVerify: user.mobileVerify,
     emailVerify: user.emailVerify,
     aadharVerify: user.aadharVerify,
+    aadharDetails: user.aadharDetails,
+    panDetails: user.panDetails,
     panVerify: user.panVerify,
     isAadharUploaded: user.isAadharUploaded,
     isPanUploaded: user.isPanUploaded,
@@ -299,22 +301,20 @@ const getPendingSteps = (ctx) => {
   const panCardBackImage = userDetails?.panCardBackImage || ctx.user?.panCardBackImage;
 
   // Check Aadhaar sub-steps
+  const hasAadharDetails = !!(user.aadharDetails || userDetails?.aadharDetails);
   const aadhaarConnect = !!(aadhaarDoc && aadhaarDoc.verificationId);
-  const aadhaarDownload = !!(aadhaarDoc && aadhaarDoc.name); // If name exists, document is downloaded
-  const aadhaarFrontImageKey = extractS3Key(aadharFrontImage);
-  const aadhaarBackImageKey = extractS3Key(aadharBackImage);
-  const aadhaarUpload = !!(user.isAadharUploaded);
+  const aadhaarDownload = !!(aadhaarDoc && aadhaarDoc.name);
+  const aadhaarUpload = !!(user.isAadharUploaded && hasAadharDetails);
 
   // Check PAN sub-steps
+  const hasPanDetails = !!(user.panDetails || userDetails?.panDetails);
   const panConnect = !!(panDoc && panDoc.verificationId);
-  const panDownload = !!(panDoc && panDoc.panNumber); // If panNumber exists, document is downloaded
-  const panFrontImageKey = extractS3Key(panCardFrontImage);
-  const panBackImageKey = extractS3Key(panCardBackImage);
-  const panUpload = !!(user.isPanUploaded);
+  const panDownload = !!(panDoc && panDoc.panNumber);
+  const panUpload = !!(user.isPanUploaded && hasPanDetails);
 
-  // Check if verification is done via manual upload flags
-  const aadharVerifyFlag = !!(user.isAadharUploaded || userDetails.isAadharUploaded);
-  const panVerifyFlag = !!(user.isPanUploaded || userDetails.isPanUploaded);
+  // Check if verification is done via manual upload flags (must also have details)
+  const aadharVerifyFlag = !!(user.isAadharUploaded && hasAadharDetails);
+  const panVerifyFlag = !!(user.isPanUploaded && hasPanDetails);
 
   const aadhaarSubSteps = [
     { key: 'connect', label: 'Connect Aadhaar', done: aadharVerifyFlag || aadhaarConnect },
@@ -328,14 +328,14 @@ const getPendingSteps = (ctx) => {
     { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag }
   ];
 
-  // Overall done: either manual flag is set OR all digilocker/image steps are complete
-  const aadhaarAllDone = aadharVerifyFlag || (aadhaarConnect && aadhaarDownload && aadhaarUpload);
-  const panAllDone = panVerifyFlag || (panConnect && panDownload && panUpload);
+  // Overall done: all sub-steps must be complete
+  const aadhaarAllDone = aadhaarSubSteps.every(s => s.done);
+  const panAllDone = panSubSteps.every(s => s.done);
 
-  // Check shop details verification using shopDetailsVerify field from user
+  // Check shop details verification
   const shopDetailsDone = !!(user.shopDetailsVerify || userDetails?.shopDetailsVerify);
 
-  // Check bank verification using bankDetailsVerify field from user AND customerBankDetails
+  // Check bank verification
   const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) ||
     !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
 
