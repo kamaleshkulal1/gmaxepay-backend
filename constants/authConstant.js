@@ -24,7 +24,7 @@ const JWT = {
   ISSUER: process.env.JWT_ISSUER || 'gmaxepay',
   AUDIENCE: process.env.JWT_AUDIENCE || 'gmaxepay_users',
   TOKEN_ENCRYPT_EXPIRY: 300,
-  SIGNATURE_TOKEN_EXPIRY: process.env.SIGNATURE_TOKEN_EXPIRY || '10m'
+  SIGNATURE_TOKEN_EXPIRY: process.env.SIGNATURE_TOKEN_EXPIRY || '6h'
 };
 
 const USER_TYPES = {
