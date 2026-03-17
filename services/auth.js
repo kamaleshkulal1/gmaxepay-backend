@@ -627,7 +627,7 @@ const loginUser = async (
 
     const nowIST = moment().utcOffset('+05:30');
     const tokenGeneratedTime = nowIST.format('YYYY-MM-DD HH:mm:ss');
-    const expiryTime = nowIST.clone().add(30, 'minutes').format('YYYY-MM-DD HH:mm:ss');
+    const expiryTime = nowIST.clone().add(6, 'hours').format('YYYY-MM-DD HH:mm:ss');
 
     const basicResponseData = {
       tokenGeneratedTime,
