@@ -1248,7 +1248,7 @@ const getDigilockerDocuments = async (req, res) => {
         const isPending = errorCode === 'validation_pending' || errorMessage.includes('validation in process');
 
         if (isExpired) {
-          // Revert verification status and delete document using helper
+          // Revert verification status and delete document
           await revertKycVerification(userId, companyId, docType.toLowerCase());
 
           return res.failure({
@@ -1261,16 +1261,19 @@ const getDigilockerDocuments = async (req, res) => {
         }
 
         if (isPending) {
+          // Revert verification status even for pending to allow user to try again/process again
+          await revertKycVerification(userId, companyId, docType.toLowerCase());
+
           return res.failure({
-            message: `Validation is in process. Please check again after some time.`,
+            message: `Validation is in process. Please check again after some time or try connecting again.`,
             data: {
               ...responseData,
-              requiresReconnect: false
+              requiresReconnect: true
             }
           });
         }
 
-        // For other terminal errors, revert the connection status to force a retry
+        // For other terminal errors, revert the connection status
         await revertKycVerification(userId, companyId, docType.toLowerCase());
 
         return res.failure({
