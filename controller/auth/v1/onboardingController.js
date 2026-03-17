@@ -1248,27 +1248,8 @@ const getDigilockerDocuments = async (req, res) => {
         const isPending = errorCode === 'validation_pending' || errorMessage.includes('validation in process');
 
         if (isExpired) {
-          // Delete the latest document request
-          await dbService.destroy(model.digilockerDocument, {
-            id: existingDigilockerDocument.id,
-            refId: userId,
-            companyId: companyId,
-            documentType: docType
-          });
-
-          // Reset user verification flag
-          const resetData = docType === 'AADHAAR' ? { aadharVerify: false } : { panVerify: false };
-          await dbService.update(model.user, {
-            id: userId,
-            companyId: companyId,
-            isDeleted: false
-          }, resetData);
-
-          // Update KYC status
-          await updateKycStatus(userId, companyId, {
-            aadhaarDoc: docType === 'AADHAAR' ? null : ctx?.aadhaarDoc,
-            panDoc: docType === 'PAN' ? null : ctx?.panDoc
-          });
+          // Revert verification status and delete document using helper
+          await revertKycVerification(userId, companyId, docType.toLowerCase());
 
           return res.failure({
             message: `Digilocker request URL has expired. Please reconnect your ${docTypeLabel}.`,
@@ -1289,8 +1270,11 @@ const getDigilockerDocuments = async (req, res) => {
           });
         }
 
+        // For other terminal errors, revert the connection status to force a retry
+        await revertKycVerification(userId, companyId, docType.toLowerCase());
+
         return res.failure({
-          message: `Failed to fetch ${docTypeLabel} document from digilocker`,
+          message: `Failed to fetch ${docTypeLabel} document from digilocker. Please try connecting again.`,
           data: response
         });
       }
