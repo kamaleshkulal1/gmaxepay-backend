@@ -8,23 +8,23 @@ require('dotenv').config({ path: '.env' });
 
 const JWT = {
   get SECRET() {
-    return process.env.JWT_ACCESS_SECRET ;
+    return process.env.JWT_ACCESS_SECRET;
   },
   get JWT_TEMP_SECRET() {
-    return process.env.JWT_TEMP_SECRET ;
+    return process.env.JWT_TEMP_SECRET;
   },
   get JWT_REFRESH_SECRET() {
     return process.env.JWT_REFRESH_SECRET;
   },
-  EXPIRES_IN: 5, // 2 minutes for access token
+  EXPIRES_IN: 30, // 30 minutes for access token
   OTP_EXPIRES_IN: 180,
-  JWT_REFRESH_EXPIRY: '25m',
-  TOTAL_SESSION_MINUTES: 30,
+  JWT_REFRESH_EXPIRY: '360m', // 6 hours
+  TOTAL_SESSION_MINUTES: 360, // 6 hours
   ALGORITHM: process.env.JWT_ALGORITHM || 'HS256',
   ISSUER: process.env.JWT_ISSUER || 'gmaxepay',
   AUDIENCE: process.env.JWT_AUDIENCE || 'gmaxepay_users',
   TOKEN_ENCRYPT_EXPIRY: 300,
-  SIGNATURE_TOKEN_EXPIRY: process.env.SIGNATURE_TOKEN_EXPIRY || '10m' 
+  SIGNATURE_TOKEN_EXPIRY: process.env.SIGNATURE_TOKEN_EXPIRY || '10m'
 };
 
 const USER_TYPES = {
