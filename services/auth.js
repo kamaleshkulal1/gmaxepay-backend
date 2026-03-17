@@ -314,11 +314,11 @@ const generateTokenWithRemainingRefresh = (user, secret, loginTimestamp) => {
   const now = Date.now();
   const loginTs = typeof loginTimestamp === 'number' ? loginTimestamp : now;
 
-  // Access token expires in 2 minutes from now
-  const accessTokenExpiry = JWT.EXPIRES_IN * 60; // 2 minutes in seconds
+  // Access token expires in minutes from now
+  const accessTokenExpiry = JWT.EXPIRES_IN * 60;
 
-  // Refresh token expires exactly 28 minutes from login timestamp
-  const refreshTokenExpiryMs = 28 * 60 * 1000; // 28 minutes in milliseconds
+  // Refresh token expires exactly TOTAL_SESSION_MINUTES from login timestamp
+  const refreshTokenExpiryMs = JWT.TOTAL_SESSION_MINUTES * 60 * 1000;
   const refreshTokenExpiryTime = loginTs + refreshTokenExpiryMs;
   const refreshTokenExpirySeconds = Math.max(60, Math.floor((refreshTokenExpiryTime - now) / 1000)); // Minimum 1 minute
 
@@ -474,8 +474,8 @@ const refreshAccessToken = async (token) => {
     // If not present (old tokens), use current time as fallback
     const loginTimestamp = payload.loginTimestamp || Date.now();
 
-    // Generate new access token (2 minutes) and refresh token with same expiry
-    // based on original login timestamp to preserve 30-minute session limit
+    // Generate new access token and refresh token with same expiry
+    // based on original login timestamp to preserve session limit
     const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
 
     return {
@@ -627,7 +627,7 @@ const loginUser = async (
 
     const nowIST = moment().utcOffset('+05:30');
     const tokenGeneratedTime = nowIST.format('YYYY-MM-DD HH:mm:ss');
-    const expiryTime = nowIST.clone().add(30, 'minutes').format('YYYY-MM-DD HH:mm:ss');
+    const expiryTime = nowIST.clone().add(6, 'hours').format('YYYY-MM-DD HH:mm:ss');
 
     const basicResponseData = {
       tokenGeneratedTime,
