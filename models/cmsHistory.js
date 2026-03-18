@@ -128,31 +128,6 @@ const CmsHistory = sequelize.define(
       allowNull: true,
       defaultValue: 0
     },
-    superadminCommTDS: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-      defaultValue: 0
-    },
-    whitelabelCommTDS: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-      defaultValue: 0
-    },
-    masterDistributorComTDS: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-      defaultValue: 0
-    },
-    distributorComTDS: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-      defaultValue: 0
-    },
-    retailerComTDS: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-      defaultValue: 0
-    },
     superAdminAvail: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

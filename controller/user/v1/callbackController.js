@@ -1255,16 +1255,6 @@ const cmsCallback = async (req, res) => {
 
                     commData.amounts.retailerComm = retSlabAmount;
 
-                    const TDS_RATE = Number(process.env.CMS_TDS_PERCENT || process.env.AEPS_TDS_PERCENT || 2) / 100;
-                    const tds = g => round4(g * TDS_RATE);
-                    commData.tds = {
-                        superAdminTDS: tds(operatorCommissionAmount),
-                        whitelabelTDS: tds(wlSlabAmount),
-                        masterDistributorTDS: tds(mdSlabAmount),
-                        distributorTDS: tds(distSlabAmount),
-                        retailerTDS: tds(retSlabAmount)
-                    };
-
                     commData.avail = {
                         superAdminAvail: Boolean(commData.users.superAdmin),
                         whitelabelAvail: Boolean(commData.users.companyAdmin),
@@ -1281,17 +1271,11 @@ const cmsCallback = async (req, res) => {
             const companyCommAmt = commData.amounts.companyComm || 0;
             const superAdminCommAmt = commData.amounts.superAdminComm || 0;
 
-            const retailerTDS = commData.tds?.retailerTDS || 0;
-            const distributorTDS = commData.tds?.distributorTDS || 0;
-            const masterDistTDS = commData.tds?.masterDistributorTDS || 0;
-            const whitelabelTDS = commData.tds?.whitelabelTDS || 0;
-            const superAdminTDS = commData.tds?.superAdminTDS || 0;
-
-            const retailerNetAmt = round4(retailerCommAmt - retailerTDS);
-            const distNetAmt = round4(distCommAmt - distributorTDS);
-            const mdNetAmt = round4(mdCommAmt - masterDistTDS);
-            const companyNetAmt = round4(companyCommAmt - whitelabelTDS);
-            const superAdminNetAmt = round4(superAdminCommAmt - superAdminTDS);
+            const retailerNetAmt = round4(retailerCommAmt);
+            const distNetAmt = round4(distCommAmt);
+            const mdNetAmt = round4(mdCommAmt);
+            const companyNetAmt = round4(companyCommAmt);
+            const superAdminNetAmt = round4(superAdminCommAmt);
 
             const saShortfallAmt = commData.amounts.saShortfall || 0;
             const wlShortfallAmt = commData.amounts.wlShortfall || 0;
@@ -1310,34 +1294,34 @@ const cmsCallback = async (req, res) => {
 
             if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
                 walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { mainWallet: closingWallet, updatedBy: transaction.refId }));
-                historyPromises.push(dbService.createOne(model.walletHistory, { refId: transaction.refId, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, amount: amountNumber, comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: 0, debit: initiatorDebit, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', remark: remarkText, aepsTxnType: 'CMS', superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS, addedBy: transaction.refId, updatedBy: transaction.refId }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: transaction.refId, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, amount: amountNumber, comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: 0, debit: initiatorDebit, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', remark: remarkText, aepsTxnType: 'CMS', superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, addedBy: transaction.refId, updatedBy: transaction.refId }));
 
                 if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
                     const dW = commData.wallets.distributorWallet, dO = round4(dW.mainWallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
                     if (distNetAmt - distShortfallAmt !== 0) {
                         walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { mainWallet: dC, updatedBy: commData.users.distributor.id }));
-                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - dist comm`, amount: amountNumber, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt + distributorTDS, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', distributorCom: distCommAmt, distributorComTDS: distributorTDS, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - dist comm`, amount: amountNumber, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', distributorCom: distCommAmt, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
                     }
                 }
                 if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
                     const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.mainWallet || 0), mC = round4(mO + mdNetAmt - mdShortfallAmt);
                     if (mdNetAmt - mdShortfallAmt !== 0) {
                         walletUpdates.push(dbService.update(model.wallet, { id: mW.id }, { mainWallet: mC, updatedBy: commData.users.masterDistributor.id }));
-                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - md comm`, amount: amountNumber, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt + masterDistTDS, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', masterDistributorCom: mdCommAmt, masterDistributorComTDS: masterDistTDS, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - md comm`, amount: amountNumber, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', masterDistributorCom: mdCommAmt, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
                     }
                 }
                 if (commData.wallets.companyWallet) {
                     const cW = commData.wallets.companyWallet, cO = round4(cW.mainWallet || 0), cC = round4(cO + companyNetAmt - wlShortfallAmt);
                     if (companyNetAmt - wlShortfallAmt !== 0) {
                         walletUpdates.push(dbService.update(model.wallet, { id: cW.id }, { mainWallet: cC, updatedBy: commData.users.companyAdmin.id }));
-                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - company comm`, amount: amountNumber, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt + whitelabelTDS, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', whitelabelComm: companyCommAmt, whitelabelCommTDS: whitelabelTDS, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - company comm`, amount: amountNumber, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', whitelabelComm: companyCommAmt, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
                     }
                 }
                 if (commData.wallets.superAdminWallet) {
                     const sW = commData.wallets.superAdminWallet, sO = round4(sW.mainWallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
                     if (superAdminNetAmt - saShortfallAmt !== 0) {
                         walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { mainWallet: sC, updatedBy: commData.users.superAdmin.id }));
-                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', superadminComm: superAdminCommAmt, superadminCommTDS: superAdminTDS, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', superadminComm: superAdminCommAmt, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
                     }
                 }
             } else {
@@ -1357,11 +1341,6 @@ const cmsCallback = async (req, res) => {
             updateData.masterDistributorCom = mdCommAmt;
             updateData.distributorCom = distCommAmt;
             updateData.retailerCom = retailerCommAmt;
-            updateData.superadminCommTDS = superAdminTDS;
-            updateData.whitelabelCommTDS = whitelabelTDS;
-            updateData.masterDistributorComTDS = masterDistTDS;
-            updateData.distributorComTDS = distributorTDS;
-            updateData.retailerComTDS = retailerTDS;
             updateData.superAdminAvail = Boolean(commData.users.superAdmin);
             updateData.whitelabelAvail = Boolean(commData.users.companyAdmin);
             updateData.masterDistributorAvail = Boolean(commData.users.masterDistributor);
