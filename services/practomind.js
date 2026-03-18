@@ -5,7 +5,6 @@ const PRACTOMIND_BASE_URL = process.env.PRACTOMIND_BASE_URL;
 const PRACTOMIND_SECRET_KEY = process.env.PRACTOMIND_SECRET_KEY;
 const PRACTOMIND_API_KEY = process.env.PRACTOMIND_API_KEY;
 
-// Practomind AEPS Onboarding
 const practomindAepsOnboarding = async (data, merchantLoginId) => {
   let payload = null;
   let token = null;

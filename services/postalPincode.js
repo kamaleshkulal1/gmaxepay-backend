@@ -1,19 +1,12 @@
 const axios = require('axios');
 
-/**
- * Validate postal pincode API URL is configured
- */
+
 const validateApiUrl = () => {
   if (!process.env.POSTAL_PINCODE_URL) {
     throw new Error('Postal Pincode API URL is not configured. Please set POSTAL_PINCODE_URL in environment variables.');
   }
 };
 
-/**
- * Get pincode by city name
- * @param {string} city - City name
- * @returns {Promise<object>} PostOffice data
- */
 const getPincodeByCity = async (city) => {
   try {
     validateApiUrl();
@@ -40,14 +33,14 @@ const getPincodeByCity = async (city) => {
     }
   } catch (error) {
     console.error('Postal pincode service error (getPincodeByCity):', error);
-    
+
     // Handle axios errors
     if (error.response) {
       throw new Error(`Postal API error: ${error.response.status} - ${error.response.data?.message || 'Unknown error'}`);
     } else if (error.request) {
       throw new Error('Unable to reach postal pincode API. Please check your network connection.');
     }
-    
+
     throw error;
   }
 };
@@ -108,14 +101,14 @@ const getCityByPincode = async (pincode) => {
     }
   } catch (error) {
     console.error('Postal pincode service error (getCityByPincode):', error);
-    
+
     // Handle axios errors
     if (error.response) {
       throw new Error(`Postal API error: ${error.response.status} - ${error.response.data?.message || 'Unknown error'}`);
     } else if (error.request) {
       throw new Error('Unable to reach postal pincode API. Please check your network connection.');
     }
-    
+
     throw error;
   }
 };
