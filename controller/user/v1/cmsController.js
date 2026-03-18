@@ -28,19 +28,21 @@ const initiateCms = async (req, res) => {
 
         if (externalRes.status) {
             return res.success({
-                message: externalRes.message,
-                data: externalRes.data
+                message: externalRes.message || 'Success',
+                data: {
+                    redirectionUrl: externalRes.redirectionUrl || externalRes.redirecturl
+                }
             });
         } else {
             await dbService.update(model.cmsHistory, { referenceId }, {
                 status: 'FAILED',
                 errorMsg: externalRes.message,
-                responsePayload: externalRes.data
+                responsePayload: externalRes
             });
 
             return res.failure({
-                message: externalRes.message,
-                data: externalRes.data
+                message: externalRes.message || 'Failed',
+                data: externalRes
             });
         }
 

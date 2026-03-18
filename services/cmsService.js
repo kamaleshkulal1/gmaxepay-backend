@@ -23,7 +23,7 @@ const initiateAirtelCms = async (referenceId) => {
 
     } catch (error) {
         console.error('Error in initiateAirtelCms service:', error.response?.data || error.message);
-        return error
+        return error.response?.data || { status: false, message: error.message };
     }
 };
 
