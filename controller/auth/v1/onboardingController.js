@@ -199,6 +199,8 @@ const loadContextByToken = async (token) => {
     mobileVerify: user.mobileVerify,
     emailVerify: user.emailVerify,
     aadharVerify: user.aadharVerify,
+    aadharDetails: user.aadharDetails,
+    panDetails: user.panDetails,
     panVerify: user.panVerify,
     isAadharUploaded: user.isAadharUploaded,
     isPanUploaded: user.isPanUploaded,
@@ -299,22 +301,20 @@ const getPendingSteps = (ctx) => {
   const panCardBackImage = userDetails?.panCardBackImage || ctx.user?.panCardBackImage;
 
   // Check Aadhaar sub-steps
+  const hasAadharDetails = !!(user.aadharDetails || userDetails?.aadharDetails);
   const aadhaarConnect = !!(aadhaarDoc && aadhaarDoc.verificationId);
-  const aadhaarDownload = !!(aadhaarDoc && aadhaarDoc.name); // If name exists, document is downloaded
-  const aadhaarFrontImageKey = extractS3Key(aadharFrontImage);
-  const aadhaarBackImageKey = extractS3Key(aadharBackImage);
-  const aadhaarUpload = !!(user.isAadharUploaded);
+  const aadhaarDownload = !!(aadhaarDoc && aadhaarDoc.name);
+  const aadhaarUpload = !!(user.isAadharUploaded && hasAadharDetails);
 
   // Check PAN sub-steps
+  const hasPanDetails = !!(user.panDetails || userDetails?.panDetails);
   const panConnect = !!(panDoc && panDoc.verificationId);
-  const panDownload = !!(panDoc && panDoc.panNumber); // If panNumber exists, document is downloaded
-  const panFrontImageKey = extractS3Key(panCardFrontImage);
-  const panBackImageKey = extractS3Key(panCardBackImage);
-  const panUpload = !!(user.isPanUploaded);
+  const panDownload = !!(panDoc && panDoc.panNumber);
+  const panUpload = !!(user.isPanUploaded && hasPanDetails);
 
-  // Check if verification is done via manual upload flags
-  const aadharVerifyFlag = !!(user.isAadharUploaded || userDetails.isAadharUploaded);
-  const panVerifyFlag = !!(user.isPanUploaded || userDetails.isPanUploaded);
+  // Check if verification is done via manual upload flags (must also have details)
+  const aadharVerifyFlag = !!(user.isAadharUploaded && hasAadharDetails);
+  const panVerifyFlag = !!(user.isPanUploaded && hasPanDetails);
 
   const aadhaarSubSteps = [
     { key: 'connect', label: 'Connect Aadhaar', done: aadharVerifyFlag || aadhaarConnect },
@@ -328,14 +328,14 @@ const getPendingSteps = (ctx) => {
     { key: 'upload', label: 'Upload PAN Images', done: panVerifyFlag }
   ];
 
-  // Overall done: either manual flag is set OR all digilocker/image steps are complete
-  const aadhaarAllDone = aadharVerifyFlag || (aadhaarConnect && aadhaarDownload && aadhaarUpload);
-  const panAllDone = panVerifyFlag || (panConnect && panDownload && panUpload);
+  // Overall done: all sub-steps must be complete
+  const aadhaarAllDone = aadhaarSubSteps.every(s => s.done);
+  const panAllDone = panSubSteps.every(s => s.done);
 
-  // Check shop details verification using shopDetailsVerify field from user
+  // Check shop details verification
   const shopDetailsDone = !!(user.shopDetailsVerify || userDetails?.shopDetailsVerify);
 
-  // Check bank verification using bankDetailsVerify field from user AND customerBankDetails
+  // Check bank verification
   const bankDetailsDone = !!(user.bankDetailsVerify || userDetails?.bankDetailsVerify) ||
     !!(customerBankDetails && customerBankDetails.accountNumber && customerBankDetails.ifsc);
 
@@ -1248,27 +1248,8 @@ const getDigilockerDocuments = async (req, res) => {
         const isPending = errorCode === 'validation_pending' || errorMessage.includes('validation in process');
 
         if (isExpired) {
-          // Delete the latest document request
-          await dbService.destroy(model.digilockerDocument, {
-            id: existingDigilockerDocument.id,
-            refId: userId,
-            companyId: companyId,
-            documentType: docType
-          });
-
-          // Reset user verification flag
-          const resetData = docType === 'AADHAAR' ? { aadharVerify: false } : { panVerify: false };
-          await dbService.update(model.user, {
-            id: userId,
-            companyId: companyId,
-            isDeleted: false
-          }, resetData);
-
-          // Update KYC status
-          await updateKycStatus(userId, companyId, {
-            aadhaarDoc: docType === 'AADHAAR' ? null : ctx?.aadhaarDoc,
-            panDoc: docType === 'PAN' ? null : ctx?.panDoc
-          });
+          // Revert verification status and delete document
+          await revertKycVerification(userId, companyId, docType.toLowerCase());
 
           return res.failure({
             message: `Digilocker request URL has expired. Please reconnect your ${docTypeLabel}.`,
@@ -1280,17 +1261,23 @@ const getDigilockerDocuments = async (req, res) => {
         }
 
         if (isPending) {
+          // Revert verification status even for pending to allow user to try again/process again
+          await revertKycVerification(userId, companyId, docType.toLowerCase());
+
           return res.failure({
-            message: `Validation is in process. Please check again after some time.`,
+            message: `Validation is in process. Please check again after some time or try connecting again.`,
             data: {
               ...responseData,
-              requiresReconnect: false
+              requiresReconnect: true
             }
           });
         }
 
+        // For other terminal errors, revert the connection status
+        await revertKycVerification(userId, companyId, docType.toLowerCase());
+
         return res.failure({
-          message: `Failed to fetch ${docTypeLabel} document from digilocker`,
+          message: `Failed to fetch ${docTypeLabel} document from digilocker. Please try connecting again.`,
           data: response
         });
       }

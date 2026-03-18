@@ -1291,26 +1291,28 @@ const revertKycData = async (req, res) => {
         companyId: companyId
       });
 
-      if (outlet && outlet.shopImage) {
-        const shopImageKey = extractS3Key(outlet.shopImage);
+      if (outlet) {
+        if (outlet.shopImage) {
+          const shopImageKey = extractS3Key(outlet.shopImage);
 
-        if (shopImageKey) {
-          revertOperations.push(
-            imageService.deleteImageFromS3(shopImageKey).catch(err =>
-              console.error('Error deleting shop image:', err)
-            )
-          );
+          if (shopImageKey) {
+            revertOperations.push(
+              imageService.deleteImageFromS3(shopImageKey).catch(err =>
+                console.error('Error deleting shop image:', err)
+              )
+            );
+          }
         }
 
-        await dbService.update(
+        // Destroy outlet record
+        await dbService.destroy(
           model.outlet,
-          { id: outlet.id },
-          { shopImage: null, shopImageVerify: false }
+          { id: outlet.id }
         );
       }
 
       updateData.shopDetailsVerify = false;
-      revertMessages.push('Shop image has been reverted');
+      revertMessages.push('Shop details have been reverted');
     }
 
     // Revert bank verification
