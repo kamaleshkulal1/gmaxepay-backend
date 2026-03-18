@@ -18,7 +18,7 @@ const initiateCms = async (req, res) => {
             refId: req.user.id,
             companyId: req.user.companyId,
             referenceId,
-            mobileNo,
+            mobileNo: existingUser?.mobileNo,
             status: 'PENDING',
             addedBy: req.user.id,
             updatedBy: req.user.id
