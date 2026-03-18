@@ -1077,8 +1077,13 @@ const cmsCallback = async (req, res) => {
         };
 
         if (event === 'CMS_BALANCE_INQUIRY') {
+            let wallet = await dbService.findOne(model.wallet, { refId: transaction.refId, companyId: transaction.companyId });
+            const currentBalance = wallet ? round4(wallet.mainWallet || 0) : 0;
+            
+            updateData.openingWallet = currentBalance;
             await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
-            return res.json({ status: 200, message: "Transaction completed successfully" });
+            
+            return res.json({ status: 200, message: "Transaction completed successfully", balance: currentBalance });
         }
 
         if (event === 'CMS_LOW_BALANCE_INQUIRY') {
@@ -1287,6 +1292,14 @@ const cmsCallback = async (req, res) => {
 
             const openingWallet = round4(wallet.mainWallet || 0);
             const initiatorDebit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? round4(amountNumber - retailerNetAmt) : round4(amountNumber - distNetAmt)) : amountNumber;
+
+            if (openingWallet < initiatorDebit) {
+                updateData.status = 'FAILED';
+                updateData.errorMsg = 'Insufficient balance in mainWallet';
+                await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
+                return res.status(400).json({ status: 400, message: "Insufficient balance in mainWallet" });
+            }
+
             const closingWallet = round4(openingWallet - initiatorDebit);
 
             const walletUpdates = [], historyPromises = [];
