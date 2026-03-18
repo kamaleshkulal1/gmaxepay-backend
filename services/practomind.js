@@ -177,18 +177,14 @@ const practomindEkycSubmit = async (data) => {
       txtPidData: data.txtPidData
     };
     console.log("tokenPayload", tokenPayload);
-    console.log("txtPidData", data.txtPidData);
-    console.log("Type of txtPidData", typeof data.txtPidData);
-    console.log("payload", payload);
-    console.log("token", token);
-
+    console.log("payload", payload)
     const response = await axios.post(`${PRACTOMIND_BASE_URL}/aeps/ekycsubmit`, payload, {
       headers: {
         'Authorization': token,
         'Content-Type': 'application/json'
       }
     });
-
+    console.log("Response", response)
     console.log('Practomind EKYC submit response:', response.data);
     return response.data;
   } catch (error) {
