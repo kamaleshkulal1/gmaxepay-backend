@@ -6,6 +6,13 @@ const round4 = (num) => {
     return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
 };
 
+const calcSlabAmount = (slab, base) => {
+    if (!slab) return 0;
+    const b = Number(base || 0), rc = Number(slab.commAmt || 0);
+    if (!Number.isFinite(b) || !Number.isFinite(rc)) return 0;
+    return (slab.amtType || 'fix').toLowerCase() === 'per' ? round4((b * rc) / 100) : round4(rc);
+};
+
 
 const updateServiceTransactionStatus = async (orderid, newStatus, opid, companyId = null) => {
     const whereClause = { orderid };
@@ -1044,11 +1051,334 @@ const a1topupCallback = async (req, res) => {
     }
 };
 
+const cmsCallback = async (req, res) => {
+    try {
+        console.log('[CMS Callback] Received payload:', JSON.stringify(req.body));
+        const { event, param } = req.body;
+
+        if (!event || !param || !param.referenceId) {
+            return res.status(400).json({ status: 400, message: "Invalid callback payload" });
+        }
+
+        const { referenceId, amount, biller_id, biller_name, mobile_no, datetime, utr, ackno, unique_id, status: paramStatus, errormsg, commission } = param;
+
+        const transaction = await dbService.findOne(model.cmsHistory, { referenceId });
+        if (!transaction) {
+            return res.status(400).json({ status: 400, message: "Transaction not found" });
+        }
+
+        const updateData = {
+            event,
+            billerId: biller_id,
+            billerName: biller_name,
+            amount: amount,
+            mobileNo: mobile_no || transaction.mobileNo,
+            responsePayload: req.body
+        };
+
+        if (event === 'CMS_BALANCE_INQUIRY') {
+            let wallet = await dbService.findOne(model.wallet, { refId: transaction.refId, companyId: transaction.companyId });
+            const currentBalance = wallet ? round4(wallet.mainWallet || 0) : 0;
+            
+            updateData.openingWallet = currentBalance;
+            await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
+            
+            return res.json({ status: 200, message: "Transaction completed successfully", balance: currentBalance });
+        }
+
+        if (event === 'CMS_LOW_BALANCE_INQUIRY') {
+            updateData.status = 'FAILED';
+            updateData.errorMsg = errormsg;
+            await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
+            return res.json({ status: 200, message: "Transaction completed successfully" });
+        }
+
+        if (event === 'CMS_POSTING') {
+            updateData.utr = utr;
+            updateData.ackno = ackno;
+            updateData.uniqueId = unique_id;
+            updateData.status = String(paramStatus) === '1' ? 'SUCCESS' : 'REFUNDED';
+            await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
+            return res.json({ status: 200, message: "Transaction completed successfully" });
+        }
+
+        if (event === 'CMS_BALANCE_DEBIT') {
+            if (transaction.status === 'DEBITED' || transaction.status === 'SUCCESS' || transaction.status === 'FAILED') {
+                return res.json({ status: 200, message: "Transaction already processed" });
+            }
+
+            const amountNumber = round4(amount || 0);
+            const user = await dbService.findOne(model.user, { id: transaction.refId });
+
+            const operator = await dbService.findOne(model.operator, {
+                operatorType: 'CMS',
+                operatorName: biller_name
+            });
+
+            const commData = { users: {}, wallets: {}, slabs: {}, amounts: { retailerComm: 0, distComm: 0, mdComm: 0, companyComm: 0, superAdminComm: 0, wlShortfall: 0, mdShortfall: 0, distShortfall: 0, saShortfall: 0 }, scenario: '' };
+
+            if (operator && [4, 5].includes(user.userRole)) {
+                const [companyAdmin, superAdmin] = await Promise.all([
+                    dbService.findOne(model.user, { companyId: user.companyId, userRole: 2, isActive: true }),
+                    dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
+                ]);
+
+                if (companyAdmin && superAdmin) {
+                    commData.users.companyAdmin = companyAdmin;
+                    commData.users.superAdmin = superAdmin;
+                    const [companyWallet, superAdminWallet] = await Promise.all([
+                        dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
+                        dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                    ]);
+                    commData.wallets.companyWallet = companyWallet;
+                    commData.wallets.superAdminWallet = superAdminWallet;
+
+                    if (user.userRole === 4) {
+                        const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                        commData.users.distributor = distributor;
+                        commData.wallets.distributorWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                        if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
+                            commData.scenario = 'DIST_DIRECT';
+                            const [saSlab, coSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                        } else {
+                            commData.scenario = 'DIST_MD';
+                            const md = await dbService.findOne(model.user, { id: distributor.reportingTo, companyId: user.companyId, isActive: true });
+                            if (md) {
+                                commData.users.masterDistributor = md;
+                                commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                                const [saSlab, coSlab, mdSlab] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType: 'CMS' })
+                                ]);
+                                commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                                commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                            }
+                        }
+                    } else if (user.userRole === 5) {
+                        const retailer = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                        commData.users.retailer = retailer;
+                        commData.wallets.retailerWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                        let reportingUser = null;
+                        if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
+                            reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: user.companyId, isActive: true });
+                        }
+                        if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                            commData.scenario = 'RET_DIRECT';
+                            const [saSlab, coSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.retSlab = coSlab?.find(c => c.roleType === 5);
+                        } else if (reportingUser.userRole === 3) {
+                            commData.scenario = 'RET_MD';
+                            commData.users.masterDistributor = reportingUser;
+                            commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                            const [saSlab, coSlab, mdSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS' })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                            commData.slabs.retSlab = mdSlab?.find(c => c.roleType === 5);
+                        } else if (reportingUser.userRole === 4) {
+                            commData.scenario = 'RET_DIST_CO';
+                            commData.users.distributor = reportingUser;
+                            commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                            if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
+                                const [saSlab, coSlab, distSlab] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS' })
+                                ]);
+                                commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4);
+                                commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                            } else {
+                                commData.scenario = 'RET_DIST_MD';
+                                const md = await dbService.findOne(model.user, { id: reportingUser.reportingTo, companyId: user.companyId, isActive: true });
+                                if (md) {
+                                    commData.users.masterDistributor = md;
+                                    commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                                    const [saSlab, coSlab, mdSlab, distSlab] = await Promise.all([
+                                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType: 'CMS' }),
+                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS' })
+                                    ]);
+                                    commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                    commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                    commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                                    commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                                    commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                                }
+                            }
+                        }
+                    }
+
+                    const operatorCommissionAmount = operator?.comm ? calcSlabAmount({ amtType: operator.amtType, commAmt: operator.comm }, amountNumber) : 0;
+                    const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
+                    const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
+                    let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
+                    let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, amountNumber) : 0;
+                    let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, amountNumber) : 0;
+
+                    let companyCost = 0;
+                    if (commData.users.masterDistributor) companyCost = mdSlabAmount;
+                    else if (commData.users.distributor) companyCost = distSlabAmount;
+                    else companyCost = retSlabAmount;
+
+                    commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
+                    if (wlSlabAmount > operatorCommissionAmount) commData.amounts.saShortfall = round4(wlSlabAmount - operatorCommissionAmount);
+
+                    commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
+                    if (companyCost > wlSlabAmount) commData.amounts.wlShortfall = round4(companyCost - wlSlabAmount);
+
+                    if (commData.users.masterDistributor) {
+                        let mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
+                        commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
+                        if (mdCost > mdSlabAmount) commData.amounts.mdShortfall = round4(mdCost - mdSlabAmount);
+                    }
+
+                    if (commData.users.distributor) {
+                        commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
+                        if (retSlabAmount > distSlabAmount) commData.amounts.distShortfall = round4(retSlabAmount - distSlabAmount);
+                    }
+
+                    commData.amounts.retailerComm = retSlabAmount;
+
+                    commData.avail = {
+                        superAdminAvail: Boolean(commData.users.superAdmin),
+                        whitelabelAvail: Boolean(commData.users.companyAdmin),
+                        masterDistributorAvail: Boolean(commData.users.masterDistributor),
+                        distributorAvail: Boolean(commData.users.distributor),
+                        retailerAvail: Boolean(commData.users.retailer)
+                    };
+                }
+            }
+
+            const retailerCommAmt = commData.amounts.retailerComm || 0;
+            const distCommAmt = commData.amounts.distComm || 0;
+            const mdCommAmt = commData.amounts.mdComm || 0;
+            const companyCommAmt = commData.amounts.companyComm || 0;
+            const superAdminCommAmt = commData.amounts.superAdminComm || 0;
+
+            const retailerNetAmt = round4(retailerCommAmt);
+            const distNetAmt = round4(distCommAmt);
+            const mdNetAmt = round4(mdCommAmt);
+            const companyNetAmt = round4(companyCommAmt);
+            const superAdminNetAmt = round4(superAdminCommAmt);
+
+            const saShortfallAmt = commData.amounts.saShortfall || 0;
+            const wlShortfallAmt = commData.amounts.wlShortfall || 0;
+            const mdShortfallAmt = commData.amounts.mdShortfall || 0;
+            const distShortfallAmt = commData.amounts.distShortfall || 0;
+
+            let wallet = await model.wallet.findOne({ where: { refId: transaction.refId, companyId: transaction.companyId } });
+            if (!wallet) wallet = await model.wallet.create({ refId: transaction.refId, companyId: transaction.companyId, roleType: user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: transaction.refId, updatedBy: transaction.refId });
+
+            const openingWallet = round4(wallet.mainWallet || 0);
+            const initiatorDebit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? round4(amountNumber - retailerNetAmt) : round4(amountNumber - distNetAmt)) : amountNumber;
+
+            if (openingWallet < initiatorDebit) {
+                updateData.status = 'FAILED';
+                updateData.errorMsg = 'Insufficient balance in mainWallet';
+                await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
+                return res.status(400).json({ status: 400, message: "Insufficient balance in mainWallet" });
+            }
+
+            const closingWallet = round4(openingWallet - initiatorDebit);
+
+            const walletUpdates = [], historyPromises = [];
+            const remarkText = `CMS Debit - ${biller_name} ${referenceId}`;
+
+            if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
+                walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { mainWallet: closingWallet, updatedBy: transaction.refId }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: transaction.refId, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, amount: amountNumber, comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: 0, debit: initiatorDebit, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', remark: remarkText, aepsTxnType: 'CMS', superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, addedBy: transaction.refId, updatedBy: transaction.refId }));
+
+                if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
+                    const dW = commData.wallets.distributorWallet, dO = round4(dW.mainWallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
+                    if (distNetAmt - distShortfallAmt !== 0) {
+                        walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { mainWallet: dC, updatedBy: commData.users.distributor.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - dist comm`, amount: amountNumber, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', distributorCom: distCommAmt, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
+                    }
+                }
+                if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
+                    const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.mainWallet || 0), mC = round4(mO + mdNetAmt - mdShortfallAmt);
+                    if (mdNetAmt - mdShortfallAmt !== 0) {
+                        walletUpdates.push(dbService.update(model.wallet, { id: mW.id }, { mainWallet: mC, updatedBy: commData.users.masterDistributor.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - md comm`, amount: amountNumber, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', masterDistributorCom: mdCommAmt, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
+                    }
+                }
+                if (commData.wallets.companyWallet) {
+                    const cW = commData.wallets.companyWallet, cO = round4(cW.mainWallet || 0), cC = round4(cO + companyNetAmt - wlShortfallAmt);
+                    if (companyNetAmt - wlShortfallAmt !== 0) {
+                        walletUpdates.push(dbService.update(model.wallet, { id: cW.id }, { mainWallet: cC, updatedBy: commData.users.companyAdmin.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - company comm`, amount: amountNumber, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', whitelabelComm: companyCommAmt, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
+                    }
+                }
+                if (commData.wallets.superAdminWallet) {
+                    const sW = commData.wallets.superAdminWallet, sO = round4(sW.mainWallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
+                    if (superAdminNetAmt - saShortfallAmt !== 0) {
+                        walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { mainWallet: sC, updatedBy: commData.users.superAdmin.id }));
+                        historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'MAIN', operator: operator?.operatorName || biller_name, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', aepsTxnType: 'CMS', superadminComm: superAdminCommAmt, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
+                    }
+                }
+            } else {
+                walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { mainWallet: closingWallet, updatedBy: transaction.refId }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: transaction.refId, companyId: transaction.companyId, walletType: 'MAIN', operator: operator?.operatorName || biller_name, amount: amountNumber, comm: 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: 0, debit: initiatorDebit, merchantTransactionId: referenceId, transactionId: referenceId, paymentStatus: 'SUCCESS', remark: remarkText, aepsTxnType: 'CMS', addedBy: transaction.refId, updatedBy: transaction.refId, userDetails: { id: user.id } }));
+            }
+
+            await Promise.all([...walletUpdates, ...historyPromises]);
+
+            updateData.status = 'DEBITED';
+            updateData.openingWallet = openingWallet;
+            updateData.closingWallet = closingWallet;
+            updateData.debit = initiatorDebit;
+            updateData.commission = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0;
+            updateData.superadminComm = superAdminCommAmt;
+            updateData.whitelabelComm = companyCommAmt;
+            updateData.masterDistributorCom = mdCommAmt;
+            updateData.distributorCom = distCommAmt;
+            updateData.retailerCom = retailerCommAmt;
+            updateData.superAdminAvail = Boolean(commData.users.superAdmin);
+            updateData.whitelabelAvail = Boolean(commData.users.companyAdmin);
+            updateData.masterDistributorAvail = Boolean(commData.users.masterDistributor);
+            updateData.distributorAvail = Boolean(commData.users.distributor);
+            updateData.retailerAvail = Boolean(commData.users.retailer);
+
+            await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
+
+            return res.json({ status: 200, message: "Transaction completed successfully" });
+        }
+
+        return res.status(400).json({ status: 400, message: "Transaction failed / Unknown event" });
+
+    } catch (err) {
+        console.error('CMS Callback Error:', err);
+        return res.status(500).json({ status: 500, message: "Internal server error" });
+    }
+};
+
 module.exports = {
     inspayCallback,
     aslPayoutCallback,
     runpaisaPayoutCallback,
     paynidiproPayoutCallback,
     aslAEPSCallback,
-    a1topupCallback
+    a1topupCallback,
+    cmsCallback
 };

@@ -77,6 +77,7 @@ db.serviceTransaction = require('./serviceTransaction');
 db.service1Transaction = require('./service1Transaction');
 db.fundRequest = require('./fundRequest');
 db.fundHistory = require('./fundHistrory');
+db.cmsHistory = require('./cmsHistory');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -775,6 +776,25 @@ db.subscription.belongsTo(db.company, {
 db.company.hasMany(db.subscription, {
   foreignKey: 'companyId',
   as: 'subscriptions',
+  sourceKey: 'id'
+});
+
+// CMS History Company Relationships
+db.cmsHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.cmsHistory, {
+  foreignKey: 'companyId',
+  as: 'cmsHistories',
+  sourceKey: 'id'
+});
+
+// CMS History User Relationships
+db.user.hasMany(db.cmsHistory, {
+  foreignKey: 'refId',
+  as: 'cmsHistories',
   sourceKey: 'id'
 });
 

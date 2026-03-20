@@ -8,4 +8,6 @@ router.post('/runpaisa-payout-callback', callbackController.runpaisaPayoutCallba
 router.post('/paynidipro-payout-callback', callbackController.paynidiproPayoutCallback);
 router.post('/aeps-callback', callbackController.aslAEPSCallback);
 router.get('/a1topup-callback', callbackController.a1topupCallback);
+router.post('/cms-callback', callbackController.cmsCallback);
+
 module.exports = router;

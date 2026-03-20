@@ -408,10 +408,7 @@ const revertKycVerification = async (userId, companyId, kycType) => {
     const updateData = {};
 
     if (kycType === 'pan') {
-      // Revert PAN verification
       updateData.panVerify = false;
-
-      // Delete PAN digilocker document
       const panDoc = await dbService.findOne(model.digilockerDocument, {
         refId: userId,
         companyId: companyId,
@@ -427,10 +424,7 @@ const revertKycVerification = async (userId, companyId, kycType) => {
         );
       }
     } else if (kycType === 'aadhar' || kycType === 'aadhaar') {
-      // Revert Aadhaar verification
       updateData.aadharVerify = false;
-
-      // Delete Aadhaar digilocker document
       const aadhaarDoc = await dbService.findOne(model.digilockerDocument, {
         refId: userId,
         companyId: companyId,
@@ -447,31 +441,27 @@ const revertKycVerification = async (userId, companyId, kycType) => {
       }
     }
 
-    // Update user if any fields need to be reverted
     if (Object.keys(updateData).length > 0) {
       await dbService.update(model.user, { id: userId, companyId: companyId }, updateData);
 
-      // Recalculate and update KYC status
       await updateKycStatus(userId, companyId, {});
     }
   } catch (error) {
   }
 };
 
-// Initial Step ReferCode
 const postReferCode = async (req, res) => {
   try {
     const companyCtx = await getCompanyFromHeaders(req);
     if (companyCtx.error) {
       return res.failure({ message: companyCtx.error });
     }
-    const { referCode } = req.body || {};
+    const { referCode, isMobile } = req.body || {};
     if (!referCode) {
       return res.failure({ message: 'Refer Code is required' });
     }
     const { companyId } = companyCtx;
 
-    // Encrypt referCode before querying (since it's stored encrypted in database)
     let encryptedReferCode;
     try {
       encryptedReferCode = encrypt(referCode);
@@ -488,7 +478,10 @@ const postReferCode = async (req, res) => {
       return res.failure({ message: 'Invalid Refer Code' });
     }
 
-    // referCode is automatically decrypted by the model's afterFind hook
+    if (isMobile && referCodeData.userRole === 2) {
+      return res.failure({ message: 'This referral code is for Master Distributor onboarding. Please access it via the web portal.' });
+    }
+
     return res.success({ message: 'Refer Code is valid', data: referCodeData.referCode });
   }
   catch (error) {
@@ -497,10 +490,9 @@ const postReferCode = async (req, res) => {
 };
 
 const validateReferralCodeAndDetermineRole = async (referCode, companyId, company) => {
-  // If no referral code provided, default to Retailer (userRole = 5)
   if (!referCode || referCode.trim() === '') {
     return {
-      userRole: 5, // Retailer
+      userRole: 5,
       parentId: null,
       error: null
     };
@@ -508,7 +500,6 @@ const validateReferralCodeAndDetermineRole = async (referCode, companyId, compan
 
   const trimmedReferCode = referCode.trim();
 
-  // Encrypt the input referCode to search in database (referCode is stored encrypted)
   let encryptedReferCode;
   try {
     encryptedReferCode = encrypt(trimmedReferCode);
@@ -520,8 +511,6 @@ const validateReferralCodeAndDetermineRole = async (referCode, companyId, compan
     };
   }
 
-  // First, check if it's a company admin referral code
-  // Find company admin user (userRole = 2) for this company with matching referCode
   const companyAdmin = await dbService.findOne(model.user, {
     companyId: companyId,
     userRole: 2,
@@ -530,35 +519,25 @@ const validateReferralCodeAndDetermineRole = async (referCode, companyId, compan
   });
 
   if (companyAdmin) {
-    // Verify the decrypted referCode matches (model hook should have decrypted it)
     let companyReferCode = companyAdmin.referCode;
-    // If model hook didn't decrypt it (shouldn't happen, but handle edge case)
     try {
       if (companyReferCode && (companyReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(companyReferCode))) {
         companyReferCode = decrypt(companyReferCode);
       }
     } catch (e) {
-      // If decryption fails, assume it's already decrypted
       console.error('Error decrypting company admin referCode:', e);
     }
 
-    // Double-check the decrypted code matches
     if (companyReferCode === trimmedReferCode) {
-      // Company referral code matched
-      // Note: reportingTo field references user.id, not company.id
-      // For company referral, we'll set reportingTo to companyAdmin.id (the company admin user)
-      // This maintains the referral relationship while using the existing field structure
       return {
-        userRole: 3, // Master Distributor
-        parentId: companyAdmin.id, // Use company admin's user ID as parentId
-        isCompanyReferral: true, // Flag to indicate this is a company referral
+        userRole: 3,
+        parentId: companyAdmin.id,
+        isCompanyReferral: true,
         error: null
       };
     }
   }
 
-  // Search for user with matching encrypted referral code within the same company
-  // The model hook will automatically decrypt referCode when we fetch the user
   const refOwner = await dbService.findOne(
     model.user,
     {
@@ -569,20 +548,16 @@ const validateReferralCodeAndDetermineRole = async (referCode, companyId, compan
     { attributes: ['id', 'referCode', 'userRole', 'companyId'] }
   );
 
-  // Verify the decrypted referCode matches (model hook should have decrypted it)
   if (refOwner && refOwner.referCode) {
     let decryptedReferCode = refOwner.referCode;
-    // If model hook didn't decrypt it (shouldn't happen, but handle edge case)
     try {
       if (decryptedReferCode && (decryptedReferCode.length > 20 || /^[0-9a-f]{32,}$/i.test(decryptedReferCode))) {
         decryptedReferCode = decrypt(decryptedReferCode);
       }
     } catch (e) {
-      // If decryption fails, assume it's already decrypted
       console.error('Error decrypting user referCode:', e);
     }
 
-    // Double-check the decrypted code matches
     if (decryptedReferCode !== trimmedReferCode) {
       return {
         userRole: null,
@@ -644,7 +619,7 @@ const sendSmsMobile = async (req, res) => {
     }
 
     const { companyId, company } = companyCtx;
-    const { mobileNo, referCode } = req.body || {};
+    const { mobileNo, referCode, isMobile } = req.body || {};
 
     // Validate mobile number
     if (!mobileNo || typeof mobileNo !== 'string' || mobileNo.trim() === '') {
@@ -742,7 +717,10 @@ const sendSmsMobile = async (req, res) => {
 
     const { userRole, parentId } = referralValidation;
 
-    // Ensure userRole is only 3, 4, or 5 (not 1 or 2)
+    if (isMobile && userRole === 3) {
+      return res.failure({ message: 'This referral code is for Master Distributor onboarding. Please access it via the web portal.' });
+    }
+
     if (userRole === 1 || userRole === 2) {
       return res.failure({
         message: 'Invalid user role. Only Master Distributor, Distributor, and Retailer can register.'
@@ -1326,7 +1304,6 @@ const connectPanVerification = async (req, res) => {
     if (!company.customDomain || !companyDomain) {
       return res.failure({ message: 'Pan verification is not allowed for this company' });
     }
-    // Check if document already exists (already processed)
     const existingDoc = await dbService.findOne(model.digilockerDocument, {
       refId: user.id,
       companyId: companyId,
