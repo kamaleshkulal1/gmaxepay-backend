@@ -619,7 +619,7 @@ const sendSmsMobile = async (req, res) => {
     }
 
     const { companyId, company } = companyCtx;
-    const { mobileNo, referCode } = req.body || {};
+    const { mobileNo, referCode, isMobile } = req.body || {};
 
     // Validate mobile number
     if (!mobileNo || typeof mobileNo !== 'string' || mobileNo.trim() === '') {
