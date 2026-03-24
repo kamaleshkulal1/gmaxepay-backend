@@ -633,6 +633,7 @@ const payout = async (req, res) => {
             amount: payoutAmount,
             walletType: mode === 'bank' ? walletType : null,
             aepsType: normalizedAepsType,
+            payoutType: activePayout.name,
             openingBalance: aepsOpeningBalance,
             closingBalance: aepsClosingBalance,
             status: mode === 'wallet' ? 'SUCCESS' : 'PENDING',
@@ -684,7 +685,6 @@ const payout = async (req, res) => {
             payoutHistoryData.bankName = customerBank.bankName;
             payoutHistoryData.mobile = user.mobileNo || user.mobile || user.phone;
 
-            payoutHistoryData.payoutType = activePayout.name;
             let apiResponse = null;
 
             if (activePayout.name === 'PayIndiPro') {

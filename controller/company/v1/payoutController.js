@@ -86,20 +86,21 @@ const payout = async (req, res) => {
         const mainWalletClosingBalance = parseFloat((mainWalletOpeningBalance + payoutAmount).toFixed(4));
 
         const payoutHistoryData = {
-            refId: existingUser.id,
-            companyId: existingUser.companyId,
+            refId: user.id,
+            companyId: user.companyId,
             type: mode === 'wallet' ? 'internal' : 'external',
             transactionID: transactionID,
             amount: payoutAmount,
             walletType: walletType,
             aepsType: normalizedAepsType,
+            payoutType: activePayout.name,
             openingBalance: aepsOpeningBalance,
             closingBalance: aepsClosingBalance,
             status: mode === 'wallet' ? 'SUCCESS' : 'PENDING',
             latitude: latitude,
             longitude: longitude,
-            addedBy: existingUser.id,
-            updatedBy: existingUser.id
+            addedBy: user.id,
+            updatedBy: user.id
         };
 
         let customerBank = null;
@@ -273,8 +274,6 @@ const payout = async (req, res) => {
                 }
             }
             // --- END: Commercials & Validation ---
-
-            payoutHistoryData.payoutType = activePayout.name;
             let apiResponse = null;
 
             if (activePayout.name === 'PayIndiPro') {
