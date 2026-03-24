@@ -69,12 +69,14 @@ const payout = async (req, res) => {
         console.log('Wallet Type:', walletType);
 
         // Parallel fetch: company, wallet, and active payout service
-        const [company, wallet, activePayout] = await Promise.all([
-            dbService.findOne(model.company, { id: user.companyId }),
-            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId }),
-            dbService.findOne(model.payoutList, { companyId: user.companyId, isActive: true })
+        const [existingUser, company, wallet, activePayout] = await Promise.all([
+            dbService.findOne(model.user, { id: req.user.id, isActive: true }),
+            dbService.findOne(model.company, { id: req.user.companyId }),
+            dbService.findOne(model.wallet, { refId: req.user.id, companyId: req.user.companyId }),
+            dbService.findOne(model.payoutList, { companyId: req.user.companyId, isActive: true })
         ]);
 
+        if (!existingUser) return res.failure({ message: 'User not found or inactive' });
         if (!company) return res.failure({ message: 'Company not found' });
         if (!wallet) return res.failure({ message: 'Wallet not found' });
         if (!activePayout) return res.failure({ message: 'No active payout service found for the company. Please contact admin.' });
@@ -692,7 +694,7 @@ const payout = async (req, res) => {
                     benAccount: customerBank.accountNumber,
                     benName: customerBank.beneficiaryName,
                     amount: payoutAmount,
-                    benMobile: user.mobileNo || user.mobile || user.phone || '9999999999',
+                    benMobile: existingUser.mobileNo || user.mobile || user.phone || '9999999999',
                     bankName: customerBank.bankName || 'Bank',
                     agentId: transactionID,
                     dmtMode: 1
@@ -720,8 +722,8 @@ const payout = async (req, res) => {
                     agent_id: transactionID,
                     amount: payoutAmount,
                     ifsc: customerBank.ifsc,
-                    email: user.email || company.email || 'payout@gmaxepay.com',
-                    mobile: user.mobileNo || user.mobile || user.phone || '9999999999',
+                    email: existingUser.email || company.email || 'payout@gmaxepay.com',
+                    mobile: existingUser.mobileNo || user.mobile || user.phone || '9999999999',
                     remark: `Payout via Zuelpay - ${transactionID}`,
                     payment_type: paymentMode
                 };
