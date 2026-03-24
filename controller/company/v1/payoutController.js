@@ -56,7 +56,7 @@ const payout = async (req, res) => {
             dbService.findOne(model.user, { id: req.user.id, isActive: true }),
             dbService.findOne(model.company, { id: req.user.companyId }),
             dbService.findOne(model.wallet, { refId: req.user.id, companyId: req.user.companyId }),
-            dbService.findOne(model.payoutList, { companyId: req.user.companyId, isActive: true })
+            dbService.findOne(model.payoutList, { isActive: true })
         ]);
 
         if (!existingUser) return res.failure({ message: 'User not found or inactive' });
