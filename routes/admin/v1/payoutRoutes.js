@@ -4,5 +4,7 @@ const payoutController = require('../../../controller/admin/v1/payoutController'
 const authentication = require('../../../middleware/authentication');
 
 router.post('/history', authentication, payoutController.getAllPayoutHistory);
+router.post('/list', authentication, payoutController.getPayoutList);
+router.post('/switch-status', authentication, payoutController.switchPayoutStatus);
 
 module.exports = router;

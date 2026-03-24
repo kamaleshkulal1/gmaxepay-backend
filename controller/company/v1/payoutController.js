@@ -2,6 +2,8 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const runpaisa = require('../../../services/runpaisa');
+const paynidipro = require('../../../services/paynidipro');
+const zuelpayApi = require('../../../services/zuelpayApi');
 const { Op } = require('sequelize');
 
 const round4 = (num) => {
@@ -50,13 +52,17 @@ const payout = async (req, res) => {
         const normalizedAepsType = aepsType.toUpperCase();
         const walletType = normalizedAepsType === 'AEPS1' ? 'apes1Wallet' : 'apes2Wallet';
 
-        const [company, wallet] = await Promise.all([
+        const [company, wallet, activePayout] = await Promise.all([
             dbService.findOne(model.company, { id: user.companyId }),
-            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId })
+            dbService.findOne(model.wallet, { refId: user.id, companyId: user.companyId }),
+            dbService.findOne(model.payoutList, { companyId: user.companyId, isActive: true })
         ]);
 
         if (!company) return res.failure({ message: 'Company not found' });
         if (!wallet) return res.failure({ message: 'Wallet not found' });
+        if (!activePayout) return res.failure({ message: 'No active payout service found for the company. Please contact admin.' });
+
+        const operatorType = activePayout.name === 'Zuelpay' ? 'PAYOUT2' : 'PAYOUT1';
 
         const currentAepsBalance = parseFloat(wallet[walletType] || 0);
 
@@ -150,7 +156,7 @@ const payout = async (req, res) => {
             // --- START: Commercials & Validation BEFORE API Call ---
             // 1. Fetch Operator
             payoutOperator = await dbService.findOne(model.operator, {
-                operatorType: 'PAYOUT',
+                operatorType: operatorType,
                 minValue: { [Op.lte]: payoutAmount },
                 maxValue: { [Op.gte]: payoutAmount }
             });
@@ -266,66 +272,76 @@ const payout = async (req, res) => {
             }
             // --- END: Commercials & Validation ---
 
-            console.log('Sending Request to Paynidipro API instead of RunPaisa');
-            const paynidipro = require('../../../services/paynidipro');
+            payoutHistoryData.payoutType = activePayout.name;
+            let apiResponse = null;
 
-            const payload = {
-                benIFSC: customerBank.ifsc,
-                benAccount: customerBank.accountNumber,
-                benName: customerBank.beneficiaryName,
-                amount: payoutAmount,
-                benMobile: user.mobileNo || user.mobile || user.phone || '9999999999',
-                bankName: customerBank.bankName || 'Bank',
-                agentId: transactionID,
-                dmtMode: 1
-            };
+            if (activePayout.name === 'PayIndiPro') {
+                console.log('Sending Request to Paynidipro API');
+                const payload = {
+                    benIFSC: customerBank.ifsc,
+                    benAccount: customerBank.accountNumber,
+                    benName: customerBank.beneficiaryName,
+                    amount: payoutAmount,
+                    benMobile: user.mobileNo || user.mobile || user.phone || '9999999999',
+                    bankName: customerBank.bankName || 'Bank',
+                    agentId: transactionID,
+                    dmtMode: 1
+                };
+                apiResponse = await paynidipro.doSettlement(payload);
+                console.log('PayIndiPro Response:', JSON.stringify(apiResponse));
 
-            /*
-            console.log('Sending Request to RunPaisa API');
-            // Call RunPaisa API for bank payout
-            const payloadRunpaisa = {
-                accountNumber: customerBank.accountNumber,
-                ifscCode: customerBank.ifsc,
-                amount: payoutAmount,
-                orderId: transactionID,
-                beneficiaryName: customerBank.beneficiaryName,
-                paymentMode: paymentMode
+                if (apiResponse) {
+                    const isSuccess = (apiResponse.status === true || apiResponse.status === 'SUCCESS' || apiResponse.code === 200) &&
+                        (apiResponse.data !== null && apiResponse.data !== undefined);
+
+                    if (isSuccess) {
+                        payoutHistoryData.status = 'SUCCESS';
+                        if (apiResponse.data?.order_id || apiResponse.orderId) payoutHistoryData.orderId = apiResponse.data?.order_id || apiResponse.orderId;
+                    } else {
+                        payoutHistoryData.status = 'FAILED';
+                    }
+                    if (apiResponse.message) payoutHistoryData.statusMessage = apiResponse.message;
+                }
+            } else if (activePayout.name === 'Zuelpay') {
+                console.log('Sending Request to Zuelpay API');
+                const payload = {
+                    account: customerBank.accountNumber,
+                    account_name: customerBank.beneficiaryName,
+                    agent_id: transactionID,
+                    amount: payoutAmount,
+                    ifsc: customerBank.ifsc,
+                    email: user.email || company.email || 'payout@gmaxepay.com',
+                    mobile: user.mobileNo || user.mobile || user.phone || '9999999999',
+                    remark: `Company Payout via Zuelpay - ${transactionID}`,
+                    payment_type: paymentMode
+                };
+                apiResponse = await zuelpayApi.payoutPayment(payload);
+                console.log('Zuelpay Response:', JSON.stringify(apiResponse));
+
+                if (apiResponse) {
+                    const isSuccess = apiResponse.status === 'success' || apiResponse.status === 'SUCCESS';
+                    if (isSuccess) {
+                        payoutHistoryData.status = 'SUCCESS';
+                    } else if (apiResponse.status === 'pending' || apiResponse.status === 'PENDING') {
+                        payoutHistoryData.status = 'PENDING';
+                    } else {
+                        payoutHistoryData.status = 'FAILED';
+                    }
+                    if (apiResponse.order_id) payoutHistoryData.orderId = apiResponse.order_id;
+                    if (apiResponse.bank_ref) payoutHistoryData.utrn = apiResponse.bank_ref;
+                    if (apiResponse.message) payoutHistoryData.statusMessage = apiResponse.message;
+                }
+            } else {
+                return res.failure({ message: `Payout service ${activePayout.name} is not implemented.` });
             }
-
-            console.log("Payload", JSON.stringify(payloadRunpaisa))
-            const runpaisaResponse = await runpaisa.bankTransfer({
-                accountNumber: customerBank.accountNumber,
-                ifscCode: customerBank.ifsc,
-                amount: payoutAmount,
-                orderId: transactionID,
-                beneficiaryName: customerBank.beneficiaryName,
-                paymentMode: paymentMode
-            });
-
-            console.log('RunPaisa API Response:', runpaisaResponse);
-            */
-
-            const paynidiproResponse = await paynidipro.doSettlement(payload);
-            console.log('Paynidipro API Response:', paynidiproResponse);
 
             // Store API response and update status
-            payoutHistoryData.apiResponse = paynidiproResponse;
+            payoutHistoryData.apiResponse = apiResponse;
             payoutHistoryData.agentTransactionId = transactionID;
-
-            if (paynidiproResponse) {
-                if (paynidiproResponse.status === true || paynidiproResponse.status === 'SUCCESS' || paynidiproResponse.code === 200 || paynidiproResponse.code === '0x0200') {
-                    payoutHistoryData.status = 'SUCCESS';
-                } else {
-                    payoutHistoryData.status = 'FAILED';
-                }
-
-                if (paynidiproResponse.data?.order_id || paynidiproResponse.orderId) payoutHistoryData.orderId = paynidiproResponse.data?.order_id || paynidiproResponse.orderId;
-                if (paynidiproResponse.message) payoutHistoryData.statusMessage = paynidiproResponse.message;
-            }
 
             if (payoutHistoryData.status === 'SUCCESS' && calculatedAmount > 0) {
                 const superAdminOpeningBalance = parseFloat(superAdminWallet.mainWallet || 0);
-                const operatorName = 'Payout';
+                const operatorName = operatorType === 'PAYOUT2' ? 'Payout2' : 'Payout1';
                 const remarkText = `Bank payout via ${paymentMode}`;
                 const commType = (slabComm.commType || 'sur').toLowerCase();
 
@@ -421,7 +437,7 @@ const payout = async (req, res) => {
                             companyId: 1,
                             transactionId: transactionID,
                             amount: saBankCharge,
-                            service: 'PAYOUT',
+                            service: operatorType,
                             operatorType: pOpName,
                             addedBy: superAdmin.id
                         });
@@ -534,7 +550,7 @@ const payout = async (req, res) => {
                             companyId: 1,
                             transactionId: transactionID,
                             amount: saDebitCharge,
-                            service: 'PAYOUT',
+                            service: operatorType,
                             operatorType: pOpName,
                             addedBy: superAdmin.id
                         });
