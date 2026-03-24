@@ -133,29 +133,63 @@ const getPayoutList = async (req, res) => {
     }
 }
 
+const createPayoutList = async (req, res) => {
+    try {
+        if (![1].includes(req.user.userRole)) {
+            return res.failure({ message: 'You are not authorized to create payout list' });
+        }
+        const { name, isActive } = req.body;
+        if (!name) {
+            return res.failure({ message: 'Name is required' });
+        }
+
+        if (isActive) {
+            // Deactivate all other payout services globally if this one is active
+            await dbService.update(model.payoutList,
+                {},
+                { isActive: false }
+            );
+        }
+
+        const dataToCreate = {
+            name,
+            isActive: isActive || false
+        };
+
+        const result = await dbService.createOne(model.payoutList, dataToCreate);
+
+        return res.success({
+            message: 'Payout list entry created successfully',
+            data: result
+        });
+    } catch (error) {
+        console.log('Create payout list error:', error);
+        return res.failure({ message: error.message || 'Internal server error' });
+    }
+}
+
 const switchPayoutStatus = async (req, res) => {
     try {
         if (![1].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to switch payout status' });
         }
 
-        const { id, companyId } = req.body;
-        if (!id || !companyId) {
-            return res.failure({ message: 'Payout ID and Company ID are required' });
+        const { id } = req.body;
+        if (!id) {
+            return res.failure({ message: 'Payout ID is required' });
         }
 
-        // Deactivate all other payout services for the same company
-        await dbService.update(model.payoutList, 
+        // Deactivate all payout services globally
+        await dbService.update(model.payoutList,
             {
-                companyId: companyId,
                 id: { [Op.ne]: id }
             },
             { isActive: false }
         );
 
         // Activate the selected payout service
-        await dbService.update(model.payoutList, 
-            { id: id, companyId: companyId },
+        await dbService.update(model.payoutList,
+            { id: id },
             { isActive: true }
         );
 
@@ -171,5 +205,6 @@ const switchPayoutStatus = async (req, res) => {
 module.exports = {
     getAllPayoutHistory,
     getPayoutList,
-    switchPayoutStatus
+    switchPayoutStatus,
+    createPayoutList
 };
