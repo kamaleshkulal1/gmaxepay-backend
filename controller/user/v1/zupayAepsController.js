@@ -93,7 +93,7 @@ const initiateOnboarding = async (req, res) => {
 
         const [zupayCity, zupayState, zupayPincode] = await Promise.all([
             dbService.findOne(model.zupayCity, { name: existingUser.district }),
-            dbService.findOne(model.zupayState, { name: existingUser.state }),
+            dbService.findOne(model.zupayState, { name: existingUser.state?.toUpperCase() }),
             dbService.findOne(model.zupayMaster, { pincode: existingUser.zipcode })
         ]);
 
