@@ -142,6 +142,11 @@ let PayoutHistory = sequelize.define('payoutHistory', {
   updatedBy: {
     type: DataTypes.INTEGER,
     allowNull: true
+  },
+  payoutType: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'PayIndiPro'
   }
 }, {
   freezeTableName: true,

@@ -28,6 +28,10 @@ const getAllPayoutHistory = async (req, res) => {
                 query.type = type.toLowerCase();
             }
 
+            if (dataToFind.query.payoutType) {
+                query.payoutType = dataToFind.query.payoutType;
+            }
+
             if (walletType && typeof walletType === 'string') {
                 const normalizedWalletType = walletType.toUpperCase();
                 if (normalizedWalletType === 'AEPS1') {
@@ -77,6 +81,17 @@ const getAllPayoutHistory = async (req, res) => {
                 }
             }
 
+            if (customSearch.payoutType) {
+                const searchValue = String(customSearch.payoutType).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        payoutType: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
             if (searchConditions.length > 0) {
                 query = {
                     ...query,
@@ -100,6 +115,96 @@ const getAllPayoutHistory = async (req, res) => {
     }
 }
 
+const getPayoutList = async (req, res) => {
+    try {
+        if (![1].includes(req.user.userRole)) {
+            return res.failure({ message: 'You are not authorized to get payout list' });
+        }
+        const query = req.body || {};
+        const result = await dbService.findAll(model.payoutList, query);
+
+        return res.success({
+            message: 'Payout list retrieved successfully',
+            data: result || []
+        });
+    } catch (error) {
+        console.log('Get payout list error:', error);
+        return res.failure({ message: error.message || 'Internal server error' });
+    }
+}
+
+const createPayoutList = async (req, res) => {
+    try {
+        if (![1].includes(req.user.userRole)) {
+            return res.failure({ message: 'You are not authorized to create payout list' });
+        }
+        const { name, isActive } = req.body;
+        if (!name) {
+            return res.failure({ message: 'Name is required' });
+        }
+
+        if (isActive) {
+            // Deactivate all other payout services globally if this one is active
+            await dbService.update(model.payoutList,
+                {},
+                { isActive: false }
+            );
+        }
+
+        const dataToCreate = {
+            name,
+            isActive: isActive || false
+        };
+
+        const result = await dbService.createOne(model.payoutList, dataToCreate);
+
+        return res.success({
+            message: 'Payout list entry created successfully',
+            data: result
+        });
+    } catch (error) {
+        console.log('Create payout list error:', error);
+        return res.failure({ message: error.message || 'Internal server error' });
+    }
+}
+
+const switchPayoutStatus = async (req, res) => {
+    try {
+        if (![1].includes(req.user.userRole)) {
+            return res.failure({ message: 'You are not authorized to switch payout status' });
+        }
+
+        const { id } = req.body;
+        if (!id) {
+            return res.failure({ message: 'Payout ID is required' });
+        }
+
+        // Deactivate all payout services globally
+        await dbService.update(model.payoutList,
+            {
+                id: { [Op.ne]: id }
+            },
+            { isActive: false }
+        );
+
+        // Activate the selected payout service
+        await dbService.update(model.payoutList,
+            { id: id },
+            { isActive: true }
+        );
+
+        return res.success({
+            message: 'Payout service switched successfully'
+        });
+    } catch (error) {
+        console.log('Switch payout status error:', error);
+        return res.failure({ message: error.message || 'Internal server error' });
+    }
+}
+
 module.exports = {
-    getAllPayoutHistory
+    getAllPayoutHistory,
+    getPayoutList,
+    switchPayoutStatus,
+    createPayoutList
 };

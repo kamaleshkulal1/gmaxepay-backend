@@ -70,6 +70,7 @@ db.practomindAepsHistory = require('./practomindAepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
+db.payoutList = require('./payoutList');
 db.gstHistory = require('./gstHistory');
 // db.recharge = require('./recharge');
 // db.dthRecharge = require('./dthRecharge');
@@ -78,6 +79,8 @@ db.service1Transaction = require('./service1Transaction');
 db.fundRequest = require('./fundRequest');
 db.fundHistory = require('./fundHistrory');
 db.cmsHistory = require('./cmsHistory');
+db.matmHistory = require('./matmHistory');
+db.mposHistory = require('./mposHistory');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -606,6 +609,15 @@ db.company.hasMany(db.gstHistory, {
   sourceKey: 'id'
 });
 
+db.payoutList.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company'
+});
+db.company.hasMany(db.payoutList, {
+  foreignKey: 'companyId',
+  as: 'payoutLists'
+});
+
 db.payoutHistory.belongsTo(db.customerBank, {
   foreignKey: 'customerBankId',
   as: 'customerBank',
@@ -795,6 +807,44 @@ db.company.hasMany(db.cmsHistory, {
 db.user.hasMany(db.cmsHistory, {
   foreignKey: 'refId',
   as: 'cmsHistories',
+  sourceKey: 'id'
+});
+
+// MATM History Company Relationships
+db.matmHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.matmHistory, {
+  foreignKey: 'companyId',
+  as: 'matmHistories',
+  sourceKey: 'id'
+});
+
+// MATM History User Relationships
+db.user.hasMany(db.matmHistory, {
+  foreignKey: 'refId',
+  as: 'matmHistories',
+  sourceKey: 'id'
+});
+
+// MPOS History Company Relationships
+db.mposHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.mposHistory, {
+  foreignKey: 'companyId',
+  as: 'mposHistories',
+  sourceKey: 'id'
+});
+
+// MPOS History User Relationships
+db.user.hasMany(db.mposHistory, {
+  foreignKey: 'refId',
+  as: 'mposHistories',
   sourceKey: 'id'
 });
 
