@@ -310,7 +310,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             companyBankAccountNumber: bankDetails?.accountNumber,
             bankIfscCode: bankDetails?.ifsc,
             companyBankName: bankDetails?.bankName,
-            bankAccountName: bankDetails?.beneficiaryName,
+            bankAccountName: bankDetails?.beneficiaryName ? bankDetails.beneficiaryName.replace(/\./g, '') : bankDetails?.beneficiaryName,
             bankBranchName: bankDetails?.branch,
             c_code: existingCompanyCode?.mccCode,
             shopAddress: existingOutlet?.shopAddress,
