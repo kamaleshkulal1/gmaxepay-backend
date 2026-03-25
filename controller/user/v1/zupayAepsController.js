@@ -92,7 +92,7 @@ const initiateOnboarding = async (req, res) => {
         if (!existingOutlet) return res.failure({ message: 'Outlet not found. Please complete outlet setup.' });
 
         const [zupayCity, zupayState, zupayPincode] = await Promise.all([
-            dbService.findOne(model.zupayCity, { name: existingOutlet.shopCity }),
+            dbService.findOne(model.zupayCity, { name: existingUser.district }),
             dbService.findOne(model.zupayState, { name: existingUser.state }),
             dbService.findOne(model.zupayMaster, { pincode: existingUser.zipcode })
         ]);
