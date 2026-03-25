@@ -3,10 +3,6 @@ const model = require('../models/index');
 const dbService = require('../utils/dbService');
 const { Op } = require('sequelize');
 
-/**
- * Reset OTP login requirement for all users at midnight IST
- * This allows OTP to be required again for the next day
- */
 const resetOtpLoginRequirement = async () => {
   try {
     const result = await dbService.update(
@@ -28,16 +24,25 @@ const resetOtpLoginRequirement = async () => {
   }
 };
 
-/**
- * Initialize AEPS daily login scheduler for midnight IST logout and OTP reset
- * This function schedules automatic logout of all users and resets OTP requirement at midnight IST
- */
+const resetZupay2faRequirement = async () => {
+  try {
+    const result = await dbService.update(
+      model.zupayOnboarding,
+      { is2faVerified: true },
+      { is2faVerified: false }
+    );
+    console.log('[Zupay 2FA Reset] Reset Zupay 2FA status for all users at midnight IST');
+    return { success: true };
+  } catch (error) {
+    console.error('[Zupay 2FA Reset] Error resetting Zupay 2FA status:', error);
+    throw error;
+  }
+};
+
+
 const aepsLogout = () => {
-  // Function to schedule next midnight IST logout and OTP reset
   const scheduleNextMidnightLogout = () => {
     let timeUntilMidnight = aepsDailyLoginService.getTimeUntilNextMidnightIST();
-    // Safety guard: if value is invalid, NaN, or <= 0, fall back to 24 hours
-    // This prevents an instant runaway loop if the calculation ever returns a bad value.
     if (!timeUntilMidnight || isNaN(timeUntilMidnight) || timeUntilMidnight <= 0) {
       console.warn('[AEPS Daily Login] Invalid timeUntilMidnight detected, defaulting to 24h');
       timeUntilMidnight = 24 * 60 * 60 * 1000;
@@ -46,22 +51,19 @@ const aepsLogout = () => {
 
     setTimeout(async () => {
       try {
-        // Logout all users and reset OTP requirement at midnight IST
         await Promise.all([
           aepsDailyLoginService.logoutAllUsersAtMidnight(),
-          resetOtpLoginRequirement()
+          resetOtpLoginRequirement(),
+          resetZupay2faRequirement()
         ]);
-        // Schedule next midnight logout
         scheduleNextMidnightLogout();
       } catch (error) {
         console.error('[AEPS Daily Login] Error in scheduled logout/OTP reset:', error);
-        // Retry after 1 hour if error occurs
         setTimeout(scheduleNextMidnightLogout, 60 * 60 * 1000);
       }
     }, timeUntilMidnight);
   };
 
-  // Start the scheduler
   scheduleNextMidnightLogout();
   console.log('[AEPS Daily Login] Midnight IST auto-logout and OTP reset scheduler initialized');
 };

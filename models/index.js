@@ -51,7 +51,6 @@ db.state = require('./state');
 db.gstState = require('./gstState');
 db.rechargeStateCode = require('./RechargeStateCode');
 
-// Bank & Payment Models (Load customerBank early as payoutHistory depends on it)
 db.bank = require('./bank');
 db.customerBank = require('./customerBank');
 db.cardType = require('./cardType');
@@ -60,6 +59,12 @@ db.aslBankList = require('./aslBankList');
 db.practomindBankList = require('./practomindBankList');
 db.practomindCompanyCode = require('./practomindCompanyCode');
 db.practomindState = require('./practomindState');
+
+db.zupayState = require('./zupayState');
+db.zupayCity = require('./zupayCity');
+db.zupayMaster = require('./zupayMaster');
+db.zupayOnboarding = require('./zupayOnbaording');
+db.zupayAepsHistory = require('./zupayAepsHistory');
 
 // Financial Models
 db.wallet = require('./wallet');
@@ -845,6 +850,50 @@ db.company.hasMany(db.mposHistory, {
 db.user.hasMany(db.mposHistory, {
   foreignKey: 'refId',
   as: 'mposHistories',
+  sourceKey: 'id'
+});
+
+// Zupay Onboarding Relationships
+db.zupayOnboarding.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.zupayOnboarding, {
+  foreignKey: 'userId',
+  as: 'zupayOnboardings',
+  sourceKey: 'id'
+});
+db.zupayOnboarding.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.zupayOnboarding, {
+  foreignKey: 'companyId',
+  as: 'zupayOnboardings',
+  sourceKey: 'id'
+});
+
+// Zupay AEPS History Relationships
+db.zupayAepsHistory.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.zupayAepsHistory, {
+  foreignKey: 'refId',
+  as: 'zupayAepsHistories',
+  sourceKey: 'id'
+});
+db.zupayAepsHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.zupayAepsHistory, {
+  foreignKey: 'companyId',
+  as: 'zupayAepsHistories',
   sourceKey: 'id'
 });
 
