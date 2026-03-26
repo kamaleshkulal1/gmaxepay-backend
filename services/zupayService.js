@@ -11,7 +11,8 @@ const headers = () => ({
     'X-API-Key': ZUPAY_API_KEY,
     'X-API-Secret': ZUPAY_API_SECRET,
     'X-Client-Id': ZUPAY_CLIENT_ID,
-    'X-Signature': ZUPAY_SIGNATURE
+    'X-Signature': ZUPAY_SIGNATURE,
+    'X-Timestamp': new Date().toISOString()
 });
 
 const initiateOnboarding = async (payload) => {
