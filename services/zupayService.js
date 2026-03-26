@@ -77,6 +77,7 @@ const verifyOTP = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
@@ -94,6 +95,7 @@ const resendOTP = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
@@ -111,6 +113,7 @@ const biometricVerification = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
@@ -128,6 +131,7 @@ const statusCheck = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
@@ -145,6 +149,7 @@ const aeps2FA = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
@@ -162,6 +167,7 @@ const cashWithdrawal = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
@@ -179,6 +185,7 @@ const balanceEnquiry = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
@@ -196,6 +203,7 @@ const miniStatement = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {

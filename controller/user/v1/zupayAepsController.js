@@ -154,7 +154,7 @@ const initiateOnboarding = async (req, res) => {
             contactId: contact_id,
             merchantCode: merchant_code,
             referenceId,
-            pipe: zupayService.ZUPAY_PIPE,
+            pipe: ZUPAY_PIPE,
             isInitiated: true,
             isOtpVerified: false,
             isEkycCompleted: false,
@@ -494,7 +494,7 @@ const cashWithdrawal = async (req, res) => {
 
         const payload = {
             merchant_reference_id: merchantReferenceId,
-            merchant_code: onboarding.merchantCode || zupayService.ZUPAY_MERCHANT_CODE,
+            merchant_code: onboarding.merchantCode || ZUPAY_MERCHANT_CODE,
             service_code: 'AEPS_CW',
             amount: Number(amount),
             sub_merchant_details: {
