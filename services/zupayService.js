@@ -7,14 +7,6 @@ const ZUPAY_API_SECRET = process.env.ZUPAY_API_SECRET;
 const ZUPAY_CLIENT_ID = process.env.ZUPAY_CLIENT_ID;
 const ZUPAY_SIGNATURE = process.env.ZUPAY_SIGNATURE;
 
-const sortObject = (obj) => {
-    if (obj === null || typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) return obj.map(sortObject);
-    return Object.keys(obj).sort().reduce((acc, key) => {
-        acc[key] = sortObject(obj[key]);
-        return acc;
-    }, {});
-};
 
 const generateSignature = (method, path, timestamp, payloadString) => {
     if (!ZUPAY_SIGNATURE) return '';
@@ -38,16 +30,13 @@ const generateSignature = (method, path, timestamp, payloadString) => {
 
 const getRequestConfig = (method, path, payload) => {
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const sortedPayload = sortObject(payload);
-    const payloadString = payload ? JSON.stringify(sortedPayload) : '';
+    const payloadString = payload ? JSON.stringify(payload) : '';
 
     const signature = generateSignature(method, path, timestamp, payloadString);
 
     return {
         headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': ZUPAY_API_KEY,
-            'X-API-Secret': ZUPAY_API_SECRET,
             'X-Client-Id': ZUPAY_CLIENT_ID,
             'X-Signature': signature,
             'X-Timestamp': timestamp
