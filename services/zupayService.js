@@ -16,32 +16,39 @@ const sortObject = (obj) => {
     }, {});
 };
 
-const generateSignature = (timestamp, payload) => {
+const generateSignature = (timestamp, payloadString) => {
     if (!ZUPAY_SIGNATURE) return '';
-    const sortedPayload = sortObject(payload);
-    const payloadString = payload ? JSON.stringify(sortedPayload) : '';
     const data = timestamp + payloadString;
     return crypto.createHmac('sha256', ZUPAY_SIGNATURE).update(data).digest('hex');
 };
 
-const getHeaders = (payload) => {
+const getRequestConfig = (payload) => {
     const timestamp = new Date().toISOString();
+    const sortedPayload = sortObject(payload);
+    const payloadString = payload ? JSON.stringify(sortedPayload) : '';
+
+    const signature = generateSignature(timestamp, payloadString);
+
     return {
-        'Content-Type': 'application/json',
-        'X-API-Key': ZUPAY_API_KEY,
-        'X-API-Secret': ZUPAY_API_SECRET,
-        'X-Client-Id': ZUPAY_CLIENT_ID,
-        'X-Signature': generateSignature(timestamp, payload),
-        'X-Timestamp': timestamp
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': ZUPAY_API_KEY,
+            'X-API-Secret': ZUPAY_API_SECRET,
+            'X-Client-Id': ZUPAY_CLIENT_ID,
+            'X-Signature': signature,
+            'X-Timestamp': timestamp
+        },
+        payloadString
     };
 };
 
 const initiateOnboarding = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/initiateOnboarding`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data)
         return response.data;
@@ -53,10 +60,11 @@ const initiateOnboarding = async (payload) => {
 
 const verifyOTP = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/verifyOTP`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
@@ -68,10 +76,11 @@ const verifyOTP = async (payload) => {
 
 const resendOTP = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/resendOTP`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
@@ -83,10 +92,11 @@ const resendOTP = async (payload) => {
 
 const biometricVerification = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/biometricVerification`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
@@ -98,10 +108,11 @@ const biometricVerification = async (payload) => {
 
 const statusCheck = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/statusCheck`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
@@ -113,10 +124,11 @@ const statusCheck = async (payload) => {
 
 const aeps2FA = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
@@ -128,10 +140,11 @@ const aeps2FA = async (payload) => {
 
 const cashWithdrawal = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
@@ -143,10 +156,11 @@ const cashWithdrawal = async (payload) => {
 
 const balanceEnquiry = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
@@ -158,10 +172,11 @@ const balanceEnquiry = async (payload) => {
 
 const miniStatement = async (payload) => {
     try {
+        const { headers, payloadString } = getRequestConfig(payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
-            payload,
-            { headers: getHeaders(payload) }
+            payloadString,
+            { headers }
         );
         console.log("response", response.data);
         return response.data;
