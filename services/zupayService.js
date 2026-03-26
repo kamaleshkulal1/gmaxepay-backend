@@ -142,6 +142,7 @@ const statusCheck = async (payload) => {
 
 const aeps2FA = async (payload) => {
     try {
+        console.log("payload", payload);
         const path = '/api/v1/transactions';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
@@ -149,7 +150,6 @@ const aeps2FA = async (payload) => {
             payloadString,
             { headers }
         );
-        console.log("payload", payload);
         console.log("response", response.data);
         return response.data;
     } catch (error) {
