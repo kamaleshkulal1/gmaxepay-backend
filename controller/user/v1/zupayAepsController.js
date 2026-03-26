@@ -271,7 +271,7 @@ const resendOTP = async (req, res) => {
 
 const ekycBiometric = async (req, res) => {
     try {
-        const { pid, pid_type, aadhaar_no } = req.body;
+        const { pid, pid_type } = req.body;
         if (!pid) return res.failure({ message: 'PID data is required' });
 
         const existingUser = await dbService.findOne(model.user, {
@@ -288,7 +288,7 @@ const ekycBiometric = async (req, res) => {
             return res.failure({ message: 'Please verify OTP first' });
         }
 
-        const aadhaarNumber = aadhaar_no || existingUser.aadharDetails?.aadhaarNumber || '';
+        const aadhaarNumber = existingUser.aadharDetails?.aadhaarNumber || '';
 
         const payload = {
             pipe: ZUPAY_PIPE,
