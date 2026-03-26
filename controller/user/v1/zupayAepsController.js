@@ -331,13 +331,15 @@ const ekycBiometric = async (req, res) => {
                 isEkycCompleted: ekycDone,
                 ekycStatus: e_kyc_status,
                 ekycRemarks: remarks,
-                aadhaarNo: aadhaarNumber ? aadhaarNumber.slice(-4).padStart(aadhaarNumber.length, 'X') : null
+                aadhaarNo: aadhaarNumber ? aadhaarNumber.slice(-4).padStart(aadhaarNumber.length, 'X') : null,
+                onboardingStatus: ekycDone ? 'ACTIVE' : onboarding.onboardingStatus
             }
         );
 
         return res.success({
             message: apiResponse.meta?.message || 'eKYC verification completed',
-            data: apiResponse.data
+            data: apiResponse.data,
+            isActive: ekycDone
         });
     } catch (err) {
         console.error('[ZupayAeps] ekycBiometric error:', err);
@@ -398,7 +400,7 @@ const checkOnboardingStatus = async (req, res) => {
     }
 };
 
-const buildTxnContext = async (req) => {
+const buildTxnContext = async (req, skip2faCheck = false) => {
     const existingUser = await dbService.findOne(model.user, {
         id: req.user.id,
         companyId: req.user.companyId
@@ -411,6 +413,15 @@ const buildTxnContext = async (req) => {
     });
     if (!onboarding || onboarding.onboardingStatus !== 'ACTIVE') {
         throw new Error('Zupay AEPS onboarding is not completed. Current status: ' + (onboarding?.onboardingStatus || 'PENDING'));
+    }
+
+    if (!skip2faCheck) {
+        const last2faDate = onboarding.last2faDate ? new Date(onboarding.last2faDate).toDateString() : null;
+        const todayStr = new Date().toDateString();
+
+        if (!onboarding.is2faVerified || last2faDate !== todayStr) {
+            throw new Error('2FA Authentication required for today. Please complete daily authentication first.');
+        }
     }
 
     return { existingUser, onboarding };
@@ -433,7 +444,16 @@ const dailyAuthentication = async (req, res) => {
         const { pid_data, pid_type, latitude, longitude, ipAddress } = req.body;
         if (!pid_data) return res.failure({ message: 'PID data is required' });
 
-        const { existingUser, onboarding } = await buildTxnContext(req);
+        const { existingUser, onboarding } = await buildTxnContext(req, true);
+
+        // Check if already authenticated today
+        const last2faDate = onboarding.last2faDate ? new Date(onboarding.last2faDate).toDateString() : null;
+        const todayStr = new Date().toDateString();
+
+        if (onboarding.is2faVerified && last2faDate === todayStr) {
+            return res.success({ message: '2FA authentication already completed for today', data: { status: 'SUCCESS' } });
+        }
+
         const aadhaarNumber = existingUser.aadharDetails?.aadhaarNumber || '';
 
         const merchantReferenceId = uuidv4();
