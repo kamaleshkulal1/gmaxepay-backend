@@ -37,6 +37,8 @@ const getRequestConfig = (method, path, payload) => {
     return {
         headers: {
             'Content-Type': 'application/json',
+            'X-API-Key': ZUPAY_API_KEY,
+            'X-API-Secret': ZUPAY_API_SECRET,
             'X-Client-Id': ZUPAY_CLIENT_ID,
             'X-Signature': signature,
             'X-Timestamp': timestamp
