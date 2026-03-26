@@ -59,6 +59,7 @@ const initiateOnboarding = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("payload", payload)
         console.log("response", response.data)
         return response.data;
     } catch (error) {
