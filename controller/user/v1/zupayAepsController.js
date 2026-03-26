@@ -111,7 +111,7 @@ const initiateOnboarding = async (req, res) => {
                 first_name: existingUser.name?.split(' ')[0] || existingUser.name,
                 middle_name: existingUser.name?.split(' ')[1] || '',
                 last_name: existingUser.name?.split(' ').slice(2).join(' ') || '',
-                dob: existingUser.dob || '',
+                dob: existingUser.dob ? existingUser.dob.replace(/-/g, '/') : '',
                 phone_number: existingUser.mobileNo,
                 email: existingUser.email
             },
