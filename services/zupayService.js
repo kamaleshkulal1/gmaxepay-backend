@@ -8,7 +8,7 @@ const ZUPAY_CLIENT_ID = process.env.ZUPAY_CLIENT_ID;
 const ZUPAY_SIGNATURE = process.env.ZUPAY_SIGNATURE;
 
 
-const generateSignature = (method, path, timestamp, payloadString) => {
+const generateSignature = (method, path, timestamp, payloadString, query = '') => {
     if (!ZUPAY_SIGNATURE) return '';
 
     let bodyHash = "";
@@ -16,8 +16,10 @@ const generateSignature = (method, path, timestamp, payloadString) => {
         bodyHash = crypto.createHash('sha256').update(payloadString).digest('base64');
     }
 
-    let stringToSign = method.toUpperCase() + "\n" + path + "\n";
-    // if (query) stringToSign += query + "\n"; 
+    let stringToSign = method + "\n" + path + "\n";
+    if (query) {
+        stringToSign += query + "\n";
+    }
     if (bodyHash) {
         stringToSign += bodyHash + "\n";
     }
@@ -28,24 +30,25 @@ const generateSignature = (method, path, timestamp, payloadString) => {
         .digest('base64');
 };
 
-const getRequestConfig = (method, path, payload) => {
+const getRequestConfig = (method, path, payload, query = '') => {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const payloadString = payload ? JSON.stringify(payload) : '';
 
-    const signature = generateSignature(method, path, timestamp, payloadString);
+    const signature = generateSignature(method, path, timestamp, payloadString, query);
 
     return {
         headers: {
             'Content-Type': 'application/json',
+            'X-Client-Id': ZUPAY_CLIENT_ID,
             'X-API-Key': ZUPAY_API_KEY,
             'X-API-Secret': ZUPAY_API_SECRET,
-            'X-Client-Id': ZUPAY_CLIENT_ID,
             'X-Signature': signature,
             'X-Timestamp': timestamp
         },
         payloadString
     };
 };
+
 
 const initiateOnboarding = async (payload) => {
     try {

@@ -122,7 +122,7 @@ const initiateOnboarding = async (req, res) => {
                 city_id: zupayCity.cityId,
                 state_id: zupayState.stateId,
                 landmark: existingOutlet.landmark || '',
-                pin_code: zupayPincode.pincodeId,
+                pin_code: zupayPincode.pincode,
                 geo_location: {
                     latitude: String(req.body.latitude || existingOutlet.shopLatitude || ''),
                     longitude: String(req.body.longitude || existingOutlet.shopLongitude || ''),
