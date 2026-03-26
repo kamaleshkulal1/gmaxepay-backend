@@ -1056,11 +1056,14 @@ const cmsCallback = async (req, res) => {
         console.log('[CMS Callback] Received payload:', JSON.stringify(req.body));
         const { event, param } = req.body;
 
-        if (!event || !param || !param.referenceId) {
+        const referenceId = param.referenceId || param.refid;
+
+        if (!event || !param || !referenceId) {
+            console.error('[CMS Callback] Invalid payload - missing event, param or referenceId:', JSON.stringify(req.body));
             return res.status(400).json({ status: 400, message: "Invalid callback payload" });
         }
 
-        const { referenceId, amount, biller_id, biller_name, mobile_no, datetime, utr, ackno, unique_id, status: paramStatus, errormsg, commission } = param;
+        const { amount, biller_id, biller_name, mobile_no, datetime, utr, ackno, unique_id, status: paramStatus, errormsg, commission } = param;
 
         const transaction = await dbService.findOne(model.cmsHistory, { referenceId });
         if (!transaction) {
@@ -1079,10 +1082,10 @@ const cmsCallback = async (req, res) => {
         if (event === 'CMS_BALANCE_INQUIRY') {
             let wallet = await dbService.findOne(model.wallet, { refId: transaction.refId, companyId: transaction.companyId });
             const currentBalance = wallet ? round4(wallet.mainWallet || 0) : 0;
-            
+
             updateData.openingWallet = currentBalance;
             await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
-            
+
             return res.json({ status: 200, message: "Transaction completed successfully", balance: currentBalance });
         }
 
