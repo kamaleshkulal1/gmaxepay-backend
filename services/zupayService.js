@@ -7,9 +7,19 @@ const ZUPAY_API_SECRET = process.env.ZUPAY_API_SECRET;
 const ZUPAY_CLIENT_ID = process.env.ZUPAY_CLIENT_ID;
 const ZUPAY_SIGNATURE = process.env.ZUPAY_SIGNATURE;
 
+const sortObject = (obj) => {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(sortObject);
+    return Object.keys(obj).sort().reduce((acc, key) => {
+        acc[key] = sortObject(obj[key]);
+        return acc;
+    }, {});
+};
+
 const generateSignature = (timestamp, payload) => {
     if (!ZUPAY_SIGNATURE) return '';
-    const payloadString = payload ? JSON.stringify(payload) : '';
+    const sortedPayload = sortObject(payload);
+    const payloadString = payload ? JSON.stringify(sortedPayload) : '';
     const data = timestamp + payloadString;
     return crypto.createHmac('sha256', ZUPAY_SIGNATURE).update(data).digest('hex');
 };
