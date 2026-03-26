@@ -544,7 +544,7 @@ const cashWithdrawal = async (req, res) => {
             responseMessage: apiResponse?.meta?.message,
             latitude: String(latitude),
             longitude: String(longitude),
-            ipAddress: ip_address || req.ip,
+            ipAddress: ipAddress || req.ip,
             deviceType: req.body.device_type,
             deviceOs: req.body.device_os,
             peripheral: req.body.peripheral,
