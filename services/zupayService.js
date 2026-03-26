@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 
 const ZUPAY_BASE_URL = process.env.ZUPAY_BASE_URL;
 const ZUPAY_API_KEY = process.env.ZUPAY_API_KEY;
@@ -6,21 +7,31 @@ const ZUPAY_API_SECRET = process.env.ZUPAY_API_SECRET;
 const ZUPAY_CLIENT_ID = process.env.ZUPAY_CLIENT_ID;
 const ZUPAY_SIGNATURE = process.env.ZUPAY_SIGNATURE;
 
-const headers = () => ({
-    'Content-Type': 'application/json',
-    'X-API-Key': ZUPAY_API_KEY,
-    'X-API-Secret': ZUPAY_API_SECRET,
-    'X-Client-Id': ZUPAY_CLIENT_ID,
-    'X-Signature': ZUPAY_SIGNATURE,
-    'X-Timestamp': new Date().toISOString()
-});
+const generateSignature = (timestamp, payload) => {
+    if (!ZUPAY_SIGNATURE) return '';
+    const payloadString = payload ? JSON.stringify(payload) : '';
+    const data = timestamp + payloadString;
+    return crypto.createHmac('sha256', ZUPAY_SIGNATURE).update(data).digest('hex');
+};
+
+const getHeaders = (payload) => {
+    const timestamp = new Date().toISOString();
+    return {
+        'Content-Type': 'application/json',
+        'X-API-Key': ZUPAY_API_KEY,
+        'X-API-Secret': ZUPAY_API_SECRET,
+        'X-Client-Id': ZUPAY_CLIENT_ID,
+        'X-Signature': generateSignature(timestamp, payload),
+        'X-Timestamp': timestamp
+    };
+};
 
 const initiateOnboarding = async (payload) => {
     try {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/initiateOnboarding`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data)
         return response.data;
@@ -35,7 +46,7 @@ const verifyOTP = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/verifyOTP`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
@@ -50,7 +61,7 @@ const resendOTP = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/resendOTP`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
@@ -65,7 +76,7 @@ const biometricVerification = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/biometricVerification`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
@@ -80,7 +91,7 @@ const statusCheck = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/statusCheck`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
@@ -95,7 +106,7 @@ const aeps2FA = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
@@ -110,7 +121,7 @@ const cashWithdrawal = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
@@ -125,7 +136,7 @@ const balanceEnquiry = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
@@ -140,7 +151,7 @@ const miniStatement = async (payload) => {
         const response = await axios.post(
             `${ZUPAY_BASE_URL}/api/v1/transactions`,
             payload,
-            { headers: headers() }
+            { headers: getHeaders(payload) }
         );
         console.log("response", response.data);
         return response.data;
