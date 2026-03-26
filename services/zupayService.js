@@ -16,18 +16,32 @@ const sortObject = (obj) => {
     }, {});
 };
 
-const generateSignature = (timestamp, payloadString) => {
+const generateSignature = (method, path, timestamp, payloadString) => {
     if (!ZUPAY_SIGNATURE) return '';
-    const data = timestamp + payloadString;
-    return crypto.createHmac('sha256', ZUPAY_SIGNATURE).update(data).digest('hex');
+
+    let bodyHash = "";
+    if (payloadString) {
+        bodyHash = crypto.createHash('sha256').update(payloadString).digest('base64');
+    }
+
+    let stringToSign = method.toUpperCase() + "\n" + path + "\n";
+    // if (query) stringToSign += query + "\n"; 
+    if (bodyHash) {
+        stringToSign += bodyHash + "\n";
+    }
+    stringToSign += timestamp;
+
+    return crypto.createHmac('sha256', ZUPAY_SIGNATURE)
+        .update(stringToSign)
+        .digest('base64');
 };
 
-const getRequestConfig = (payload) => {
-    const timestamp = new Date().toISOString();
+const getRequestConfig = (method, path, payload) => {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
     const sortedPayload = sortObject(payload);
     const payloadString = payload ? JSON.stringify(sortedPayload) : '';
 
-    const signature = generateSignature(timestamp, payloadString);
+    const signature = generateSignature(method, path, timestamp, payloadString);
 
     return {
         headers: {
@@ -44,9 +58,10 @@ const getRequestConfig = (payload) => {
 
 const initiateOnboarding = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/v1/submerchant/onboarding/aeps/initiateOnboarding';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/initiateOnboarding`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -60,9 +75,10 @@ const initiateOnboarding = async (payload) => {
 
 const verifyOTP = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/v1/submerchant/onboarding/aeps/verifyOTP';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/verifyOTP`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -76,9 +92,10 @@ const verifyOTP = async (payload) => {
 
 const resendOTP = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/v1/submerchant/onboarding/aeps/resendOTP';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/resendOTP`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -92,9 +109,10 @@ const resendOTP = async (payload) => {
 
 const biometricVerification = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/v1/submerchant/onboarding/aeps/biometricVerification';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/biometricVerification`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -108,9 +126,10 @@ const biometricVerification = async (payload) => {
 
 const statusCheck = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/v1/submerchant/onboarding/aeps/statusCheck';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/v1/submerchant/onboarding/aeps/statusCheck`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -124,9 +143,10 @@ const statusCheck = async (payload) => {
 
 const aeps2FA = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/api/v1/transactions';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/api/v1/transactions`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -140,9 +160,10 @@ const aeps2FA = async (payload) => {
 
 const cashWithdrawal = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/api/v1/transactions';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/api/v1/transactions`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -156,9 +177,10 @@ const cashWithdrawal = async (payload) => {
 
 const balanceEnquiry = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/api/v1/transactions';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/api/v1/transactions`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
@@ -172,9 +194,10 @@ const balanceEnquiry = async (payload) => {
 
 const miniStatement = async (payload) => {
     try {
-        const { headers, payloadString } = getRequestConfig(payload);
+        const path = '/api/v1/transactions';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
-            `${ZUPAY_BASE_URL}/api/v1/transactions`,
+            `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
