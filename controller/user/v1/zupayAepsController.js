@@ -416,11 +416,11 @@ const saveTxnHistory = async (userId, companyId, txnData) => {
 
 const dailyAuthentication = async (req, res) => {
     try {
-        const { aadhaar_number, pid_data, pid_type, latitude, longitude, ipAddress } = req.body;
+        const { pid_data, pid_type, latitude, longitude, ipAddress } = req.body;
         if (!pid_data) return res.failure({ message: 'PID data is required' });
-        if (!aadhaar_number) return res.failure({ message: 'Aadhaar number is required' });
 
         const { existingUser, onboarding } = await buildTxnContext(req);
+        const aadhaarNumber = existingUser.aadharDetails?.aadhaarNumber || '';
 
         const merchantReferenceId = uuidv4();
 
@@ -439,7 +439,7 @@ const dailyAuthentication = async (req, res) => {
             },
             transaction_details: {
                 service_code: 'AEPS_2FA',
-                aadhaar_number,
+                aadhaar_number: aadhaarNumber,
                 pid_data,
                 transaction_type: '2FA',
                 pid_type: pid_type || 1
