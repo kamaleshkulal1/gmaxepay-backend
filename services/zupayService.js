@@ -4,12 +4,14 @@ const ZUPAY_BASE_URL = process.env.ZUPAY_BASE_URL;
 const ZUPAY_API_KEY = process.env.ZUPAY_API_KEY;
 const ZUPAY_API_SECRET = process.env.ZUPAY_API_SECRET;
 const ZUPAY_CLIENT_ID = process.env.ZUPAY_CLIENT_ID;
+const ZUPAY_SIGNATURE = process.env.ZUPAY_SIGNATURE;
 
 const headers = () => ({
     'Content-Type': 'application/json',
     'X-API-Key': ZUPAY_API_KEY,
     'X-API-Secret': ZUPAY_API_SECRET,
-    'X-Client-Id': ZUPAY_CLIENT_ID
+    'X-Client-Id': ZUPAY_CLIENT_ID,
+    'X-Signature': ZUPAY_SIGNATURE
 });
 
 const initiateOnboarding = async (payload) => {
