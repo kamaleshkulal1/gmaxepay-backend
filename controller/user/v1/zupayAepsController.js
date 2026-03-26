@@ -2,8 +2,8 @@ const { v4: uuidv4 } = require('uuid');
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const zupayService = require('../../../services/zupayService');
-const ZUPAY_MERCHANT_CODE = process.env.ZUPAY_MERCHANT_CODE || 'ZPM000000';
-const ZUPAY_PIPE = process.env.ZUPAY_PIPE || 'pipe1';
+const ZUPAY_MERCHANT_CODE = process.env.ZUPAY_MERCHANT_CODE;
+const ZUPAY_PIPE = process.env.ZUPAY_PIPE;
 
 
 const isZupaySuccess = (response) => {
