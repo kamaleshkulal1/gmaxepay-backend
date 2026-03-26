@@ -65,6 +65,7 @@ db.zupayCity = require('./zupayCity');
 db.zupayMaster = require('./zupayMaster');
 db.zupayOnboarding = require('./zupayOnbaording');
 db.zupayAepsHistory = require('./zupayAepsHistory');
+db.zupayBankList = require('./zupayBankList');
 
 // Financial Models
 db.wallet = require('./wallet');
@@ -895,6 +896,19 @@ db.company.hasMany(db.zupayAepsHistory, {
   foreignKey: 'companyId',
   as: 'zupayAepsHistories',
   sourceKey: 'id'
+});
+
+// Zupay AEPS History Bank Relationships
+db.zupayAepsHistory.belongsTo(db.zupayBankList, {
+  foreignKey: 'bankIin',
+  targetKey: 'bankIin',
+  as: 'bank',
+  required: false
+});
+db.zupayBankList.hasMany(db.zupayAepsHistory, {
+  foreignKey: 'bankIin',
+  sourceKey: 'bankIin',
+  as: 'zupayAepsHistories'
 });
 
 module.exports = db;

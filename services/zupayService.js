@@ -64,7 +64,7 @@ const initiateOnboarding = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay initiateOnboarding:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -82,7 +82,7 @@ const verifyOTP = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay verifyOTP:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -100,7 +100,7 @@ const resendOTP = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay resendOTP:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -118,7 +118,7 @@ const biometricVerification = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay biometricVerification:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -136,7 +136,7 @@ const statusCheck = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay statusCheck:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -154,7 +154,7 @@ const aeps2FA = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay aeps2FA:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -172,7 +172,7 @@ const cashWithdrawal = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay cashWithdrawal:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -190,7 +190,7 @@ const balanceEnquiry = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay balanceEnquiry:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
@@ -208,7 +208,7 @@ const miniStatement = async (payload) => {
         return response.data;
     } catch (error) {
         console.error('Error Zupay miniStatement:', error.response ? error.response.data : error.message);
-        throw error;
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 

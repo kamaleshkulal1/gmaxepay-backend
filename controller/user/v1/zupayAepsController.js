@@ -13,8 +13,7 @@ const isZupaySuccess = (response) => {
 
 const getZupayError = (response) => {
     if (response?.errors && response.errors.length > 0) {
-        const { error_code, error_message } = response.errors[0];
-        return `[${error_code}] ${error_message}`;
+        return response.errors[0].error_message;
     }
     return response?.meta?.message || 'Unknown Zupay error';
 };
@@ -103,14 +102,29 @@ const initiateOnboarding = async (req, res) => {
 
         const referenceId = uuidv4();
 
+        const nameParts = (existingUser.name || '').trim().split(/\s+/);
+        let first_name = '', middle_name = '', last_name = '';
+
+        if (nameParts.length === 1) {
+            first_name = nameParts[0];
+            last_name = nameParts[0];
+        } else if (nameParts.length === 2) {
+            first_name = nameParts[0];
+            last_name = nameParts[1];
+        } else {
+            first_name = nameParts[0];
+            middle_name = nameParts[1];
+            last_name = nameParts.slice(2).join(' ');
+        }
+
         const payload = {
             reference_id: referenceId,
             pipe: ZUPAY_PIPE,
             merchant_code: ZUPAY_MERCHANT_CODE,
             personal_details: {
-                first_name: existingUser.name?.split(' ')[0] || existingUser.name,
-                middle_name: existingUser.name?.split(' ')[1] || '',
-                last_name: existingUser.name?.split(' ').slice(2).join(' ') || '',
+                first_name,
+                middle_name,
+                last_name,
                 dob: existingUser.dob ? existingUser.dob.replace(/-/g, '/') : '',
                 phone_number: existingUser.mobileNo,
                 email: existingUser.email
