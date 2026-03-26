@@ -117,7 +117,7 @@ const initiateOnboarding = async (req, res) => {
             },
             business_details: {
                 shop_name: existingOutlet.shopName || existingOutlet.shopCategory,
-                address_line1: existingOutlet.shopAddress,
+                address_line1: existingOutlet.shopAddress?.slice(0, 100),
                 address_line2: existingOutlet.shopAddress2 || '',
                 city_id: zupayCity.cityId,
                 state_id: zupayState.stateId,
