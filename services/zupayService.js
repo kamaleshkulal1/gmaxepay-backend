@@ -200,7 +200,7 @@ const balanceEnquiry = async (payload) => {
 
 const miniStatement = async (payload) => {
     try {
-        const path = '/api/v1/transactions';
+        const path = '/v1/transactions';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
