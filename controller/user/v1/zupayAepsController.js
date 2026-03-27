@@ -4,6 +4,7 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const zupayService = require('../../../services/zupayService');
 const imageService = require('../../../services/imageService');
+const { generateTransactionID } = require('../../../utils/transactionID');
 const ZUPAY_MERCHANT_CODE = process.env.ZUPAY_MERCHANT_CODE;
 const ZUPAY_PIPE = process.env.ZUPAY_PIPE;
 
@@ -567,7 +568,8 @@ const cashWithdrawal = async (req, res) => {
         if (!bank_name) return res.failure({ message: 'Bank name is required' });
 
         const { existingUser, onboarding } = await buildTxnContext(req);
-
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+        const transactionId = generateTransactionID(existingCompany?.companyName);
         const merchantReferenceId = uuidv4();
 
         const payload = {
@@ -825,7 +827,7 @@ const cashWithdrawal = async (req, res) => {
             subMerchantCode: onboarding.subMerchantCode,
             merchantCode: onboarding.merchantCode,
             merchantReferenceId,
-            transactionId: apiResponse?.data?.transaction_id,
+            transactionId: transactionId,
             bankReferenceNumber: apiResponse?.data?.bank_reference_number,
             bankRRN: apiResponse?.data?.details?.bank_rrn,
             serviceCode: 'AEPS_CW',
@@ -868,9 +870,13 @@ const cashWithdrawal = async (req, res) => {
         if (!success) {
             return res.failure({ message: getZupayError(apiResponse), data: apiResponse });
         }
+        const response = {
+            ...apiResponse?.data,
+            transactionId
+        }
         return res.success({
             message: apiResponse.meta?.message || 'Cash withdrawal successful',
-            data: apiResponse.data
+            data: response
         });
     } catch (err) {
         console.error('[ZupayAeps] cashWithdrawal error:', err);
@@ -893,7 +899,8 @@ const balanceEnquiry = async (req, res) => {
         if (!bank_name) return res.failure({ message: 'Bank name is required' });
 
         const { existingUser, onboarding } = await buildTxnContext(req);
-
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+        const transactionId = generateTransactionID(existingCompany?.companyName);
         const merchantReferenceId = uuidv4();
 
         const payload = {
@@ -930,7 +937,7 @@ const balanceEnquiry = async (req, res) => {
             subMerchantCode: onboarding.subMerchantCode,
             merchantCode: onboarding.merchantCode,
             merchantReferenceId,
-            transactionId: apiResponse?.data?.transaction_id,
+            transactionId: transactionId,
             bankReferenceNumber: apiResponse?.data?.bank_reference_number,
             bankRRN: apiResponse?.data?.details?.bank_rrn,
             serviceCode: 'AEPS_BE',
@@ -958,9 +965,13 @@ const balanceEnquiry = async (req, res) => {
         if (!success) {
             return res.failure({ message: getZupayError(apiResponse), data: apiResponse });
         }
+        const response = {
+            ...apiResponse?.data,
+            transactionId
+        }
         return res.success({
             message: apiResponse.meta?.message || 'Balance enquiry successful',
-            data: apiResponse.data
+            data: response
         });
     } catch (err) {
         console.error('[ZupayAeps] balanceEnquiry error:', err);
@@ -983,7 +994,8 @@ const miniStatement = async (req, res) => {
         if (!bank_name) return res.failure({ message: 'Bank name is required' });
 
         const { existingUser, onboarding } = await buildTxnContext(req);
-
+        const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
+        const transactionId = generateTransactionID(existingCompany?.companyName);
         const merchantReferenceId = uuidv4();
 
         const payload = {
@@ -1233,7 +1245,7 @@ const miniStatement = async (req, res) => {
             subMerchantCode: onboarding.subMerchantCode,
             merchantCode: onboarding.merchantCode,
             merchantReferenceId,
-            transactionId: apiResponse?.data?.transaction_id,
+            transactionId: transactionId,
             bankReferenceNumber: apiResponse?.data?.bank_reference_number,
             bankRRN: apiResponse?.data?.details?.bank_rrn,
             serviceCode: 'AEPS_MS',
@@ -1276,9 +1288,13 @@ const miniStatement = async (req, res) => {
         if (!success) {
             return res.failure({ message: getZupayError(apiResponse), data: apiResponse });
         }
+        const response = {
+            ...apiResponse?.data,
+            transactionId
+        }
         return res.success({
             message: apiResponse.meta?.message || 'Mini statement fetched successfully',
-            data: apiResponse.data
+            data: response
         });
     } catch (err) {
         console.error('[ZupayAeps] miniStatement error:', err);
