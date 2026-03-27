@@ -14,5 +14,7 @@ router.post('/cash-withdrawal', authentication, zupayAepsController.cashWithdraw
 router.post('/balance-enquiry', authentication, zupayAepsController.balanceEnquiry);
 router.post('/mini-statement', authentication, zupayAepsController.miniStatement);
 router.post('/transaction-history', authentication, zupayAepsController.transactionHistory);
+router.post('/bank-list', authentication, zupayAepsController.bankList);
+router.post('/recent-banks', authentication, zupayAepsController.recentBanks);
 
 module.exports = router;

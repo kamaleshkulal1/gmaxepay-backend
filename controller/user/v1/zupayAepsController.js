@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const zupayService = require('../../../services/zupayService');
+const imageService = require('../../../services/imageService');
 const ZUPAY_MERCHANT_CODE = process.env.ZUPAY_MERCHANT_CODE;
 const ZUPAY_PIPE = process.env.ZUPAY_PIPE;
 
@@ -491,7 +492,6 @@ const dailyAuthentication = async (req, res) => {
 
         const { existingUser, onboarding } = await buildTxnContext(req, true);
 
-        // Check if already authenticated today
         const last2faDate = onboarding.last2faDate ? new Date(onboarding.last2faDate).toDateString() : null;
         const todayStr = new Date().toDateString();
 
@@ -549,6 +549,7 @@ const dailyAuthentication = async (req, res) => {
         return res.failure({ message: err.message || 'Failed to perform 2FA authentication' });
     }
 };
+
 
 const cashWithdrawal = async (req, res) => {
     try {
@@ -1315,6 +1316,112 @@ const transactionHistory = async (req, res) => {
     }
 };
 
+const bankList = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        const banks = await dbService.findAll(model.zupayBankList, {
+            isActive: true
+        });
+
+        // Map to response format with CDN URLs for logos
+        const formattedBankList = banks.map(bank => {
+            const bankData = bank.toJSON ? bank.toJSON() : bank;
+            return {
+                bankIIN: bankData.bankIin,
+                bankName: bankData.bankName,
+                bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
+            };
+        });
+
+        return res.success({
+            message: 'Bank list retrieved successfully',
+            data: formattedBankList
+        });
+    } catch (err) {
+        console.error('[ZupayAeps] bankList error:', err);
+        return res.failure({ message: err.message || 'Failed to retrieve bank list' });
+    }
+};
+
+const recentBanks = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const aepsTransactions = await dbService.findAll(
+            model.zupayAepsHistory,
+            {
+                refId: req.user.id,
+                companyId: req.user.companyId,
+                bankIin: { [Op.ne]: null }
+            },
+            {
+                attributes: ['bankIin', 'createdAt'],
+                sort: { createdAt: -1 }
+            }
+        );
+
+        const uniqueBankIINs = [];
+        const seenBankIINs = new Set();
+        for (const txn of aepsTransactions) {
+            const bankIIN = txn.bankIin ? String(txn.bankIin).trim() : null;
+            if (bankIIN && !seenBankIINs.has(bankIIN)) {
+                seenBankIINs.add(bankIIN);
+                uniqueBankIINs.push(bankIIN);
+                if (uniqueBankIINs.length >= 4) break;
+            }
+        }
+
+        if (uniqueBankIINs.length === 0) {
+            return res.success({
+                message: 'Recent banks retrieved successfully',
+                data: []
+            });
+        }
+
+        const banks = await dbService.findAll(
+            model.zupayBankList,
+            {
+                bankIin: { [Op.in]: uniqueBankIINs },
+                isActive: true
+            }
+        );
+
+        const bankMap = new Map();
+        banks.forEach((bank) => {
+            const bankData = bank.toJSON ? bank.toJSON() : bank;
+            bankMap.set(bankData.bankIin, {
+                bankIIN: bankData.bankIin,
+                bankName: bankData.bankName,
+                bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
+            });
+        });
+
+        const recentBanksData = uniqueBankIINs
+            .map((bankIIN) => bankMap.get(bankIIN))
+            .filter(Boolean);
+
+        return res.success({
+            message: 'Recent banks retrieved successfully',
+            data: recentBanksData
+        });
+    } catch (err) {
+        console.error('[ZupayAeps] recentBanks error:', err);
+        return res.failure({ message: err.message || 'Failed to retrieve recent banks' });
+    }
+};
+
 module.exports = {
     getOnboardingStatus,
     initiateOnboarding,
@@ -1326,5 +1433,7 @@ module.exports = {
     cashWithdrawal,
     balanceEnquiry,
     miniStatement,
-    transactionHistory
+    transactionHistory,
+    bankList,
+    recentBanks
 };
