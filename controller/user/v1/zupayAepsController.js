@@ -345,8 +345,28 @@ const ekycBiometric = async (req, res) => {
             return res.failure({ message: getZupayError(apiResponse), data: apiResponse });
         }
 
+        // Call statusCheck after successful biometric verification
+        const statusPayload = {
+            pipe: ZUPAY_PIPE,
+            sub_merchant_code: onboarding.subMerchantCode,
+            device_info: deviceInfoFromReq(req.body)
+        };
+        const statusResponse = await zupayService.statusCheck(statusPayload);
+
         const { e_kyc_status, remarks } = apiResponse.data;
         const ekycDone = e_kyc_status === 'EKYC_COMPLETE';
+
+        // Get status from statusResponse if successful, otherwise fallback to e_kyc_status logic
+        let onBoardStatus = onboarding.onboardingStatus;
+        let onboardRemarks = onboarding.onboardRemarks;
+
+        if (isZupaySuccess(statusResponse)) {
+            onBoardStatus = statusResponse.data.onBoard_status;
+            onboardRemarks = statusResponse.data.onBoard_remarks;
+        } else if (ekycDone) {
+            onBoardStatus = 'ACTIVE';
+            onboardRemarks = remarks;
+        }
 
         await dbService.update(
             model.zupayOnboarding,
@@ -356,14 +376,15 @@ const ekycBiometric = async (req, res) => {
                 ekycStatus: e_kyc_status,
                 ekycRemarks: remarks,
                 aadhaarNo: aadhaarNumber ? aadhaarNumber.slice(-4).padStart(aadhaarNumber.length, 'X') : null,
-                onboardingStatus: ekycDone ? 'ACTIVE' : onboarding.onboardingStatus
+                onboardingStatus: onBoardStatus,
+                onboardRemarks: onboardRemarks
             }
         );
 
         return res.success({
-            message: apiResponse.meta?.message || 'eKYC verification completed',
-            data: apiResponse.data,
-            isActive: ekycDone
+            message: isZupaySuccess(statusResponse) ? (statusResponse.meta?.message || 'Onboarding status updated') : (apiResponse.meta?.message || 'eKYC verification completed'),
+            data: isZupaySuccess(statusResponse) ? statusResponse.data : apiResponse.data,
+            isActive: onBoardStatus === 'ACTIVE'
         });
     } catch (err) {
         console.error('[ZupayAeps] ekycBiometric error:', err);
