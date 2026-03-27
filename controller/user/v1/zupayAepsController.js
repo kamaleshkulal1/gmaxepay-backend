@@ -1,9 +1,22 @@
 const { v4: uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const zupayService = require('../../../services/zupayService');
 const ZUPAY_MERCHANT_CODE = process.env.ZUPAY_MERCHANT_CODE;
 const ZUPAY_PIPE = process.env.ZUPAY_PIPE;
+
+const round4 = (num) => {
+    const n = Number(num);
+    return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0;
+};
+
+const calcSlabAmount = (slab, base) => {
+    if (!slab) return 0;
+    const b = Number(base || 0), rc = Number(slab.commAmt || 0);
+    if (!Number.isFinite(b) || !Number.isFinite(rc)) return 0;
+    return (slab.amtType || 'fix').toLowerCase() === 'per' ? round4((b * rc) / 100) : round4(rc);
+};
 
 
 const isZupaySuccess = (response) => {
@@ -566,8 +579,228 @@ const cashWithdrawal = async (req, res) => {
             }
         };
 
+        const amountNumber = round4(amount || 0);
+
+        const operator = await dbService.findOne(model.operator, {
+            operatorType: 'AEPS1',
+            minValue: { [Op.lte]: amountNumber },
+            maxValue: { [Op.gte]: amountNumber }
+        });
+        const operatorType = operator?.operatorType || 'AEPS1';
+
+        const commData = { users: {}, wallets: {}, slabs: {}, amounts: { retailerComm: 0, distComm: 0, mdComm: 0, companyComm: 0, superAdminComm: 0, wlShortfall: 0, mdShortfall: 0, distShortfall: 0, saShortfall: 0 }, scenario: '' };
+        const user = req.user;
+
+        if (operator && [4, 5].includes(user.userRole)) {
+            const [companyAdmin, superAdmin] = await Promise.all([
+                dbService.findOne(model.user, { companyId: user.companyId, userRole: 2, isActive: true }),
+                dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
+            ]);
+            if (companyAdmin && superAdmin) {
+                commData.users.companyAdmin = companyAdmin;
+                commData.users.superAdmin = superAdmin;
+                const [companyWallet, superAdminWallet] = await Promise.all([
+                    dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
+                    dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                ]);
+                commData.wallets.companyWallet = companyWallet;
+                commData.wallets.superAdminWallet = superAdminWallet;
+
+                if (user.userRole === 4) {
+                    const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.distributor = distributor;
+                    commData.wallets.distributorWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
+                        commData.scenario = 'DIST_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                    } else {
+                        commData.scenario = 'DIST_MD';
+                        const md = await dbService.findOne(model.user, { id: distributor.reportingTo, companyId: user.companyId, isActive: true });
+                        if (md) {
+                            commData.users.masterDistributor = md;
+                            commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                            const [saSlab, coSlab, mdSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                            commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                        }
+                    }
+                } else if (user.userRole === 5) {
+                    const retailer = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.retailer = retailer;
+                    commData.wallets.retailerWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    let reportingUser = null;
+                    if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
+                        reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: user.companyId, isActive: true });
+                    }
+                    if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                        commData.scenario = 'RET_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.retSlab = coSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 3) {
+                        commData.scenario = 'RET_MD';
+                        commData.users.masterDistributor = reportingUser;
+                        commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        const [saSlab, coSlab, mdSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                        commData.slabs.retSlab = mdSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 4) {
+                        commData.users.distributor = reportingUser;
+                        commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
+                            commData.scenario = 'RET_DIST_CO';
+                            const [saSlab, coSlab, distSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4);
+                            commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                        } else {
+                            commData.scenario = 'RET_DIST_MD';
+                            const md = await dbService.findOne(model.user, { id: reportingUser.reportingTo, companyId: user.companyId, isActive: true });
+                            if (md) {
+                                commData.users.masterDistributor = md;
+                                commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                                const [saSlab, coSlab, mdSlab, distSlab] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                ]);
+                                commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                                commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                                commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                            }
+                        }
+                    }
+                }
+
+                // Calculate amounts
+                const operatorCommissionAmount = operator?.comm ? calcSlabAmount({ amtType: operator.amtType, commAmt: operator.comm }, amountNumber) : 0;
+                const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, amountNumber) : 0;
+                const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, amountNumber) : 0;
+                let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, amountNumber) : 0;
+                let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, amountNumber) : 0;
+                let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, amountNumber) : 0;
+
+                let companyCost = 0;
+                if (commData.users.masterDistributor) companyCost = mdSlabAmount;
+                else if (commData.users.distributor) companyCost = distSlabAmount;
+                else companyCost = retSlabAmount;
+
+                // Super Admin
+                commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
+                if (wlSlabAmount > operatorCommissionAmount) commData.amounts.saShortfall = round4(wlSlabAmount - operatorCommissionAmount);
+
+                // Company (WL)
+                commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
+                if (companyCost > wlSlabAmount) commData.amounts.wlShortfall = round4(companyCost - wlSlabAmount);
+
+                // Master Distributor
+                if (commData.users.masterDistributor) {
+                    let mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
+                    commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
+                    if (mdCost > mdSlabAmount) commData.amounts.mdShortfall = round4(mdCost - mdSlabAmount);
+                }
+
+                // Distributor
+                if (commData.users.distributor) {
+                    commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
+                    if (retSlabAmount > distSlabAmount) commData.amounts.distShortfall = round4(retSlabAmount - distSlabAmount);
+                }
+
+                commData.amounts.retailerComm = retSlabAmount;
+
+                const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
+                const tds = (g) => round4(g * TDS_RATE);
+                commData.tds = { superAdminTDS: tds(operatorCommissionAmount), whitelabelTDS: tds(wlSlabAmount), masterDistributorTDS: tds(mdSlabAmount), distributorTDS: tds(distSlabAmount), retailerTDS: tds(retSlabAmount) };
+                commData.avail = { superAdminAvail: Boolean(commData.users.superAdmin), whitelabelAvail: Boolean(commData.users.companyAdmin), masterDistributorAvail: Boolean(commData.users.masterDistributor), distributorAvail: Boolean(commData.users.distributor), retailerAvail: Boolean(commData.users.retailer) };
+            }
+        }
+
         const apiResponse = await zupayService.cashWithdrawal(payload);
         const success = isZupaySuccess(apiResponse);
+        console.log("success", success)
+        console.log("apiResponse", apiResponse);
+
+        const merchantTransactionId = apiResponse?.data?.transaction_id || merchantReferenceId;
+        const paymentStatus = success ? 'SUCCESS' : 'FAILED';
+
+        const retailerCommAmt = commData.amounts.retailerComm || 0, distCommAmt = commData.amounts.distComm || 0;
+        const mdCommAmt = commData.amounts.mdComm || 0, companyCommAmt = commData.amounts.companyComm || 0, superAdminCommAmt = commData.amounts.superAdminComm || 0;
+        const distShortfallAmt = commData.amounts.distShortfall || 0, mdShortfallAmt = commData.amounts.mdShortfall || 0;
+        const wlShortfallAmt = commData.amounts.wlShortfall || 0, saShortfallAmt = commData.amounts.saShortfall || 0;
+        const retailerTDS = commData.tds?.retailerTDS || 0, distributorTDS = commData.tds?.distributorTDS || 0;
+        const masterDistTDS = commData.tds?.masterDistributorTDS || 0, whitelabelTDS = commData.tds?.whitelabelTDS || 0, superAdminTDS = commData.tds?.superAdminTDS || 0;
+        const retailerNetAmt = round4(retailerCommAmt - retailerTDS), distNetAmt = round4(distCommAmt - distributorTDS);
+        const mdNetAmt = round4(mdCommAmt - masterDistTDS), companyNetAmt = round4(companyCommAmt - whitelabelTDS), superAdminNetAmt = round4(superAdminCommAmt - superAdminTDS);
+
+        let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
+        if (!wallet) wallet = await model.wallet.create({ refId: req.user.id, companyId: req.user.companyId, roleType: req.user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: req.user.id, updatedBy: req.user.id });
+        const openingWallet = round4(wallet.apes1Wallet || 0);
+        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? round4(amountNumber + retailerNetAmt) : round4(amountNumber + distNetAmt)) : 0;
+        const closingWallet = success ? round4(openingWallet + initiatorCredit) : openingWallet;
+
+        if (success) {
+            const remarkText = `AEPS1 CW-${bank_name}`;
+            const walletUpdates = [], historyPromises = [];
+            if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
+                if (initiatorCredit > 0) walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { apes1Wallet: closingWallet, updatedBy: req.user.id }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS1', operator: bank_name, amount: amountNumber, comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, remark: remarkText, aepsTxnType: 'CW', bankiin: bank_iin, superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS, addedBy: req.user.id, updatedBy: req.user.id }));
+                if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
+                    const dW = commData.wallets.distributorWallet, dO = round4(dW.apes1Wallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { apes1Wallet: dC, updatedBy: commData.users.distributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: user.companyId, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - dist comm`, amount: amountNumber, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt + distributorTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'CW', bankiin: bank_iin, distributorCom: distCommAmt, distributorComTDS: distributorTDS, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
+                }
+                if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
+                    const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.apes1Wallet || 0), mC = round4(mO + mdNetAmt - mdShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: mW.id }, { apes1Wallet: mC, updatedBy: commData.users.masterDistributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: user.companyId, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - md comm`, amount: amountNumber, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt + masterDistTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'CW', bankiin: bank_iin, masterDistributorCom: mdCommAmt, masterDistributorComTDS: masterDistTDS, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
+                }
+                if (commData.wallets.companyWallet) {
+                    const cW = commData.wallets.companyWallet, cO = round4(cW.apes1Wallet || 0), cC = round4(cO + companyNetAmt - wlShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: cW.id }, { apes1Wallet: cC, updatedBy: commData.users.companyAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: user.companyId, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - company comm`, amount: amountNumber, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt + whitelabelTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'CW', bankiin: bank_iin, whitelabelComm: companyCommAmt, whitelabelCommTDS: whitelabelTDS, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
+                }
+                if (commData.wallets.superAdminWallet) {
+                    const sW = commData.wallets.superAdminWallet, sO = round4(sW.apes1Wallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { apes1Wallet: sC, updatedBy: commData.users.superAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - admin comm`, amount: amountNumber, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'CW', bankiin: bank_iin, superadminComm: superAdminCommAmt, superadminCommTDS: superAdminTDS, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
+                }
+                await Promise.all([...walletUpdates, ...historyPromises]);
+            } else {
+                if (initiatorCredit > 0) walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { apes1Wallet: closingWallet, updatedBy: req.user.id }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS1', operator: bank_name, amount: amountNumber, comm: 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, remark: `AEPS1 CW-${bank_name}`, aepsTxnType: 'CW', bankiin: bank_iin, addedBy: req.user.id, updatedBy: req.user.id }));
+                await Promise.all([...walletUpdates, ...historyPromises]);
+            }
+        }
 
         await saveTxnHistory(existingUser.id, existingUser.companyId, {
             subMerchantCode: onboarding.subMerchantCode,
@@ -596,7 +829,21 @@ const cashWithdrawal = async (req, res) => {
             peripheral: req.body.peripheral,
             pidType: pid_type || 1,
             requestPayload: { ...payload, transaction_details: { ...payload.transaction_details, pid_data: 'REDACTED' } },
-            responsePayload: apiResponse
+            responsePayload: apiResponse,
+            openingWallet,
+            closingWallet,
+            credit: success ? initiatorCredit : 0,
+            superadminComm: superAdminCommAmt,
+            whitelabelComm: companyCommAmt,
+            masterDistributorCom: mdCommAmt,
+            distributorCom: distCommAmt,
+            retailerCom: retailerCommAmt,
+            superadminCommTDS: superAdminTDS,
+            whitelabelCommTDS: whitelabelTDS,
+            masterDistributorComTDS: masterDistTDS,
+            distributorComTDS: distributorTDS,
+            retailerComTDS: retailerTDS,
+            ...commData.avail
         });
 
         if (!success) {
@@ -749,8 +996,221 @@ const miniStatement = async (req, res) => {
             }
         };
 
+        const operator = await dbService.findOne(model.operator, { operatorName: 'AEPS1_MS' });
+        const operatorType = operator?.operatorType || 'AEPS1_MS';
+
+        const commData = { users: {}, wallets: {}, slabs: {}, amounts: { retailerComm: 0, distComm: 0, mdComm: 0, companyComm: 0, superAdminComm: 0, wlShortfall: 0, mdShortfall: 0, distShortfall: 0, saShortfall: 0 }, scenario: '' };
+        const user = req.user;
+        const msBase = 0;
+
+        if (operator && [4, 5].includes(user.userRole)) {
+            const [companyAdmin, superAdmin] = await Promise.all([
+                dbService.findOne(model.user, { companyId: user.companyId, userRole: 2, isActive: true }),
+                dbService.findOne(model.user, { id: 1, companyId: 1, userRole: 1, isActive: true })
+            ]);
+            if (companyAdmin && superAdmin) {
+                commData.users.companyAdmin = companyAdmin;
+                commData.users.superAdmin = superAdmin;
+                const [companyWallet, superAdminWallet] = await Promise.all([
+                    dbService.findOne(model.wallet, { refId: companyAdmin.id, companyId: user.companyId }),
+                    dbService.findOne(model.wallet, { refId: superAdmin.id, companyId: 1 })
+                ]);
+                commData.wallets.companyWallet = companyWallet;
+                commData.wallets.superAdminWallet = superAdminWallet;
+
+                if (user.userRole === 4) {
+                    const distributor = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.distributor = distributor;
+                    commData.wallets.distributorWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
+                        commData.scenario = 'DIST_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4 || c.roleName === 'DI');
+                    } else {
+                        commData.scenario = 'DIST_MD';
+                        const md = await dbService.findOne(model.user, { id: distributor.reportingTo, companyId: user.companyId, isActive: true });
+                        if (md) {
+                            commData.users.masterDistributor = md;
+                            commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                            const [saSlab, coSlab, mdSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                            commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                        }
+                    }
+                } else if (user.userRole === 5) {
+                    const retailer = await dbService.findOne(model.user, { id: user.id, companyId: user.companyId, isActive: true });
+                    commData.users.retailer = retailer;
+                    commData.wallets.retailerWallet = await model.wallet.findOne({ where: { refId: user.id, companyId: user.companyId } });
+                    let reportingUser = null;
+                    if (retailer.reportingTo && retailer.reportingTo !== companyAdmin.id) {
+                        reportingUser = await dbService.findOne(model.user, { id: retailer.reportingTo, companyId: user.companyId, isActive: true });
+                    }
+                    if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
+                        commData.scenario = 'RET_DIRECT';
+                        const [saSlab, coSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.retSlab = coSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 3) {
+                        commData.scenario = 'RET_MD';
+                        commData.users.masterDistributor = reportingUser;
+                        commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        const [saSlab, coSlab, mdSlab] = await Promise.all([
+                            dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                            dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                        ]);
+                        commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                        commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                        commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                        commData.slabs.retSlab = mdSlab?.find(c => c.roleType === 5);
+                    } else if (reportingUser.userRole === 4) {
+                        commData.users.distributor = reportingUser;
+                        commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
+                        if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
+                            commData.scenario = 'RET_DIST_CO';
+                            const [saSlab, coSlab, distSlab] = await Promise.all([
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                            ]);
+                            commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                            commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                            commData.slabs.distSlab = coSlab?.find(c => c.roleType === 4);
+                            commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                        } else {
+                            commData.scenario = 'RET_DIST_MD';
+                            const md = await dbService.findOne(model.user, { id: reportingUser.reportingTo, companyId: user.companyId, isActive: true });
+                            if (md) {
+                                commData.users.masterDistributor = md;
+                                commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
+                                const [saSlab, coSlab, mdSlab, distSlab] = await Promise.all([
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName', 'operatorId'] })
+                                ]);
+                                commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
+                                commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
+                                commData.slabs.mdSlab = coSlab?.find(c => c.roleType === 3);
+                                commData.slabs.distSlab = mdSlab?.find(c => c.roleType === 4);
+                                commData.slabs.retSlab = distSlab?.find(c => c.roleType === 5);
+                            }
+                        }
+                    }
+                }
+
+                // Calculate amounts
+                const operatorCommissionAmount = operator?.comm ? calcSlabAmount({ amtType: operator.amtType, commAmt: operator.comm }, msBase) : 0;
+                const saSlabAmount = commData.slabs.saSlab ? calcSlabAmount(commData.slabs.saSlab, msBase) : 0;
+                const wlSlabAmount = commData.slabs.wlSlab ? calcSlabAmount(commData.slabs.wlSlab, msBase) : 0;
+                let mdSlabAmount = commData.slabs.mdSlab ? calcSlabAmount(commData.slabs.mdSlab, msBase) : 0;
+                let distSlabAmount = commData.slabs.distSlab ? calcSlabAmount(commData.slabs.distSlab, msBase) : 0;
+                let retSlabAmount = commData.slabs.retSlab ? calcSlabAmount(commData.slabs.retSlab, msBase) : 0;
+
+                let companyCost = 0;
+                if (commData.users.masterDistributor) companyCost = mdSlabAmount;
+                else if (commData.users.distributor) companyCost = distSlabAmount;
+                else companyCost = retSlabAmount;
+
+                // Super Admin
+                commData.amounts.superAdminComm = Math.max(0, round4(operatorCommissionAmount - wlSlabAmount));
+                if (wlSlabAmount > operatorCommissionAmount) commData.amounts.saShortfall = round4(wlSlabAmount - operatorCommissionAmount);
+
+                // Company (WL)
+                commData.amounts.companyComm = Math.max(0, round4(wlSlabAmount - companyCost));
+                if (companyCost > wlSlabAmount) commData.amounts.wlShortfall = round4(companyCost - wlSlabAmount);
+
+                // Master Distributor
+                if (commData.users.masterDistributor) {
+                    let mdCost = commData.users.distributor ? distSlabAmount : retSlabAmount;
+                    commData.amounts.mdComm = Math.max(0, round4(mdSlabAmount - mdCost));
+                    if (mdCost > mdSlabAmount) commData.amounts.mdShortfall = round4(mdCost - mdSlabAmount);
+                }
+
+                // Distributor
+                if (commData.users.distributor) {
+                    commData.amounts.distComm = Math.max(0, round4(distSlabAmount - retSlabAmount));
+                    if (retSlabAmount > distSlabAmount) commData.amounts.distShortfall = round4(retSlabAmount - distSlabAmount);
+                }
+
+                commData.amounts.retailerComm = retSlabAmount;
+
+                const TDS_RATE = Number(process.env.AEPS_TDS_PERCENT || 2) / 100;
+                const tds = (g) => round4(g * TDS_RATE);
+                commData.tds = { superAdminTDS: tds(operatorCommissionAmount), whitelabelTDS: tds(wlSlabAmount), masterDistributorTDS: tds(mdSlabAmount), distributorTDS: tds(distSlabAmount), retailerTDS: tds(retSlabAmount) };
+                commData.avail = { superAdminAvail: Boolean(commData.users.superAdmin), whitelabelAvail: Boolean(commData.users.companyAdmin), masterDistributorAvail: Boolean(commData.users.masterDistributor), distributorAvail: Boolean(commData.users.distributor), retailerAvail: Boolean(commData.users.retailer) };
+            }
+        }
+
         const apiResponse = await zupayService.miniStatement(payload);
         const success = isZupaySuccess(apiResponse);
+
+        const merchantTransactionId = apiResponse?.data?.transaction_id || merchantReferenceId;
+        const paymentStatus = success ? 'SUCCESS' : 'FAILED';
+
+        const retailerCommAmt = commData.amounts.retailerComm || 0, distCommAmt = commData.amounts.distComm || 0;
+        const mdCommAmt = commData.amounts.mdComm || 0, companyCommAmt = commData.amounts.companyComm || 0, superAdminCommAmt = commData.amounts.superAdminComm || 0;
+        const distShortfallAmt = commData.amounts.distShortfall || 0, mdShortfallAmt = commData.amounts.mdShortfall || 0;
+        const wlShortfallAmt = commData.amounts.wlShortfall || 0, saShortfallAmt = commData.amounts.saShortfall || 0;
+        const retailerTDS = commData.tds?.retailerTDS || 0, distributorTDS = commData.tds?.distributorTDS || 0;
+        const masterDistTDS = commData.tds?.masterDistributorTDS || 0, whitelabelTDS = commData.tds?.whitelabelTDS || 0, superAdminTDS = commData.tds?.superAdminTDS || 0;
+        const retailerNetAmt = round4(retailerCommAmt - retailerTDS), distNetAmt = round4(distCommAmt - distributorTDS);
+        const mdNetAmt = round4(mdCommAmt - masterDistTDS), companyNetAmt = round4(companyCommAmt - whitelabelTDS), superAdminNetAmt = round4(superAdminCommAmt - superAdminTDS);
+
+        let wallet = await model.wallet.findOne({ where: { refId: req.user.id, companyId: req.user.companyId } });
+        if (!wallet) wallet = await model.wallet.create({ refId: req.user.id, companyId: req.user.companyId, roleType: req.user.userType, mainWallet: 0, apes1Wallet: 0, apes2Wallet: 0, addedBy: req.user.id, updatedBy: req.user.id });
+        const openingWallet = round4(wallet.apes1Wallet || 0);
+        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? round4(retailerNetAmt) : round4(distNetAmt)) : 0;
+        const closingWallet = success ? round4(openingWallet + initiatorCredit) : openingWallet;
+
+        if (success) {
+            const remarkText = `AEPS1 MS-${bank_name}`;
+            const walletUpdates = [], historyPromises = [];
+            if ([4, 5].includes(user.userRole) && commData.users.companyAdmin) {
+                if (initiatorCredit > 0) walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { apes1Wallet: closingWallet, updatedBy: req.user.id }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS1', operator: bank_name, amount: 0, comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, remark: remarkText, aepsTxnType: 'MS', bankiin: bank_iin, superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt, superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS, addedBy: req.user.id, updatedBy: req.user.id }));
+                if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
+                    const dW = commData.wallets.distributorWallet, dO = round4(dW.apes1Wallet || 0), dC = round4(dO + distNetAmt - distShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: dW.id }, { apes1Wallet: dC, updatedBy: commData.users.distributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.distributor.id, companyId: user.companyId, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - dist comm`, amount: 0, comm: distCommAmt, surcharge: 0, openingAmt: dO, closingAmt: dC, credit: distNetAmt, debit: distShortfallAmt + distributorTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'MS', bankiin: bank_iin, distributorCom: distCommAmt, distributorComTDS: distributorTDS, addedBy: commData.users.distributor.id, updatedBy: commData.users.distributor.id }));
+                }
+                if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
+                    const mW = commData.wallets.masterDistributorWallet, mO = round4(mW.apes1Wallet || 0), mC = round4(mO + mdNetAmt - mdShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: mW.id }, { apes1Wallet: mC, updatedBy: commData.users.masterDistributor.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.masterDistributor.id, companyId: user.companyId, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - md comm`, amount: 0, comm: mdCommAmt, surcharge: 0, openingAmt: mO, closingAmt: mC, credit: mdNetAmt, debit: mdShortfallAmt + masterDistTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'MS', bankiin: bank_iin, masterDistributorCom: mdCommAmt, masterDistributorComTDS: masterDistTDS, addedBy: commData.users.masterDistributor.id, updatedBy: commData.users.masterDistributor.id }));
+                }
+                if (commData.wallets.companyWallet) {
+                    const cW = commData.wallets.companyWallet, cO = round4(cW.apes1Wallet || 0), cC = round4(cO + companyNetAmt - wlShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: cW.id }, { apes1Wallet: cC, updatedBy: commData.users.companyAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.companyAdmin.id, companyId: user.companyId, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - company comm`, amount: 0, comm: companyCommAmt, surcharge: 0, openingAmt: cO, closingAmt: cC, credit: companyNetAmt, debit: wlShortfallAmt + whitelabelTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'MS', bankiin: bank_iin, whitelabelComm: companyCommAmt, whitelabelCommTDS: whitelabelTDS, addedBy: commData.users.companyAdmin.id, updatedBy: commData.users.companyAdmin.id }));
+                }
+                if (commData.wallets.superAdminWallet) {
+                    const sW = commData.wallets.superAdminWallet, sO = round4(sW.apes1Wallet || 0), sC = round4(sO + superAdminNetAmt - saShortfallAmt);
+                    walletUpdates.push(dbService.update(model.wallet, { id: sW.id }, { apes1Wallet: sC, updatedBy: commData.users.superAdmin.id }));
+                    historyPromises.push(dbService.createOne(model.walletHistory, { refId: commData.users.superAdmin.id, companyId: 1, walletType: 'AEPS1', operator: bank_name, remark: `${remarkText} - admin comm`, amount: 0, comm: superAdminCommAmt, surcharge: 0, openingAmt: sO, closingAmt: sC, credit: superAdminNetAmt, debit: saShortfallAmt + superAdminTDS, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, aepsTxnType: 'MS', bankiin: bank_iin, superadminComm: superAdminCommAmt, superadminCommTDS: superAdminTDS, addedBy: commData.users.superAdmin.id, updatedBy: commData.users.superAdmin.id }));
+                }
+                await Promise.all([...walletUpdates, ...historyPromises]);
+            } else {
+                if (initiatorCredit > 0) walletUpdates.push(dbService.update(model.wallet, { id: wallet.id }, { apes1Wallet: closingWallet, updatedBy: req.user.id }));
+                historyPromises.push(dbService.createOne(model.walletHistory, { refId: req.user.id, companyId: req.user.companyId, walletType: 'AEPS1', operator: bank_name, amount: 0, comm: 0, surcharge: 0, openingAmt: openingWallet, closingAmt: closingWallet, credit: initiatorCredit, debit: 0, merchantTransactionId, transactionId: apiResponse?.data?.transaction_id, paymentStatus, remark: `AEPS1 MS-${bank_name}`, aepsTxnType: 'MS', bankiin: bank_iin, addedBy: req.user.id, updatedBy: req.user.id }));
+                await Promise.all([...walletUpdates, ...historyPromises]);
+            }
+        }
 
         await saveTxnHistory(existingUser.id, existingUser.companyId, {
             subMerchantCode: onboarding.subMerchantCode,
@@ -779,7 +1239,21 @@ const miniStatement = async (req, res) => {
             peripheral: req.body.peripheral,
             pidType: pid_type || 1,
             requestPayload: { ...payload, transaction_details: { ...payload.transaction_details, pid_data: 'REDACTED' } },
-            responsePayload: apiResponse
+            responsePayload: apiResponse,
+            openingWallet,
+            closingWallet,
+            credit: success ? initiatorCredit : 0,
+            superadminComm: superAdminCommAmt,
+            whitelabelComm: companyCommAmt,
+            masterDistributorCom: mdCommAmt,
+            distributorCom: distCommAmt,
+            retailerCom: retailerCommAmt,
+            superadminCommTDS: superAdminTDS,
+            whitelabelCommTDS: whitelabelTDS,
+            masterDistributorComTDS: masterDistTDS,
+            distributorComTDS: distributorTDS,
+            retailerComTDS: retailerTDS,
+            ...commData.avail
         });
 
         if (!success) {
