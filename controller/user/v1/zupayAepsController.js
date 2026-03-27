@@ -555,7 +555,7 @@ const cashWithdrawal = async (req, res) => {
     try {
         const {
             aadhaar_number, pid_data, pid_type, amount,
-            bank_iin, mobile_number, customer_name, bank_name,
+            bank_iin, mobile_number, bank_name,
             device_serial, latitude, longitude, ipAddress
         } = req.body;
 
@@ -564,7 +564,6 @@ const cashWithdrawal = async (req, res) => {
         if (!amount) return res.failure({ message: 'Amount is required for cash withdrawal' });
         if (!bank_iin) return res.failure({ message: 'Bank IIN is required' });
         if (!mobile_number) return res.failure({ message: 'Mobile number is required' });
-        if (!customer_name) return res.failure({ message: 'Customer name is required' });
         if (!bank_name) return res.failure({ message: 'Bank name is required' });
 
         const { existingUser, onboarding } = await buildTxnContext(req);
@@ -593,7 +592,7 @@ const cashWithdrawal = async (req, res) => {
                 device_serial: device_serial || '',
                 transaction_type: 'CW',
                 mobile_number,
-                customer_name,
+                customer_name: '',
                 bank_name,
                 pid_type: pid_type || 1
             }
