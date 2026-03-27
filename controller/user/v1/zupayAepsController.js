@@ -882,15 +882,14 @@ const balanceEnquiry = async (req, res) => {
     try {
         const {
             aadhaar_number, pid_data, pid_type,
-            bank_iin, mobile_number, customer_name, bank_name,
-            device_serial, latitude, longitude, ip_address
+            bank_iin, mobile_number, bank_name,
+            device_serial, latitude, longitude, ipAddress
         } = req.body;
 
         if (!pid_data) return res.failure({ message: 'PID data is required' });
         if (!aadhaar_number) return res.failure({ message: 'Aadhaar number is required' });
         if (!bank_iin) return res.failure({ message: 'Bank IIN is required' });
         if (!mobile_number) return res.failure({ message: 'Mobile number is required' });
-        if (!customer_name) return res.failure({ message: 'Customer name is required' });
         if (!bank_name) return res.failure({ message: 'Bank name is required' });
 
         const { existingUser, onboarding } = await buildTxnContext(req);
@@ -906,7 +905,7 @@ const balanceEnquiry = async (req, res) => {
                 geo_location: {
                     latitude: latitude || 0,
                     longitude: longitude || 0,
-                    ip_address: ip_address || req.ip || '0.0.0.0'
+                    ip_address: ipAddress || req.ip || '0.0.0.0'
                 },
                 device_info: deviceInfoFromReq(req.body)
             },
@@ -918,7 +917,7 @@ const balanceEnquiry = async (req, res) => {
                 device_serial: device_serial || '',
                 transaction_type: 'BE',
                 mobile_number,
-                customer_name,
+                customer_name: '',
                 bank_name,
                 pid_type: pid_type || 1
             }
@@ -940,14 +939,14 @@ const balanceEnquiry = async (req, res) => {
             aadhaarLastFour: aadhaar_number?.slice(-4),
             bankIin: bank_iin,
             bankName: bank_name,
-            customerName: customer_name,
+            customerName: customer_name || '',
             mobileNumber: mobile_number,
             transactionStatus: success ? 'SUCCESS' : 'FAILED',
             responseCode: apiResponse?.meta?.response_code,
             responseMessage: apiResponse?.meta?.message,
             latitude: String(latitude),
             longitude: String(longitude),
-            ipAddress: ip_address || req.ip,
+            ipAddress: ipAddress || req.ip,
             deviceType: req.body.device_type,
             deviceOs: req.body.device_os,
             peripheral: req.body.peripheral,
@@ -973,15 +972,14 @@ const miniStatement = async (req, res) => {
     try {
         const {
             aadhaar_number, pid_data, pid_type,
-            bank_iin, mobile_number, customer_name, bank_name,
-            device_serial, latitude, longitude, ip_address
+            bank_iin, mobile_number, bank_name,
+            device_serial, latitude, longitude, ipAddress
         } = req.body;
 
         if (!pid_data) return res.failure({ message: 'PID data is required' });
         if (!aadhaar_number) return res.failure({ message: 'Aadhaar number is required' });
         if (!bank_iin) return res.failure({ message: 'Bank IIN is required' });
         if (!mobile_number) return res.failure({ message: 'Mobile number is required' });
-        if (!customer_name) return res.failure({ message: 'Customer name is required' });
         if (!bank_name) return res.failure({ message: 'Bank name is required' });
 
         const { existingUser, onboarding } = await buildTxnContext(req);
@@ -997,7 +995,7 @@ const miniStatement = async (req, res) => {
                 geo_location: {
                     latitude: latitude || 0,
                     longitude: longitude || 0,
-                    ip_address: ip_address || req.ip || '0.0.0.0'
+                    ip_address: ipAddress || req.ip || '0.0.0.0'
                 },
                 device_info: deviceInfoFromReq(req.body)
             },
@@ -1009,7 +1007,7 @@ const miniStatement = async (req, res) => {
                 device_serial: device_serial || '',
                 transaction_type: 'MS',
                 mobile_number,
-                customer_name,
+                customer_name: '',
                 bank_name,
                 pid_type: pid_type || 1
             }
@@ -1245,14 +1243,14 @@ const miniStatement = async (req, res) => {
             aadhaarLastFour: aadhaar_number?.slice(-4),
             bankIin: bank_iin,
             bankName: bank_name,
-            customerName: customer_name,
+            customerName: customer_name || '',
             mobileNumber: mobile_number,
             transactionStatus: success ? 'SUCCESS' : 'FAILED',
             responseCode: apiResponse?.meta?.response_code,
             responseMessage: apiResponse?.meta?.message,
             latitude: String(latitude),
             longitude: String(longitude),
-            ipAddress: ip_address || req.ip,
+            ipAddress: ipAddress || req.ip,
             deviceType: req.body.device_type,
             deviceOs: req.body.device_os,
             peripheral: req.body.peripheral,
