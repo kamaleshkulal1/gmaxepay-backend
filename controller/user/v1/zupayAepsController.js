@@ -555,7 +555,7 @@ const cashWithdrawal = async (req, res) => {
     try {
         const {
             aadhaar_number, pid_data, pid_type, amount,
-            bank_iin, mobile_number, bank_name,
+            bank_iin, mobile_number, bank_name, customer_name,
             device_serial, latitude, longitude, ipAddress
         } = req.body;
 
@@ -835,7 +835,7 @@ const cashWithdrawal = async (req, res) => {
             aadhaarLastFour: aadhaar_number?.slice(-4),
             bankIin: bank_iin,
             bankName: bank_name,
-            customerName: customer_name,
+            customerName: customer_name || '',
             mobileNumber: mobile_number,
             transactionStatus: success ? 'SUCCESS' : 'FAILED',
             responseCode: apiResponse?.meta?.response_code,
@@ -882,7 +882,7 @@ const balanceEnquiry = async (req, res) => {
     try {
         const {
             aadhaar_number, pid_data, pid_type,
-            bank_iin, mobile_number, bank_name,
+            bank_iin, mobile_number, bank_name, customer_name,
             device_serial, latitude, longitude, ipAddress
         } = req.body;
 
@@ -972,7 +972,7 @@ const miniStatement = async (req, res) => {
     try {
         const {
             aadhaar_number, pid_data, pid_type,
-            bank_iin, mobile_number, bank_name,
+            bank_iin, mobile_number, bank_name, customer_name,
             device_serial, latitude, longitude, ipAddress
         } = req.body;
 
