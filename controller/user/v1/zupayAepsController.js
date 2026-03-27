@@ -503,8 +503,6 @@ const dailyAuthentication = async (req, res) => {
                 pid_type: pid_type || 1
             }
         };
-        console.log("payload", payload);
-
         const apiResponse = await zupayService.aeps2FA(payload);
         const success = isZupaySuccess(apiResponse);
 
