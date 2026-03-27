@@ -150,6 +150,7 @@ const aeps2FA = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("response", response)
         console.log("response", response.data);
         return response.data;
     } catch (error) {
