@@ -319,6 +319,16 @@ const ekycBiometric = async (req, res) => {
         const apiResponse = await zupayService.biometricVerification(payload);
 
         if (!isZupaySuccess(apiResponse)) {
+            await dbService.update(
+                model.zupayOnboarding,
+                { id: onboarding.id },
+                {
+                    isOtpVerified: false,
+                    isEkycCompleted: false,
+                    ekycStatus: 'PENDING',
+                    ekycRemarks: getZupayError(apiResponse)
+                }
+            );
             return res.failure({ message: getZupayError(apiResponse), data: apiResponse });
         }
 
