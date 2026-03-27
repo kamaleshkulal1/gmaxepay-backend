@@ -142,55 +142,58 @@ const statusCheck = async (payload) => {
 
 const aeps2FA = async (payload) => {
     try {
-        console.log("payload", payload);
-        const path = '/api/v1/transactions';
+        console.log("Zupay AEPS 2FA Payload:", JSON.stringify(payload, null, 2));
+        const path = '/v1/transactions';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
-        console.log("response", JSON.stringify(response, null, 2));
         console.log("response", response.data);
         return response.data;
     } catch (error) {
-        console.error('Error Zupay aeps2FA:', error.response ? error.response.data : error.message);
+        const errorData = error.response ? error.response.data : { message: error.message };
+        console.error('Error Zupay aeps2FA Status:', error.response?.status);
+        console.error('Error Zupay aeps2FA Body:', JSON.stringify(errorData, null, 2));
         return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
 const cashWithdrawal = async (payload) => {
     try {
-        const path = '/api/v1/transactions';
+        const path = '/v1/transactions';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
-        console.log("payload", payload);
-        console.log("response", response.data);
+        console.log("Zupay AEPS CW Response Data:", JSON.stringify(response.data, null, 2));
         return response.data;
     } catch (error) {
-        console.error('Error Zupay cashWithdrawal:', error.response ? error.response.data : error.message);
+        const errorData = error.response ? error.response.data : { message: error.message };
+        console.error('Error Zupay cashWithdrawal Status:', error.response?.status);
+        console.error('Error Zupay cashWithdrawal Body:', JSON.stringify(errorData, null, 2));
         return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
 
 const balanceEnquiry = async (payload) => {
     try {
-        const path = '/api/v1/transactions';
+        const path = '/v1/transactions';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
-        console.log("payload", payload);
-        console.log("response", response.data);
+        console.log("Zupay AEPS BE Response Data:", JSON.stringify(response.data, null, 2));
         return response.data;
     } catch (error) {
-        console.error('Error Zupay balanceEnquiry:', error.response ? error.response.data : error.message);
+        const errorData = error.response ? error.response.data : { message: error.message };
+        console.error('Error Zupay balanceEnquiry Status:', error.response?.status);
+        console.error('Error Zupay balanceEnquiry Body:', JSON.stringify(errorData, null, 2));
         return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
@@ -204,11 +207,12 @@ const miniStatement = async (payload) => {
             payloadString,
             { headers }
         );
-        console.log("payload", payload);
-        console.log("response", response.data);
+        console.log("Zupay AEPS MS Response Data:", JSON.stringify(response.data, null, 2));
         return response.data;
     } catch (error) {
-        console.error('Error Zupay miniStatement:', error.response ? error.response.data : error.message);
+        const errorData = error.response ? error.response.data : { message: error.message };
+        console.error('Error Zupay miniStatement Status:', error.response?.status);
+        console.error('Error Zupay miniStatement Body:', JSON.stringify(errorData, null, 2));
         return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
     }
 };
