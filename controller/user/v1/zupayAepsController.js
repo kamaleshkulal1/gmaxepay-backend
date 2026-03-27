@@ -138,8 +138,8 @@ const initiateOnboarding = async (req, res) => {
                 landmark: existingOutlet.landmark || '',
                 pin_code: zupayPincode.pincodeId,
                 geo_location: {
-                    latitude: String(req.body.latitude || existingOutlet.shopLatitude || ''),
-                    longitude: String(req.body.longitude || existingOutlet.shopLongitude || ''),
+                    latitude: Number(req.body.latitude),
+                    longitude: Number(req.body.longitude),
                     ip_address: req.ip || req.body.ipAddress || '0.0.0.0'
                 }
             },
