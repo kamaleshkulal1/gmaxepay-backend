@@ -1501,12 +1501,160 @@ const revertKycData = async (req, res) => {
   }
 };
 
+const upgradeList = async (req, res) => {
+  try {
+    if (req.user.userRole !== 2) {
+      return res.failure({ message: "Only whitelabel users can access this endpoint!" });
+    }
+
+    const companyId = req.user.companyId;
+    const userId = req.user.id;
+
+    if (!companyId) {
+      return res.failure({ message: 'Company ID is required' });
+    }
+
+    let dataToFind = req.body || {};
+    let options = {};
+    let query = {
+      companyId: companyId,
+      userRole: { [Op.in]: [3, 4, 5] },
+      [Op.or]: [
+        { reportingTo: userId },
+        { reportingTo: null }
+      ],
+      isDeleted: false
+    };
+
+    if (dataToFind.query) {
+      if (dataToFind.query.userRole !== undefined) {
+        const requestedRole = dataToFind.query.userRole;
+        if ([3, 4, 5].includes(requestedRole)) {
+          query.userRole = requestedRole;
+        } else {
+          return res.failure({ message: "Access denied! You can only filter by master distributor, distributor or retailer role." });
+        }
+      }
+
+      Object.keys(dataToFind.query).forEach(key => {
+        if (key !== 'userRole' && key !== 'reportingTo') {
+          query[key] = dataToFind.query[key];
+        }
+      });
+    }
+
+    if (dataToFind.options !== undefined) {
+      options = { ...dataToFind.options };
+    }
+
+    if (dataToFind.customSearch) {
+      const keys = Object.keys(dataToFind.customSearch);
+      const orConditions = [];
+
+      keys.forEach((key) => {
+        if (typeof dataToFind.customSearch[key] === 'number') {
+          orConditions.push(
+            Sequelize.where(Sequelize.cast(Sequelize.col(key), 'varchar'), {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            })
+          );
+        } else {
+          orConditions.push({
+            [key]: {
+              [Op.iLike]: `%${dataToFind.customSearch[key]}%`
+            }
+          });
+        }
+      });
+
+      if (orConditions.length > 0) {
+        const reportingToCondition = {
+          [Op.or]: [
+            { reportingTo: userId },
+            { reportingTo: null }
+          ]
+        };
+
+        query = {
+          companyId: query.companyId,
+          userRole: query.userRole,
+          isDeleted: query.isDeleted,
+          [Op.and]: [
+            reportingToCondition,
+            { [Op.or]: orConditions }
+          ]
+        };
+
+        Object.keys(dataToFind.query || {}).forEach(key => {
+          if (key !== 'userRole' && key !== 'reportingTo') {
+            query[Op.and].push({ [key]: dataToFind.query[key] });
+          }
+        });
+      }
+    }
+
+    const paginateOptions = {
+      ...options,
+      attributes: ['id', 'name', 'userId', 'userRole', 'mobileNo', 'email', 'isActive', 'createdAt', 'slabId']
+    };
+
+    let foundUsers = await dbService.paginate(model.user, query, paginateOptions);
+
+    if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
+      return res.success({
+        message: 'Users Retrieved Successfully',
+        data: [],
+        total: 0,
+        paginator: {
+          itemCount: 0,
+          perPage: options.paginate || 25,
+          pageCount: 0,
+          currentPage: options.page || 1
+        }
+      });
+    }
+
+    const roleMap = {
+      2: 'WL',
+      3: 'MD',
+      4: 'DI',
+      5: 'RE'
+    };
+
+    const transformedUsers = foundUsers.data.map((user) => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      return {
+        id: userData.id,
+        name: userData.name || null,
+        userId: userData.userId || null,
+        mobileNo: userData.mobileNo || null,
+        email: userData.email || null,
+        userRole: roleMap[userData.userRole] || `Role ${userData.userRole}`,
+        status: userData.isActive ? 'Active' : 'Inactive',
+        date: userData.createdAt || null,
+        slabId: userData.slabId || null
+      };
+    });
+
+    return res.success({
+      message: 'Upgrade Users List Retrieved Successfully',
+      data: transformedUsers,
+      total: foundUsers.total,
+      paginator: foundUsers.paginator
+    });
+  } catch (error) {
+    console.error('Error in upgradeList:', error);
+    return res.internalServerError({ message: error.message });
+  }
+};
+
 module.exports = {
   findAllUsers,
   setMPIN,
   resetMPIN,
   getUserProfile,
   findAllCompanyReportToUser,
+  upgradeList,
   getByUserProfile,
   getCompleteKycData,
   revertKycData
