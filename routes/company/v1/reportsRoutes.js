@@ -9,6 +9,7 @@ router.post('/aeps3Reports', authentication, reportController.getAeps3Reports);
 router.post('/recharge1Reports', authentication, reportController.getRecharge1Reports);
 router.post('/recharge2Reports', authentication, reportController.getRecharge2Reports);
 router.post('/bbpReports', authentication, reportController.getBbpReports);
+router.post('/cmsReports', authentication, reportController.getCmsReports);
 router.post('/aeps2/aeps2TransactionDetailsById/:id', authentication, reportController.getAeps2TransactionDetailsById);
 router.post('/aeps3/aeps3TransactionDetailsById/:id', authentication, reportController.getAeps3TransactionDetailsById);
 

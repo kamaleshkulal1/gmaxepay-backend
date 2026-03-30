@@ -1086,12 +1086,204 @@ const getAeps3TransactionDetailsById = async (req, res) => {
     }
 };
 
+const getCmsReports = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const userRole = existingUser.userRole;
+        const companyId = existingUser.companyId;
+
+        if (userRole !== 2) {
+            return res.failure({ message: 'Access denied. Only Company Admin can access CMS reports.' });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = {
+            companyId: companyId,
+            status: { [Op.in]: ['SUCCESS', 'FAILED'] }
+        };
+
+        if (dataToFind && dataToFind.query) {
+            Object.keys(dataToFind.query).forEach(key => {
+                if (key !== 'companyId') {
+                    query[key] = dataToFind.query[key];
+                }
+            });
+        }
+
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+
+            if (dataToFind.options.sort) {
+                const sortEntries = Object.entries(dataToFind.options.sort);
+                options.order = sortEntries.map(([field, direction]) => {
+                    return [field, direction === -1 ? 'DESC' : 'ASC'];
+                });
+            } else {
+                options.order = [['createdAt', 'DESC']];
+            }
+        } else {
+            options.order = [['createdAt', 'DESC']];
+        }
+
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const searchConditions = [];
+            const customSearch = dataToFind.customSearch;
+
+            if (customSearch.transactionId) {
+                const searchValue = String(customSearch.transactionId).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        referenceId: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.mobileNo) {
+                const searchValue = String(customSearch.mobileNo).trim();
+                if (searchValue) {
+                    searchConditions.push({
+                        mobileNo: {
+                            [Op.iLike]: `%${searchValue}%`
+                        }
+                    });
+                }
+            }
+
+            const userSearchFields = [];
+            if (customSearch.name) {
+                const searchName = String(customSearch.name).trim();
+                if (searchName) {
+                    userSearchFields.push({
+                        name: {
+                            [Op.iLike]: `%${searchName}%`
+                        }
+                    });
+                }
+            }
+
+            if (customSearch.mobilePhone) {
+                const searchMobile = String(customSearch.mobilePhone).trim();
+                if (searchMobile) {
+                    userSearchFields.push({
+                        mobileNo: {
+                            [Op.iLike]: `%${searchMobile}%`
+                        }
+                    });
+                }
+            }
+
+            if (userSearchFields.length > 0) {
+                const matchingUsers = await dbService.findAll(model.user, {
+                    companyId: companyId,
+                    [Op.or]: userSearchFields,
+                    isDeleted: false
+                }, {
+                    attributes: ['id']
+                });
+
+                const matchingUserIds = matchingUsers.map(u => u.id);
+                if (matchingUserIds.length > 0) {
+                    searchConditions.push({
+                        refId: { [Op.in]: matchingUserIds }
+                    });
+                } else {
+                    return res.status(200).send({
+                        status: 'SUCCESS',
+                        message: 'CMS reports retrieved successfully',
+                        data: [],
+                        total: 0,
+                        paginator: {
+                            page: options.page || 1,
+                            paginate: options.paginate || 10,
+                            totalPages: 0
+                        }
+                    });
+                }
+            }
+
+            if (searchConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.and]: [
+                        { [Op.or]: searchConditions }
+                    ]
+                };
+            }
+        }
+
+        options.include = [
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['id', 'name', 'userRole', 'profileImage', 'mobileNo', 'userId'],
+                required: false
+            }
+        ];
+
+        const result = await dbService.paginate(model.cmsHistory, query, options);
+
+        if (!result || !result.data || result.data.length === 0) {
+            return res.status(200).send({
+                status: 'SUCCESS',
+                message: 'No CMS reports found',
+                data: [],
+                total: result?.total || 0,
+                paginator: result?.paginator || {
+                    page: options.page || 1,
+                    paginate: options.paginate || 10,
+                    totalPages: 0
+                }
+            });
+        }
+
+        const mappedData = result?.data?.map((transaction) => {
+            const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { user, ...restData } = transactionData;
+            const userData = user || {};
+
+            return {
+                ...restData,
+                userDetails: userData.id ? {
+                    name: userData.name || null,
+                    userRole: userData.userRole || null,
+                    profileImage: userData.profileImage ? imageService.getImageUrl(userData.profileImage, false) : null,
+                    mobileNo: userData.mobileNo || null,
+                    userId: userData.userId || null
+                } : null
+            };
+        }) || [];
+
+        return res.status(200).send({
+            status: 'SUCCESS',
+            message: 'CMS reports retrieved successfully',
+            data: mappedData,
+            total: result.total || 0,
+            paginator: result.paginator
+        });
+    } catch (error) {
+        console.error('CMS reports error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve CMS reports' });
+    }
+};
+
 module.exports = {
     getAeps1Reports,
     getRecharge1Reports,
     getRecharge2Reports,
     getAeps2Reports,
     getAeps3Reports,
+    getCmsReports,
     getBbpReports,
     getAeps2TransactionDetailsById,
     getAeps3TransactionDetailsById

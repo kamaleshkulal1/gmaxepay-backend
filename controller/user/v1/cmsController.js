@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const dbService = require('../../../utils/dbService');
 const model = require('../../../models');
 const cmsService = require('../../../services/cmsService');
@@ -51,7 +52,50 @@ const initiateCms = async (req, res) => {
         return res.failure({ message: err.message || 'Internal Server Error' });
     }
 };
+
+const getCmsReports = async (req, res) => {
+    try {
+        if (!req.user.companyId) return res.failure({ message: 'Company ID is required' });
+        const dataToFind = req.body || {};
+        let options = { order: [['createdAt', 'DESC']] };
+        if (dataToFind.options) {
+            options = {
+                ...dataToFind.options,
+                order: dataToFind.options.sort ? Object.entries(dataToFind.options.sort).map(([f, d]) => [f, d === -1 ? 'DESC' : 'ASC']) : [['createdAt', 'DESC']]
+            };
+        }
+        options.include = [{ model: model.user, as: 'user', attributes: ['id', 'name', 'userId', 'mobileNo'], required: false }];
+
+        const filter = {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            status: { [Op.in]: ['SUCCESS', 'FAILED'] }
+        };
+
+        if (dataToFind.query) {
+            Object.keys(dataToFind.query).forEach(key => {
+                if (key !== 'refId' && key !== 'companyId') {
+                    filter[key] = dataToFind.query[key];
+                }
+            });
+        }
+
+        const result = await dbService.paginate(model.cmsHistory, filter, options);
+        return res.status(200).send({
+            status: 'SUCCESS',
+            message: 'CMS reports retrieved successfully',
+            data: result?.data || [],
+            total: result?.total || 0,
+            paginator: result?.paginator || { page: 1, paginate: 10, totalPages: 0 }
+        });
+    } catch (error) {
+        console.error('Get CMS Reports error:', error);
+        return res.failure({ message: error.message || 'Internal Server Error' });
+    }
+};
+
 module.exports = {
-    initiateCms
+    initiateCms,
+    getCmsReports
 };
 
