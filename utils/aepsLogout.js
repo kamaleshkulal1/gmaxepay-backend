@@ -28,8 +28,13 @@ const resetZupay2faRequirement = async () => {
   try {
     const result = await dbService.update(
       model.zupayOnboarding,
-      { is2faVerified: true },
-      { is2faVerified: false }
+      {
+        [Op.or]: [
+          { is2faVerified: true },
+          { last2faDate: { [Op.ne]: null } }
+        ]
+      },
+      { is2faVerified: false, last2faDate: null, twoFaStatus: 'FAILED' }
     );
     console.log('[Zupay 2FA Reset] Reset Zupay 2FA status for all users at midnight IST');
     return { success: true };
