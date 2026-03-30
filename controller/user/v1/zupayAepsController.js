@@ -23,7 +23,17 @@ const calcSlabAmount = (slab, base) => {
 
 const isZupaySuccess = (response) => {
     if (!response) return false;
-    return !response.errors && !!response.data;
+    if (response.errors && response.errors.length > 0) return false;
+    if (!response.data) return false;
+
+    if (response.meta?.response_code && String(response.meta.response_code).toUpperCase().includes('ERR')) return false;
+
+    const data = response.data;
+    if (data.status === 'FAILED') return false;
+    if (data.onBoard_status === 'FAILED') return false;
+    if (data.e_kyc_status === 'FAILED') return false;
+
+    return true;
 };
 
 const getZupayError = (response) => {
