@@ -1347,7 +1347,7 @@ const cmsCallback = async (req, res) => {
 
             await Promise.all([...walletUpdates, ...historyPromises]);
 
-            updateData.status = 'DEBITED';
+            updateData.status = 'SUCCESS';
             updateData.openingWallet = openingWallet;
             updateData.closingWallet = closingWallet;
             updateData.debit = initiatorDebit;
