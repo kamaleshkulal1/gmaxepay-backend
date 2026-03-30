@@ -542,7 +542,7 @@ const dailyAuthentication = async (req, res) => {
             model.zupayOnboarding,
             { id: onboarding.id },
             {
-                is2faVerified: success,
+                is2faVerified: apiResponse?.data?.status || (success ? true : false),
                 last2faDate: success ? new Date() : onboarding.last2faDate,
                 twoFaStatus: apiResponse?.data?.status || (success ? 'SUCCESS' : 'FAILED')
             }
