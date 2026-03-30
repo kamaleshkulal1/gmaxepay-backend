@@ -1040,6 +1040,18 @@ const payout = async (req, res) => {
             }
         }
 
+        // Calculate final closing balance for the response/history (payout + gst + surcharge)
+        let finalClosingBalance = aepsClosingBalance;
+        if (payoutHistoryData.status === 'SUCCESS' && commData.isValid) {
+            if (user.userRole === 3) {
+                finalClosingBalance = parseFloat((aepsClosingBalance - commData.amounts.mdSurcharge).toFixed(4));
+            } else if (user.userRole === 4) {
+                finalClosingBalance = parseFloat((aepsClosingBalance - commData.amounts.distSurcharge).toFixed(4));
+            } else if (user.userRole === 5) {
+                finalClosingBalance = parseFloat((aepsClosingBalance - commData.amounts.retailerSurcharge).toFixed(4));
+            }
+        }
+
         // Prepare response data
         const responseData = {
             transactionID: transactionID,
@@ -1052,7 +1064,7 @@ const payout = async (req, res) => {
             remark: payoutHistoryData?.statusMessage,
             [normalizedAepsType.toLowerCase()]: {
                 openingBalance: aepsOpeningBalance,
-                closingBalance: aepsClosingBalance
+                closingBalance: finalClosingBalance
             },
             gstAmount: gstAmount
         };
@@ -1065,7 +1077,7 @@ const payout = async (req, res) => {
             await dbService.update(
                 model.payoutHistory,
                 updateCondition,
-                { apiResponse: responseData, updatedBy: user.id }
+                { apiResponse: responseData, closingBalance: finalClosingBalance, updatedBy: user.id }
             );
         }
 

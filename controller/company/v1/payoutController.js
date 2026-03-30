@@ -687,6 +687,10 @@ const payout = async (req, res) => {
             gstAmount: gstAmount
         };
 
+        if (payoutHistory?.id) {
+            await dbService.update(model.payoutHistory, { id: payoutHistory.id }, { closingBalance: aepsClosingBalance, updatedBy: user.id });
+        }
+
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {
             responseData.mainWallet = {
                 openingBalance: mainWalletOpeningBalance,
