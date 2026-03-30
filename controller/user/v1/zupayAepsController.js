@@ -1314,28 +1314,282 @@ const miniStatement = async (req, res) => {
 
 const transactionHistory = async (req, res) => {
     try {
-        const { page = 1, limit = 20, serviceCode } = req.body;
-
-        const filter = {
-            refId: req.user.id,
-            companyId: req.user.companyId
-        };
-        if (serviceCode) filter.serviceCode = serviceCode;
-
-        const history = await model.zupayAepsHistory.paginate({
-            where: filter,
-            order: [['createdAt', 'DESC']],
-            page: Number(page),
-            paginate: Number(limit)
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
         });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        const userRole = existingUser.userRole;
+        const userId = existingUser.id;
+        const companyId = existingUser.companyId;
+
+        if (![3, 4, 5].includes(userRole)) {
+            return res.failure({
+                message: 'Access denied. Only Master Distributor, Distributor, and Retailer can access transaction history.'
+            });
+        }
+
+        const dataToFind = req.body || {};
+        let options = {};
+        let query = { companyId: companyId };
+
+        if (userRole === 4 || userRole === 5) {
+            query.refId = userId;
+        } else if (userRole === 3) {
+            const reportingUsers = await dbService.findAll(
+                model.user,
+                {
+                    reportingTo: userId,
+                    companyId: companyId,
+                    isDeleted: false,
+                    userRole: { [Op.in]: [4, 5] }
+                },
+                {
+                    attributes: ['id']
+                }
+            );
+            const reportingUserIds = reportingUsers.map((u) => u.id);
+            query.refId = { [Op.in]: [userId, ...reportingUserIds] };
+        }
+
+        if (dataToFind && dataToFind.query) {
+            query = { ...query, ...dataToFind.query };
+        }
+
+        if (dataToFind && dataToFind.options !== undefined) {
+            options = { ...dataToFind.options };
+        }
+
+        if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
+            const keys = Object.keys(dataToFind.customSearch);
+            const orConditions = [];
+
+            keys.forEach((key) => {
+                const value = dataToFind.customSearch[key];
+                if (value === undefined || value === null || String(value).trim() === '') return;
+
+                orConditions.push({
+                    [key]: {
+                        [Op.iLike]: `%${String(value).trim()}%`
+                    }
+                });
+            });
+
+            if (orConditions.length > 0) {
+                query = {
+                    ...query,
+                    [Op.or]: orConditions
+                };
+            }
+        }
+
+        options.include = [
+            {
+                model: model.zupayBankList,
+                as: 'bank',
+                attributes: ['bankName'],
+                required: false
+            },
+            {
+                model: model.user,
+                as: 'user',
+                attributes: ['name', 'userRole'],
+                required: false
+            }
+        ];
+
+        const result = await dbService.paginate(model.zupayAepsHistory, query, options);
+
+        const mappedData = result?.data?.map((transaction) => {
+            const txData = transaction.toJSON ? transaction.toJSON() : transaction;
+            const { bank, user, ...restData } = txData;
+            return {
+                ...restData,
+                bankName: bank?.bankName || null,
+                name: user?.name || null,
+                userRole: user?.userRole || null
+            };
+        }) || [];
 
         return res.success({
-            message: 'Transaction history fetched',
-            data: history
+            message: 'Zupay AEPS transaction history retrieved successfully',
+            data: mappedData,
+            total: result?.total || 0,
+            paginator: result?.paginator
         });
-    } catch (err) {
-        console.error('[ZupayAeps] transactionHistory error:', err);
-        return res.failure({ message: err.message || 'Failed to fetch transaction history' });
+    } catch (error) {
+        console.error('Zupay AEPS transaction history error', error);
+        return res.failure({ message: error.message || 'Unable to retrieve Zupay AEPS transaction history' });
+    }
+};
+
+const getAepsTransactionDetailsById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) {
+            return res.failure({ message: 'Transaction ID is required' });
+        }
+
+        const [existingUser, transaction] = await Promise.all([
+            dbService.findOne(model.user, {
+                id: req.user.id,
+                isActive: true
+            }),
+            dbService.findOne(model.zupayAepsHistory, { id })
+        ]);
+
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        if (![3, 4, 5].includes(existingUser.userRole)) {
+            return res.failure({ message: 'Access denied. Unauthorized role.' });
+        }
+
+        if (!transaction) {
+            return res.failure({ message: 'Transaction not found' });
+        }
+
+        let transactionUser, existingBankDetails, parentUser, companyDetails;
+
+        if (existingUser.userRole === 5) {
+            // Retailer: the transaction must belong to them
+            if (transaction.refId !== existingUser.id) {
+                return res.failure({ message: 'Access denied. Transaction does not belong to you.' });
+            }
+
+            [existingBankDetails, parentUser, companyDetails] = await Promise.all([
+                dbService.findOne(model.zupayBankList, {
+                    bankIin: transaction.bankIin
+                }),
+                existingUser.reportingTo ? dbService.findOne(model.user, {
+                    id: existingUser.reportingTo,
+                    isActive: true
+                }) : Promise.resolve(null),
+                dbService.findOne(model.company, {
+                    id: existingUser.companyId
+                })
+            ]);
+
+            if (!companyDetails) {
+                return res.failure({ message: 'Company details not found' });
+            }
+
+            // If no direct parent, fall back to Company Admin
+            if (!parentUser) {
+                parentUser = await dbService.findOne(model.user, {
+                    companyId: existingUser.companyId,
+                    userRole: 2
+                });
+            }
+
+            const data = {
+                userDetails: {
+                    name: existingUser.name,
+                    userRole: existingUser.userRole,
+                    userId: existingUser.userId,
+                    mobileNo: existingUser.mobileNo
+                },
+                reportingUserDetails: {
+                    companyName: companyDetails.companyName,
+                    parentName: parentUser?.name || null,
+                    parentRole: parentUser?.userRole || null,
+                    parentUserId: parentUser?.userId || null
+                },
+                transactionDetails: {
+                    amount: transaction.transactionAmount,
+                    bankName: existingBankDetails?.bankName || transaction.bankName || null,
+                    aadharNumber: transaction.aadhaarLastFour,
+                    commission: transaction.retailerCom || 0
+                },
+                transaction: transaction
+            };
+
+            return res.success({
+                message: 'Zupay AEPS transaction details retrieved successfully',
+                data
+            });
+
+        } else {
+            // Role 3 (MD) or 4 (Distributor): transaction user must report to them
+            [transactionUser, existingBankDetails] = await Promise.all([
+                dbService.findOne(model.user, {
+                    id: transaction.refId,
+                    companyId: transaction.companyId,
+                    isActive: true
+                }),
+                dbService.findOne(model.zupayBankList, {
+                    bankIin: transaction.bankIin
+                })
+            ]);
+
+            if (!transactionUser) {
+                return res.failure({ message: 'Transaction user details not found' });
+            }
+
+            // check if the transaction user reports correctly
+            // For Role 3 (MD): check if transaction.refId's user reports to existingUser (Role 3)
+            // or if they are a distributor (Role 4) reporting to this MD, and this transaction belongs to them.
+            // Simplified: if transactionUser.reportingTo === existingUser.id
+            if (transactionUser.reportingTo !== existingUser.id) {
+                 // Additional check: maybe they report to a distributor who reports to this MD
+                 const distributor = await dbService.findOne(model.user, { id: transactionUser.reportingTo, reportingTo: existingUser.id });
+                 if(!distributor && transactionUser.id !== existingUser.id) {
+                     return res.failure({ message: 'Access denied. Transaction user does not report to you.' });
+                 }
+            }
+
+            companyDetails = await dbService.findOne(model.company, {
+                id: transactionUser.companyId
+            });
+
+            if (!companyDetails) {
+                return res.failure({ message: 'Company details not found' });
+            }
+
+            let commission = 0;
+            if (existingUser.userRole === 3) {
+                commission = transaction.masterDistributorCom || 0;
+            } else if (existingUser.userRole === 4) {
+                commission = transaction.distributorCom || 0;
+            }
+
+            const data = {
+                userDetails: {
+                    name: transactionUser.name,
+                    userRole: transactionUser.userRole,
+                    userId: transactionUser.userId,
+                    mobileNo: transactionUser.mobileNo
+                },
+                reportingUserDetails: {
+                    companyName: companyDetails.companyName,
+                    parentName: existingUser.name,
+                    parentRole: existingUser.userRole,
+                    parentUserId: existingUser.userId
+                },
+                transactionDetails: {
+                    amount: transaction.transactionAmount,
+                    bankName: existingBankDetails?.bankName || transaction.bankName || null,
+                    aadharNumber: transaction.aadhaarLastFour,
+                    commission: commission
+                },
+                transaction: transaction
+            };
+
+            return res.success({
+                message: 'Zupay AEPS transaction details retrieved successfully',
+                data
+            });
+        }
+    } catch (error) {
+        console.error('Zupay AEPS transaction details error', error);
+        return res.failure({
+            message: error.message || 'Unable to retrieve Zupay AEPS transaction details'
+        });
     }
 };
 
@@ -1457,6 +1711,7 @@ module.exports = {
     balanceEnquiry,
     miniStatement,
     transactionHistory,
+    getAepsTransactionDetailsById,
     bankList,
     recentBanks
 };

@@ -16,5 +16,6 @@ router.post('/mini-statement', authentication, zupayAepsController.miniStatement
 router.post('/transaction-history', authentication, zupayAepsController.transactionHistory);
 router.post('/bank-list', authentication, zupayAepsController.bankList);
 router.post('/recent-banks', authentication, zupayAepsController.recentBanks);
+router.get('/transaction-details/:id', authentication, zupayAepsController.getAepsTransactionDetailsById);
 
 module.exports = router;
