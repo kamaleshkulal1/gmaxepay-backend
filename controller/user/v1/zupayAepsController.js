@@ -1427,7 +1427,7 @@ const transactionHistory = async (req, res) => {
     }
 };
 
-const getAepsTransactionDetailsById = async (req, res) => {
+const getAeps3TransactionDetailsById = async (req, res) => {
     try {
         const { id } = req.params;
         if (!id) {
@@ -1536,11 +1536,11 @@ const getAepsTransactionDetailsById = async (req, res) => {
             // or if they are a distributor (Role 4) reporting to this MD, and this transaction belongs to them.
             // Simplified: if transactionUser.reportingTo === existingUser.id
             if (transactionUser.reportingTo !== existingUser.id) {
-                 // Additional check: maybe they report to a distributor who reports to this MD
-                 const distributor = await dbService.findOne(model.user, { id: transactionUser.reportingTo, reportingTo: existingUser.id });
-                 if(!distributor && transactionUser.id !== existingUser.id) {
-                     return res.failure({ message: 'Access denied. Transaction user does not report to you.' });
-                 }
+                // Additional check: maybe they report to a distributor who reports to this MD
+                const distributor = await dbService.findOne(model.user, { id: transactionUser.reportingTo, reportingTo: existingUser.id });
+                if (!distributor && transactionUser.id !== existingUser.id) {
+                    return res.failure({ message: 'Access denied. Transaction user does not report to you.' });
+                }
             }
 
             companyDetails = await dbService.findOne(model.company, {
@@ -1711,7 +1711,7 @@ module.exports = {
     balanceEnquiry,
     miniStatement,
     transactionHistory,
-    getAepsTransactionDetailsById,
+    getAeps3TransactionDetailsById,
     bankList,
     recentBanks
 };
