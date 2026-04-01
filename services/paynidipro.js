@@ -41,7 +41,39 @@ const doSettlement = async (data) => {
         return error.response?.data || { status: false, message: error.message };
     }
 };
+const getWalletbalance = async () => {
+    const paynidiproUrl = process.env.PAYINDIPRO_URL;
+    const apiKey = process.env.PAYINDIPRO_API_KEY;
+    const token = process.env.PAYINDIPRO_TOKEN;
+
+    if (!paynidiproUrl || !apiKey || !token) {
+        console.error("[Paynidipro] Configuration missing. Please check .env file.");
+        return { status: false, message: "Service configuration missing (URL, API Key, or Token)" };
+    }
+
+    try {
+        const config = {
+            method: 'post',
+            url: `${paynidiproUrl}/ApiUser/getBalance`,
+            headers: {
+                'Content-Type': 'application/json',
+                'x-kay-client-id': apiKey,
+                'x-kay-client-token': token
+            },
+            data: {}
+        };
+
+        const response = await axios.request(config);
+        console.log('Paynidipro Balance Response:', JSON.stringify(response.data));
+
+        return response.data;
+    } catch (error) {
+        console.error("[Paynidipro] Error in getWalletbalance:", error.response?.data || error.message);
+        return error.response?.data || { status: false, message: error.message };
+    }
+};
 
 module.exports = {
-    doSettlement
+    doSettlement,
+    getWalletbalance
 };
