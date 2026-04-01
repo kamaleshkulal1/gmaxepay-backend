@@ -41,6 +41,17 @@ const login = async (req, res) => {
             return res.failure({ message: 'Invalid phone number' });
         }
 
+        // Domain restriction for employees (role 6)
+        const host = req.get('origin') || req.get('referer') || '';
+        if (existingUser.userRole === 6) {
+            const isAppDomain = host.includes('app.gmaxepay.in') || host.includes('app.gmaxepay.com');
+            const isSupportDomain = host.includes('support.gmaxepay.in') || host.includes('support.gmaxepay.com');
+
+            if (isAppDomain && !isSupportDomain) {
+                return res.failure({ message: 'Invalid credentials' });
+            }
+        }
+
         if (existingUser.kycStatus !== 'FULL_KYC' || existingUser.kycSteps !== 7) {
             return res.failure({ message: 'KYC is not completed! Please complete your KYC to login.' });
         }
