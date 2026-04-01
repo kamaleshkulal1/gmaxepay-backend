@@ -41,13 +41,19 @@ const login = async (req, res) => {
             return res.failure({ message: 'Invalid phone number' });
         }
 
-        // Domain restriction for employees (role 6)
+        // Domain restriction for employees (role 6) and other users
         const host = req.get('origin') || req.get('referer') || '';
-        if (existingUser.userRole === 6) {
-            const isAppDomain = host.includes('app.gmaxepay.in') || host.includes('app.gmaxepay.com');
-            const isSupportDomain = host.includes('support.gmaxepay.in') || host.includes('support.gmaxepay.com');
+        const isAppDomain = host.includes('app.gmaxepay.in') || host.includes('app.gmaxepay.com');
+        const isSupportDomain = host.includes('support.gmaxepay.in') || host.includes('support.gmaxepay.com');
 
+        if (existingUser.userRole === 6) {
+            // Employees (role 6) can only log in through support domains
             if (isAppDomain && !isSupportDomain) {
+                return res.failure({ message: 'Invalid credentials' });
+            }
+        } else {
+            // Other users (merchants/distributors/admins) cannot log in through support domains
+            if (isSupportDomain) {
                 return res.failure({ message: 'Invalid credentials' });
             }
         }
