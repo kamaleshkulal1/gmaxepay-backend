@@ -163,7 +163,6 @@ const aeps2FA = async (payload) => {
 const cashWithdrawal = async (payload) => {
     try {
         const path = '/v1/transactions';
-        console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
@@ -183,7 +182,6 @@ const cashWithdrawal = async (payload) => {
 const balanceEnquiry = async (payload) => {
     try {
         const path = '/v1/transactions';
-        console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
@@ -203,7 +201,6 @@ const balanceEnquiry = async (payload) => {
 const miniStatement = async (payload) => {
     try {
         const path = '/v1/transactions';
-        console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
@@ -220,6 +217,26 @@ const miniStatement = async (payload) => {
     }
 };
 
+const reconcile = async (payload) => {
+    try {
+        console.log("Payload", payload)
+        const path = '/v1/recon/reconcile';
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
+        const response = await axios.post(
+            `${ZUPAY_BASE_URL}${path}`,
+            payloadString,
+            { headers }
+        );
+        console.log("Zupay AEPS Recon Response Data:", JSON.stringify(response.data, null, 2));
+        return response.data;
+    } catch (error) {
+        const errorData = error.response ? error.response.data : { message: error.message };
+        console.error('Error Zupay reconcile Status:', error.response?.status);
+        console.error('Error Zupay reconcile Body:', JSON.stringify(errorData, null, 2));
+        return error.response ? error.response.data : { errors: [{ error_message: error.message }], meta: { message: error.message, status: false } };
+    }
+};
+
 module.exports = {
     initiateOnboarding,
     verifyOTP,
@@ -229,5 +246,7 @@ module.exports = {
     aeps2FA,
     cashWithdrawal,
     balanceEnquiry,
-    miniStatement
+    miniStatement,
+    reconcile
 };
+

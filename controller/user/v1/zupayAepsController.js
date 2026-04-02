@@ -560,7 +560,6 @@ const dailyAuthentication = async (req, res) => {
     }
 };
 
-
 const cashWithdrawal = async (req, res) => {
     try {
         const {
@@ -1592,6 +1591,50 @@ const getAeps3TransactionDetailsById = async (req, res) => {
     }
 };
 
+const reconcile = async (req, res) => {
+    try {
+        const { merchant_reference_id } = req.body;
+        if (!merchant_reference_id) {
+            return res.failure({ message: 'Merchant reference ID is required' });
+        }
+
+        const payload = {
+            merchant_reference_id
+        };
+
+        const apiResponse = await zupayService.reconcile(payload);
+
+        if (!isZupaySuccess(apiResponse)) {
+            return res.failure({ message: getZupayError(apiResponse), data: apiResponse });
+        }
+
+        const transaction = await dbService.findOne(model.zupayAepsHistory, {
+            merchantReferenceId: merchant_reference_id,
+            companyId: req.user.companyId
+        });
+
+        if (transaction) {
+            const apiStatus = apiResponse.data?.status;
+            const currentStatus = transaction.transactionStatus;
+
+            if (apiStatus && apiStatus !== currentStatus) {
+                await dbService.update(model.zupayAepsHistory, { id: transaction.id }, {
+                    transactionStatus: apiStatus,
+                    responsePayload: apiResponse
+                });
+            }
+        }
+
+        return res.success({
+            message: apiResponse.meta?.message || 'Transaction reconciliation successful',
+            data: apiResponse.data
+        });
+    } catch (err) {
+        console.error('[ZupayAeps] reconcile error:', err);
+        return res.failure({ message: err.message || 'Failed to reconcile transaction' });
+    }
+};
+
 const bankList = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, {
@@ -1711,6 +1754,7 @@ module.exports = {
     miniStatement,
     transactionHistory,
     getAeps3TransactionDetailsById,
+    reconcile,
     bankList,
     recentBanks
 };
