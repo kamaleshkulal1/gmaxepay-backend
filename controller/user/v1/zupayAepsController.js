@@ -348,7 +348,6 @@ const ekycBiometric = async (req, res) => {
                 model.zupayOnboarding,
                 { id: onboarding.id },
                 {
-                    isOtpVerified: false,
                     isEkycCompleted: false,
                     ekycStatus: 'PENDING',
                     ekycRemarks: getZupayError(apiResponse)

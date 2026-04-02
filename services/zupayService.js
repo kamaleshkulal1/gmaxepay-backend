@@ -163,6 +163,7 @@ const aeps2FA = async (payload) => {
 const cashWithdrawal = async (payload) => {
     try {
         const path = '/v1/transactions';
+        console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
@@ -182,6 +183,7 @@ const cashWithdrawal = async (payload) => {
 const balanceEnquiry = async (payload) => {
     try {
         const path = '/v1/transactions';
+        console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
@@ -201,6 +203,7 @@ const balanceEnquiry = async (payload) => {
 const miniStatement = async (payload) => {
     try {
         const path = '/v1/transactions';
+        console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
