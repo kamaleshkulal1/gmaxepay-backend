@@ -170,6 +170,8 @@ const cashWithdrawal = async (payload) => {
             payloadString,
             { headers }
         );
+        console.log("response", response);
+        console.log("full response", JSON.stringify(response, null, 2));
         console.log("Zupay AEPS CW Response Data:", JSON.stringify(response.data, null, 2));
         return response.data;
     } catch (error) {
