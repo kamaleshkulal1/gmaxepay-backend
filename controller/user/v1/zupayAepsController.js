@@ -1598,8 +1598,22 @@ const reconcile = async (req, res) => {
             return res.failure({ message: 'Merchant reference ID is required' });
         }
 
+        const zupayTransaction = await dbService.findOne(model.zupayAepsHistory, {
+            merchantReferenceId: merchant_reference_id,
+            companyId: req.user.companyId
+        });
+        if (!zupayTransaction) {
+            return res.failure({ message: 'Zupay transaction not found' });
+        }
+
         const payload = {
-            merchant_reference_id
+            merchant_reference_id,
+            bank_rrn: zupayTransaction?.bankRRN,
+            transaction_status: zupayTransaction?.transactionStatus,
+            transaction_date: zupayTransaction?.createdAt ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata' }).format(new Date(zupayTransaction.createdAt)) : null,
+            service_code: zupayTransaction?.serviceCode,
+            merchant_code: zupayTransaction?.merchantCode,
+            sub_merchant_code: zupayTransaction?.subMerchantCode
         };
 
         const apiResponse = await zupayService.reconcile(payload);
