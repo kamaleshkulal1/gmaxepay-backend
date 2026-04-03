@@ -163,15 +163,13 @@ const aeps2FA = async (payload) => {
 const cashWithdrawal = async (payload) => {
     try {
         console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
-        const path = '/v1/transactions';
+        const path = '/api/v1/transactions';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
-        console.log("response", response);
-        console.log("full response", JSON.stringify(response, null, 2));
         console.log("Zupay AEPS CW Response Data:", JSON.stringify(response.data, null, 2));
         return response.data;
     } catch (error) {
