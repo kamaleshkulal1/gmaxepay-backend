@@ -30,24 +30,22 @@ const generateSignature = (method, path, timestamp, payloadString, query = '') =
         .digest('base64');
 };
 
-const getRequestConfig = (method, path, payload, query = '', extraHeaders = {}) => {
+const getRequestConfig = (method, path, payload, query = '') => {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const payloadString = payload ? JSON.stringify(payload) : '';
 
     const signature = generateSignature(method, path, timestamp, payloadString, query);
 
-    const headers = {
-        'Content-Type': 'application/json',
-        'X-Client-Id': ZUPAY_CLIENT_ID,
-        'X-API-Key': ZUPAY_API_KEY,
-        'X-API-Secret': ZUPAY_API_SECRET,
-        'X-Signature': signature,
-        'X-Timestamp': timestamp,
-        ...extraHeaders
-    };
-
     return {
-        headers,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Client-Id': ZUPAY_CLIENT_ID,
+            'X-Mock-Response': 'FAILED',
+            'X-API-Key': ZUPAY_API_KEY,
+            'X-API-Secret': ZUPAY_API_SECRET,
+            'X-Signature': signature,
+            'X-Timestamp': timestamp
+        },
         payloadString
     };
 };
@@ -165,23 +163,15 @@ const aeps2FA = async (payload) => {
 
 const cashWithdrawal = async (payload) => {
     try {
-        const mockResponse = payload.mock_response || (process.env.NODE_ENV !== 'production' ? 'FAILED' : null);
-        const cleanPayload = { ...payload };
-        delete cleanPayload.mock_response;
-
-        console.log("Zupay AEPS CW Payload:", JSON.stringify(cleanPayload, null, 2));
+        console.log("Zupay AEPS CW Payload:", JSON.stringify(payload, null, 2));
         const path = '/v1/transactions';
-        const extraHeaders = {};
-        if (process.env.NODE_ENV !== 'production' && mockResponse) {
-            extraHeaders['X-Mock-Response'] = mockResponse;
-        }
-
-        const { headers, payloadString } = getRequestConfig('POST', path, cleanPayload, '', extraHeaders);
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
             payloadString,
             { headers }
         );
+        console.log("response", response);
         console.log("Zupay AEPS CW Response Data:", JSON.stringify(response.data, null, 2));
         return response.data;
     } catch (error) {
@@ -194,17 +184,8 @@ const cashWithdrawal = async (payload) => {
 
 const balanceEnquiry = async (payload) => {
     try {
-        const mockResponse = payload.mock_response || (process.env.NODE_ENV !== 'production' ? 'FAILED' : null);
-        const cleanPayload = { ...payload };
-        delete cleanPayload.mock_response;
-
         const path = '/v1/transactions';
-        const extraHeaders = {};
-        if (process.env.NODE_ENV !== 'production' && mockResponse) {
-            extraHeaders['X-Mock-Response'] = mockResponse;
-        }
-
-        const { headers, payloadString } = getRequestConfig('POST', path, cleanPayload, '', extraHeaders);
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
             payloadString,
@@ -222,17 +203,8 @@ const balanceEnquiry = async (payload) => {
 
 const miniStatement = async (payload) => {
     try {
-        const mockResponse = payload.mock_response || (process.env.NODE_ENV !== 'production' ? 'FAILED' : null);
-        const cleanPayload = { ...payload };
-        delete cleanPayload.mock_response;
-
         const path = '/v1/transactions';
-        const extraHeaders = {};
-        if (process.env.NODE_ENV !== 'production' && mockResponse) {
-            extraHeaders['X-Mock-Response'] = mockResponse;
-        }
-
-        const { headers, payloadString } = getRequestConfig('POST', path, cleanPayload, '', extraHeaders);
+        const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
             `${ZUPAY_BASE_URL}${path}`,
             payloadString,

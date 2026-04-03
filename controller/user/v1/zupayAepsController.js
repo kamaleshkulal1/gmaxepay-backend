@@ -579,10 +579,7 @@ const cashWithdrawal = async (req, res) => {
         const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
         const transactionId = generateTransactionID(existingCompany?.companyName);
         const merchantReferenceId = uuidv4();
-        const mock_response = req.body.mock_response || req.headers['x-mock-response'];
-
         const payload = {
-            mock_response,
             merchant_reference_id: merchantReferenceId,
             merchant_code: onboarding.merchantCode || ZUPAY_MERCHANT_CODE,
             service_code: 'AEPS_CW',
@@ -911,10 +908,9 @@ const balanceEnquiry = async (req, res) => {
         const { existingUser, onboarding } = await buildTxnContext(req);
         const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
         const transactionId = generateTransactionID(existingCompany?.companyName);
-        const mock_response = req.body.mock_response || req.headers['x-mock-response'];
         const merchantReferenceId = uuidv4();
+
         const payload = {
-            mock_response,
             merchant_reference_id: merchantReferenceId,
             merchant_code: onboarding.merchantCode || zupayService.ZUPAY_MERCHANT_CODE,
             service_code: 'AEPS_BE',
@@ -1007,10 +1003,9 @@ const miniStatement = async (req, res) => {
         const { existingUser, onboarding } = await buildTxnContext(req);
         const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
         const transactionId = generateTransactionID(existingCompany?.companyName);
-        const mock_response = req.body.mock_response || req.headers['x-mock-response'];
         const merchantReferenceId = uuidv4();
+
         const payload = {
-            mock_response,
             merchant_reference_id: merchantReferenceId,
             merchant_code: onboarding.merchantCode || zupayService.ZUPAY_MERCHANT_CODE,
             service_code: 'AEPS_MS',
