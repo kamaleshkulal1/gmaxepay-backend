@@ -107,6 +107,7 @@ const resendOTP = async (payload) => {
 
 const biometricVerification = async (payload) => {
     try {
+        console.log("Zupay Biometric Verification Payload:", JSON.stringify(payload, null, 2));
         const path = '/v1/submerchant/onboarding/aeps/biometricVerification';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
