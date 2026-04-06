@@ -2,6 +2,29 @@ const dbService = require('../../../utils/dbService');
 const model = require('../../../models/index');
 const { Op, fn, col } = require('sequelize');
 const imageService = require('../../../services/imageService');
+const zupayService = require('../../../services/zupayService');
+
+const isZupaySuccess = (response) => {
+    if (!response) return false;
+    if (response.errors && response.errors.length > 0) return false;
+    if (!response.data) return false;
+
+    if (response.meta?.response_code && String(response.meta.response_code).toUpperCase().includes('ERR')) return false;
+
+    const data = response.data;
+    if (data.status === 'FAILED') return false;
+    if (data.onBoard_status === 'FAILED') return false;
+    if (data.e_kyc_status === 'FAILED') return false;
+
+    return true;
+};
+
+const getZupayError = (response) => {
+    if (response?.errors && response.errors.length > 0) {
+        return response.errors[0].error_message;
+    }
+    return response?.meta?.message || 'Unknown Zupay error';
+};
 
 const getAeps1Reports = async (req, res) => {
     try {
@@ -13,7 +36,7 @@ const getAeps1Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -198,7 +221,7 @@ const getAeps2Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -395,7 +418,7 @@ const getAepsTransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
         const transaction = await dbService.findOne(model.aepsHistory, { id });
@@ -471,7 +494,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -559,7 +582,7 @@ const getAeps3Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -756,7 +779,7 @@ const getAeps3TransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -844,7 +867,7 @@ const getRecharge1Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -997,7 +1020,7 @@ const getRecharge2Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1143,7 +1166,7 @@ const getRecharge2Reports = async (req, res) => {
 
 const getSurRecReports = async (req, res) => {
     try {
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1201,7 +1224,7 @@ const getBbpReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1362,7 +1385,7 @@ const getGstReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1512,7 +1535,7 @@ const getCmsReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (req.user?.userRole !== 1) {
+        if (![1, 6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1654,6 +1677,75 @@ const getCmsReports = async (req, res) => {
     }
 }
 
+const reconcile = async (req, res) => {
+    try {
+        const { merchant_reference_id } = req.body;
+        if (!merchant_reference_id) {
+            return res.failure({ message: 'Merchant reference ID is required' });
+        }
+
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+
+        // Super Admin (1) or Support (Employee - 6)
+        if (![1, 6].includes(req.user?.userRole)) {
+            return res.failure({ message: 'Unauthorized access' });
+        }
+
+        const zupayTransaction = await dbService.findOne(model.zupayAepsHistory, {
+            merchantReferenceId: merchant_reference_id
+        });
+        if (!zupayTransaction) {
+            return res.failure({ message: 'Zupay transaction not found' });
+        }
+
+        const payload = {
+            merchant_reference_id,
+            bank_rrn: zupayTransaction?.bankRRN,
+            transaction_status: zupayTransaction?.transactionStatus,
+            transaction_date: zupayTransaction?.createdAt ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata' }).format(new Date(zupayTransaction.createdAt)) : null,
+            service_code: zupayTransaction?.serviceCode,
+            merchant_code: zupayTransaction?.merchantCode,
+            sub_merchant_code: zupayTransaction?.subMerchantCode
+        };
+
+        const apiResponse = await zupayService.reconcile(payload);
+
+        if (!isZupaySuccess(apiResponse)) {
+            return res.failure({ message: getZupayError(apiResponse), data: apiResponse });
+        }
+
+        const transaction = await dbService.findOne(model.zupayAepsHistory, {
+            id: zupayTransaction.id
+        });
+
+        if (transaction) {
+            const apiStatus = apiResponse.data?.status;
+            const currentStatus = transaction.transactionStatus;
+
+            if (apiStatus && apiStatus !== currentStatus) {
+                await dbService.update(model.zupayAepsHistory, { id: transaction.id }, {
+                    transactionStatus: apiStatus,
+                    responsePayload: apiResponse
+                });
+            }
+        }
+
+        return res.success({
+            message: apiResponse.meta?.message || 'Transaction reconciliation successful',
+            data: apiResponse.data
+        });
+    } catch (err) {
+        console.error('[Admin ZupayAeps] reconcile error:', err);
+        return res.failure({ message: err.message || 'Failed to reconcile transaction' });
+    }
+};
+
 module.exports = {
     getAeps1Reports,
     getAepsTransactionDetailsById,
@@ -1666,5 +1758,6 @@ module.exports = {
     getSurRecReports,
     getBbpReports,
     getCmsReports,
-    getGstReports
+    getGstReports,
+    reconcile
 };

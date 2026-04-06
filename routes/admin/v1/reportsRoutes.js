@@ -15,5 +15,6 @@ router.post('/surRecReports', authentication, reportController.getSurRecReports)
 router.post('/bbpReports', authentication, reportController.getBbpReports);
 router.post('/cmsReports', authentication, reportController.getCmsReports);
 router.post('/gstReports', authentication, reportController.getGstReports);
+router.post('/aeps3/reconcile', authentication, reportController.reconcile);
 
 module.exports = router;
