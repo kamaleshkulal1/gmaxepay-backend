@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const walletController = require('../../../controller/employee/v1/walletContoller');
+const walletController = require('../../../controller/employee/v1/walletController');
 const authentication = require('../../../middleware/authentication');
 
 router.post('/alsWallet', authentication, walletController.alsWallet);

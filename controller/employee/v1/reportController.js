@@ -36,7 +36,7 @@ const getAeps1Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -221,7 +221,7 @@ const getAeps2Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -418,7 +418,7 @@ const getAepsTransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
         const transaction = await dbService.findOne(model.aepsHistory, { id });
@@ -494,7 +494,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -582,7 +582,7 @@ const getAeps3Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -779,7 +779,7 @@ const getAeps3TransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -867,7 +867,7 @@ const getRecharge1Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1020,7 +1020,7 @@ const getRecharge2Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1166,7 +1166,7 @@ const getRecharge2Reports = async (req, res) => {
 
 const getSurRecReports = async (req, res) => {
     try {
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1224,7 +1224,7 @@ const getBbpReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1385,7 +1385,7 @@ const getGstReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1535,7 +1535,7 @@ const getCmsReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1693,7 +1693,7 @@ const reconcile = async (req, res) => {
         }
 
         // Super Admin (1) or Support (Employee - 6)
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
