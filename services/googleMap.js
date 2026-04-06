@@ -1,39 +1,25 @@
 const axios = require('axios');
 
-/**
- * Validate Google API key is configured
- */
 const validateApiKey = () => {
   if (!process.env.GOOGLE_GEOCODING_API_KEY) {
     throw new Error('Google Geocoding API key is not configured. Please set GOOGLE_GEOCODING_API_KEY in environment variables.');
   }
 };
 
-/**
- * Helper function to get address component by type
- */
 const getAddressComponent = (addressComponents, types, shortName = false) => {
-  const component = addressComponents.find(comp => 
+  const component = addressComponents.find(comp =>
     types.some(type => comp.types.includes(type))
   );
   return component ? (shortName ? component.short_name : component.long_name) : '';
 };
 
-/**
- * Reverse Geocoding - Convert coordinates to address
- * @param {number} latitude - Latitude coordinate
- * @param {number} longitude - Longitude coordinate
- * @param {object} options - Additional options (result_type, etc.)
- * @returns {Promise<object>} Address information
- */
 const reverseGeocode = async (latitude, longitude, options = {}) => {
   try {
     validateApiKey();
 
-    // Validate coordinates
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
-    
+
     if (isNaN(lat) || isNaN(lng)) {
       throw new Error('Invalid latitude or longitude format');
     }
@@ -43,7 +29,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     }
 
     const geocodingUrl = `${process.env.GOOGLE_GEOCODING_URL}/geocode/json`;
-    
+
     const config = {
       method: 'get',
       url: geocodingUrl,
@@ -56,7 +42,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     };
 
     const geocodeResponse = await axios.request(config);
-    
+
     if (geocodeResponse.data.status === 'ZERO_RESULTS') {
       throw new Error('No address found for the given coordinates');
     }
@@ -67,11 +53,9 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
       );
     }
 
-    // Get the first (most accurate) result
     const result = geocodeResponse.data.results[0];
     const addressComponents = result.address_components || [];
-    
-    // Extract address components
+
     const doorNumber = getAddressComponent(addressComponents, ['street_number']);
     const streetName = getAddressComponent(addressComponents, ['route']);
     const sublocality = getAddressComponent(addressComponents, ['sublocality', 'sublocality_level_1']);
@@ -82,7 +66,6 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     const postalCode = getAddressComponent(addressComponents, ['postal_code']);
     const country = getAddressComponent(addressComponents, ['country']);
 
-    // Construct the complete address
     const addressParts = [];
     if (doorNumber) addressParts.push(doorNumber);
     if (streetName) addressParts.push(streetName);
@@ -94,11 +77,9 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     if (postalCode) addressParts.push(postalCode);
     if (country) addressParts.push(country);
 
-    // Build complete address from parts, use formatted_address as fallback
     const addressFromParts = addressParts.join(', ');
     const completeAddress = addressFromParts || result.formatted_address;
 
-    // Extract plus code if available (prefer the result-level code, fallback to top-level)
     const resultPlusCode = result.plus_code || null;
     const topLevelPlusCode = geocodeResponse.data.plus_code || null;
     const selectedPlusCode = resultPlusCode || topLevelPlusCode;
@@ -108,13 +89,9 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     const plusCodeData = {
       global_code: globalCode,
       compound_code: compoundCode,
-      // Use encoded path to avoid '+' being treated as space in some clients
       plus_code_link: globalCode ? `https://plus.codes/${encodeURIComponent(globalCode)}` : '',
-      // Provide a Google Maps search URL using the Plus Code (works without location permission)
       google_maps_link: globalCode ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(globalCode)}` : ''
     };
-
-    // Extract exact location bounds/viewport
     const exactLat = result.geometry.location.lat;
     const exactLng = result.geometry.location.lng;
     const exactLocation = {
@@ -148,7 +125,6 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     return {
       formatted_address: result.formatted_address,
       complete_address: completeAddress,
-      // Convenience alias often consumed by callers
       address: completeAddress,
       address_components: {
         door_number: doorNumber,
@@ -156,7 +132,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
         street_address: doorNumber && streetName ? `${doorNumber} ${streetName}` : (doorNumber || streetName),
         sublocality: sublocality,
         locality: locality,
-        city: city,
+        city: city || district,
         district: district,
         state: state,
         postal_code: postalCode,
@@ -178,12 +154,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
   }
 };
 
-/**
- * Forward Geocoding - Convert address to coordinates
- * @param {string} address - Address string
- * @param {object} options - Additional options (region, bounds, etc.)
- * @returns {Promise<object>} Location information with coordinates
- */
+
 const forwardGeocode = async (address, options = {}) => {
   try {
     validateApiKey();
@@ -193,7 +164,7 @@ const forwardGeocode = async (address, options = {}) => {
     }
 
     const geocodingUrl = `${GOOGLE_MAPS_API_URL}/geocode/json`;
-    
+
     const config = {
       method: 'get',
       url: geocodingUrl,
@@ -205,7 +176,7 @@ const forwardGeocode = async (address, options = {}) => {
     };
 
     const geocodeResponse = await axios.request(config);
-    
+
     if (geocodeResponse.data.status === 'ZERO_RESULTS') {
       throw new Error('No location found for the given address');
     }
@@ -216,10 +187,9 @@ const forwardGeocode = async (address, options = {}) => {
       );
     }
 
-    // Return all results
     const results = geocodeResponse.data.results.map(result => {
       const addressComponents = result.address_components || [];
-      
+
       return {
         formatted_address: result.formatted_address,
         location: {

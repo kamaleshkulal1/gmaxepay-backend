@@ -457,12 +457,12 @@ const uploadOperatorImage = async (req, res) => {
     const formatImage = (image) =>
       Array.isArray(image)
         ? image.map((file) => ({
-            filename: file.filename,
-            mimetype: file.mimetype,
-            originalname: file.originalname,
-            size: file.size,
-            path: file.path
-          }))
+          filename: file.filename,
+          mimetype: file.mimetype,
+          originalname: file.originalname,
+          size: file.size,
+          path: file.path
+        }))
         : [];
 
     const formattedBillerImage = formatImage(billerImage);
@@ -512,19 +512,16 @@ const getOperators = async (req, res) => {
     const companyId = req.user?.companyId;
     const userId = req.user?.id;
 
-    // Extract operatorService from query if provided
     const operatorService = query.operatorService;
     let whereClause = { isDeleted: false };
 
-    // If operatorService is provided, find the category and filter by categoryId
     if (operatorService) {
       const operatorCategory = await dbService.findOne(
         model.bbpsOperatorCategory,
         { name: operatorService, isDeleted: false }
       );
-      
+
       if (!operatorCategory) {
-        // Return empty result if category not found
         if (isCountOnly) {
           return res.success({ data: { totalRecords: 0 } });
         }
@@ -545,14 +542,12 @@ const getOperators = async (req, res) => {
       whereClause.categoryId = operatorCategory.id;
     }
 
-    // Merge with remaining query parameters (excluding operatorService)
     const { operatorService: _, ...restQuery } = query;
     whereClause = {
       ...whereClause,
       ...restQuery
     };
 
-    // Build user query conditionally to handle undefined companyId
     const userWhere = { id: userId };
     if (companyId !== undefined && companyId !== null) {
       userWhere.companyId = companyId;
@@ -572,11 +567,10 @@ const getOperators = async (req, res) => {
 
       keys.forEach((key) => {
         const value = customSearch[key];
-        // Skip empty strings, null, or undefined values
         if (value === null || value === undefined || value === '') {
           return;
         }
-        
+
         if (typeof value === 'number') {
           orConditions.push(
             sequelize.where(sequelize.cast(sequelize.col(key), 'varchar'), {
@@ -842,7 +836,7 @@ const getAllPaymentInfo = async (req, res) => {
         if (value === null || value === undefined || value === '') {
           return;
         }
-        
+
         if (typeof value === 'number') {
           orConditions.push(
             sequelize.where(sequelize.cast(sequelize.col(key), 'varchar'), {

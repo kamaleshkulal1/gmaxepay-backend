@@ -1,21 +1,12 @@
 const axios = require('axios');
 
-/**
- * Validate Mappls API key is configured
- */
+
 const validateApiKey = () => {
   if (!process.env.MAPPLS_API_KEY) {
     throw new Error('Mappls API key is not configured. Please set MAPPLS_API_KEY in environment variables.');
   }
 };
 
-/**
- * Reverse Geocoding - Convert coordinates to address using Mappls API
- * @param {number} latitude - Latitude coordinate
- * @param {number} longitude - Longitude coordinate
- * @param {object} options - Optional parameters (region, lang)
- * @returns {Promise<object>} Address information
- */
 const reverseGeocode = async (latitude, longitude, options = {}) => {
   try {
     validateApiKey();
@@ -23,7 +14,7 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     // Validate coordinates
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
-    
+
     if (isNaN(lat) || isNaN(lng)) {
       throw new Error('Invalid latitude or longitude format');
     }
@@ -33,41 +24,34 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     }
 
     const apiKey = process.env.MAPPLS_API_KEY;
-    // Default to apis.mapmyindia.com as per official documentation
-    // Can be overridden with MAPPLS_API_URL environment variable
     const baseUrl = process.env.MAPPLS_API_URL || 'https://apis.mapmyindia.com';
     const geocodingUrl = `${baseUrl}/advancedmaps/v1/${apiKey}/rev_geocode`;
-    
+
     const config = {
       method: 'get',
       url: geocodingUrl,
       params: {
         lat: lat,
         lng: lng,
-        // Optional parameters
-        ...(options.region && { region: options.region }), // For countries other than India (e.g., 'LKA', 'NPL', 'BGD')
-        ...(options.lang && { lang: options.lang }) // Language code (e.g., 'hi' for Hindi)
+        ...(options.region && { region: options.region }),
+        ...(options.lang && { lang: options.lang })
       }
     };
 
     const geocodeResponse = await axios.request(config);
-    
-    // Check if API response is successful
+
     if (geocodeResponse.data.responseCode !== 200) {
       throw new Error(
         `Mappls API error: ${geocodeResponse.data.responseCode}. ${geocodeResponse.data.error_message || 'Unknown error'}`
       );
     }
 
-    // Check if results exist
     if (!geocodeResponse.data.results || geocodeResponse.data.results.length === 0) {
       throw new Error('No address found for the given coordinates');
     }
 
-    // Get the first (most accurate) result
     const result = geocodeResponse.data.results[0];
-    
-    // Extract address components
+
     const houseNumber = result.houseNumber || '';
     const houseName = result.houseName || '';
     const street = result.street || '';
@@ -99,8 +83,8 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     if (pincode) addressParts.push(`PIN-${pincode}`);
     if (area) addressParts.push(`(${area})`);
 
-    const completeAddress = addressParts.length > 0 
-      ? addressParts.join(', ') 
+    const completeAddress = addressParts.length > 0
+      ? addressParts.join(', ')
       : result.formatted_address;
 
     return {
@@ -140,18 +124,18 @@ const reverseGeocode = async (latitude, longitude, options = {}) => {
     console.error('Mappls reverse geocoding error:', error);
     if (error.response && error.response.data) {
       const errorData = error.response.data;
-      const errorMessage = 
-        errorData.error_description || 
-        errorData.error_message || 
-        errorData.error || 
-        errorData.message || 
+      const errorMessage =
+        errorData.error_description ||
+        errorData.error_message ||
+        errorData.error ||
+        errorData.message ||
         `Mappls API error: ${error.response.status}`;
-      
+
       const errorCode = errorData.error_code || errorData.responsecode || '';
-      const fullErrorMessage = errorCode 
+      const fullErrorMessage = errorCode
         ? `${errorMessage} (${errorCode})`
         : errorMessage;
-      
+
       throw new Error(fullErrorMessage);
     }
     throw error;

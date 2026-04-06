@@ -144,7 +144,6 @@ const createPayoutList = async (req, res) => {
         }
 
         if (isActive) {
-            // Deactivate all other payout services globally if this one is active
             await dbService.update(model.payoutList,
                 {},
                 { isActive: false }
@@ -179,7 +178,6 @@ const switchPayoutStatus = async (req, res) => {
             return res.failure({ message: 'Payout ID is required' });
         }
 
-        // Deactivate all payout services globally
         await dbService.update(model.payoutList,
             {
                 id: { [Op.ne]: id }
@@ -187,7 +185,6 @@ const switchPayoutStatus = async (req, res) => {
             { isActive: false }
         );
 
-        // Activate the selected payout service
         await dbService.update(model.payoutList,
             { id: id },
             { isActive: true }
