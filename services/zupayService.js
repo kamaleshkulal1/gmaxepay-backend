@@ -43,6 +43,7 @@ const getRequestConfig = (method, path, payload, query = '') => {
             'X-API-Key': ZUPAY_API_KEY,
             'X-API-Secret': ZUPAY_API_SECRET,
             'X-Signature': signature,
+            'X-Mock-Response': 'FAILED',
             'X-Timestamp': timestamp
         },
         payloadString
