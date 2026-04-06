@@ -327,8 +327,7 @@ const ekycBiometric = async (req, res) => {
             return res.failure({ message: 'Please verify OTP first' });
         }
 
-        const aadhaarNumber = existingUser.aadharDetails?.aadhaarNumber || '';
-        console.log("aadhaarNumber", existingUser?.aadharDetails);
+        const aadhaarNumber = existingUser.aadharDetails?.aadhaarNumber || existingUser.aadharDetails?.aadhaarLast4 || existingUser.aadharDetails?.aadhaarNumber?.aadhaarLast4 || '';
 
         const payload = {
             pipe: ZUPAY_PIPE,
