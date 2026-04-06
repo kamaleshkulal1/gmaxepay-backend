@@ -328,6 +328,7 @@ const ekycBiometric = async (req, res) => {
         }
 
         const aadhaarNumber = existingUser.aadharDetails?.aadhaarNumber || '';
+        console.log("aadhaarNumber", existingUser?.aadharDetails);
 
         const payload = {
             pipe: ZUPAY_PIPE,
