@@ -52,6 +52,7 @@ const getRequestConfig = (method, path, payload, query = '') => {
 
 const initiateOnboarding = async (payload) => {
     try {
+        console.log("Zupay Initiate Onboarding Payload:", JSON.stringify(payload, null, 2));
         const path = '/v1/submerchant/onboarding/aeps/initiateOnboarding';
         const { headers, payloadString } = getRequestConfig('POST', path, payload);
         const response = await axios.post(
