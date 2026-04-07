@@ -10,5 +10,6 @@ router.use('/fund', require('./v1/fundRoute'));
 router.use('/slab', require('./v1/slabRoutes'));
 router.use('/operators', require('./v1/operatorRoutes'));
 router.use('/service', require('./v1/servicesRoutes'));
+router.use('/payout', require('./v1/payoutRoutes'));
 
 module.exports = router;
