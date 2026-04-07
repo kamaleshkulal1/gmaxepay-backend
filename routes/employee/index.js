@@ -11,5 +11,6 @@ router.use('/slab', require('./v1/slabRoutes'));
 router.use('/operators', require('./v1/operatorRoutes'));
 router.use('/service', require('./v1/servicesRoutes'));
 router.use('/payout', require('./v1/payoutRoutes'));
+router.use('/user', require('./v1/userRoute'));
 
 module.exports = router;
