@@ -354,7 +354,7 @@ const updateSlabComm = async (req, res) => {
         }
 
 
-        if (req.user.userRole !== 1 && req.user.companyId !== companyId) {
+        if (req.user.userRole !== 6 && req.user.companyId !== companyId) {
             return res.failure({ message: 'You are not authorized to create slab' });
         }
 
@@ -362,7 +362,7 @@ const updateSlabComm = async (req, res) => {
         const id = req.params.id;
         const companyId = req.user.companyId;
 
-        if (req.user.userRole !== 1 && req.user.companyId !== companyId) {
+        if (req.user.userRole !== 6 && req.user.companyId !== companyId) {
             return res.failure({ message: 'You are not authorized to update slab commission' });
         }
         if (commAmt === undefined && commType === undefined && amtType === undefined) {
