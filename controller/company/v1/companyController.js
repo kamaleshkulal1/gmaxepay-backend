@@ -13,10 +13,13 @@ const getCompanyDetails = async (req, res) => {
     }
 
     // Map support domains to app.gmaxepay.in
-    if (companyDomain === 'support.gmaxepay.in' || companyDomain === 'support.gmaxepay.com') {
+    if (companyDomain === 'support.gmaxepay.in') {
       companyDomain = 'app.gmaxepay.in';
     }
+    if (companyDomain === 'support.gmaxepay.com') {
+      companyDomain = 'app.gmaxepay.com';
 
+    }
     // Set default domain for development environment
     if (process.env.NODE_ENV === 'development' && !companyDomain) {
       companyDomain = 'app.gmaxepay.in';

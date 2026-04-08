@@ -1,26 +1,12 @@
-/**
- * aepsEncryption.js
- * @description :: JWT Helper for Practomind AEPS API token generation and verification
- * Implements custom JWT encoding/decoding as per Practomind API requirements
- */
 
 const crypto = require('crypto');
 
-/**
- * Base64Url Encode
- * @param {string|Buffer} data - Data to encode
- * @returns {string} - Base64URL encoded string
- */
 const base64urlEncode = (data) => {
   const base64 = Buffer.from(data).toString('base64');
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 };
 
-/**
- * Base64Url Decode
- * @param {string} data - Base64URL encoded string
- * @returns {string} - Decoded string
- */
+
 const base64urlDecode = (data) => {
   let base64 = data.replace(/-/g, '+').replace(/_/g, '/');
   const padding = 4 - (base64.length % 4);
@@ -30,13 +16,7 @@ const base64urlDecode = (data) => {
   return Buffer.from(base64, 'base64').toString('utf8');
 };
 
-/**
- * Create JWT token for Practomind AEPS API
- * @param {Object} payload - JWT payload data
- * @param {string} secret - Secret key for signing
- * @param {string} alg - Algorithm (default: HS256)
- * @returns {string} - JWT token
- */
+
 const createJwtToken = (payload, secret, alg = 'HS256') => {
   if (!secret) {
     throw new Error('Secret key is required for JWT signing');
@@ -66,13 +46,7 @@ const createJwtToken = (payload, secret, alg = 'HS256') => {
   return `${headerEncoded}.${payloadEncoded}.${signatureEncoded}`;
 };
 
-/**
- * Decode and verify JWT token
- * @param {string} jwt - JWT token to decode
- * @param {string} secret - Secret key for verification
- * @param {boolean} verifyExp - Whether to verify expiration (default: true)
- * @returns {Object|null} - Decoded payload or null if invalid
- */
+
 const verifyJwtToken = (jwt, secret, verifyExp = true) => {
   try {
     if (!jwt || !secret) {
@@ -136,16 +110,10 @@ const verifyJwtToken = (jwt, secret, verifyExp = true) => {
   }
 };
 
-/**
- * Generate Practomind AEPS API token with standard payload
- * @param {Object} data - Data to include in JWT payload
- * @param {string} secret - Secret key for signing
- * @param {number} expiresIn - Token expiry in seconds (default: 3600 = 1 hour)
- * @returns {string} - JWT token
- */
+
 const generatePractomindToken = (data, secret, expiresIn = 3600) => {
   const now = Math.floor(Date.now() / 1000);
-  
+
   const payload = {
     ...data,
     iat: now,
