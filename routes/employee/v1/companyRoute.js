@@ -1,6 +1,6 @@
 const express = require('express');
 const authentication = require('../../../middleware/authentication');
-const ekycHubController = require('../../../controller/admin/v1/eKycHubContoller');
+const ekycHubController = require('../../../controller/employee/v1/eKycHubContoller');
 const companyController = require('../../../controller/employee/v1/companyController');
 const { upload, multer } = require('../../../middleware/multerConfig');
 const router = express.Router();
