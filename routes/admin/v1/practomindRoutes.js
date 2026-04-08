@@ -1,7 +1,4 @@
-/**
- * practomindRoute.js
- * @description :: routes for practomind CRUD operations
- */
+
 const express = require('express');
 const router = express.Router();
 const practomindController = require('../../../controller/admin/v1/practomindController');

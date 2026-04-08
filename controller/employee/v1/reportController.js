@@ -28,7 +28,6 @@ const getZupayError = (response) => {
 
 const getAeps1Reports = async (req, res) => {
     try {
-        // Use userRole directly from req.user (set by authentication middleware)
         const existingUser = await dbService.findOne(model.user, {
             id: req.user.id,
             isActive: true
@@ -36,27 +35,22 @@ const getAeps1Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
         const { query: queryFilter = {}, options: paginationOptions = {}, customSearch = {} } = req.body || {};
 
-        // Build base query
         const query = { ...queryFilter };
 
-        // Define fields that belong to related tables
         const userFields = ['name', 'userName', 'mobileNo', 'userId'];
         const companyFields = ['companyName'];
         const bankFields = ['bankName'];
 
-        // Separate customSearch into main table fields and related table fields
         const mainTableSearch = {};
         const userSearch = {};
         const companySearch = {};
         const bankSearch = {};
-
-        // Handle customSearch (iLike search on multiple fields)
         if (customSearch && typeof customSearch === 'object') {
             Object.entries(customSearch).forEach(([key, value]) => {
                 if (value === undefined || value === null || String(value).trim() === '') {
@@ -72,19 +66,16 @@ const getAeps1Reports = async (req, res) => {
                 } else if (bankFields.includes(key)) {
                     bankSearch[key] = { [Op.iLike]: `%${trimmedValue}%` };
                 } else {
-                    // Fields that belong to aepsHistory table (transactionId, status, etc.)
                     mainTableSearch[key] = { [Op.iLike]: `%${trimmedValue}%` };
                 }
             });
         }
 
-        // If searching by user fields, use subquery to find matching user IDs
         if (Object.keys(userSearch).length > 0) {
             const userWhereConditions = Object.entries(userSearch).map(([key, value]) => ({
                 [key]: value
             }));
 
-            // Find user IDs that match the search criteria
             const matchingUsers = await model.user.findAll({
                 where: {
                     [Op.or]: userWhereConditions
@@ -96,26 +87,22 @@ const getAeps1Reports = async (req, res) => {
             const userIds = matchingUsers.map(u => u.id);
 
             if (userIds.length > 0) {
-                // Add refId filter to main query
-                // If refId already exists in queryFilter, intersect with matching userIds (AND condition)
                 if (query.refId) {
                     const existingRefId = query.refId;
-                    // If it's a single value, check if it matches
                     if (typeof existingRefId === 'number' || (typeof existingRefId === 'string' && !isNaN(existingRefId))) {
                         const refIdNum = parseInt(existingRefId);
                         if (userIds.includes(refIdNum)) {
-                            query.refId = refIdNum; // Keep the existing refId if it matches
+                            query.refId = refIdNum;
                         } else {
-                            query.id = { [Op.in]: [] }; // No match, return empty
+                            query.id = { [Op.in]: [] };
                         }
                     } else if (existingRefId[Op.in]) {
-                        // If it's already an Op.in condition, intersect
                         const existingIds = Array.isArray(existingRefId[Op.in]) ? existingRefId[Op.in] : [existingRefId[Op.in]];
                         const intersection = existingIds.filter(id => userIds.includes(parseInt(id)));
                         if (intersection.length > 0) {
                             query.refId = { [Op.in]: intersection };
                         } else {
-                            query.id = { [Op.in]: [] }; // No match, return empty
+                            query.id = { [Op.in]: [] };
                         }
                     } else {
                         query.refId = { [Op.in]: userIds };
@@ -124,18 +111,15 @@ const getAeps1Reports = async (req, res) => {
                     query.refId = { [Op.in]: userIds };
                 }
             } else {
-                // No users found matching criteria, return empty result
-                query.id = { [Op.in]: [] }; // This will return no results
+                query.id = { [Op.in]: [] };
             }
         }
 
-        // Add main table search conditions
         if (Object.keys(mainTableSearch).length > 0) {
             const orConditions = Object.entries(mainTableSearch).map(([key, value]) => ({
                 [key]: value
             }));
 
-            // Combine with existing OR conditions if any
             if (query[Op.or]) {
                 const existingOr = Array.isArray(query[Op.or]) ? query[Op.or] : [query[Op.or]];
                 query[Op.or] = [...existingOr, ...orConditions];
@@ -144,7 +128,6 @@ const getAeps1Reports = async (req, res) => {
             }
         }
 
-        // Prepare options with company, user, and bank includes
         const includeOptions = [
             {
                 model: model.company,
@@ -173,10 +156,8 @@ const getAeps1Reports = async (req, res) => {
             include: includeOptions
         };
 
-        // Fetch paginated results
         const result = await dbService.paginate(model.aepsHistory, query, options);
 
-        // Map results to include companyName, companyLogo, user details, and bank name with CDN URLs
         const mappedData = result?.data?.map((transaction) => {
             const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
             const { company, user, bank, ...restData } = transactionData;
@@ -221,7 +202,7 @@ const getAeps2Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -418,7 +399,7 @@ const getAepsTransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
         const transaction = await dbService.findOne(model.aepsHistory, { id });
@@ -494,7 +475,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -582,7 +563,7 @@ const getAeps3Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -779,7 +760,7 @@ const getAeps3TransactionDetailsById = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -867,7 +848,7 @@ const getRecharge1Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1020,7 +1001,7 @@ const getRecharge2Reports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1166,7 +1147,7 @@ const getRecharge2Reports = async (req, res) => {
 
 const getSurRecReports = async (req, res) => {
     try {
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1224,7 +1205,7 @@ const getBbpReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1385,7 +1366,7 @@ const getGstReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1535,7 +1516,7 @@ const getCmsReports = async (req, res) => {
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 
@@ -1693,7 +1674,7 @@ const reconcile = async (req, res) => {
         }
 
         // Super Admin (1) or Support (Employee - 6)
-        if (![1].includes(req.user?.userRole)) {
+        if (![6].includes(req.user?.userRole)) {
             return res.failure({ message: 'Unauthorized access' });
         }
 

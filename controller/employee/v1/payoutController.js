@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 const getAllPayoutHistory = async (req, res) => {
     try {
 
-        if (![1].includes(req.user.userRole)) {
+        if (![6].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to get all payout history' });
         }
         const dataToFind = req.body || {};
@@ -117,7 +117,7 @@ const getAllPayoutHistory = async (req, res) => {
 
 const getPayoutList = async (req, res) => {
     try {
-        if (![1].includes(req.user.userRole)) {
+        if (![6].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to get payout list' });
         }
         const query = req.body || {};
@@ -135,7 +135,7 @@ const getPayoutList = async (req, res) => {
 
 const createPayoutList = async (req, res) => {
     try {
-        if (![1].includes(req.user.userRole)) {
+        if (![6].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to create payout list' });
         }
         const { name, isActive } = req.body;
@@ -169,7 +169,7 @@ const createPayoutList = async (req, res) => {
 
 const switchPayoutStatus = async (req, res) => {
     try {
-        if (![1].includes(req.user.userRole)) {
+        if (![6].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to switch payout status' });
         }
 

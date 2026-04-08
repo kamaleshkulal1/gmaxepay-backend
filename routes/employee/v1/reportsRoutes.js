@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authentication = require('../../../middleware/authentication');
-const reportController = require('../../../controller/admin/v1/reportController');
+const reportController = require('../../../controller/employee/v1/reportController');
 
 router.post('/aeps1Reports', authentication, reportController.getAeps1Reports);
 router.post('/aeps1/transactionDetails/:id', authentication, reportController.getAepsTransactionDetailsById);

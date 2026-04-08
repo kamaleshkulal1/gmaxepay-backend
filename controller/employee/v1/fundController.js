@@ -49,7 +49,7 @@ const processFundRequestData = (data) => {
 
 const approveFundRequest = async (req, res) => {
     try {
-        if (req.user.userRole !== 1 || req.user.companyId !== 1) {
+        if (req.user.userRole !== 6 || req.user.companyId !== 1) {
             return res.failure({
                 message: 'Only superadmin can access this endpoint'
             });
@@ -286,7 +286,7 @@ const approveFundRequest = async (req, res) => {
 
 const getFundRequests = async (req, res) => {
     try {
-        if (req.user.userRole !== 1 || req.user.companyId !== 1) {
+        if (req.user.userRole !== 6 || req.user.companyId !== 1) {
             return res.failure({
                 message: 'Only superadmin can access this endpoint'
             });

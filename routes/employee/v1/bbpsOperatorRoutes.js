@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authentication = require('../../../middleware/authentication');
-const bbpsOperatorController = require('../../../controller/admin/v1/bbpsOperatorController');
+const bbpsOperatorController = require('../../../controller/employee/v1/bbpsOperatorController');
 const { upload, multer } = require('../../../middleware/multerConfig');
 
 router.post('/categories', authentication, bbpsOperatorController.createOperatorCategory);
