@@ -7,11 +7,19 @@ const getCompanyDetails = async (req, res) => {
   try {
     let companyDomain = req.query.domain;
 
-    // Map localhost to zpay.gmaxepay.in for development
+    // Map localhost to app.gmaxepay.in for development
     if (companyDomain === 'localhost') {
       companyDomain = 'app.gmaxepay.in';
     }
 
+    // Map support domains to app.gmaxepay.in
+    if (companyDomain === 'support.gmaxepay.in') {
+      companyDomain = 'app.gmaxepay.in';
+    }
+    if (companyDomain === 'support.gmaxepay.com') {
+      companyDomain = 'app.gmaxepay.com';
+
+    }
     // Set default domain for development environment
     if (process.env.NODE_ENV === 'development' && !companyDomain) {
       companyDomain = 'app.gmaxepay.in';

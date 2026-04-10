@@ -8,15 +8,12 @@ const { decrypt } = require('../../../utils/encryption');
 const processFundRequestData = (data) => {
     if (!data) return data;
 
-    // Handle array of records
     if (Array.isArray(data)) {
         return data.map(record => processFundRequestData(record));
     }
 
-    // Process single record
     const processed = { ...data.dataValues || data };
 
-    // Decrypt and add CDN URL for requester profileImage
     if (processed.requester) {
         const requester = { ...(processed.requester.dataValues || processed.requester) };
         if (requester.profileImage) {
@@ -24,14 +21,12 @@ const processFundRequestData = (data) => {
                 const decryptedImage = decrypt(requester.profileImage);
                 requester.profileImage = `${process.env.AWS_CDN_URL}/${decryptedImage}`;
             } catch (e) {
-                // If decryption fails, set to null
                 requester.profileImage = null;
             }
         }
         processed.requester = requester;
     }
 
-    // Decrypt and add CDN URL for approver profileImage
     if (processed.approver) {
         const approver = { ...(processed.approver.dataValues || processed.approver) };
         if (approver.profileImage) {
@@ -39,14 +34,12 @@ const processFundRequestData = (data) => {
                 const decryptedImage = decrypt(approver.profileImage);
                 approver.profileImage = `${process.env.AWS_CDN_URL}/${decryptedImage}`;
             } catch (e) {
-                // If decryption fails, set to null
                 approver.profileImage = null;
             }
         }
         processed.approver = approver;
     }
 
-    // Add CDN URL for paySlip
     if (processed.paySlip) {
         processed.paySlip = `${process.env.AWS_CDN_URL}/${processed.paySlip}`;
     }
@@ -56,7 +49,6 @@ const processFundRequestData = (data) => {
 
 const approveFundRequest = async (req, res) => {
     try {
-        // Check if user is superadmin (userRole 1, companyId 1)
         if (req.user.userRole !== 1 || req.user.companyId !== 1) {
             return res.failure({
                 message: 'Only superadmin can access this endpoint'
@@ -73,7 +65,6 @@ const approveFundRequest = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
-        // Validate required fields
         if (!fundRequestId || !action) {
             return res.failure({
                 message: 'Fund request ID and action are required'
@@ -86,7 +77,6 @@ const approveFundRequest = async (req, res) => {
             });
         }
 
-        // Get fund request (can be from any company)
         const fundRequest = await dbService.findOne(model.fundRequest, {
             id: fundRequestId,
             isActive: true,
@@ -96,25 +86,21 @@ const approveFundRequest = async (req, res) => {
             return res.failure({ message: 'Fund request not found' });
         }
 
-        // Check if user is authorized to approve (must be the approval ref)
         if (fundRequest.approvalRefId !== req.user.id) {
             return res.failure({
                 message: 'You are not authorized to approve this request'
             });
         }
 
-        // Check if already processed
         if (fundRequest.status !== 'PENDING') {
             return res.failure({
                 message: `This request has already been ${fundRequest.status.toLowerCase()}`
             });
         }
 
-        // If approved, create fund history entry and credit amount to wallet
         if (action === 'APPROVED') {
             const transferAmount = parseFloat(fundRequest.amount);
 
-            // Parallel fetch: Get both wallets simultaneously
             const [approverWallet, requesterWallet] = await Promise.all([
                 dbService.findOne(model.wallet, {
                     refId: req.user.id,
@@ -134,7 +120,6 @@ const approveFundRequest = async (req, res) => {
                 return res.failure({ message: 'Requester wallet not found' });
             }
 
-            // Check if approver has sufficient balance in main wallet
             const approverBalance = parseFloat(approverWallet.mainWallet) || 0;
             if (approverBalance < transferAmount) {
                 return res.failure({
@@ -142,14 +127,12 @@ const approveFundRequest = async (req, res) => {
                 });
             }
 
-            // Calculate balances
             const approverOpeningBalance = approverBalance;
             const approverClosingBalance = approverBalance - transferAmount;
 
             const requesterOpeningBalance = parseFloat(requesterWallet.mainWallet) || 0;
             const requesterClosingBalance = requesterOpeningBalance + transferAmount;
 
-            // Prepare wallet history data
             const approverWalletHistoryData = {
                 refId: req.user.id,
                 companyId: req.user.companyId,
@@ -181,9 +164,7 @@ const approveFundRequest = async (req, res) => {
                 createdAt: new Date()
             };
 
-            // Parallel execution: Update wallets and create history entries simultaneously
             await Promise.all([
-                // Update wallets
                 dbService.update(
                     model.wallet,
                     { refId: req.user.id, companyId: req.user.companyId },
@@ -194,12 +175,10 @@ const approveFundRequest = async (req, res) => {
                     { refId: fundRequest.refId, companyId: fundRequest.companyId },
                     { mainWallet: requesterClosingBalance }
                 ),
-                // Create wallet history entries
                 dbService.createOne(model.walletHistory, approverWalletHistoryData),
                 dbService.createOne(model.walletHistory, requesterWalletHistoryData)
             ]);
 
-            // Update existing fund history record from PENDING to CREDITED
             const fundHistoryUpdateData = {
                 openingBalance: requesterOpeningBalance,
                 closingBalance: requesterClosingBalance,
@@ -216,7 +195,6 @@ const approveFundRequest = async (req, res) => {
                 fundHistoryUpdateData
             );
 
-            // Update final status to APPROVED (only if still PENDING to prevent race condition)
             const approvedUpdate = await dbService.update(
                 model.fundRequest,
                 { id: fundRequestId, status: 'PENDING' },
@@ -228,14 +206,12 @@ const approveFundRequest = async (req, res) => {
                 }
             );
 
-            // Check if update was successful
             if (!approvedUpdate || approvedUpdate[0] === 0) {
                 return res.failure({
                     message: 'This request has already been processed by another user'
                 });
             }
 
-            // Parallel fetch: Get requester and company details simultaneously
             const [requester, company] = await Promise.all([
                 dbService.findOne(model.user, {
                     id: fundRequest.refId,
@@ -247,18 +223,14 @@ const approveFundRequest = async (req, res) => {
                 })
             ]);
 
-            // Send Email notifications to requester
             if (requester) {
                 try {
-                    // Build logo and illustration URLs
                     const backendUrl = process.env.BASE_URL;
                     const logoUrl = (company && company.logo) ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
                     const illustrationUrl = `${backendUrl}/walletload.png`;
 
-                    // Format amount with 2 decimal places
                     const formattedAmount = parseFloat(transferAmount).toFixed(2);
 
-                    // Send Email notification
                     if (requester.email) {
                         await emailService.sendFundApprovalEmail({
                             to: requester.email,
@@ -272,12 +244,10 @@ const approveFundRequest = async (req, res) => {
                         });
                     }
                 } catch (notificationError) {
-                    // Log error but don't fail the approval process
                     console.error('Error sending notifications:', notificationError);
                 }
             }
         } else {
-            // Update final status to REJECTED (only if still PENDING to prevent race condition)
             const rejectedUpdate = await dbService.update(
                 model.fundRequest,
                 { id: fundRequestId, status: 'PENDING' },
@@ -289,7 +259,6 @@ const approveFundRequest = async (req, res) => {
                 }
             );
 
-            // Check if update was successful
             if (!rejectedUpdate || rejectedUpdate[0] === 0) {
                 return res.failure({
                     message: 'This request has already been processed by another user'
@@ -349,26 +318,18 @@ const getFundRequests = async (req, res) => {
         const isApprover = !!hasApprovalRequests;
 
         if (isApprover) {
-            // User is an approver - show ONLY requests assigned to them for approval (across all companies)
             query.approvalRefId = req.user.id;
         } else {
-            // User is not an approver - show requests they created
             query.refId = req.user.id;
-            // For non-approvers, also filter by companyId
             query.companyId = req.user.companyId;
         }
 
-        // Build query from request body
         if (dataToFind && dataToFind.query) {
-            // Extract startDate and endDate before merging query to handle them separately
             const { startDate, endDate, ...restQuery } = dataToFind.query;
             query = { ...query, ...restQuery };
 
-            // Handle date filtering (startDate/endDate)
-            // Filter by transactionDate for fund requests
             if (startDate || endDate) {
                 if (startDate && endDate) {
-                    // Both dates provided - filter by range
                     const start = new Date(startDate);
                     start.setHours(0, 0, 0, 0);
                     const end = new Date(endDate);
@@ -378,14 +339,12 @@ const getFundRequests = async (req, res) => {
                         [Op.between]: [start, end]
                     };
                 } else if (startDate) {
-                    // Only start date - filter from date onwards
                     const start = new Date(startDate);
                     start.setHours(0, 0, 0, 0);
                     query.transactionDate = {
                         [Op.gte]: start
                     };
                 } else if (endDate) {
-                    // Only end date - filter up to date
                     const end = new Date(endDate);
                     end.setHours(23, 59, 59, 999);
                     query.transactionDate = {
@@ -395,12 +354,10 @@ const getFundRequests = async (req, res) => {
             }
         }
 
-        // Handle options (pagination, sorting)
         if (dataToFind && dataToFind.options !== undefined) {
             options = { ...dataToFind.options };
         }
 
-        // Add includes for user details (requester and approver)
         options.include = [
             {
                 model: model.user,
@@ -422,8 +379,6 @@ const getFundRequests = async (req, res) => {
             }
         ];
 
-        // Handle customSearch (iLike search on multiple fields)
-        // Support: name, transactionId, referenceNo
         if (dataToFind?.customSearch && typeof dataToFind.customSearch === 'object') {
             const keys = Object.keys(dataToFind.customSearch);
             const searchOrConditions = [];
@@ -433,11 +388,9 @@ const getFundRequests = async (req, res) => {
                 const value = dataToFind.customSearch[key];
                 if (value === undefined || value === null || String(value).trim() === '') continue;
 
-                // Handle name search separately
                 if (key === 'userName' || key === 'name') {
                     nameSearchValue = String(value).trim();
                 } else if (key === 'transactionId' || key === 'referenceNo') {
-                    // Direct field search in fundRequest table
                     searchOrConditions.push({
                         [key]: {
                             [Op.iLike]: `%${String(value).trim()}%`
@@ -446,9 +399,7 @@ const getFundRequests = async (req, res) => {
                 }
             }
 
-            // If searching by name, find matching user IDs first
             if (nameSearchValue) {
-                // For superadmin, search across all companies
                 const matchingUsers = await dbService.findAll(model.user, {
                     name: {
                         [Op.iLike]: `%${nameSearchValue}%`
@@ -462,20 +413,16 @@ const getFundRequests = async (req, res) => {
                 const userIds = matchingUsers.map(u => u.id);
 
                 if (userIds.length > 0) {
-                    // OPTIMIZED: If user is an approver, only search in refId (requester)
-                    // since approvalRefId is already filtered to current user
                     if (isApprover) {
                         searchOrConditions.push({
                             refId: { [Op.in]: userIds }
                         });
                     } else {
-                        // For non-approvers, search in refId (requests they created)
                         searchOrConditions.push({
                             refId: { [Op.in]: userIds }
                         });
                     }
                 } else {
-                    // No users found with that name, return empty results
                     return res.success({
                         message: 'Fund requests retrieved successfully',
                         data: [],
@@ -490,24 +437,17 @@ const getFundRequests = async (req, res) => {
             }
 
             if (searchOrConditions.length > 0) {
-                // Combine all search conditions with OR (if multiple) and then AND with base query
                 if (searchOrConditions.length === 1) {
-                    // Single condition - add directly to query (will be ANDed with base conditions)
                     Object.assign(query, searchOrConditions[0]);
                 } else {
-                    // Multiple conditions - combine with OR, then AND with base query
                     query[Op.and] = [
                         { [Op.or]: searchOrConditions }
                     ];
                 }
             }
-            // If no search conditions, the base query already has the correct filters
         }
 
-        // Use paginate for consistent pagination response
         const result = await dbService.paginate(model.fundRequest, query, options);
-
-        // Process data to decrypt profile images and add CDN URLs
         const processedData = processFundRequestData(result?.data || []);
 
         return res.success({

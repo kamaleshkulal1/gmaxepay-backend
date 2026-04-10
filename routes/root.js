@@ -18,6 +18,7 @@ router.use('/company', require('./company/index'));
 
 router.use('/user', require('./user/index'));
 
+router.use('/employee', require('./employee/index'));
 
 
 module.exports = router;

@@ -9,5 +9,7 @@ router.post('/inspayWallet', authentication, walletController.inspayWallet);
 router.post('/bbpsWallet', authentication, walletController.bbpsWallet);
 router.post('/walletHistory', authentication, walletController.walletHistory);
 router.post('/a1TopupWallet', authentication, walletController.a1TopupWallet);
+router.post('/paynidiWallet', authentication, walletController.paynidiWallet);
+
 
 module.exports = router;

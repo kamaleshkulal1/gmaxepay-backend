@@ -4,6 +4,7 @@ const asl = require('../../../services/asl')
 const inspayService = require('../../../services/inspayService')
 const bbpsService = require('../../../services/bbps')
 const a1TopUpService = require('../../../services/a1topService')
+const paynidipro = require('../../../services/paynidipro')
 const { Op } = require('sequelize')
 
 const alsWallet = async (req, res) => {
@@ -237,11 +238,33 @@ const a1TopupWallet = async (req, res) => {
     }
 };
 
+const paynidiWallet = async (req, res) => {
+    try {
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId,
+            isActive: true
+        });
+        if (!existingUser) {
+            return res.failure({ message: 'User not found' });
+        }
+        if (existingUser.userRole !== 1) {
+            return res.failure({ message: 'Unauthorized access' });
+        }
+        const response = await paynidipro.getWalletbalance();
+        return res.success({ message: 'Balance fetched successfully', data: response });
+    } catch (error) {
+        console.error('Error in paynidiWallet', error);
+        return res.failure({ message: error.message });
+    }
+}
+
 module.exports = {
     alsWallet,
     walletBalance,
     inspayWallet,
     bbpsWallet,
     a1TopupWallet,
-    walletHistory
+    walletHistory,
+    paynidiWallet
 };

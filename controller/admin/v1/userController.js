@@ -6,7 +6,11 @@ const emailService = require('../../../services/emailService');
 const ekycHub = require('../../../services/eKycHub');
 const razorpayApi = require('../../../services/razorpayApi');
 const { doubleEncrypt, decrypt } = require('../../../utils/doubleCheckUp');
+const moment = require('moment');
+const bcrypt = require('bcrypt');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
+
+
 
 
 const createUser = async (req, res) => {
@@ -1903,6 +1907,208 @@ const getProfile = async (req, res) => {
   }
 };
 
+const createEmployee = async (req, res) => {
+  try {
+    let permissions = req.permission || [];
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 1 &&
+        permission.dataValues.write === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: "User doesn't have Permission!" });
+    }
+
+    let { name, email, mobileNo } = req.body;
+
+    if (!name || !email || !mobileNo) {
+      return res.failure({ message: 'Name, Email and MobileNo are required' });
+    }
+
+    if (email && !email.includes('@')) {
+      email = `${email.trim()}@gmaxepay.in`;
+    } else if (email && !email.toLowerCase().endsWith('@gmaxepay.in')) {
+      return res.failure({ message: 'Only company Mail are allowed' });
+    }
+
+    const randomPassword = Math.random().toString(36).slice(-8);
+    const companyId = req.companyId || req.user.companyId;
+
+    let dataToCreate = {
+      name,
+      email,
+      mobileNo,
+      password: randomPassword,
+      userRole: 6,
+      isActive: true,
+      mobileVerify: true,
+      emailVerify: true,
+      aadharVerify: true,
+      panVerify: true,
+      shopDetailsVerify: true,
+      imageVerify: true,
+      profileImageWithShopVerify: true,
+      bankDetailsVerify: true,
+      kycStatus: 'FULL_KYC',
+      kycSteps: 7,
+      isResetPassword: true,
+      addedBy: req.user.id,
+      userType: 1,
+      companyId
+    };
+
+    let createdUser;
+    let createAttempts = 0;
+    const maxAttempts = 3;
+
+    while (createAttempts < maxAttempts) {
+      try {
+        createdUser = await dbService.createOne(model.user, dataToCreate);
+        break;
+      } catch (createError) {
+        createAttempts++;
+        if (createError.name === 'SequelizeUniqueConstraintError' && createError.fields && createError.fields.userId && createAttempts < maxAttempts) {
+          continue;
+        }
+        throw createError;
+      }
+    }
+
+    if (!createdUser) {
+      return res.failure({ message: 'Failed to create Employee' });
+    }
+
+    // Implementation of temp password with expiry
+    // expiry time: 24 hours from now
+    const expiryTime = moment().add(24, 'hours').toISOString();
+    const finalPassword = `${createdUser.password}~${expiryTime}`;
+
+    // Update with temporary password and expiry part (bypass hooks to avoid further hashing)
+    await model.user.update(
+      { password: finalPassword },
+      { where: { id: createdUser.id }, hooks: false }
+    );
+
+    // Send credentials via email
+    if (email) {
+      try {
+        const backendUrl = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
+        const company = await dbService.findOne(model.company, { id: companyId });
+        const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
+        const welcomeIllustrationUrl = `${backendUrl}/welcome.png`;
+
+        await emailService.sendNotificationEmail({
+          to: email,
+          userName: name || 'Employee',
+          subject: 'Your Employee Account Credentials - Gmaxepay',
+          successMessage: 'Employee Account Created Successfully',
+          message: `Your employee account has been created. Use the following credentials to login. Your password will expire in 24 hours.\n\nUser ID: ${createdUser.userId}\nPassword: ${randomPassword}`,
+          logoUrl: logoUrl,
+          illustrationUrl: welcomeIllustrationUrl
+        });
+      } catch (emailError) {
+        console.error('Error sending employee credential email:', emailError);
+      }
+    }
+
+    let userToReturn = {
+      ...createdUser.dataValues,
+      tempPassword: randomPassword,
+      expiryTime: expiryTime
+    };
+
+    return res.success({
+      message: 'Employee Created Successfully and Credentials sent to Mail',
+      data: userToReturn
+    });
+  } catch (error) {
+    console.log(error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.failure({ message: error.errors[0].message });
+    } else if (error.name === 'SequelizeValidationError') {
+      return res.failure({ message: error.errors[0].message });
+    }
+    return res.failure({ message: error.message });
+  }
+};
+
+
+const resendEmployeePassword = async (req, res) => {
+  try {
+    let permissions = req.permission || [];
+    let hasPermission = permissions.some(
+      (permission) =>
+        permission.dataValues.permissionId === 1 &&
+        permission.dataValues.write === true
+    );
+
+    if (!hasPermission) {
+      return res.failure({ message: "User doesn't have Permission!" });
+    }
+
+    const { id } = req.params;
+
+    const user = await dbService.findOne(model.user, { id, isDeleted: false });
+    if (!user) {
+      return res.failure({ message: 'Employee not found' });
+    }
+
+    if (user.userRole !== 6) {
+      return res.failure({ message: 'User is not an employee' });
+    }
+
+    const randomPassword = Math.random().toString(36).slice(-8);
+
+    const bcrypt = require('bcrypt');
+    const hashedPassword = await bcrypt.hash(randomPassword, 8);
+
+    const expiryTime = moment().add(24, 'hours').toISOString();
+    const finalPassword = `${hashedPassword}~${expiryTime}`;
+
+    await model.user.update(
+      {
+        password: finalPassword,
+        isResetPassword: true
+      },
+      { where: { id: user.id }, hooks: false }
+    );
+
+    if (user.email) {
+      try {
+        const backendUrl = process.env.BASE_URL || 'https://api-dev.gmaxepay.in';
+        const companyId = user.companyId;
+        const company = await dbService.findOne(model.company, { id: companyId });
+        const logoUrl = company?.logo ? imageService.getImageUrl(company.logo) : `${backendUrl}/gmaxepay.png`;
+        const welcomeIllustrationUrl = `${backendUrl}/welcome.png`;
+
+        await emailService.sendNotificationEmail({
+          to: user.email,
+          userName: user.name || 'Employee',
+          subject: 'New Employee Account Credentials - Gmaxepay',
+          successMessage: 'New Credentials Generated Successfully',
+          message: `Your employee account password has been reset. Use the following credentials to login. Your password will expire in 24 hours.\n\nUser ID: ${user.userId}\nPassword: ${randomPassword}`,
+          logoUrl: logoUrl,
+          illustrationUrl: welcomeIllustrationUrl
+        });
+      } catch (emailError) {
+        console.error('Error sending employee credential email:', emailError);
+      }
+    }
+
+    return res.success({
+      message: 'New Credentials Generated and sent to Mail',
+      data: {
+        tempPassword: randomPassword,
+        expiryTime: expiryTime
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    return res.failure({ message: error.message });
+  }
+};
+
 module.exports = {
   createUser,
   findAllUsers,
@@ -1916,5 +2122,7 @@ module.exports = {
   uploadBankDetailsForUser,
   getCompanyAdminById,
   getByUserProfile,
-  getProfile
+  getProfile,
+  createEmployee,
+  resendEmployeePassword
 };

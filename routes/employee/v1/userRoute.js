@@ -1,0 +1,19 @@
+const express = require('express');
+const router = express.Router();
+const userController = require('../../../controller/employee/v1/userController');
+const authentication = require('../../../middleware/authentication');
+
+router.post('/create', userController.createUser);
+router.post('/list', authentication, userController.findAllUsers);
+router.post('/getProfile', authentication, userController.getProfile);
+router.post('/company-admin/:id', authentication, userController.getCompanyAdminById);
+router.post('/bank-details/upload', authentication, userController.uploadBankDetailsForUser);
+router.post('/profile/:id', authentication, userController.getByUserProfile);
+router.post('/:id', authentication, userController.getUser);
+router.put('/:id', authentication, userController.updateUser);
+router.delete('/:id', authentication, userController.deleteUser);
+router.post('/unlock/:id', authentication, userController.unlockAccount);
+router.post('/kyc/status/:id', authentication, userController.getKycVerificationStatus);
+router.post('/kyc/complete/:id', authentication, userController.getCompleteKycData);
+router.post('/kyc/revert/:id', authentication, userController.revertKycData);
+module.exports = router;

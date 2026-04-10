@@ -51,7 +51,6 @@ db.state = require('./state');
 db.gstState = require('./gstState');
 db.rechargeStateCode = require('./RechargeStateCode');
 
-// Bank & Payment Models (Load customerBank early as payoutHistory depends on it)
 db.bank = require('./bank');
 db.customerBank = require('./customerBank');
 db.cardType = require('./cardType');
@@ -60,6 +59,13 @@ db.aslBankList = require('./aslBankList');
 db.practomindBankList = require('./practomindBankList');
 db.practomindCompanyCode = require('./practomindCompanyCode');
 db.practomindState = require('./practomindState');
+
+db.zupayState = require('./zupayState');
+db.zupayCity = require('./zupayCity');
+db.zupayMaster = require('./zupayMaster');
+db.zupayOnboarding = require('./zupayOnbaording');
+db.zupayBankList = require('./zupayBankList');
+db.zupayAepsHistory = require('./zupayAepsHistory');
 
 // Financial Models
 db.wallet = require('./wallet');
@@ -70,6 +76,7 @@ db.practomindAepsHistory = require('./practomindAepsHistory');
 db.ledger = require('./ledger');
 db.pgCommercials = require('./pgCommercials');
 db.payoutHistory = require('./payoutHistory');
+db.payoutList = require('./payoutList');
 db.gstHistory = require('./gstHistory');
 // db.recharge = require('./recharge');
 // db.dthRecharge = require('./dthRecharge');
@@ -78,6 +85,8 @@ db.service1Transaction = require('./service1Transaction');
 db.fundRequest = require('./fundRequest');
 db.fundHistory = require('./fundHistrory');
 db.cmsHistory = require('./cmsHistory');
+db.matmHistory = require('./matmHistory');
+db.mposHistory = require('./mposHistory');
 
 // Commission & Slab Models
 db.slab = require('./slab');
@@ -606,6 +615,15 @@ db.company.hasMany(db.gstHistory, {
   sourceKey: 'id'
 });
 
+db.payoutList.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company'
+});
+db.company.hasMany(db.payoutList, {
+  foreignKey: 'companyId',
+  as: 'payoutLists'
+});
+
 db.payoutHistory.belongsTo(db.customerBank, {
   foreignKey: 'customerBankId',
   as: 'customerBank',
@@ -796,6 +814,102 @@ db.user.hasMany(db.cmsHistory, {
   foreignKey: 'refId',
   as: 'cmsHistories',
   sourceKey: 'id'
+});
+
+// MATM History Company Relationships
+db.matmHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.matmHistory, {
+  foreignKey: 'companyId',
+  as: 'matmHistories',
+  sourceKey: 'id'
+});
+
+// MATM History User Relationships
+db.user.hasMany(db.matmHistory, {
+  foreignKey: 'refId',
+  as: 'matmHistories',
+  sourceKey: 'id'
+});
+
+// MPOS History Company Relationships
+db.mposHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.mposHistory, {
+  foreignKey: 'companyId',
+  as: 'mposHistories',
+  sourceKey: 'id'
+});
+
+// MPOS History User Relationships
+db.user.hasMany(db.mposHistory, {
+  foreignKey: 'refId',
+  as: 'mposHistories',
+  sourceKey: 'id'
+});
+
+// Zupay Onboarding Relationships
+db.zupayOnboarding.belongsTo(db.user, {
+  foreignKey: 'userId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.zupayOnboarding, {
+  foreignKey: 'userId',
+  as: 'zupayOnboardings',
+  sourceKey: 'id'
+});
+db.zupayOnboarding.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.zupayOnboarding, {
+  foreignKey: 'companyId',
+  as: 'zupayOnboardings',
+  sourceKey: 'id'
+});
+
+// Zupay AEPS History Relationships
+db.zupayAepsHistory.belongsTo(db.user, {
+  foreignKey: 'refId',
+  as: 'user',
+  targetKey: 'id'
+});
+db.user.hasMany(db.zupayAepsHistory, {
+  foreignKey: 'refId',
+  as: 'zupayAepsHistories',
+  sourceKey: 'id'
+});
+db.zupayAepsHistory.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company',
+  targetKey: 'id'
+});
+db.company.hasMany(db.zupayAepsHistory, {
+  foreignKey: 'companyId',
+  as: 'zupayAepsHistories',
+  sourceKey: 'id'
+});
+
+db.zupayAepsHistory.belongsTo(db.zupayBankList, {
+  foreignKey: 'bankIin',
+  targetKey: 'bankIin',
+  as: 'bank',
+  required: false,
+  constraints: false
+});
+db.zupayBankList.hasMany(db.zupayAepsHistory, {
+  foreignKey: 'bankIin',
+  sourceKey: 'bankIin',
+  as: 'zupayAepsHistories',
+  constraints: false
 });
 
 module.exports = db;

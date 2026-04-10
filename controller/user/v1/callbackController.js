@@ -1056,11 +1056,14 @@ const cmsCallback = async (req, res) => {
         console.log('[CMS Callback] Received payload:', JSON.stringify(req.body));
         const { event, param } = req.body;
 
-        if (!event || !param || !param.referenceId) {
+        const referenceId = param.referenceId || param.refid;
+
+        if (!event || !param || !referenceId) {
+            console.error('[CMS Callback] Invalid payload - missing event, param or referenceId:', JSON.stringify(req.body));
             return res.status(400).json({ status: 400, message: "Invalid callback payload" });
         }
 
-        const { referenceId, amount, biller_id, biller_name, mobile_no, datetime, utr, ackno, unique_id, status: paramStatus, errormsg, commission } = param;
+        const { amount, biller_id, biller_name, mobile_no, datetime, utr, ackno, unique_id, status: paramStatus, errormsg, commission } = param;
 
         const transaction = await dbService.findOne(model.cmsHistory, { referenceId });
         if (!transaction) {
@@ -1079,10 +1082,10 @@ const cmsCallback = async (req, res) => {
         if (event === 'CMS_BALANCE_INQUIRY') {
             let wallet = await dbService.findOne(model.wallet, { refId: transaction.refId, companyId: transaction.companyId });
             const currentBalance = wallet ? round4(wallet.mainWallet || 0) : 0;
-            
+
             updateData.openingWallet = currentBalance;
             await dbService.update(model.cmsHistory, { id: transaction.id }, updateData);
-            
+
             return res.json({ status: 200, message: "Transaction completed successfully", balance: currentBalance });
         }
 
@@ -1111,7 +1114,7 @@ const cmsCallback = async (req, res) => {
             const user = await dbService.findOne(model.user, { id: transaction.refId });
 
             const operator = await dbService.findOne(model.operator, {
-                operatorType: 'CMS',
+                operatorType: 'CMS1',
                 operatorName: biller_name
             });
 
@@ -1140,8 +1143,8 @@ const cmsCallback = async (req, res) => {
                         if (distributor.reportingTo === companyAdmin.id || distributor.reportingTo === null) {
                             commData.scenario = 'DIST_DIRECT';
                             const [saSlab, coSlab] = await Promise.all([
-                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }, { select: ['id', 'commAmt', 'roleType', 'amtType', 'commType', 'roleName'] })
                             ]);
                             commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
                             commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
@@ -1153,9 +1156,9 @@ const cmsCallback = async (req, res) => {
                                 commData.users.masterDistributor = md;
                                 commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
                                 const [saSlab, coSlab, mdSlab] = await Promise.all([
-                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType: 'CMS' })
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType: 'CMS1' })
                                 ]);
                                 commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
                                 commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
@@ -1174,8 +1177,8 @@ const cmsCallback = async (req, res) => {
                         if (!reportingUser || retailer.reportingTo === companyAdmin.id || retailer.reportingTo === null) {
                             commData.scenario = 'RET_DIRECT';
                             const [saSlab, coSlab] = await Promise.all([
-                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' })
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS1' })
                             ]);
                             commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
                             commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
@@ -1185,9 +1188,9 @@ const cmsCallback = async (req, res) => {
                             commData.users.masterDistributor = reportingUser;
                             commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
                             const [saSlab, coSlab, mdSlab] = await Promise.all([
-                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS' })
+                                dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS1' })
                             ]);
                             commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
                             commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
@@ -1199,9 +1202,9 @@ const cmsCallback = async (req, res) => {
                             commData.wallets.distributorWallet = await dbService.findOne(model.wallet, { refId: reportingUser.id, companyId: user.companyId });
                             if (reportingUser.reportingTo === companyAdmin.id || reportingUser.reportingTo === null) {
                                 const [saSlab, coSlab, distSlab] = await Promise.all([
-                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS' })
+                                    dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                    dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS1' })
                                 ]);
                                 commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
                                 commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
@@ -1214,10 +1217,10 @@ const cmsCallback = async (req, res) => {
                                     commData.users.masterDistributor = md;
                                     commData.wallets.masterDistributorWallet = await dbService.findOne(model.wallet, { refId: md.id, companyId: user.companyId });
                                     const [saSlab, coSlab, mdSlab, distSlab] = await Promise.all([
-                                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType: 'CMS' }),
-                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS' })
+                                        dbService.findAll(model.commSlab, { companyId: 1, addedBy: superAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: companyAdmin.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: md.id, operatorId: operator.id, operatorType: 'CMS1' }),
+                                        dbService.findAll(model.commSlab, { companyId: user.companyId, addedBy: reportingUser.id, operatorId: operator.id, operatorType: 'CMS1' })
                                     ]);
                                     commData.slabs.saSlab = saSlab?.find(c => c.roleType === 1 || c.roleName === 'AD');
                                     commData.slabs.wlSlab = saSlab?.find(c => c.roleType === 2 || c.roleName === 'WU');
@@ -1344,7 +1347,7 @@ const cmsCallback = async (req, res) => {
 
             await Promise.all([...walletUpdates, ...historyPromises]);
 
-            updateData.status = 'DEBITED';
+            updateData.status = 'SUCCESS';
             updateData.openingWallet = openingWallet;
             updateData.closingWallet = closingWallet;
             updateData.debit = initiatorDebit;

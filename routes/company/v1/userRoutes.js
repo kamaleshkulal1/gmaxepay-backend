@@ -5,6 +5,7 @@ const userController = require('../../../controller/company/v1/userContoller');
 const authentication = require('../../../middleware/authentication');
 
 router.post('/list', authentication, userController.findAllUsers);
+router.post('/upgradeList', authentication, userController.upgradeList);
 router.post('/upgradeUser', authentication, whitelabelController.upgradeUserRole);
 router.post('/degradeUser', authentication, whitelabelController.degradeUserRole);
 router.post('/setMPIN', authentication, userController.setMPIN);

@@ -62,7 +62,16 @@ const getDashboard = async (req, res) => {
       totalRetailerCount,
       todayMasterDistributorCount,
       todayDistributorCount,
-      todayRetailerCount
+      todayRetailerCount,
+      mdMainWallet,
+      mdAeps1Wallet,
+      mdAeps2Wallet,
+      diMainWallet,
+      diAeps1Wallet,
+      diAeps2Wallet,
+      reMainWallet,
+      reAeps1Wallet,
+      reAeps2Wallet
     ] = await Promise.all([
       model.user.count({
         where: { ...companyFilter, userRole: 3, isDeleted: false }
@@ -81,7 +90,16 @@ const getDashboard = async (req, res) => {
       }),
       model.user.count({
         where: { ...todayWhere, userRole: 5, isDeleted: false }
-      })
+      }),
+      model.wallet.sum('mainWallet', { where: { ...companyFilter, roleType: 3, isDelete: false } }),
+      model.wallet.sum('apes1Wallet', { where: { ...companyFilter, roleType: 3, isDelete: false } }),
+      model.wallet.sum('apes2Wallet', { where: { ...companyFilter, roleType: 3, isDelete: false } }),
+      model.wallet.sum('mainWallet', { where: { ...companyFilter, roleType: 4, isDelete: false } }),
+      model.wallet.sum('apes1Wallet', { where: { ...companyFilter, roleType: 4, isDelete: false } }),
+      model.wallet.sum('apes2Wallet', { where: { ...companyFilter, roleType: 4, isDelete: false } }),
+      model.wallet.sum('mainWallet', { where: { ...companyFilter, roleType: 5, isDelete: false } }),
+      model.wallet.sum('apes1Wallet', { where: { ...companyFilter, roleType: 5, isDelete: false } }),
+      model.wallet.sum('apes2Wallet', { where: { ...companyFilter, roleType: 5, isDelete: false } })
     ]);
 
     const nsdlPanWhere = {
@@ -359,6 +377,23 @@ const getDashboard = async (req, res) => {
             masterDistributor: todayMasterDistributorCount || 0,
             distributor: todayDistributorCount || 0,
             retailer: todayRetailerCount || 0
+          },
+          walletBalances: {
+            masterDistributor: {
+              mainWallet: roundToTwo(mdMainWallet || 0),
+              aeps1Wallet: roundToTwo(mdAeps1Wallet || 0),
+              aeps2Wallet: roundToTwo(mdAeps2Wallet || 0)
+            },
+            distributor: {
+              mainWallet: roundToTwo(diMainWallet || 0),
+              aeps1Wallet: roundToTwo(diAeps1Wallet || 0),
+              aeps2Wallet: roundToTwo(diAeps2Wallet || 0)
+            },
+            retailer: {
+              mainWallet: roundToTwo(reMainWallet || 0),
+              aeps1Wallet: roundToTwo(reAeps1Wallet || 0),
+              aeps2Wallet: roundToTwo(reAeps2Wallet || 0)
+            }
           }
         },
         commissions: {

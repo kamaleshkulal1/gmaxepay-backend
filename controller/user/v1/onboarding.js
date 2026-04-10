@@ -409,36 +409,33 @@ const revertKycVerification = async (userId, companyId, kycType) => {
 
     if (kycType === 'pan') {
       updateData.panVerify = false;
-      const panDoc = await dbService.findOne(model.digilockerDocument, {
+      updateData.panInfo = null;
+      updateData.panDetails = null;
+      updateData.isPanUploaded = false;
+      updateData.panCardFrontImage = null;
+      updateData.panCardBackImage = null;
+
+      await dbService.destroy(model.digilockerDocument, {
         refId: userId,
         companyId: companyId,
-        documentType: 'PAN',
-        isDeleted: false
-      });
-
-      if (panDoc) {
-        await dbService.update(
-          model.digilockerDocument,
-          { id: panDoc.id },
-          { isDeleted: true }
-        );
-      }
+        documentType: 'PAN'
+      }, { force: true });
     } else if (kycType === 'aadhar' || kycType === 'aadhaar') {
       updateData.aadharVerify = false;
-      const aadhaarDoc = await dbService.findOne(model.digilockerDocument, {
+      updateData.name = null;
+      updateData.dob = null;
+      updateData.fullAddress = null;
+      updateData.aadharDetails = null;
+      updateData.aadharInfo = null;
+      updateData.isAadharUploaded = false;
+      updateData.aadharFrontImage = null;
+      updateData.aadharBackImage = null;
+
+      await dbService.destroy(model.digilockerDocument, {
         refId: userId,
         companyId: companyId,
-        documentType: 'AADHAAR',
-        isDeleted: false
-      });
-
-      if (aadhaarDoc) {
-        await dbService.update(
-          model.digilockerDocument,
-          { id: aadhaarDoc.id },
-          { isDeleted: true }
-        );
-      }
+        documentType: 'AADHAAR'
+      }, { force: true });
     }
 
     if (Object.keys(updateData).length > 0) {
@@ -1559,31 +1556,8 @@ const getDigilockerDocuments = async (req, res) => {
           errorMessage.includes('validation in process');
 
         if (isExpiredOrPending) {
-          // Delete the latest document request
-          await dbService.destroy(model.digilockerDocument, {
-            id: existingDigilockerDocument.id,
-            refId: userId,
-            companyId: companyIdNum,
-            documentType: docType
-          });
-
-          // Reset user verification flag
-          const resetData = docType === 'AADHAAR' ? { aadharVerify: false } : { panVerify: false };
-          await dbService.update(
-            model.user,
-            {
-              id: userId,
-              companyId: companyIdNum,
-              isDeleted: false
-            },
-            resetData
-          );
-
-          // Update KYC status
-          await updateKycStatus(userId, companyIdNum, {
-            aadhaarDoc: docType === 'AADHAAR' ? null : userCtx?.aadhaarDoc,
-            panDoc: docType === 'PAN' ? null : userCtx?.panDoc
-          });
+          // Revert verification status and clear documents permanently
+          await revertKycVerification(userId, companyIdNum, docType.toLowerCase());
 
           const errorMsg =
             errorCode === 'validation_pending'
@@ -1599,8 +1573,11 @@ const getDigilockerDocuments = async (req, res) => {
           });
         }
 
+        // Revert verification status for any other failure
+        await revertKycVerification(userId, companyIdNum, docType.toLowerCase());
+
         return res.failure({
-          message: `Failed to fetch ${docTypeLabel} document from digilocker`,
+          message: `Failed to fetch ${docTypeLabel} document from digilocker. Please reconnect.`,
           data: response
         });
       }

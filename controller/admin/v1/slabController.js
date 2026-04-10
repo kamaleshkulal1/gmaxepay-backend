@@ -66,7 +66,7 @@ const findAllslabComm = async (req, res) => {
       return res.failure({ message: `User doesn't have Permission!` });
     }
 
-    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+    if (req.user.userRole !== 1 && req.user.companyId !== companyId) {
       return res.failure({ message: 'You are not authorized to create slab' });
     }
 
@@ -144,7 +144,6 @@ const findAllslabComm = async (req, res) => {
       }
     }
 
-    // Filter to only include roleType 1 (AD) and 2 (WU)
     query.roleType = { [Op.in]: [1, 2] };
 
     foundUser = await dbService.findAll(model.commSlab, query, {
@@ -226,7 +225,7 @@ const updateSlab = async (req, res) => {
         return res.failure({ message: 'slabName cannot be empty' });
       }
       updateData.slabName = slabName.trim();
-      
+
       // Check if new slabName already exists for this company (excluding current slab)
       const existingSlab = await dbService.findOne(model.slab, {
         slabName: slabName.trim(),
@@ -235,8 +234,8 @@ const updateSlab = async (req, res) => {
       });
 
       if (existingSlab) {
-        return res.failure({ 
-          message: `Slab with name "${slabName.trim()}" already exists for this company` 
+        return res.failure({
+          message: `Slab with name "${slabName.trim()}" already exists for this company`
         });
       }
     }
@@ -260,14 +259,14 @@ const updateSlab = async (req, res) => {
       if (views === null) {
         // If setting to null, check if schemaMode is private
         if (finalSchemaMode === 'private') {
-          return res.failure({ 
-            message: 'views cannot be empty when schemaMode is "private". Please provide at least one user ID.' 
+          return res.failure({
+            message: 'views cannot be empty when schemaMode is "private". Please provide at least one user ID.'
           });
         }
         updateData.views = [];
       } else if (!Array.isArray(views)) {
-        return res.failure({ 
-          message: 'views must be an array of user IDs' 
+        return res.failure({
+          message: 'views must be an array of user IDs'
         });
       } else {
         // Validate and sanitize views array - ensure all items are valid integers
@@ -275,11 +274,11 @@ const updateSlab = async (req, res) => {
           const id = Number(userId);
           return !isNaN(id) && id > 0;
         }).map((userId) => Number(userId));
-        
+
         // If schemaMode is private, views must have at least one user
         if (finalSchemaMode === 'private' && validatedViews.length === 0) {
-          return res.failure({ 
-            message: 'views array must contain at least one valid user ID when schemaMode is "private"' 
+          return res.failure({
+            message: 'views array must contain at least one valid user ID when schemaMode is "private"'
           });
         }
         updateData.views = validatedViews;
@@ -288,8 +287,8 @@ const updateSlab = async (req, res) => {
       // If schemaMode is being changed to private but views is not provided, check existing views
       const currentViews = slab.views || [];
       if (!Array.isArray(currentViews) || currentViews.length === 0) {
-        return res.failure({ 
-          message: 'views is required when schemaMode is "private". Please provide at least one user ID in the views array.' 
+        return res.failure({
+          message: 'views is required when schemaMode is "private". Please provide at least one user ID in the views array.'
         });
       }
     }
@@ -299,22 +298,22 @@ const updateSlab = async (req, res) => {
       if (subscriptionAmount === null) {
         // If setting to null, check if schemaType is premium
         if (finalSchemaType === 'premium') {
-          return res.failure({ 
-            message: 'subscriptionAmount is required when schemaType is "premium". Please provide a valid amount.' 
+          return res.failure({
+            message: 'subscriptionAmount is required when schemaType is "premium". Please provide a valid amount.'
           });
         }
         updateData.subscriptionAmount = 0;
       } else {
         const amount = Number(subscriptionAmount);
         if (isNaN(amount) || amount < 0) {
-          return res.failure({ 
-            message: 'subscriptionAmount must be a valid non-negative number' 
+          return res.failure({
+            message: 'subscriptionAmount must be a valid non-negative number'
           });
         }
         // If schemaType is premium, subscriptionAmount must be greater than 0
         if (finalSchemaType === 'premium' && amount <= 0) {
-          return res.failure({ 
-            message: 'subscriptionAmount must be greater than 0 when schemaType is "premium"' 
+          return res.failure({
+            message: 'subscriptionAmount must be greater than 0 when schemaType is "premium"'
           });
         }
         updateData.subscriptionAmount = amount;
@@ -323,8 +322,8 @@ const updateSlab = async (req, res) => {
       // If schemaType is being changed to premium but subscriptionAmount is not provided, check existing amount
       const currentAmount = slab.subscriptionAmount || 0;
       if (currentAmount <= 0) {
-        return res.failure({ 
-          message: 'subscriptionAmount is required when schemaType is "premium". Please provide a valid amount greater than 0.' 
+        return res.failure({
+          message: 'subscriptionAmount is required when schemaType is "premium". Please provide a valid amount greater than 0.'
         });
       }
     }
@@ -370,15 +369,15 @@ const updateSlabComm = async (req, res) => {
     }
 
 
-    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+    if (req.user.userRole !== 1 && req.user.companyId !== companyId) {
       return res.failure({ message: 'You are not authorized to create slab' });
     }
 
     const { commAmt, commType, amtType } = req.body;
     const id = req.params.id;
-    const companyId =  req.user.companyId;
+    const companyId = req.user.companyId;
 
-    if(req.user.userRole!==1 && req.user.companyId!==companyId){
+    if (req.user.userRole !== 1 && req.user.companyId !== companyId) {
       return res.failure({ message: 'You are not authorized to update slab commission' });
     }
     if (commAmt === undefined && commType === undefined && amtType === undefined) {
@@ -389,7 +388,7 @@ const updateSlabComm = async (req, res) => {
     if (commType !== undefined && !['com', 'sur'].includes(commType)) {
       return res.failure({ message: 'commType must be either "com" or "sur"' });
     }
-    if(amtType !== undefined && !['fix', 'per'].includes(amtType)) {
+    if (amtType !== undefined && !['fix', 'per'].includes(amtType)) {
       return res.failure({ message: 'amtType must be either "fix" or "per"' });
     }
 
@@ -397,7 +396,7 @@ const updateSlabComm = async (req, res) => {
     if (commAmt !== undefined && (isNaN(commAmt) || commAmt < 0)) {
       return res.failure({ message: 'commAmt must be a valid non-negative number' });
     }
-;
+    ;
 
     // Find the slab commission entry
     const slabComm = await dbService.findOne(model.commSlab, {
@@ -410,8 +409,8 @@ const updateSlabComm = async (req, res) => {
 
     // Build update data
     const updateData = {
-        updatedBy: req.user.id
-      };
+      updatedBy: req.user.id
+    };
 
     if (commAmt !== undefined) {
       updateData.commAmt = parseFloat(commAmt);
@@ -420,7 +419,7 @@ const updateSlabComm = async (req, res) => {
     if (commType !== undefined) {
       updateData.commType = commType;
     }
-    if(amtType !== undefined) {
+    if (amtType !== undefined) {
       updateData.amtType = amtType;
     }
 
@@ -454,76 +453,68 @@ const createSlab = async (req, res) => {
   try {
     const { slabName, schemaMode, schemaType, views, subscriptionAmount } = req.body;
 
-    if(req.user.userRole!==1 && req.user.companyId!==companyId) {
+    if (req.user.userRole !== 1 && req.user.companyId !== companyId) {
       return res.failure({ message: 'You are not authorized to create slab' });
     }
-    // Validate required fields
     if (!slabName) {
-      return res.failure({ 
-        message: 'slabName is required' 
+      return res.failure({
+        message: 'slabName is required'
       });
     }
 
     if (!schemaMode) {
-      return res.failure({ 
-        message: 'schemaMode is required' 
+      return res.failure({
+        message: 'schemaMode is required'
       });
     }
 
     if (!schemaType) {
-      return res.failure({ 
-        message: 'schemaType is required' 
+      return res.failure({
+        message: 'schemaType is required'
       });
     }
 
-    // Validate schemaMode
     if (!['global', 'private'].includes(schemaMode)) {
-      return res.failure({ 
-        message: 'schemaMode must be either "global" or "private"' 
+      return res.failure({
+        message: 'schemaMode must be either "global" or "private"'
       });
     }
 
-    // Validate schemaType
     if (!['free', 'premium'].includes(schemaType)) {
-      return res.failure({ 
-        message: 'schemaType must be either "free" or "premium"' 
+      return res.failure({
+        message: 'schemaType must be either "free" or "premium"'
       });
     }
 
-    // Validate views based on schemaMode
     let validatedViews = [];
     if (schemaMode === 'private') {
-      // If schemaMode is private, views is required
       if (views === undefined || views === null) {
-        return res.failure({ 
-          message: 'views is required when schemaMode is "private". Please specify which users can view this slab.' 
+        return res.failure({
+          message: 'views is required when schemaMode is "private". Please specify which users can view this slab.'
         });
       }
       if (!Array.isArray(views)) {
-        return res.failure({ 
-          message: 'views must be an array of user IDs' 
+        return res.failure({
+          message: 'views must be an array of user IDs'
         });
       }
-      // Ensure all items in views array are valid integers
       validatedViews = views.filter((userId) => {
         const id = Number(userId);
         return !isNaN(id) && id > 0;
       }).map((userId) => Number(userId));
-      
+
       if (validatedViews.length === 0) {
-        return res.failure({ 
-          message: 'views array must contain at least one valid user ID when schemaMode is "private"' 
+        return res.failure({
+          message: 'views array must contain at least one valid user ID when schemaMode is "private"'
         });
       }
     } else {
-      // If schemaMode is global, views is optional (anyone can view)
       if (views !== undefined && views !== null) {
         if (!Array.isArray(views)) {
-          return res.failure({ 
-            message: 'views must be an array of user IDs' 
+          return res.failure({
+            message: 'views must be an array of user IDs'
           });
         }
-        // Ensure all items in views array are valid integers
         validatedViews = views.filter((userId) => {
           const id = Number(userId);
           return !isNaN(id) && id > 0;
@@ -531,53 +522,48 @@ const createSlab = async (req, res) => {
       }
     }
 
-    // Validate subscriptionAmount based on schemaType
     let validatedSubscriptionAmount = 0;
     if (schemaType === 'premium') {
-      // If schemaType is premium, subscriptionAmount is required
       if (subscriptionAmount === undefined || subscriptionAmount === null) {
-        return res.failure({ 
-          message: 'subscriptionAmount is required when schemaType is "premium"' 
+        return res.failure({
+          message: 'subscriptionAmount is required when schemaType is "premium"'
         });
       }
       const amount = Number(subscriptionAmount);
       if (isNaN(amount) || amount < 0) {
-        return res.failure({ 
-          message: 'subscriptionAmount must be a valid non-negative number when schemaType is "premium"' 
+        return res.failure({
+          message: 'subscriptionAmount must be a valid non-negative number when schemaType is "premium"'
         });
       }
       validatedSubscriptionAmount = amount;
     } else {
-      // If schemaType is free, subscriptionAmount is optional (defaults to 0)
       if (subscriptionAmount !== undefined && subscriptionAmount !== null) {
         const amount = Number(subscriptionAmount);
         if (isNaN(amount) || amount < 0) {
-          return res.failure({ 
-            message: 'subscriptionAmount must be a valid non-negative number' 
+          return res.failure({
+            message: 'subscriptionAmount must be a valid non-negative number'
           });
         }
         validatedSubscriptionAmount = amount;
       }
     }
 
-    // Get companyId from the user creating the slab
     const companyId = req.companyId ?? req.user?.companyId ?? null;
-    
+
     if (!companyId) {
-      return res.failure({ 
-        message: 'Company ID is required. User must belong to a company.' 
+      return res.failure({
+        message: 'Company ID is required. User must belong to a company.'
       });
     }
 
-    // Check if slab with same name already exists for this company
     const existingSlab = await dbService.findOne(model.slab, {
       slabName,
       companyId: companyId
     });
 
     if (existingSlab) {
-      return res.failure({ 
-        message: `Slab with name "${slabName}" already exists for this company` 
+      return res.failure({
+        message: `Slab with name "${slabName}" already exists for this company`
       });
     }
 
@@ -585,7 +571,7 @@ const createSlab = async (req, res) => {
       slabName: slabName,
       schemaMode,
       schemaType,
-      companyId: companyId, 
+      companyId: companyId,
       remark: null,
       isSignUpB2B: false,
       users: [],
@@ -597,7 +583,6 @@ const createSlab = async (req, res) => {
       type: req.user.userType
     };
 
-    // Create the slab
     const createdSlab = await dbService.createOne(model.slab, dataToCreate);
 
     if (!createdSlab) {
@@ -606,7 +591,6 @@ const createSlab = async (req, res) => {
 
     const slabId = createdSlab.id;
 
-    // Create default commissions for this slab + company
     const operators = await dbService.findAll(
       model.operator,
       { inSlab: true },
@@ -660,8 +644,8 @@ const getAllSlabs = async (req, res) => {
     if (!companyId) {
       return res.failure({ message: 'Company ID is required' });
     }
-    
-    if(req.user.userRole!==1 && req.user.companyId!==1) {
+
+    if (req.user.userRole !== 1 && req.user.companyId !== 1) {
       return res.failure({ message: 'You are not authorized to get all slabs' });
     }
 
@@ -714,13 +698,13 @@ const getAllSlabs = async (req, res) => {
 
     const allUserIds = new Set();
     const allViewUserIds = new Set();
-    
+
     if (allSlabs && allSlabs.length > 0) {
       allSlabs.forEach(slab => {
         const slabData = slab.toJSON ? slab.toJSON() : slab;
         const users = slabData.users || [];
         const views = slabData.views || [];
-        
+
         if (Array.isArray(users) && users.length > 0) {
           users.forEach(userId => {
             if (userId) {
@@ -728,8 +712,7 @@ const getAllSlabs = async (req, res) => {
             }
           });
         }
-        
-        // Collect view user IDs only for private slabs
+
         if (slabData.schemaMode === 'private' && Array.isArray(views) && views.length > 0) {
           views.forEach(userId => {
             if (userId) {
@@ -742,12 +725,10 @@ const getAllSlabs = async (req, res) => {
 
     const totalUsers = allUserIds.size;
 
-    // Fetch user details with company information for view users
     let viewUsersMap = {};
     if (allViewUserIds.size > 0) {
       const viewUserIdsArray = Array.from(allViewUserIds);
-      
-      // Fetch users
+
       const viewUsers = await dbService.findAll(model.user, {
         id: { [Op.in]: viewUserIdsArray },
         isActive: true
@@ -755,7 +736,6 @@ const getAllSlabs = async (req, res) => {
         attributes: ['id', 'name', 'companyId']
       });
 
-      // Get unique company IDs
       const companyIds = new Set();
       if (viewUsers && viewUsers.length > 0) {
         viewUsers.forEach(user => {
@@ -766,7 +746,6 @@ const getAllSlabs = async (req, res) => {
         });
       }
 
-      // Fetch companies
       let companiesMap = {};
       if (companyIds.size > 0) {
         const companies = await dbService.findAll(model.company, {
@@ -783,7 +762,6 @@ const getAllSlabs = async (req, res) => {
         }
       }
 
-      // Map users with their company names
       if (viewUsers && viewUsers.length > 0) {
         viewUsers.forEach(user => {
           const userData = user.toJSON ? user.toJSON() : user;
@@ -807,15 +785,14 @@ const getAllSlabs = async (req, res) => {
       const users = slabData.users || [];
       const views = slabData.views || [];
       const totalUsersInSlab = Array.isArray(users) ? users.filter(id => id).length : 0;
-      
+
       const { users: _, views: __, ...rest } = slabData;
-      
+
       const responseData = {
         ...rest,
         totalUsers: totalUsersInSlab
       };
 
-      // Only include view details for private slabs
       if (slabData.schemaMode === 'private') {
         const viewDetails = [];
         if (Array.isArray(views) && views.length > 0) {
@@ -828,11 +805,10 @@ const getAllSlabs = async (req, res) => {
         responseData.totalViews = viewDetails.length;
         responseData.viewDetails = viewDetails;
       } else {
-        // For global slabs, don't show view details
         responseData.totalViews = 0;
         responseData.viewDetails = [];
       }
-      
+
       return responseData;
     });
 
@@ -859,7 +835,7 @@ const getAllSlabs = async (req, res) => {
 const getAllCompanySlabList = async (req, res) => {
   try {
     const userId = req.params.id;
-    
+
     if (!userId) {
       return res.failure({ message: 'User ID is required' });
     }
@@ -909,7 +885,7 @@ const getAllCompanySlabList = async (req, res) => {
     });
 
     const userIdNum = Number(userId);
-    
+
     const userSubscriptions = await dbService.findAll(model.subscription, {
       userId: userIdNum,
       companyId: companyId,
@@ -933,7 +909,7 @@ const getAllCompanySlabList = async (req, res) => {
       const slabData = slab.toJSON ? slab.toJSON() : slab;
       const subscriptionAmount = slabData.subscriptionAmount || 0;
       const isSubscribed = subscribedSlabIds.has(slabData.id);
-      
+
       return {
         id: slabData.id,
         slabName: slabData.slabName,
@@ -956,15 +932,15 @@ const getAllCompanySlabList = async (req, res) => {
 const assignSlabToCompany = async (req, res) => {
   try {
     const { slabId, companyId } = req.body;
-    
+
     if (req.user.companyId !== companyId && req.user.userRole !== 1) {
       return res.failure({ message: 'You are not authorized to assign this slab to this company' });
     }
-    
+
     if (!slabId) {
       return res.failure({ message: 'slabId is required' });
     }
-    
+
     if (!companyId) {
       return res.failure({ message: 'companyId is required' });
     }
@@ -1034,7 +1010,6 @@ const assignSlabToCompany = async (req, res) => {
       );
     }
 
-    // Ensure admin is present in the new slab's users array
     if (!isUserInSlab) {
       const updatedUsers = Array.isArray(slabUsers) ? [...slabUsers, companyAdmin.id] : [companyAdmin.id];
       await dbService.update(
@@ -1044,7 +1019,6 @@ const assignSlabToCompany = async (req, res) => {
       );
     }
 
-    // Ensure admin is present in the new slab's views array (for downline visibility)
     if (!isUserInViews) {
       const updatedViews = Array.isArray(slabViews) ? [...slabViews, companyAdmin.id] : [companyAdmin.id];
       await dbService.update(
@@ -1055,8 +1029,7 @@ const assignSlabToCompany = async (req, res) => {
     }
 
     const originalCompanyId = slab.companyId;
-    
-    // 1) Try to copy existing commissions from the slab's original company
+
     if (originalCompanyId !== companyId) {
       const existingCommissions = await dbService.findAll(model.commSlab, {
         slabId: slabId,
@@ -1094,7 +1067,6 @@ const assignSlabToCompany = async (req, res) => {
       }
     }
 
-    // 2) If still no commissions for this slab + company, create default ones
     const companyCommissions = await dbService.findAll(model.commSlab, {
       slabId: slabId,
       companyId: companyId
@@ -1135,9 +1107,7 @@ const assignSlabToCompany = async (req, res) => {
       }
     }
 
-    // Create subscription record when slab is assigned
     if (!isSlabAssigned) {
-      // Check if subscription already exists
       const existingSubscription = await dbService.findOne(model.subscription, {
         slabId: slabId,
         userId: companyAdmin.id,
@@ -1145,11 +1115,9 @@ const assignSlabToCompany = async (req, res) => {
       });
 
       if (!existingSubscription) {
-        // New subscription - deduct subscriptionAmount from req.user.id's mainWallet
         const subscriptionAmount = parseFloat(slab.subscriptionAmount || 0);
-        
+
         if (subscriptionAmount > 0) {
-          // Get or create wallet for req.user.id
           let requesterWallet = await dbService.findOne(model.wallet, {
             refId: req.user.id,
             companyId: req.user.companyId
@@ -1169,27 +1137,24 @@ const assignSlabToCompany = async (req, res) => {
           }
 
           const openingBalance = parseFloat(requesterWallet.mainWallet || 0);
-          
+
           if (openingBalance < subscriptionAmount) {
-            return res.failure({ 
-              message: `Insufficient wallet balance. Required: ${subscriptionAmount}, Available: ${openingBalance}` 
+            return res.failure({
+              message: `Insufficient wallet balance. Required: ${subscriptionAmount}, Available: ${openingBalance}`
             });
           }
 
           const closingBalance = parseFloat((openingBalance - subscriptionAmount).toFixed(2));
-          
-          // Generate transaction ID
+
           const requesterCompany = await dbService.findOne(model.company, { id: req.user.companyId });
           const transactionID = generateTransactionID(requesterCompany?.companyName || 'SYSTEM');
 
-          // Update wallet
           await dbService.update(
             model.wallet,
             { refId: req.user.id, companyId: req.user.companyId },
             { mainWallet: closingBalance, updatedBy: req.user.id }
           );
 
-          // Create wallet history entry
           await dbService.createOne(model.walletHistory, {
             refId: req.user.id,
             companyId: req.user.companyId,
@@ -1207,7 +1172,6 @@ const assignSlabToCompany = async (req, res) => {
           });
         }
 
-        // Create subscription record
         await dbService.createOne(model.subscription, {
           slabId: slabId,
           userId: companyAdmin.id,
@@ -1217,8 +1181,6 @@ const assignSlabToCompany = async (req, res) => {
           isActive: true
         });
       } else {
-        // Subscription already exists - no deduction needed
-        // Update existing subscription status to SUCCESS
         await dbService.update(
           model.subscription,
           {
