@@ -281,6 +281,7 @@ const findAllUsers = async (req, res) => {
                 kycSteps: userData.kycSteps || 0,
                 status: userData.isActive ? 'Active' : 'Inactive',
                 lock: isLocked,
+                aepsOnboardingStatus: userData.isAepsOnbaordingStatus,
                 onboardingTokenExpiresAt,
                 wallet: {
                     mainWallet: walletData.mainWallet || 0,

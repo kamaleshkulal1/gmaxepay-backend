@@ -23,6 +23,7 @@ const calcSlabAmount = (slab, base) => {
 
 const isZupaySuccess = (response) => {
     if (!response) return false;
+    if (response.status === 'FAILED') return false;
     if (response.errors && response.errors.length > 0) return false;
     if (!response.data) return false;
 
@@ -365,7 +366,7 @@ const ekycBiometric = async (req, res) => {
         const statusResponse = await zupayService.statusCheck(statusPayload);
 
         const { e_kyc_status, remarks } = apiResponse.data;
-        const ekycDone = e_kyc_status === 'EKYC_COMPLETE';
+        let ekycDone = e_kyc_status === 'EKYC_COMPLETE';
 
         // Get status from statusResponse if successful, otherwise fallback to e_kyc_status logic
         let onBoardStatus = onboarding.onboardingStatus;
@@ -379,6 +380,10 @@ const ekycBiometric = async (req, res) => {
             onboardRemarks = remarks;
         }
 
+        if (onBoardStatus === 'ACTIVE') {
+            ekycDone = true;
+        }
+
         await dbService.update(
             model.zupayOnboarding,
             { id: onboarding.id },
@@ -390,6 +395,12 @@ const ekycBiometric = async (req, res) => {
                 onboardingStatus: onBoardStatus,
                 onboardRemarks: onboardRemarks
             }
+        );
+
+        await dbService.update(
+            model.user,
+            { id: existingUser.id },
+            { isAepsOnbaordingStatus: onBoardStatus === 'ACTIVE' }
         );
 
         return res.success({
@@ -439,8 +450,15 @@ const checkOnboardingStatus = async (req, res) => {
             { id: onboarding.id },
             {
                 onboardingStatus: onBoard_status,
-                onboardRemarks: onBoard_remarks
+                onboardRemarks: onBoard_remarks,
+                isEkycCompleted: isActive
             }
+        );
+
+        await dbService.update(
+            model.user,
+            { id: existingUser.id },
+            { isAepsOnbaordingStatus: isActive }
         );
 
         return res.success({

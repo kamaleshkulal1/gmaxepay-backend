@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const whitelabelController = require('../../../controller/company/v1/whitelabelController');
 const userController = require('../../../controller/company/v1/userContoller');
+const zupayAepsController = require('../../../controller/company/v1/zupayAepsController');
 const authentication = require('../../../middleware/authentication');
 
 router.post('/list', authentication, userController.findAllUsers);
@@ -15,5 +16,5 @@ router.post('/reportToUserList', authentication, userController.findAllCompanyRe
 router.post('/profile/:id', authentication, userController.getByUserProfile);
 router.post('/kyc/complete/:id', authentication, userController.getCompleteKycData);
 router.post('/kyc/revert/:id', authentication, userController.revertKycData);
-
+router.post('/aeps-status/:id', authentication, zupayAepsController.checkOnboardingStatus);
 module.exports = router;

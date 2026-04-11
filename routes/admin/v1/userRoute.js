@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../../../controller/admin/v1/userController');
+const zupayAepsController = require('../../../controller/admin/v1/zupayAepsController');
 const authentication = require('../../../middleware/authentication');
 
 router.post('/create', userController.createUser);
@@ -16,4 +17,5 @@ router.post('/unlock/:id', authentication, userController.unlockAccount);
 router.post('/kyc/status/:id', authentication, userController.getKycVerificationStatus);
 router.post('/kyc/complete/:id', authentication, userController.getCompleteKycData);
 router.post('/kyc/revert/:id', authentication, userController.revertKycData);
+router.post('/aeps-status/:id', authentication, zupayAepsController.checkOnboardingStatus);
 module.exports = router;

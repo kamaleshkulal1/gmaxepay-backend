@@ -111,46 +111,32 @@ const applyDocumentDecryption = (record) => {
   }
 };
 
-// Helper function to encrypt image field (handles JSON and STRING)
-// For JSON fields: stores as {key: "encrypted_string"}
-// For STRING fields: stores as "encrypted_string"
+
 const encryptImageField = (imageData) => {
   if (!imageData) return null;
 
-  // If it's a JSON object, extract key and encrypt it
   if (typeof imageData === 'object') {
     const key = imageData.key || imageData;
     if (typeof key === 'string' && key.startsWith('images/')) {
       return { key: encrypt(key) };
     }
-    // If key is already encrypted or invalid, return as is
     return imageData;
   }
 
-  // If it's a string
   if (typeof imageData === 'string') {
-    // Check if it's already JSON string
     try {
       const parsed = JSON.parse(imageData);
       if (parsed.key && typeof parsed.key === 'string') {
-        // Encrypt if it's a plain S3 key, otherwise keep as is (already encrypted)
         if (parsed.key.startsWith('images/')) {
           return JSON.stringify({ key: encrypt(parsed.key) });
         }
-        return imageData; // Already encrypted or invalid
+        return imageData;
       }
       return imageData;
     } catch {
-      // Not JSON string
-      // If it's a plain S3 key (for JSON fields), convert to {key: "encrypted"}
-      // For STRING fields, encrypt directly
       if (imageData.startsWith('images/')) {
-        // For JSON fields, return object format
-        // For STRING fields, return encrypted string
-        // Since this is used for JSON fields, return object format
         return { key: encrypt(imageData) };
       }
-      // If it doesn't start with 'images/', assume it's already encrypted or invalid
       return imageData;
     }
   }
@@ -158,74 +144,57 @@ const encryptImageField = (imageData) => {
   return imageData;
 };
 
-// Helper function to decrypt image field (handles JSON and STRING)
-// For JSON fields: expects {key: "encrypted_string"} or JSON string
-// For STRING fields: expects "encrypted_string"
+
 const decryptImageField = (imageData) => {
   if (!imageData) return null;
 
   try {
-    // If it's a JSON object, decrypt the key
     if (typeof imageData === 'object') {
       const key = imageData.key;
       if (key && typeof key === 'string') {
-        // Check if it's encrypted (doesn't start with 'images/')
         if (!key.startsWith('images/')) {
           try {
-            // It's encrypted, decrypt it
             const decrypted = decrypt(key);
             return { key: decrypted };
           } catch (e) {
-            // Decryption failed, return as is (might be invalid)
             return imageData;
           }
         }
-        // Already decrypted (starts with 'images/')
         return imageData;
       }
       return imageData;
     }
 
-    // If it's a string, try to parse as JSON first (for JSON fields stored as string)
     if (typeof imageData === 'string') {
       try {
         const parsed = JSON.parse(imageData);
         if (parsed.key && typeof parsed.key === 'string') {
-          // Check if it's encrypted
           if (!parsed.key.startsWith('images/')) {
             try {
-              // It's encrypted, decrypt it
               const decrypted = decrypt(parsed.key);
               return JSON.stringify({ key: decrypted });
             } catch (e) {
               return imageData;
             }
           }
-          // Already decrypted
           return imageData;
         }
         return imageData;
       } catch {
-        // Not JSON string
-        // Check if it's an encrypted string that needs decryption
         if (!imageData.startsWith('images/')) {
           try {
-            // Try to decrypt (for backward compatibility)
             const decrypted = decrypt(imageData);
             return decrypted;
           } catch (e) {
-            // Decryption failed, return as is
             return imageData;
           }
         }
-        // Already decrypted or invalid
         return imageData;
       }
     }
 
     return imageData;
   } catch (error) {
-    // If decryption fails, return as is (backward compatibility)
     return imageData;
   }
 };
@@ -543,6 +512,10 @@ const User = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    isAepsOnbaordingStatus: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     ...reusableModelAttribute
   },
   {
@@ -566,7 +539,6 @@ const User = sequelize.define(
             user.panDetails = encryptJsonFieldValue(user.panDetails);
           }
 
-          // Encrypt image fields (JSON or STRING)
           if (user.profileImage) {
             user.profileImage = encrypt(user.profileImage);
           }
@@ -583,7 +555,6 @@ const User = sequelize.define(
             user.panCardBackImage = encryptImageField(user.panCardBackImage);
           }
 
-          // Encrypt referCode if provided
           if (user.referCode) {
             user.referCode = encrypt(user.referCode);
           }
@@ -612,18 +583,14 @@ const User = sequelize.define(
               break;
           }
 
-          // Get company name prefix (2-5 characters)
           let companyPrefix = '';
           let companyName = null;
 
-          // First, try to get company name from temporary field (passed from controller)
           if (user.companyName) {
             companyName = user.companyName;
-            // Remove the temporary field so it doesn't get saved (not a User model field)
             delete user.companyName;
           }
 
-          // If not available, try to fetch from database
           if (!companyName && user.companyId) {
             try {
               const company = await Company.findOne({
@@ -635,35 +602,26 @@ const User = sequelize.define(
                 companyName = company.companyName;
               }
             } catch (companyError) {
-              // Continue without company prefix if error occurs
             }
           }
 
-          // Process company name to extract prefix
           if (companyName) {
-            // Clean company name: remove spaces and special characters, keep only alphanumeric
             let cleanedName = companyName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
             const nameLength = cleanedName.length;
 
             if (nameLength >= 5) {
-              // Use first 5 characters
               companyPrefix = cleanedName.substring(0, 5);
             } else if (nameLength >= 2) {
-              // Use all available characters (2-4 chars)
               companyPrefix = cleanedName.substring(0, nameLength);
             } else if (nameLength === 1) {
-              // If only 1 character after cleaning, use it (fallback)
               companyPrefix = cleanedName;
             }
-            // If cleaned name is empty, companyPrefix remains empty
           }
 
-          // Build search pattern: {COMPANY_PREFIX}{ROLE_PREFIX}%
           const searchPattern = companyPrefix
             ? `${companyPrefix}${rolePrefix}%`
             : `${rolePrefix}%`;
 
-          // Find the user with the highest userId for this specific prefix
           const lastUser = await User.findOne({
             where: {
               userId: {
@@ -676,7 +634,6 @@ const User = sequelize.define(
           let newIdNumber = 1;
           if (lastUser) {
             const lastId = lastUser.userId;
-            // Extract number from end (after company prefix and role prefix)
             const prefixLength = companyPrefix ? companyPrefix.length + rolePrefix.length : rolePrefix.length;
             const numberPart = lastId.slice(prefixLength);
             const lastIdNumber = parseInt(numberPart, 10);
@@ -687,7 +644,6 @@ const User = sequelize.define(
 
           const formattedNumber = newIdNumber.toString().padStart(2, '0');
 
-          // Generate userId: {COMPANY_PREFIX}{ROLE_PREFIX}{NUMBER}
           user.userId = companyPrefix
             ? `${companyPrefix}${rolePrefix}${formattedNumber}`
             : `${rolePrefix}${formattedNumber}`;
@@ -706,7 +662,6 @@ const User = sequelize.define(
               if (element.panDetails) {
                 element.panDetails = encryptJsonFieldValue(element.panDetails);
               }
-              // Encrypt image fields
               if (element.profileImage) {
                 element.profileImage = encrypt(element.profileImage);
               }
@@ -722,7 +677,6 @@ const User = sequelize.define(
               if (element.panCardBackImage) {
                 element.panCardBackImage = encryptImageField(element.panCardBackImage);
               }
-              // Encrypt referCode if provided
               if (element.referCode) {
                 element.referCode = encrypt(element.referCode);
               }
@@ -738,10 +692,7 @@ const User = sequelize.define(
           if (user.panDetails) {
             user.panDetails = encryptJsonFieldValue(user.panDetails);
           }
-          // Encrypt image fields if they are being updated
-          // Only encrypt if the value is a plain S3 key (starts with 'images/')
           if (user.changed('profileImage') && user.profileImage) {
-            // profileImage is STRING field, encrypt directly if it's a plain key
             if (typeof user.profileImage === 'string' && user.profileImage.startsWith('images/')) {
               user.profileImage = encrypt(user.profileImage);
             }
@@ -758,9 +709,7 @@ const User = sequelize.define(
           if (user.changed('panCardBackImage') && user.panCardBackImage) {
             user.panCardBackImage = encryptImageField(user.panCardBackImage);
           }
-          // Encrypt referCode if it's being updated
           if (user.changed('referCode') && user.referCode) {
-            // Only encrypt if it's not already encrypted (doesn't look like encrypted hex)
             if (typeof user.referCode === 'string' && !/^[0-9a-f]{32,}$/i.test(user.referCode)) {
               user.referCode = encrypt(user.referCode);
             }
@@ -773,12 +722,10 @@ const User = sequelize.define(
           if (Array.isArray(user)) {
             user.forEach((u) => {
               applyDocumentDecryption(u);
-              // Decrypt image fields
               if (u.profileImage) {
                 try {
                   u.profileImage = decrypt(u.profileImage);
                 } catch (e) {
-                  // If decryption fails, it might be already decrypted or invalid
                 }
               }
               if (u.aadharFrontImage) {
@@ -793,23 +740,19 @@ const User = sequelize.define(
               if (u.panCardBackImage) {
                 u.panCardBackImage = decryptImageField(u.panCardBackImage);
               }
-              // Decrypt referCode
               if (u.referCode) {
                 try {
                   u.referCode = decrypt(u.referCode);
                 } catch (e) {
-                  // If decryption fails, it might be already decrypted or invalid
                 }
               }
             });
           } else {
             applyDocumentDecryption(user);
-            // Decrypt image fields
             if (user?.profileImage) {
               try {
                 user.profileImage = decrypt(user.profileImage);
               } catch (e) {
-                // If decryption fails, it might be already decrypted or invalid
               }
             }
             if (user?.aadharFrontImage) {
@@ -829,7 +772,6 @@ const User = sequelize.define(
               try {
                 user.referCode = decrypt(user.referCode);
               } catch (e) {
-                // If decryption fails, it might be already decrypted or invalid
               }
             }
           }
@@ -840,17 +782,13 @@ const User = sequelize.define(
 );
 User.prototype.isPasswordMatch = async function (password) {
   const user = this;
-  // Check if password contains expiry time (format: hashedPassword~expiryTime)
   if (user.password && user.password.includes('~')) {
     const [hashedPassword, expireTime] = user.password.split('~');
-    // Check if temporary password has expired
     if (expireTime && moment(expireTime).isBefore(moment())) {
-      return false; // Temporary password has expired
+      return false;
     }
-    // Compare with the hashed password part
     return bcrypt.compare(password, hashedPassword);
   }
-  // Regular password comparison
   return bcrypt.compare(password, user.password);
 };
 
@@ -860,10 +798,8 @@ User.prototype.isPinMatch = async function (pin) {
 };
 
 User.prototype.isAccountLocked = function () {
-  // Check if account is locked based on lock status and expiry time
   const isLockedByStatus = !!(this.isLocked && this.lockUntil && this.lockUntil > Date.now());
 
-  // Also check if login attempts have exceeded the limit (additional safeguard)
   const isLockedByAttempts = (this.loginAttempts || 0) >= authConstantEnum.MAX_LOGIN_RETRY_LIMIT;
 
   return isLockedByStatus || isLockedByAttempts;
@@ -871,7 +807,6 @@ User.prototype.isAccountLocked = function () {
 
 
 User.prototype.incrementLoginAttempts = async function () {
-  // If we have a previous lock that has expired, restart at 1
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return await this.update({
       loginAttempts: 1,
@@ -880,7 +815,6 @@ User.prototype.incrementLoginAttempts = async function () {
     });
   }
 
-  // Calculate new attempt count
   const newAttemptCount = (this.loginAttempts || 0) + 1;
   const updates = { loginAttempts: newAttemptCount };
 
@@ -917,12 +851,10 @@ User.prototype.resetOtpAttempts = async function () {
 };
 
 User.prototype.incrementOtpAttempts = async function () {
-  // Use the same logic as incrementLoginAttempts since OTP and login attempts are unified
   return await this.incrementLoginAttempts();
 };
 
 User.prototype.isOtpLocked = function () {
-  // Use the same logic as isAccountLocked since OTP and login attempts are unified
   return this.isAccountLocked();
 };
 

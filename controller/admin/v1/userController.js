@@ -43,15 +43,13 @@ const createUser = async (req, res) => {
     while (createAttempts < maxAttempts) {
       try {
         createdUser = await dbService.createOne(model.user, dataToCreate);
-        break; // Success, exit loop
+        break;
       } catch (createError) {
         createAttempts++;
         if (createError.name === 'SequelizeUniqueConstraintError' && createError.fields && createError.fields.userId && createAttempts < maxAttempts) {
-          // If collision on userId, retry (the model hook will generate a new ID)
           console.log(`userId collision detected during admin user creation, retrying attempt ${createAttempts + 1}...`);
           continue;
         }
-        // If it's a different error or we've run out of attempts, throw it
         throw createError;
       }
     }
@@ -254,7 +252,6 @@ const findAllUsers = async (req, res) => {
       }
     }
 
-    // Transform the response
     const transformedData = usersArray.map((userData) => {
       const companyData = userData.company || {};
       const walletData = userData.wallet || {};
@@ -295,6 +292,7 @@ const findAllUsers = async (req, res) => {
         status: userData.isActive ? 'Active' : 'Inactive',
         lock: isLocked,
         onboardingTokenExpiresAt,
+        aepsOnboardingStatus: userData.isAepsOnbaordingStatus,
         wallet: {
           mainWallet: walletData.mainWallet || 0,
           apes1Wallet: walletData.apes1Wallet || 0,
