@@ -92,17 +92,14 @@ const findAllUsers = async (req, res) => {
     let options = {};
     let query = {};
 
-    // Build query from request body
     if (dataToFind.query) {
       query = { ...dataToFind.query };
     }
 
-    // Filter by userRole (2=white label, 3=master distributor, 4=distributor, 5=retailer)
     if (!query.userRole) {
       query.userRole = { [Op.in]: [2, 3, 4, 5] };
     }
 
-    // Apply company filter
     const userRole = req.user.userRole;
     const userCompanyId = req.user.companyId;
     if (!(userRole === 1 && userCompanyId === 1)) {
@@ -112,7 +109,6 @@ const findAllUsers = async (req, res) => {
       }
     }
 
-    // Handle kycStatus filter
     if (query.kycStatus) {
       const kycStatusValue = query.kycStatus;
 
@@ -133,12 +129,10 @@ const findAllUsers = async (req, res) => {
       }
     }
 
-    // Handle options
     if (dataToFind.options !== undefined) {
       options = { ...dataToFind.options };
     }
 
-    // Handle customSearch
     if (dataToFind.customSearch) {
       const keys = Object.keys(dataToFind.customSearch);
       const orConditions = [];
@@ -168,7 +162,6 @@ const findAllUsers = async (req, res) => {
       }
     }
 
-    // Include company, wallet, and onboardingToken information
     options.include = [
       {
         model: model.company,
@@ -197,14 +190,16 @@ const findAllUsers = async (req, res) => {
       }
     ];
 
-    // Use pagination
     let foundUsers = await dbService.paginate(model.user, query, options);
+
+    const totalUsers = await model.user.count({ where: query });
 
     if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
       return res.success({
         message: 'Users Retrieved Successfully',
         data: [],
         total: 0,
+        totalUsers,
         paginator: {
           itemCount: 0,
           perPage: options.paginate || 25,
@@ -214,7 +209,6 @@ const findAllUsers = async (req, res) => {
       });
     }
 
-    // Map userRole to readable names
     const roleMap = {
       2: 'WL',
       3: 'MD',
@@ -222,7 +216,6 @@ const findAllUsers = async (req, res) => {
       5: 'RE'
     };
 
-    // Normalize users and collect slabIds
     const usersArray = foundUsers.data.map((user) =>
       user.toJSON ? user.toJSON() : user
     );
@@ -306,6 +299,7 @@ const findAllUsers = async (req, res) => {
       message: 'Users Retrieved Successfully',
       data: transformedData,
       total: foundUsers.total,
+      totalUsers,
       paginator: foundUsers.paginator
     });
   } catch (error) {
