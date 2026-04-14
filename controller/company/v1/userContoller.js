@@ -203,14 +203,12 @@ const findAllUsers = async (req, res) => {
 
     let foundUsers = await dbService.paginate(model.user, query, options);
 
-    const totalUsers = await model.user.count({ where: query });
 
     if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
-      return res.success({
+      return res.status(200).send({
         message: 'Users Retrieved Successfully',
         data: [],
         total: 0,
-        totalUsers,
         paginator: {
           itemCount: 0,
           perPage: options.paginate || 25,
@@ -281,11 +279,10 @@ const findAllUsers = async (req, res) => {
       };
     });
 
-    return res.success({
+    return res.status(200).send({
       message: 'Users Retrieved Successfully',
       data: companiesWithUsers,
       total: foundUsers.total,
-      totalUsers,
       paginator: foundUsers.paginator
     });
   } catch (error) {

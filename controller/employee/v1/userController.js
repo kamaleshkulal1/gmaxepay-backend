@@ -193,7 +193,7 @@ const findAllUsers = async (req, res) => {
         let foundUsers = await dbService.paginate(model.user, query, options);
 
         if (!foundUsers || !foundUsers.data || foundUsers.data.length === 0) {
-            return res.success({
+            return res.status(200).send({
                 message: 'Users Retrieved Successfully',
                 data: [],
                 total: 0,
@@ -292,7 +292,7 @@ const findAllUsers = async (req, res) => {
             };
         });
 
-        return res.success({
+        return res.status(200).send({
             message: 'Users Retrieved Successfully',
             data: transformedData,
             total: foundUsers.total,
