@@ -1035,11 +1035,16 @@ const a1topupCallback = async (req, res) => {
                 amount
             });
         } else {
-            console.error('[A1 TopUp Callback] Failed to update status:', result.message, {
-                orderid: systemOrderId,
-                txid,
-                status: newStatus
-            });
+            if (!systemOrderId || !status) {
+                console.error('[A1 TopUp Callback] Missing required parameters:', { txid, status, orderid, trsnactionId });
+                try {
+                    await axios.get('https://admin-api.villagepe.in/a1-top/callback', { params: payload });
+                    console.log('[A1 TopUp Callback] Missing params: Payload forwarded to villagepe');
+                } catch (forwardError) {
+                    console.error('[A1 TopUp Callback] Forwarding error:', forwardError.message);
+                }
+                return res.send('OK');
+            }
         }
 
         return res.send('OK');
