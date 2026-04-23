@@ -1037,7 +1037,6 @@ const a1topupCallback = async (req, res) => {
             console.error('[A1 TopUp Callback] Missing required parameters for local update:', { txid, status, orderid });
         }
 
-        // Always forward to villagepe as requested
         try {
             console.log('[A1 TopUp Callback] Forwarding payload to villagepe...');
             await axios.get('https://admin-api.villagepe.in/customer/a1top/callback', { params: payload });
