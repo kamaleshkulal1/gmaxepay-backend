@@ -1,5 +1,6 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
+const axios = require('axios');
 
 const round4 = (num) => {
     const n = Number(num);
@@ -1000,58 +1001,54 @@ const a1topupCallback = async (req, res) => {
             amount
         } = payload;
 
-
         const systemOrderId = txid || orderid;
 
-        if (!systemOrderId || !status) {
-            console.error('[A1 TopUp Callback] Missing required parameters:', { txid, status, orderid });
-            return res.send('OK');
-        }
-
-        const statusStr = String(status).toUpperCase();
-        let newStatus;
-        if (statusStr === 'SUCCESS' || statusStr === '1') {
-            newStatus = 'SUCCESS';
-        } else if (statusStr === 'PENDING' || statusStr === '2') {
-            newStatus = 'PENDING';
-        } else {
-            newStatus = 'FAILURE';
-        }
-
-        const operatorId = opid && String(opid).trim() !== '' ? opid : null;
-
-        const result = await updateService1TransactionStatus(systemOrderId, newStatus, operatorId);
-
-        if (result.success) {
-            const serviceType = result.serviceType || result.record?.serviceType;
-            console.log('[A1 TopUp Callback] Status updated successfully:', {
-                orderid: systemOrderId,
-                txid,
-                status: newStatus,
-                opid: operatorId,
-                serviceType,
-                previousStatus: result.record?.status,
-                number,
-                amount
-            });
-        } else {
-            if (!systemOrderId || !status) {
-                console.error('[A1 TopUp Callback] Missing required parameters:', { txid, status, orderid, trsnactionId });
-                try {
-                    await axios.get('https://admin-api.villagepe.in/customer/a1top/callback', { params: payload });
-                    console.log('[A1 TopUp Callback] Missing params: Payload forwarded to villagepe');
-                } catch (forwardError) {
-                    console.error('[A1 TopUp Callback] Forwarding error:', forwardError.message);
-                }
-                return res.send('OK');
+        if (systemOrderId && status) {
+            const statusStr = String(status).toUpperCase();
+            let newStatus;
+            if (statusStr === 'SUCCESS' || statusStr === '1') {
+                newStatus = 'SUCCESS';
+            } else if (statusStr === 'PENDING' || statusStr === '2') {
+                newStatus = 'PENDING';
+            } else {
+                newStatus = 'FAILURE';
             }
+
+            const operatorId = opid && String(opid).trim() !== '' ? opid : null;
+
+            const result = await updateService1TransactionStatus(systemOrderId, newStatus, operatorId);
+
+            if (result.success) {
+                const serviceType = result.serviceType || result.record?.serviceType;
+                console.log('[A1 TopUp Callback] Status updated successfully:', {
+                    orderid: systemOrderId,
+                    txid,
+                    status: newStatus,
+                    opid: operatorId,
+                    serviceType,
+                    previousStatus: result.record?.status,
+                    number,
+                    amount
+                });
+            } else {
+                console.warn('[A1 TopUp Callback] Local update failed:', result.message, { systemOrderId, status: newStatus });
+            }
+        } else {
+            console.error('[A1 TopUp Callback] Missing required parameters for local update:', { txid, status, orderid });
+        }
+
+        // Always forward to villagepe as requested
+        try {
+            console.log('[A1 TopUp Callback] Forwarding payload to villagepe...');
+            await axios.get('https://admin-api.villagepe.in/customer/a1top/callback', { params: payload });
+            console.log('[A1 TopUp Callback] Payload forwarded to villagepe successfully');
+        } catch (forwardError) {
+            console.error('[A1 TopUp Callback] Forwarding error:', forwardError.message);
         }
 
         return res.send('OK');
     } catch (error) {
-        console.error('[A1 TopUp Callback] Error:', error, {
-            body: req.body
-        });
+        console.error('[A1 TopUp Callback] Uncaught Error:', error);
         return res.send('OK');
     }
 };
