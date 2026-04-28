@@ -1038,9 +1038,12 @@ const a1topupCallback = async (req, res) => {
         }
 
         try {
-            console.log('[A1 TopUp Callback] Forwarding payload to villagepe...');
-            await axios.get('https://admin-api.villagepe.in/customer/a1top/callback', { params: payload });
-            console.log('[A1 TopUp Callback] Payload forwarded to villagepe successfully');
+            console.log('[A1 TopUp Callback] Forwarding payload to villagepe APIs...');
+            await Promise.allSettled([
+                axios.get('https://admin-api.villagepe.in/customer/a1top/callback', { params: payload }),
+                axios.get('https://pro-api.villagepepro.com/retailer/recharge/callback', { params: payload })
+            ]);
+            console.log('[A1 TopUp Callback] Payload forwarded to villagepe APIs successfully');
         } catch (forwardError) {
             console.error('[A1 TopUp Callback] Forwarding error:', forwardError.message);
         }
