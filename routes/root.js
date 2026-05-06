@@ -20,5 +20,6 @@ router.use('/user', require('./user/index'));
 
 router.use('/employee', require('./employee/index'));
 
+router.use('/extend', require('./extend/index'));
 
 module.exports = router;
