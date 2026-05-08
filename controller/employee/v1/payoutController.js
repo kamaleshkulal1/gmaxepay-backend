@@ -102,6 +102,32 @@ const getAllPayoutHistory = async (req, res) => {
 
         const result = await dbService.paginate(model.payoutHistory, query, options);
 
+        if (result && result.data && result.data.length > 0) {
+            const refIds = [...new Set(result.data.map(item => item.refId).filter(id => id))];
+            if (refIds.length > 0) {
+                const users = await dbService.findAll(model.user, {
+                    id: { [Op.in]: refIds }
+                }, {
+                    attributes: ['id', 'name', 'userRole']
+                });
+
+                const userMap = users.reduce((acc, user) => {
+                    acc[user.id] = user;
+                    return acc;
+                }, {});
+
+                result.data = result.data.map(item => {
+                    const itemData = item.toJSON ? item.toJSON() : item;
+                    const userData = userMap[itemData.refId];
+                    return {
+                        ...itemData,
+                        userName: userData ? userData.name : 'N/A',
+                        userRole: userData ? userData.userRole : 'N/A'
+                    };
+                });
+            }
+        }
+
         return res.success({
             message: 'Payout history retrieved successfully',
             data: result?.data || [],
