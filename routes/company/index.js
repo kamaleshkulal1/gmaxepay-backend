@@ -13,4 +13,6 @@ router.use('/subscription', require('./v1/subscriptionRoutes'));
 router.use('/bank', require('./v1/bankRoutes'));
 router.use('/payout', require('./v1/payoutRoutes'));
 router.use('/dashboard', require('./v1/dashboardRoutes'));
+router.use('/aepsAPISwitch', require('./v1/aepsAPISwitchRoutes'));
+
 module.exports = router;

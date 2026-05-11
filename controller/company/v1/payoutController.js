@@ -4,6 +4,7 @@ const { generateTransactionID } = require('../../../utils/transactionID');
 const runpaisa = require('../../../services/runpaisa');
 const paynidipro = require('../../../services/paynidipro');
 const zuelpayApi = require('../../../services/zuelpayApi');
+const aslApi = require('../../../services/asl');
 const { Op } = require('sequelize');
 
 const round4 = (num) => {
@@ -331,6 +332,36 @@ const payout = async (req, res) => {
                     if (apiResponse.order_id) payoutHistoryData.orderId = apiResponse.order_id;
                     if (apiResponse.bank_ref) payoutHistoryData.utrn = apiResponse.bank_ref;
                     if (apiResponse.message) payoutHistoryData.statusMessage = apiResponse.message;
+                }
+            } else if (activePayout.name === 'ASL') {
+                console.log('Sending Request to ASL API');
+                const payload = {
+                    mobile: existingUser.mobileNo || existingUser.mobile || existingUser.phone || '9999999999',
+                    accountNumber: customerBank.accountNumber,
+                    beneficiaryName: customerBank.beneficiaryName,
+                    bankName: customerBank.bankName || 'Bank',
+                    ifscCode: customerBank.ifsc,
+                    amount: payoutAmount,
+                    paymentMode: paymentMode,
+                    latitude: latitude || '0.0',
+                    longitude: longitude || '0.0',
+                    agentTransactionId: transactionID
+                };
+                apiResponse = await aslApi.aslAepsPayOut(payload);
+                console.log('ASL Response:', JSON.stringify(apiResponse));
+
+                if (apiResponse) {
+                    const isSuccess = apiResponse.status === 'SUCCESS' || apiResponse.status === 'success';
+                    if (isSuccess) {
+                        payoutHistoryData.status = 'SUCCESS';
+                    } else if (apiResponse.status === 'PENDING' || apiResponse.status === 'pending') {
+                        payoutHistoryData.status = 'PENDING';
+                    } else {
+                        payoutHistoryData.status = 'FAILED';
+                    }
+                    if (apiResponse.orderid || apiResponse.orderId) payoutHistoryData.orderId = apiResponse.orderid || apiResponse.orderId;
+                    if (apiResponse.bankref || apiResponse.bank_ref) payoutHistoryData.utrn = apiResponse.bankref || apiResponse.bank_ref;
+                    if (apiResponse.remark || apiResponse.message) payoutHistoryData.statusMessage = apiResponse.remark || apiResponse.message;
                 }
             } else {
                 return res.failure({ message: `Payout service ${activePayout.name} is not implemented.` });

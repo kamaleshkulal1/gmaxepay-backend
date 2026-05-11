@@ -123,6 +123,7 @@ db.bbpsPaymentInfo = require('./bbpsPaymentInfo');
 // db.apiUser = require('./apiUser');
 // db.apiUserWallet = require('./apiUserWallet');
 // db.payInPaymentChannel = require('./payInPaymentChannel');
+db.aepsAPISwitch = require('./aepsAPISwitch');
 
 db.user.belongsTo(db.user, {
   foreignKey: 'addedBy',
@@ -623,6 +624,16 @@ db.company.hasMany(db.payoutList, {
   foreignKey: 'companyId',
   as: 'payoutLists'
 });
+
+db.aepsAPISwitch.belongsTo(db.company, {
+  foreignKey: 'companyId',
+  as: 'company'
+});
+db.company.hasMany(db.aepsAPISwitch, {
+  foreignKey: 'companyId',
+  as: 'aepsAPISwitches'
+});
+
 
 db.payoutHistory.belongsTo(db.customerBank, {
   foreignKey: 'customerBankId',
