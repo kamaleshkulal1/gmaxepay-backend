@@ -14,13 +14,13 @@ let AepsAPISwitch = sequelize.define('AepsAPISwitch', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    aepsType: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
-    },
-    companyId: {
-        type: DataTypes.INTEGER,
-        allowNull: true
     },
     addedBy: {
         type: DataTypes.INTEGER,

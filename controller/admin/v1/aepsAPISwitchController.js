@@ -38,18 +38,26 @@ const createAepsAPISwitch = async (req, res) => {
         if (![1].includes(req.user.userRole)) {
             return res.failure({ message: 'You are not authorized to create AEPS API switch' });
         }
-        const { name, isActive, companyId } = req.body;
+        const { name, isActive, aepsType } = req.body;
         if (!name) {
             return res.failure({ message: 'Name is required' });
         }
 
         const dataToCreate = {
             name,
+            aepsType: aepsType || null,
             isActive: isActive || false,
-            companyId: companyId || null,
             addedBy: req.user.id,
             updatedBy: req.user.id
         };
+
+        // If activating this one, deactivate all others of the same aepsType
+        if (dataToCreate.isActive) {
+            await dbService.update(model.aepsAPISwitch,
+                { aepsType: dataToCreate.aepsType },
+                { isActive: false, updatedBy: req.user.id }
+            );
+        }
 
         const result = await dbService.createOne(model.aepsAPISwitch, dataToCreate);
 
@@ -63,47 +71,7 @@ const createAepsAPISwitch = async (req, res) => {
     }
 }
 
-const switchAepsAPI = async (req, res) => {
-    try {
-        if (![1].includes(req.user.userRole)) {
-            return res.failure({ message: 'You are not authorized to switch AEPS API' });
-        }
 
-        const { id, companyId } = req.body;
-        if (!id) {
-            return res.failure({ message: 'API Switch ID is required' });
-        }
-
-        const query = {};
-        if (companyId) {
-            query.companyId = companyId;
-        } else {
-            query.companyId = null; // Global
-        }
-
-        // Deactivate all others for this company/global
-        await dbService.update(model.aepsAPISwitch,
-            {
-                ...query,
-                id: { [Op.ne]: id }
-            },
-            { isActive: false, updatedBy: req.user.id }
-        );
-
-        // Activate the chosen one
-        await dbService.update(model.aepsAPISwitch,
-            { id: id },
-            { isActive: true, updatedBy: req.user.id }
-        );
-
-        return res.success({
-            message: 'AEPS API switched successfully'
-        });
-    } catch (error) {
-        console.log('Switch AEPS API error:', error);
-        return res.failure({ message: error.message || 'Internal server error' });
-    }
-}
 
 const updateAepsAPISwitch = async (req, res) => {
     try {
@@ -115,7 +83,25 @@ const updateAepsAPISwitch = async (req, res) => {
             return res.failure({ message: 'ID is required' });
         }
 
+        // Find existing record to know aepsType if not provided
+        const existingRecord = await dbService.findOne(model.aepsAPISwitch, { id });
+        if (!existingRecord) {
+            return res.failure({ message: 'AEPS API Switch not found' });
+        }
+
         dataToUpdate.updatedBy = req.user.id;
+        const targetAepsType = dataToUpdate.aepsType || existingRecord.aepsType;
+
+        // If setting this one to active, deactivate all others of the same type
+        if (dataToUpdate.isActive === true) {
+            await dbService.update(model.aepsAPISwitch,
+                {
+                    aepsType: targetAepsType,
+                    id: { [Op.ne]: id }
+                },
+                { isActive: false, updatedBy: req.user.id }
+            );
+        }
 
         const result = await dbService.update(model.aepsAPISwitch, { id }, dataToUpdate);
 
@@ -153,7 +139,6 @@ const deleteAepsAPISwitch = async (req, res) => {
 module.exports = {
     getAllAepsAPISwitch,
     createAepsAPISwitch,
-    switchAepsAPI,
     updateAepsAPISwitch,
     deleteAepsAPISwitch
 };

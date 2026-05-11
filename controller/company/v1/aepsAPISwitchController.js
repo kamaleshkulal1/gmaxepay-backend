@@ -4,19 +4,13 @@ const { Op } = require('sequelize');
 
 const getActiveAepsAPI = async (req, res) => {
     try {
-        const companyId = req.user.companyId;
-
-        let activeSwitch = await dbService.findOne(model.aepsAPISwitch, {
-            companyId: companyId,
-            isActive: true
-        });
-
-        if (!activeSwitch) {
-            activeSwitch = await dbService.findOne(model.aepsAPISwitch, {
-                companyId: null,
-                isActive: true
-            });
+        const { aepsType } = req.query;
+        const baseQuery = { isActive: true };
+        if (aepsType) {
+            baseQuery.aepsType = aepsType;
         }
+
+        let activeSwitch = await dbService.findOne(model.aepsAPISwitch, baseQuery);
 
         return res.success({
             message: 'Active AEPS API retrieved successfully',

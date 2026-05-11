@@ -625,14 +625,7 @@ db.company.hasMany(db.payoutList, {
   as: 'payoutLists'
 });
 
-db.aepsAPISwitch.belongsTo(db.company, {
-  foreignKey: 'companyId',
-  as: 'company'
-});
-db.company.hasMany(db.aepsAPISwitch, {
-  foreignKey: 'companyId',
-  as: 'aepsAPISwitches'
-});
+
 
 
 db.payoutHistory.belongsTo(db.customerBank, {
