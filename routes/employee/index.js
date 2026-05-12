@@ -13,4 +13,6 @@ router.use('/service', require('./v1/servicesRoutes'));
 router.use('/payout', require('./v1/payoutRoutes'));
 router.use('/user', require('./v1/userRoute'));
 router.use('/ekyc-hub', require('./v1/ekycHubRoutes'));
+router.use('/aepsAPISwitch', require('./v1/aepsAPISwitchRoutes'));
+
 module.exports = router;
