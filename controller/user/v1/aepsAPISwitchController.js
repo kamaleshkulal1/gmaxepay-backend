@@ -10,7 +10,7 @@ const getActiveAepsAPI = async (req, res) => {
             baseQuery.aepsType = aepsType;
         }
 
-        let activeSwitch = await dbService.findOne(model.aepsAPISwitch, baseQuery);
+        let activeSwitch = await dbService.findAll(model.aepsAPISwitch, baseQuery);
 
         return res.success({
             message: 'Active AEPS API retrieved successfully',
