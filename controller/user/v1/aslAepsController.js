@@ -416,68 +416,68 @@ const aepsTransaction = async (req, res) => {
         console.log('payload', payload);
 
         // ── MOCK API RESPONSE (ASL API call commented out for testing) ─────────
-        // const aepsResponse = await asl.aslAepsTransaction(payload);
-        let aepsResponse;
-        if (normalizedTxnType === 'CW') {
-            aepsResponse = {
-                status: 'SUCCESS',
-                data: {
-                    terminalId: 'FA012123',
-                    requestTransactionTime: '01/01/2018 23:59:59',
-                    transactionAmount: amountNumber,
-                    transactionStatus: 'successful',
-                    balanceAmount: 200,
-                    bankRRN: '765765656857',
-                    transactionType: 'CW',
-                    FingpayTransactionId: 'CW00010291117175529',
-                    merchantTxnId: generatedTxnId,
-                    responseCode: '00'
-                },
-                message: 'successful'
-            };
-        } else if (normalizedTxnType === 'BE') {
-            aepsResponse = {
-                status: 'SUCCESS',
-                data: {
-                    terminalId: 'FA274530',
-                    requestTransactionTime: '01/05/2020 00:04:32',
-                    transactionAmount: 590.0,
-                    transactionStatus: 'successful',
-                    balanceAmount: 1500.0,
-                    bankRRN: '012200836920',
-                    transactionType: 'BE',
-                    fpTransactionId: 'BEBD0491833010520000431984I',
-                    merchantTxnId: generatedTxnId,
-                    errorCode: null,
-                    errorMessage: null,
-                    merchantTransactionId: null,
-                    responseCode: '00'
-                },
-                message: 'successful'
-            };
-        } else if (normalizedTxnType === 'MS') {
-            aepsResponse = {
-                status: 'SUCCESS',
-                data: {
-                    terminalId: 'FA049053',
-                    requestTransactionTime: '03/01/2020 16:56:53',
-                    transactionStatus: 'successful',
-                    balanceAmount: 995.88,
-                    bankRRN: '000316273914',
-                    transactionType: 'MS',
-                    fpTransactionId: '000316273914',
-                    merchantTxnId: generatedTxnId,
-                    errorCode: null,
-                    errorMessage: null,
-                    miniStatementStructureModel: [
-                        { date: '31/12/2019', txnType: 'Cr', amount: ' 1.00', narration: ' INF/INFT/021841' },
-                        { date: '31/12/2019', txnType: 'Cr', amount: ' 1.00', narration: ' INF/INFT/021841' }
-                    ],
-                    responseCode: '00'
-                },
-                message: 'successful'
-            };
-        }
+        const aepsResponse = await asl.aslAepsTransaction(payload);
+        // let aepsResponse;
+        // if (normalizedTxnType === 'CW') {
+        //     aepsResponse = {
+        //         status: 'SUCCESS',
+        //         data: {
+        //             terminalId: 'FA012123',
+        //             requestTransactionTime: '01/01/2018 23:59:59',
+        //             transactionAmount: amountNumber,
+        //             transactionStatus: 'successful',
+        //             balanceAmount: 200,
+        //             bankRRN: '765765656857',
+        //             transactionType: 'CW',
+        //             FingpayTransactionId: 'CW00010291117175529',
+        //             merchantTxnId: generatedTxnId,
+        //             responseCode: '00'
+        //         },
+        //         message: 'successful'
+        //     };
+        // } else if (normalizedTxnType === 'BE') {
+        //     aepsResponse = {
+        //         status: 'SUCCESS',
+        //         data: {
+        //             terminalId: 'FA274530',
+        //             requestTransactionTime: '01/05/2020 00:04:32',
+        //             transactionAmount: 590.0,
+        //             transactionStatus: 'successful',
+        //             balanceAmount: 1500.0,
+        //             bankRRN: '012200836920',
+        //             transactionType: 'BE',
+        //             fpTransactionId: 'BEBD0491833010520000431984I',
+        //             merchantTxnId: generatedTxnId,
+        //             errorCode: null,
+        //             errorMessage: null,
+        //             merchantTransactionId: null,
+        //             responseCode: '00'
+        //         },
+        //         message: 'successful'
+        //     };
+        // } else if (normalizedTxnType === 'MS') {
+        //     aepsResponse = {
+        //         status: 'SUCCESS',
+        //         data: {
+        //             terminalId: 'FA049053',
+        //             requestTransactionTime: '03/01/2020 16:56:53',
+        //             transactionStatus: 'successful',
+        //             balanceAmount: 995.88,
+        //             bankRRN: '000316273914',
+        //             transactionType: 'MS',
+        //             fpTransactionId: '000316273914',
+        //             merchantTxnId: generatedTxnId,
+        //             errorCode: null,
+        //             errorMessage: null,
+        //             miniStatementStructureModel: [
+        //                 { date: '31/12/2019', txnType: 'Cr', amount: ' 1.00', narration: ' INF/INFT/021841' },
+        //                 { date: '31/12/2019', txnType: 'Cr', amount: ' 1.00', narration: ' INF/INFT/021841' }
+        //             ],
+        //             responseCode: '00'
+        //         },
+        //         message: 'successful'
+        //     };
+        // }
         const safeJsonStringify = (value) => {
             try {
                 const seen = new WeakSet();
