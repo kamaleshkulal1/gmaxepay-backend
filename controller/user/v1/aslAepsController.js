@@ -866,23 +866,16 @@ const aepsTransaction = async (req, res) => {
 
         // Separate AEPS history (for reporting) — always written for all statuses
         const creditToApply = (isSuccess || isPending) ? initiatorCredit : 0;
-        if (model.aepsHistory) {
-            await model.aepsHistory.create({
+        if (model.practomindAepsHistory) {
+            await model.practomindAepsHistory.create({
                 refId: req.user.id,
                 companyId: req.user.companyId,
-                operator: operator?.operatorName || normalizedBankiin,
-                bankiin: normalizedBankiin,
-                aepsTxnType: normalizedTxnType,
-                captureType: normalizedCaptureType,
-                amount: amountNumber,
+                serviceType: 'NSDL',
+                transactionType: normalizedTxnType,
+                transactionAmount: amountNumber,
+                balanceAmount: innerData?.balanceAmount || normalizedGatewayResponse?.data?.balanceAmount || normalizedGatewayResponse?.balanceAmount || null,
                 transactionId: safeRequest.transactionId,
                 merchantTransactionId,
-                consumerNumber: consumerNumber ? String(consumerNumber) : null,
-                consumerAadhaarNumber,
-                ipAddress: resolvedIpAddress,
-                latitude: txLatitude !== undefined && txLatitude !== null ? Number(txLatitude) : null,
-                longitude: txLongitude !== undefined && txLongitude !== null ? Number(txLongitude) : null,
-                transactionCompleteAddress,
                 bankRRN:
                     innerData?.bankRRN ||
                     innerData?.bankRrn ||
@@ -893,8 +886,13 @@ const aepsTransaction = async (req, res) => {
                     innerData?.FingpayTransactionId ||
                     normalizedGatewayResponse?.fpTransactionId ||
                     normalizedGatewayResponse?.FingpayTransactionId,
-                responseCode,
-                status: paymentStatus,
+                terminalId: innerData?.terminalId || normalizedGatewayResponse?.data?.terminalId || null,
+                responseCode: responseCode,
+                errorCode: innerData?.errorCode || normalizedGatewayResponse?.data?.errorCode || null,
+                errorMessage: innerData?.errorMessage || normalizedGatewayResponse?.data?.errorMessage || null,
+                transactionStatus: transactionStatus || paymentStatus,
+                status: isSuccess,
+                paymentStatus,
                 message:
                     normalizedGatewayResponse?.message ||
                     innerData?.errorMessage ||
@@ -902,8 +900,14 @@ const aepsTransaction = async (req, res) => {
                     innerData?.message,
                 requestPayload: safeRequest,
                 responsePayload: normalizedGatewayResponse,
-                openingAepsWallet,
-                closingAepsWallet,
+                ministatement: miniStatement ? (typeof miniStatement === 'string' ? miniStatement : JSON.stringify(miniStatement)) : null,
+                consumerAadhaarNumber,
+                mobileNumber: consumerNumber ? String(consumerNumber) : null,
+                bankIin: normalizedBankiin,
+                latitude: txLatitude !== undefined && txLatitude !== null ? Number(txLatitude) : null,
+                longitude: txLongitude !== undefined && txLongitude !== null ? Number(txLongitude) : null,
+                openingAeps2Wallet: openingAepsWallet,
+                closingAeps2Wallet: closingAepsWallet,
                 credit: creditToApply,
                 superadminComm: superAdminCommAmt,
                 whitelabelComm: companyCommAmt,
@@ -1066,7 +1070,7 @@ const checkStatus = async (req, res) => {
         }
 
         // ── Lookup existing AEPS history record for this txnId ───────────────
-        const aepsHistoryRecord = await dbService.findOne(model.aepsHistory, { transactionId: txnId });
+        const aepsHistoryRecord = await dbService.findOne(model.practomindAepsHistory, { transactionId: txnId });
 
         // ── Call the ASL check-status API ────────────────────────────────────
         const statusPayload = {
@@ -1096,7 +1100,7 @@ const checkStatus = async (req, res) => {
 
         // ── If FAILURE: reverse all AEPS wallet commissions ──────────────────
         if (isFailure && aepsHistoryRecord) {
-            const currentStatus = aepsHistoryRecord.status;
+            const currentStatus = aepsHistoryRecord.paymentStatus;
 
             // Only reverse if the original transaction was SUCCESS or PENDING (not already FAILED/REFUNDED)
             if (currentStatus === 'SUCCESS' || currentStatus === 'PENDING') {
@@ -1140,7 +1144,7 @@ const checkStatus = async (req, res) => {
                                 companyId: history.companyId,
                                 walletType: 'AEPS1',
                                 operator: history.operator || '',
-                                remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
+                                remark: `Reversal - AEPS ${aepsHistoryRecord.transactionType || ''} Failed`,
                                 amount: history.amount || 0,
                                 comm: 0,
                                 surcharge: 0,
@@ -1181,7 +1185,7 @@ const checkStatus = async (req, res) => {
                                 companyId: aepsHistoryRecord.companyId,
                                 walletType: 'AEPS1',
                                 operator: aepsHistoryRecord.operator || '',
-                                remark: `Reversal - AEPS ${aepsHistoryRecord.aepsTxnType || ''} Failed`,
+                                remark: `Reversal - AEPS ${aepsHistoryRecord.transactionType || ''} Failed`,
                                 amount: aepsHistoryRecord.amount || 0,
                                 comm: 0, surcharge: 0,
                                 openingAmt: currentAeps, closingAmt: newAeps,
@@ -1195,8 +1199,9 @@ const checkStatus = async (req, res) => {
                 }
 
                 // Update aepsHistory record to FAILED with zeroed commissions
-                await dbService.update(model.aepsHistory, { transactionId: txnId }, {
-                    status: 'FAILED',
+                await dbService.update(model.practomindAepsHistory, { transactionId: txnId }, {
+                    status: false,
+                    paymentStatus: 'FAILED',
                     superadminComm: 0,
                     whitelabelComm: 0,
                     masterDistributorCom: 0,
@@ -1226,9 +1231,10 @@ const checkStatus = async (req, res) => {
         // ── SUCCESS or still pending ─────────────────────────────────────────
         if (isSuccess) {
             // Update aepsHistory status to SUCCESS if it was PENDING
-            if (aepsHistoryRecord && aepsHistoryRecord.status === 'PENDING') {
-                await dbService.update(model.aepsHistory, { transactionId: txnId }, {
-                    status: 'SUCCESS',
+            if (aepsHistoryRecord && aepsHistoryRecord.paymentStatus === 'PENDING') {
+                await dbService.update(model.practomindAepsHistory, { transactionId: txnId }, {
+                    status: true,
+                    paymentStatus: 'SUCCESS',
                     updatedBy: existingUser.id
                 });
             }
@@ -2218,12 +2224,12 @@ const recentBanks = async (req, res) => {
         }
 
         // Get all AEPS transactions for this user, ordered by most recent first
-        const aepsTransactions = await dbService.findAll(model.aepsHistory, {
+        const aepsTransactions = await dbService.findAll(model.practomindAepsHistory, {
             refId: req.user.id,
             companyId: req.user.companyId,
-            bankiin: { [Op.ne]: null }
+            bankIin: { [Op.ne]: null }
         }, {
-            attributes: ['bankiin', 'createdAt'],
+            attributes: ['bankIin', 'createdAt'],
             sort: { createdAt: -1 }
         });
 
@@ -2232,7 +2238,7 @@ const recentBanks = async (req, res) => {
         const seenBankIINs = new Set();
 
         for (const txn of aepsTransactions) {
-            const bankIIN = txn.bankiin ? String(txn.bankiin).trim() : null;
+            const bankIIN = txn.bankIin ? String(txn.bankIin).trim() : null;
             if (bankIIN && !seenBankIINs.has(bankIIN)) {
                 seenBankIINs.add(bankIIN);
                 uniqueBankIINs.push(bankIIN);
@@ -2459,7 +2465,7 @@ const aepsTransactionHistory = async (req, res) => {
         }
 
         // Use paginate for consistent pagination response
-        const result = await dbService.paginate(model.aepsHistory, query, options);
+        const result = await dbService.paginate(model.practomindAepsHistory, query, options);
 
         return res.success({
             message: 'AEPS transaction history retrieved successfully',

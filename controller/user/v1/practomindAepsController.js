@@ -1148,6 +1148,11 @@ const cashWithdrawal = async (req, res) => {
                 requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno, transactionAmount: amountNumber, transactionId },
                 responsePayload: response, ipAddress: req.ip || req.connection?.remoteAddress,
                 openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
+                serviceType: 'ICICI',
+                terminalId: response?.result?.terminalId || null,
+                responseCode: response?.result?.responseCode || null,
+                errorCode: response?.result?.errorCode || null,
+                errorMessage: response?.result?.errorMessage || null,
                 superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt,
                 superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
                 ...aepsAvail, addedBy: existingUser.id
@@ -1304,6 +1309,11 @@ const balanceEnquiry = async (req, res) => {
             },
             responsePayload: response,
             ipAddress: req.ip || req.connection?.remoteAddress,
+            serviceType: 'ICICI',
+            terminalId: response?.result?.terminalId || response?.result?.result?.terminalId || null,
+            responseCode: response?.result?.responseCode || response?.result?.result?.responseCode || null,
+            errorCode: response?.result?.errorCode || response?.result?.result?.errorCode || null,
+            errorMessage: response?.result?.errorMessage || response?.result?.result?.errorMessage || null,
             addedBy: existingUser.id
         };
 
@@ -1703,6 +1713,11 @@ const miniStatement = async (req, res) => {
                 requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno, transactionId },
                 responsePayload: response, ipAddress: req.ip || req.connection?.remoteAddress,
                 openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
+                serviceType: 'ICICI',
+                terminalId: response?.result?.terminalId || null,
+                responseCode: response?.result?.responseCode || null,
+                errorCode: response?.result?.errorCode || null,
+                errorMessage: response?.result?.errorMessage || null,
                 superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt,
                 superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
                 ...aepsAvail, addedBy: existingUser.id

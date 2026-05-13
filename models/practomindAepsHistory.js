@@ -275,6 +275,30 @@ const PractomindAepsHistory = sequelize.define(
       allowNull: true,
       comment: 'Normalised payment status: SUCCESS | FAILED | PENDING'
     },
+    serviceType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'ICICI'
+    },
+    terminalId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null
+    },
+    responseCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null
+    },
+    errorCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null
+    },
+    errorMessage: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     ...reusableModelAttribute
   },
   {
