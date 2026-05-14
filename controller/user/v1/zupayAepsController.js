@@ -397,11 +397,6 @@ const ekycBiometric = async (req, res) => {
             }
         );
 
-        await dbService.update(
-            model.user,
-            { id: existingUser.id },
-            { isAepsOnbaordingStatus: onBoardStatus === 'ACTIVE' }
-        );
 
         return res.success({
             message: isZupaySuccess(statusResponse) ? (statusResponse.meta?.message || 'Onboarding status updated') : (apiResponse.meta?.message || 'eKYC verification completed'),
