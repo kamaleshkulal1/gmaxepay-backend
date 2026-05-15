@@ -588,6 +588,74 @@ const aepsTransaction = async (req, res) => {
             consumerNumber
         };
 
+        // ── Data Extraction from Gateway Response ───────────────────────────
+        // Use bank details already fetched during validation
+        let bankName = null;
+        let bankLogo = null;
+        if (bankDetails) {
+            bankName = bankDetails.bankName;
+            bankLogo = imageService.getImageUrl(bankDetails.bankLogo, false);
+        }
+
+        // Get company logo URL - check company.logo first, then companyImage table
+        let companyLogo = null;
+        if (existingCompany?.logo) {
+            companyLogo = imageService.getImageUrl(existingCompany.logo, false);
+        } else if (existingCompany?.id) {
+            // Try to get logo from companyImage table (type: signature, subtype: logo)
+            const companyLogoImage = await dbService.findOne(model.companyImage, {
+                companyId: existingCompany.id,
+                type: 'signature',
+                subtype: 'logo',
+                isActive: true
+            });
+            if (companyLogoImage?.s3Key) {
+                companyLogo = imageService.getImageUrl(companyLogoImage.s3Key, false);
+            }
+        }
+
+        // Extract transaction date/time from gateway response
+        const transactionDateTimeRaw = innerData?.requestTransactionTime ||
+            normalizedGatewayResponse?.data?.requestTransactionTime ||
+            null;
+
+        // Format transaction date/time (if from gateway, use as-is; otherwise use current time)
+        let transactionDateTime = transactionDateTimeRaw;
+        let transactionTime = transactionDateTimeRaw;
+        if (!transactionDateTimeRaw) {
+            const now = new Date();
+            // Format as DD/MM/YYYY HH:MM:SS
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            transactionDateTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+            transactionTime = `${hours}:${minutes}:${seconds}`;
+        } else {
+            // If gateway provides time, extract just time part if needed
+            const timeMatch = transactionDateTimeRaw.match(/(\d{2}:\d{2}:\d{2})/);
+            if (timeMatch) {
+                transactionTime = timeMatch[1];
+            }
+        }
+
+        // Extract remaining balance from gateway response
+        const remainingBalance = innerData?.balanceAmount ||
+            normalizedGatewayResponse?.data?.balanceAmount ||
+            normalizedGatewayResponse?.balanceAmount ||
+            null;
+
+        const miniStatement = innerData?.miniStatementStructureModel ||
+            normalizedGatewayResponse?.data?.miniStatementStructureModel ||
+            aepsResponse?.miniStatementStructureModel ||
+            null;
+
+        // Extract client_transaction_id for transactionId
+        const clientTransactionId = normalizedGatewayResponse?.client_transaction_id ||
+            payload.transactionId;
+
         // Resolve complete address from latitude/longitude (best-effort: do not fail transaction if Google fails)
         let transactionCompleteAddress = null;
         try {
@@ -873,8 +941,8 @@ const aepsTransaction = async (req, res) => {
                 serviceType: 'NSDL',
                 transactionType: normalizedTxnType,
                 transactionAmount: amountNumber,
-                balanceAmount: innerData?.balanceAmount || normalizedGatewayResponse?.data?.balanceAmount || normalizedGatewayResponse?.balanceAmount || null,
-                transactionId: safeRequest.transactionId,
+                balanceAmount: remainingBalance,
+                transactionId: clientTransactionId,
                 merchantTransactionId,
                 bankRRN:
                     innerData?.bankRRN ||
@@ -942,72 +1010,6 @@ const aepsTransaction = async (req, res) => {
             });
         }
 
-        // Use bank details already fetched during validation
-        let bankName = null;
-        let bankLogo = null;
-        if (bankDetails) {
-            bankName = bankDetails.bankName;
-            bankLogo = imageService.getImageUrl(bankDetails.bankLogo, false);
-        }
-
-        // Get company logo URL - check company.logo first, then companyImage table
-        let companyLogo = null;
-        if (existingCompany?.logo) {
-            companyLogo = imageService.getImageUrl(existingCompany.logo, false);
-        } else if (existingCompany?.id) {
-            // Try to get logo from companyImage table (type: signature, subtype: logo)
-            const companyLogoImage = await dbService.findOne(model.companyImage, {
-                companyId: existingCompany.id,
-                type: 'signature',
-                subtype: 'logo',
-                isActive: true
-            });
-            if (companyLogoImage?.s3Key) {
-                companyLogo = imageService.getImageUrl(companyLogoImage.s3Key, false);
-            }
-        }
-
-        // Extract transaction date/time from gateway response
-        const transactionDateTimeRaw = innerData?.requestTransactionTime ||
-            normalizedGatewayResponse?.data?.requestTransactionTime ||
-            null;
-
-        // Format transaction date/time (if from gateway, use as-is; otherwise use current time)
-        let transactionDateTime = transactionDateTimeRaw;
-        let transactionTime = transactionDateTimeRaw;
-        if (!transactionDateTimeRaw) {
-            const now = new Date();
-            // Format as DD/MM/YYYY HH:MM:SS
-            const day = String(now.getDate()).padStart(2, '0');
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const year = now.getFullYear();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            transactionDateTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-            transactionTime = `${hours}:${minutes}:${seconds}`;
-        } else {
-            // If gateway provides time, extract just time part if needed
-            const timeMatch = transactionDateTimeRaw.match(/(\d{2}:\d{2}:\d{2})/);
-            if (timeMatch) {
-                transactionTime = timeMatch[1];
-            }
-        }
-
-        // Extract remaining balance from gateway response
-        const remainingBalance = innerData?.balanceAmount ||
-            normalizedGatewayResponse?.data?.balanceAmount ||
-            normalizedGatewayResponse?.balanceAmount ||
-            null;
-
-        const miniStatement = innerData?.miniStatementStructureModel ||
-            normalizedGatewayResponse?.data?.miniStatementStructureModel ||
-            aepsResponse?.miniStatementStructureModel ||
-            null;
-
-        // Extract client_transaction_id for transactionId
-        const clientTransactionId = normalizedGatewayResponse?.client_transaction_id ||
-            payload.transactionId;
 
         // Format response with all required fields
         const responseData = {

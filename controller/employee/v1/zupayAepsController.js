@@ -99,7 +99,7 @@ const checkOnboardingStatus = async (req, res) => {
                 refId: existingUser.id,
                 companyId: existingUser.companyId,
                 name: 'AEPS1 Activated',
-                msg: 'your AEPS1 account activated'
+                msg: 'Your AEPS1 account has been activated successfully.'
             });
         }
 
