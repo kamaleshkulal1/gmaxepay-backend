@@ -1,7 +1,4 @@
 const admin = require('firebase-admin');
-const path = require('path');
-const fs = require('fs');
-const serviceAccountPath = path.join(__dirname, '../config/serviceAccountKey.json');
 
 const firebaseConfig = {
   projectId: process.env.FIREBASE_PROJECT_ID,
@@ -14,18 +11,12 @@ if (firebaseConfig.projectId && firebaseConfig.privateKey && firebaseConfig.clie
     credential: admin.credential.cert(firebaseConfig)
   });
   console.log('Firebase Admin initialized successfully using environment variables');
-} else if (fs.existsSync(serviceAccountPath)) {
-  const serviceAccount = require(serviceAccountPath);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-  console.log('Firebase Admin initialized successfully using serviceAccountKey.json');
 } else {
-  console.warn('Firebase credentials not found (neither in .env nor in config/serviceAccountKey.json). Push notifications will be disabled.');
+  console.warn('Firebase credentials not found in .env. Push notifications will be disabled.');
 }
 
 
-const sendPushNotification = async (deviceToken, title, body, data = {}) => {
+const sendPushNotification = async (deviceToken, title, body, imageUrl = null, data = {}) => {
   if (!admin.apps.length) {
     console.warn('Firebase Admin not initialized. Skipping push notification.');
     return;
@@ -43,6 +34,11 @@ const sendPushNotification = async (deviceToken, title, body, data = {}) => {
     data: data,
     token: deviceToken
   };
+
+  if (imageUrl) {
+    message.notification.imageUrl = imageUrl;
+    message.notification.image = imageUrl;
+  }
 
   console.log('Sending push notification:', JSON.stringify(message, null, 2));
 

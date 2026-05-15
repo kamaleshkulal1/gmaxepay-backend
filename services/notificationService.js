@@ -13,12 +13,18 @@ const createNotification = async (data) => {
         });
 
         // Send push notification if user has a device token
-        const user = await dbService.findOne(model.user, { id: data.refId }, { attributes: ['deviceToken'] });
+        const user = await dbService.findOne(model.user, { id: data.refId }, { attributes: ['deviceToken', 'companyId'] });
+        
         if (user && user.deviceToken) {
+            // Fetch company branding for white-labeling
+            const company = await dbService.findOne(model.company, { id: user.companyId }, { attributes: ['logo', 'companyName'] });
+            const logoUrl = company ? company.logo : null;
+
             await sendPushNotification(
                 user.deviceToken,
-                data.name || 'System Notification',
-                data.msg
+                data.name || company?.companyName || 'System Notification',
+                data.msg,
+                logoUrl
             ).catch(err => console.error('Push Notification Error:', err));
         }
 
