@@ -8,8 +8,7 @@ const getAllNotifications = async (req, res) => {
 
     const baseQuery = {
       refId: userId,
-      companyId: companyId,
-      isDeleted: false
+      companyId: companyId
     };
 
     // Get counts
