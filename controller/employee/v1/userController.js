@@ -57,6 +57,7 @@ const createUser = async (req, res) => {
         if (!createdUser) {
             return res.failure({ message: 'Failed to create User' });
         }
+
         let userToReturn = {
             ...createdUser.dataValues
         };

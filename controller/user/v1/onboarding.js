@@ -22,6 +22,7 @@ const { Op } = require('sequelize');
 const key = Buffer.from(process.env.AES_KEY, 'hex');
 const { generateUniqueReferCode } = require('../../../utils/generateUniqueReferCode');
 const { generateUserToken, decryptUserToken } = require('../../../utils/userToken');
+const notificationService = require('../../../services/notificationService');
 
 const getCompanyFromHeaders = async (req) => {
   const companyId = req.get('x-company-id');
@@ -777,6 +778,13 @@ const sendSmsMobile = async (req, res) => {
     if (!newUser) {
       return res.failure({ message: 'Failed to create user account' });
     }
+
+    await notificationService.createNotification({
+      refId: newUser.id,
+      companyId: newUser.companyId,
+      name: 'AEPS1 Activated',
+      msg: 'your AEPS1 account activated'
+    });
 
     // Create wallet for the new user (only if wallet doesn't exist)
     const existingWallet = await dbService.findOne(model.wallet, {

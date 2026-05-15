@@ -28,5 +28,6 @@ router.use('/matm', require('./v1/matmRoute'));
 router.use('/mpos', require('./v1/mposRoute'));
 router.use('/aeps3', require('./v1/zupayAepsRoute'));
 router.use('/aepsAPISwitch', require('./v1/aepsAPISwitchRoutes'));
+router.use('/notification', require('./v1/notificationRoute'));
 
 module.exports = router;

@@ -4,6 +4,7 @@ const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const zupayService = require('../../../services/zupayService');
 const imageService = require('../../../services/imageService');
+const notificationService = require('../../../services/notificationService');
 const { generateTransactionID } = require('../../../utils/transactionID');
 const ZUPAY_MERCHANT_CODE = process.env.ZUPAY_MERCHANT_CODE;
 const ZUPAY_PIPE = process.env.ZUPAY_PIPE;
@@ -455,6 +456,15 @@ const checkOnboardingStatus = async (req, res) => {
             { id: existingUser.id },
             { isAepsOnbaordingStatus: isActive }
         );
+
+        if (isActive) {
+            await notificationService.createNotification({
+                refId: existingUser.id,
+                companyId: existingUser.companyId,
+                name: 'AEPS1 Activated',
+                msg: 'your AEPS1 account activated'
+            });
+        }
 
         return res.success({
             message: apiResponse.meta?.message || 'Onboarding status fetched',

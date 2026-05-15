@@ -14,5 +14,6 @@ router.use('/bank', require('./v1/bankRoutes'));
 router.use('/payout', require('./v1/payoutRoutes'));
 router.use('/dashboard', require('./v1/dashboardRoutes'));
 router.use('/aepsAPISwitch', require('./v1/aepsAPISwitchRoutes'));
+router.use('/notification', require('./v1/notificationRoute'));
 
 module.exports = router;

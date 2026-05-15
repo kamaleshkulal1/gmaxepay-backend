@@ -17,6 +17,20 @@ let notification = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
+    refId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: 'user',
+        key: 'id'
+      },
+    },
+    companyId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: 'company',
+        key: 'id'
+      }
+    },
     name: {
       type: DataTypes.STRING
     },

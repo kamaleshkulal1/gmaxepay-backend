@@ -1,6 +1,7 @@
 const model = require('../../../models');
 const dbService = require('../../../utils/dbService');
 const zupayService = require('../../../services/zupayService');
+const notificationService = require('../../../services/notificationService');
 const ZUPAY_PIPE = process.env.ZUPAY_PIPE;
 
 const isZupaySuccess = (response) => {
@@ -92,6 +93,15 @@ const checkOnboardingStatus = async (req, res) => {
             { id: existingUser.id },
             { isAepsOnbaordingStatus: isActive }
         );
+
+        if (isActive) {
+            await notificationService.createNotification({
+                refId: existingUser.id,
+                companyId: existingUser.companyId,
+                name: 'AEPS1 Activated',
+                msg: 'your AEPS1 account activated'
+            });
+        }
 
         return res.success({
             message: apiResponse.meta?.message || 'Onboarding status fetched',
