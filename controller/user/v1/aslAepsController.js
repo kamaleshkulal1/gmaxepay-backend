@@ -935,6 +935,17 @@ const aepsTransaction = async (req, res) => {
         // Separate AEPS history (for reporting) — always written for all statuses
         const creditToApply = (isSuccess || isPending) ? initiatorCredit : 0;
         if (model.practomindAepsHistory) {
+            // Find matching Practomind bank to satisfy foreign key constraint (targetKey: aeps_bank_id)
+            let practomindBankId = null;
+            try {
+                if (model.practomindBankList) {
+                    const pBank = await dbService.findOne(model.practomindBankList, { iinno: normalizedBankiin });
+                    practomindBankId = pBank?.aeps_bank_id || null;
+                }
+            } catch (pBankErr) {
+                practomindBankId = null;
+            }
+
             await model.practomindAepsHistory.create({
                 refId: req.user.id,
                 companyId: req.user.companyId,
@@ -971,7 +982,7 @@ const aepsTransaction = async (req, res) => {
                 ministatement: miniStatement ? (typeof miniStatement === 'string' ? miniStatement : JSON.stringify(miniStatement)) : null,
                 consumerAadhaarNumber,
                 mobileNumber: consumerNumber ? String(consumerNumber) : null,
-                bankIin: normalizedBankiin,
+                bankIin: practomindBankId, // Using resolved bank ID to satisfy foreign key
                 latitude: txLatitude !== undefined && txLatitude !== null ? Number(txLatitude) : null,
                 longitude: txLongitude !== undefined && txLongitude !== null ? Number(txLongitude) : null,
                 openingAeps2Wallet: openingAepsWallet,
@@ -981,7 +992,7 @@ const aepsTransaction = async (req, res) => {
                 whitelabelComm: companyCommAmt,
                 masterDistributorCom: mdCommAmt,
                 distributorCom: distCommAmt,
-                retailerCom: retailerCommAmt,
+                retailerCom: retailerComAmt,
                 superadminCommTDS: superAdminTDS,
                 whitelabelCommTDS: whitelabelTDS,
                 masterDistributorComTDS: masterDistTDS,
