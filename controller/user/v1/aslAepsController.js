@@ -992,7 +992,7 @@ const aepsTransaction = async (req, res) => {
                 whitelabelComm: companyCommAmt,
                 masterDistributorCom: mdCommAmt,
                 distributorCom: distCommAmt,
-                retailerCom: retailerComAmt,
+                retailerCom: retailerCommAmt,
                 superadminCommTDS: superAdminTDS,
                 whitelabelCommTDS: whitelabelTDS,
                 masterDistributorComTDS: masterDistTDS,
