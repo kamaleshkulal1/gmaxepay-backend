@@ -7,7 +7,7 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/dbConnection');
 const sequelizePaginate = require('sequelize-paginate');
 const sequelizeTransforms = require('sequelize-transforms');
-const { reusableAttributes } = require('../utils/common');
+const { reusableModelAttribute } = require('../utils/common');
 
 let notification = sequelize.define(
   'notification',
@@ -41,7 +41,7 @@ let notification = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
-    ...reusableAttributes
+    ...reusableModelAttribute
   },
   {
     freezeTableName: true
