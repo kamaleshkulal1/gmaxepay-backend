@@ -830,7 +830,7 @@ const loginUser = async (
 };
 
 
-const verifyMobileOTP = async (token, mobileOtp, companyId) => {
+const verifyMobileOTP = async (token, mobileOtp, companyId, deviceToken) => {
   try {
     if (!token || !mobileOtp) {
       return {
@@ -868,6 +868,11 @@ const verifyMobileOTP = async (token, mobileOtp, companyId) => {
         flag: true,
         msg: 'User does not exist!'
       };
+    }
+
+    // Update device token if provided
+    if (deviceToken) {
+      await dbService.update(model.user, { id: user.id }, { deviceToken });
     }
 
     // Check if account is locked due to failed login attempts (password or OTP)
@@ -1899,161 +1904,13 @@ const setupMPIN = async (dataToken, newMPIN, confirmMPIN, companyId, latitude, l
   }
 };
 
-const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAddress) => {
-  try {
-    if (!dataToken || !mpin) {
-      return {
-        flag: true,
-        msg: 'token and MPIN are required!'
-      };
-    }
 
-    // Validate and decrypt dataToken with expiration check
-    const tokenValidation = await validateAndDecryptDataToken(dataToken);
-    if (!tokenValidation.isValid) {
-      return {
-        flag: true,
-        msg: tokenValidation.error
-      };
-    }
 
-    const { userId } = tokenValidation;
-    const loginTimestamp = tokenValidation.userDetail?.timestamp;
-
-    const where = {
-      id: userId,
-      isActive: true,
-      isDeleted: false
-    };
-
-    if (companyId !== null) {
-      where.companyId = companyId;
-    }
-    const user = await dbService.findOne(model.user, where);
-    if (!user) {
-      return {
-        flag: true,
-        msg: 'User does not exist!'
-      };
-    }
-
-    // Check if account is locked due to failed login attempts
-    if (user.isAccountLocked()) {
-      return {
-        flag: true,
-        msg: `Account is locked due to multiple failed login attempts. Please contact admin for assistance.`
-      };
-    }
-
-    if (!user.secureKey) {
-      return {
-        flag: true,
-        msg: 'MPIN is not set for this user!'
-      };
-    }
-
-    // Validate MPIN format (4 digits)
-    const mpinRegex = /^\d{4}$/;
-    if (!mpinRegex.test(mpin)) {
-      return {
-        flag: true,
-        msg: 'MPIN must be exactly 4 digits!'
-      };
-    }
-
-    // Verify MPIN
-    const isMPINValid = await user.isPinMatch(mpin);
-    if (!isMPINValid) {
-      // Increment login attempts and potentially lock account
-      await user.incrementLoginAttempts();
-
-      // Reload user to get updated loginAttempts and lock status
-      const updatedUser = await dbService.findOne(model.user, { id: user.id });
-
-      // Check if account is now locked after this attempt
-      if (updatedUser.isAccountLocked() || updatedUser.loginAttempts >= MAX_LOGIN_RETRY_LIMIT) {
-        return {
-          flag: true,
-          msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
-        };
-      }
-
-      // Calculate remaining attempts (MAX_LOGIN_RETRY_LIMIT = 3)
-      // After 1st wrong: loginAttempts = 1, remaining = 2
-      // After 2nd wrong: loginAttempts = 2, remaining = 1
-      // After 3rd wrong: account is locked (handled above)
-      const remainingAttempts = MAX_LOGIN_RETRY_LIMIT - updatedUser.loginAttempts;
-
-      // Ensure remaining attempts is never negative
-      if (remainingAttempts <= 0) {
-        return {
-          flag: true,
-          msg: 'Account locked due to multiple failed MPIN attempts. Please contact admin for assistance.'
-        };
-      }
-
-      return {
-        flag: true,
-        msg: `Invalid MPIN. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before account lock.`
-      };
-    }
-
-    // Reset login attempts on successful MPIN verification
-    await user.resetLoginAttempts();
-
-    // Update user login status
-    const getTokenVersion = getRandomNumber();
-    await dbService.update(
-      model.user,
-      { id: user.id },
-      { tokenVersion: getTokenVersion, loggedIn: true }
-    );
-
-    // Update user object with new tokenVersion
-    user.tokenVersion = getTokenVersion;
-
-    // Generate final tokens after MPIN verification
-    const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-
-    // Create userLogin record for successful MPIN verification
-    const userLoginRecord = await dbService.createOne(model.userLogin, {
-      user_id: user.id,
-      user_type: user.userRole,
-      isLoggedIn: true,
-      latitude: latitude || null,
-      longitude: longitude || null,
-      ipAddress: ipAddress || null,
-      companyId: user.companyId
-    });
-
-    // Load user permissions
-    const permissions = await loadUserPermissions(user.userRole);
-
-    return {
-      flag: false,
-      msg: 'MPIN verification successful!',
-      data: {
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          name: user.name,
-          mobileNo: user.mobileNo,
-          userRole: user.userRole,
-          outletName: user.outletName,
-          companyId: user.companyId
-        },
-        userLogin: userLoginRecord,
-        permissions
-      }
-    };
-  } catch (error) {
-    console.error('Error verifying MPIN:', error);
-    throw new Error(error.message);
-  }
+const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress, deviceToken) => {
+  return handleSecurity(dataToken, otp, companyId, latitude, longitude, ipAddress, '2fa', deviceToken);
 };
 
-const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
+const setup2FA = async (dataToken, otp, companyId, deviceToken) => {
   try {
     if (!dataToken || !otp) {
       return {
@@ -2091,160 +1948,9 @@ const verify2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddre
       };
     }
 
-    if (!user.key2Fa) {
-      return {
-        flag: true,
-        msg: '2FA is not enabled for this user!'
-      };
-    }
-
-    // In development environment, skip OTP verification
-    if (process.env.NODE_ENV === 'development') {
-      // Update user login status FIRST
-      const getTokenVersion = getRandomNumber();
-      await dbService.update(
-        model.user,
-        { id: user.id },
-        { tokenVersion: getTokenVersion, loggedIn: true }
-      );
-
-      // Update user object with new tokenVersion
-      user.tokenVersion = getTokenVersion;
-
-      // Generate final tokens after 2FA verification
-      const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-
-      // Create userLogin record for successful 2FA verification
-      const userLoginRecord = await dbService.createOne(model.userLogin, {
-        user_id: user.id,
-        user_type: user.userRole,
-        isLoggedIn: true,
-        latitude: latitude || null,
-        longitude: longitude || null,
-        ipAddress: ipAddress || null,
-        companyId: user.companyId
-      });
-
-      // Load user permissions
-      const permissions = await loadUserPermissions(user.userRole);
-
-      return {
-        flag: false,
-        msg: '2FA verification successful!',
-        data: {
-          accessToken,
-          refreshToken,
-          user: {
-            id: user.id,
-            name: user.name,
-            mobileNo: user.mobileNo,
-            userRole: user.userRole,
-            outletName: user.outletName,
-            companyId: user.companyId
-          },
-          userLogin: userLoginRecord,
-          permissions
-        }
-      };
-    }
-
-    // Production environment - Verify OTP
-    const verificationResult = verifyOTP(otp, user);
-    if (verificationResult) {
-      // Update user login status FIRST
-      const getTokenVersion = getRandomNumber();
-      await dbService.update(
-        model.user,
-        { id: user.id },
-        { tokenVersion: getTokenVersion, loggedIn: true }
-      );
-
-      // Update user object with new tokenVersion
-      user.tokenVersion = getTokenVersion;
-
-      // Generate final tokens after 2FA verification
-      const { accessToken, refreshToken } = generateTokenWithRemainingRefresh(user, JWT.SECRET, loginTimestamp);
-
-      // Create userLogin record for successful 2FA verification
-      const userLoginRecord = await dbService.createOne(model.userLogin, {
-        user_id: user.id,
-        user_type: user.userRole,
-        isLoggedIn: true,
-        latitude: latitude,
-        longitude: longitude,
-        ipAddress: ipAddress,
-        companyId: user.companyId
-      });
-
-      // Load user permissions
-      const permissions = await loadUserPermissions(user.userRole);
-
-      return {
-        flag: false,
-        msg: '2FA verification successful!',
-        data: {
-          accessToken,
-          refreshToken,
-          user: {
-            id: user.id,
-            name: user.name,
-            mobileNo: user.mobileNo,
-            userRole: user.userRole,
-            outletName: user.outletName,
-            companyId: user.companyId
-          },
-          userLogin: userLoginRecord,
-          permissions
-        }
-      };
-    } else {
-      return {
-        flag: true,
-        msg: '2FA verification failed. Please try again.'
-      };
-    }
-  } catch (error) {
-    console.error('Error verifying 2FA:', error);
-    throw new Error(error.message);
-  }
-};
-
-const setup2FA = async (dataToken, otp, companyId) => {
-  try {
-    if (!dataToken || !otp) {
-      return {
-        flag: true,
-        msg: 'token and 2FA code are required!'
-      };
-    }
-
-    // Validate and decrypt dataToken with expiration check
-    const tokenValidation = await validateAndDecryptDataToken(dataToken);
-    if (!tokenValidation.isValid) {
-      return {
-        flag: true,
-        msg: tokenValidation.error
-      };
-    }
-
-    const { userId } = tokenValidation;
-    const loginTimestamp = tokenValidation.userDetail?.timestamp;
-
-    const where = {
-      id: userId,
-      isActive: true,
-      isDeleted: false
-    };
-
-    if (companyId !== null) {
-      where.companyId = companyId;
-    }
-    const user = await dbService.findOne(model.user, where);
-    if (!user) {
-      return {
-        flag: true,
-        msg: 'User does not exist!'
-      };
+    // Update device token if provided
+    if (deviceToken) {
+      await dbService.update(model.user, { id: user.id }, { deviceToken });
     }
 
     if (!user.key2Fa) {
@@ -3642,6 +3348,10 @@ const verifyResendTemporaryPasswordOTP = async (token, otp, companyId) => {
 // Keep handle2FA for backward compatibility - it now uses handleSecurity internally
 const handle2FA = async (dataToken, otp, companyId, latitude, longitude, ipAddress) => {
   return handleSecurity(dataToken, otp, companyId, latitude, longitude, ipAddress, '2fa');
+};
+
+const verifyMPIN = async (dataToken, mpin, companyId, latitude, longitude, ipAddress) => {
+  return handleSecurity(dataToken, mpin, companyId, latitude, longitude, ipAddress, 'mpin');
 };
 
 module.exports = {

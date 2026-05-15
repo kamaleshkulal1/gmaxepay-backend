@@ -1,6 +1,6 @@
 const model = require('../models');
 const dbService = require('../utils/dbService');
-
+const { sendPushNotification } = require('../utils/pushNotification');
 
 const createNotification = async (data) => {
     try {
@@ -11,6 +11,17 @@ const createNotification = async (data) => {
             msg: data.msg,
             isRead: false
         });
+
+        // Send push notification if user has a device token
+        const user = await dbService.findOne(model.user, { id: data.refId }, { attributes: ['deviceToken'] });
+        if (user && user.deviceToken) {
+            await sendPushNotification(
+                user.deviceToken,
+                data.name || 'System Notification',
+                data.msg
+            ).catch(err => console.error('Push Notification Error:', err));
+        }
+
         return notification;
     } catch (error) {
         console.error('Error creating notification:', error);

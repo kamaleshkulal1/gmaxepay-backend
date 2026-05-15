@@ -5,7 +5,7 @@ const { TYPES } = require('../../../constants/authConstant');
 
 const login = async (req, res) => {
     try {
-        const { mobileNo, password, latitude, longitude } = req.body;
+        const { mobileNo, password, latitude, longitude, deviceToken } = req.body;
         const companyId = req.headers['x-company-id'];
         if (!companyId) {
             return res.failure({ message: 'Company ID is required!' });
@@ -104,7 +104,7 @@ const login = async (req, res) => {
 
 const verifyOTP = async (req, res) => {
     try {
-        const { otp } = req.body;
+        const { otp, deviceToken } = req.body;
         const companyId = req.headers['x-company-id'];
         const token = req.headers['token'];
 
@@ -127,7 +127,8 @@ const verifyOTP = async (req, res) => {
         const result = await authService.verifyMobileOTP(
             token,
             otp,
-            companyId
+            companyId,
+            deviceToken
         );
 
         if (result.flag) {

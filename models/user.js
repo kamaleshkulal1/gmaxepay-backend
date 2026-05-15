@@ -516,6 +516,10 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    deviceToken: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     ...reusableModelAttribute
   },
   {
