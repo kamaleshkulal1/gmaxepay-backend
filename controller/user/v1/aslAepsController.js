@@ -1548,7 +1548,9 @@ const aepsOnboarding = async (req, res) => {
             bankAccountNo: customerBankDetails.accountNumber,
             bankIfsc: customerBankDetails.ifsc,
             bankName: customerBankDetails.bankName,
-            bankAccHolderName: customerBankDetails.beneficiaryName,
+            bankAccHolderName: customerBankDetails.beneficiaryName
+                ? customerBankDetails.beneficiaryName.replace(/^(MR|MRS|MS|MISS|MX|M\/S|DR)\b\.?\s*/gi, '').trim()
+                : '',
             latitude: retailerLatitude,
             longitude: retailerLongitude,
             retailerShopName: outletDetails.shopName || existingUser.outletName,
