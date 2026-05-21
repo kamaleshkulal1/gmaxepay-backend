@@ -686,7 +686,7 @@ const aepsTransaction = async (req, res) => {
                 updatedBy: req.user.id
             });
         }
-        const openingAepsWallet = round4(wallet.apes1Wallet || 0);
+        const openingAepsWallet = round4(wallet.apes2Wallet || 0);
 
         // Slab commission references — GROSS amounts (for reporting)
         const retailerCommAmt = commData.amounts.retailerComm || 0;
@@ -720,7 +720,15 @@ const aepsTransaction = async (req, res) => {
         };
 
         // Transaction initiator's AEPS wallet credit = NET retail comm (role 5) or NET dist comm (role 4)
-        const initiatorCredit = [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerNetAmt : distNetAmt) : 0;
+        // For CW (Cash Withdrawal), the initiator credit should also include the withdrawn cash amountNumber
+        let initiatorCredit = 0;
+        if ([4, 5].includes(user.userRole)) {
+            if (normalizedTxnType === 'CW') {
+                initiatorCredit = user.userRole === 5 ? round4(amountNumber + retailerNetAmt) : round4(amountNumber + distNetAmt);
+            } else if (normalizedTxnType === 'MS') {
+                initiatorCredit = user.userRole === 5 ? retailerNetAmt : distNetAmt;
+            }
+        }
         const closingAepsWallet = (isSuccess || isPending) ? round4(openingAepsWallet + initiatorCredit) : openingAepsWallet;
 
 
@@ -735,16 +743,16 @@ const aepsTransaction = async (req, res) => {
 
                 // A. Initiating User (Retailer role 5 OR Distributor role 4)
                 if (initiatorCredit > 0) {
-                    await wallet.update({ apes1Wallet: closingAepsWallet, updatedBy: req.user.id });
+                    await wallet.update({ apes2Wallet: closingAepsWallet, updatedBy: req.user.id });
                 }
 
                 await model.walletHistory.create({
                     refId: req.user.id,
                     companyId: req.user.companyId,
-                    walletType: 'AEPS1',
+                    walletType: 'AEPS2',
                     operator: operator?.operatorName || normalizedBankiin,
                     amount: amountNumber,
-                    comm: initiatorCredit,
+                    comm: [4, 5].includes(user.userRole) ? (user.userRole === 5 ? retailerCommAmt : distCommAmt) : 0,
                     surcharge: 0,
                     openingAmt: openingAepsWallet,
                     closingAmt: closingAepsWallet,
@@ -775,17 +783,17 @@ const aepsTransaction = async (req, res) => {
                 // B. Distributor (role 4) — only present when retailer (role 5) is the initiator
                 if (commData.users.distributor && commData.wallets.distributorWallet && user.userRole === 5) {
                     const dWallet = commData.wallets.distributorWallet;
-                    const dOpening = round4(dWallet.apes1Wallet || 0);
+                    const dOpening = round4(dWallet.apes2Wallet || 0);
                     // Net credit = gross comm − TDS − shortfall
                     const dNet = distNetAmt - distShortfallAmt;
                     const dClosing = round4(dOpening + dNet);
                     walletUpdates.push(
-                        dbService.update(model.wallet, { id: dWallet.id }, { apes1Wallet: dClosing, updatedBy: commData.users.distributor.id })
+                        dbService.update(model.wallet, { id: dWallet.id }, { apes2Wallet: dClosing, updatedBy: commData.users.distributor.id })
                     );
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.distributor.id,
                         companyId: user.companyId,
-                        walletType: 'AEPS1',
+                        walletType: 'AEPS2',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - dist comm`,
                         amount: amountNumber,
@@ -806,16 +814,16 @@ const aepsTransaction = async (req, res) => {
                 // C. Master Distributor
                 if (commData.users.masterDistributor && commData.wallets.masterDistributorWallet) {
                     const mWallet = commData.wallets.masterDistributorWallet;
-                    const mOpening = round4(mWallet.apes1Wallet || 0);
+                    const mOpening = round4(mWallet.apes2Wallet || 0);
                     const mNet = mdNetAmt - mdShortfallAmt;
                     const mClosing = round4(mOpening + mNet);
                     walletUpdates.push(
-                        dbService.update(model.wallet, { id: mWallet.id }, { apes1Wallet: mClosing, updatedBy: commData.users.masterDistributor.id })
+                        dbService.update(model.wallet, { id: mWallet.id }, { apes2Wallet: mClosing, updatedBy: commData.users.masterDistributor.id })
                     );
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.masterDistributor.id,
                         companyId: user.companyId,
-                        walletType: 'AEPS1',
+                        walletType: 'AEPS2',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - md comm`,
                         amount: amountNumber,
@@ -836,16 +844,16 @@ const aepsTransaction = async (req, res) => {
                 // D. Company (WL)
                 if (commData.wallets.companyWallet) {
                     const cWallet = commData.wallets.companyWallet;
-                    const cOpening = round4(cWallet.apes1Wallet || 0);
+                    const cOpening = round4(cWallet.apes2Wallet || 0);
                     const cNet = companyNetAmt - wlShortfallAmt;
                     const cClosing = round4(cOpening + cNet);
                     walletUpdates.push(
-                        dbService.update(model.wallet, { id: cWallet.id }, { apes1Wallet: cClosing, updatedBy: commData.users.companyAdmin.id })
+                        dbService.update(model.wallet, { id: cWallet.id }, { apes2Wallet: cClosing, updatedBy: commData.users.companyAdmin.id })
                     );
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.companyAdmin.id,
                         companyId: user.companyId,
-                        walletType: 'AEPS1',
+                        walletType: 'AEPS2',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - company comm`,
                         amount: amountNumber,
@@ -866,16 +874,16 @@ const aepsTransaction = async (req, res) => {
                 // E. Super Admin
                 if (commData.wallets.superAdminWallet) {
                     const saWallet = commData.wallets.superAdminWallet;
-                    const saOpening = round4(saWallet.apes1Wallet || 0);
+                    const saOpening = round4(saWallet.apes2Wallet || 0);
                     const saNet = superAdminNetAmt - saShortfallAmt;
                     const saClosing = round4(saOpening + saNet);
                     walletUpdates.push(
-                        dbService.update(model.wallet, { id: saWallet.id }, { apes1Wallet: saClosing, updatedBy: commData.users.superAdmin.id })
+                        dbService.update(model.wallet, { id: saWallet.id }, { apes2Wallet: saClosing, updatedBy: commData.users.superAdmin.id })
                     );
                     historyPromises.push(dbService.createOne(model.walletHistory, {
                         refId: commData.users.superAdmin.id,
                         companyId: 1,
-                        walletType: 'AEPS1',
+                        walletType: 'AEPS2',
                         operator: operator?.operatorName || normalizedBankiin,
                         remark: `${remarkText} - admin comm`,
                         amount: amountNumber,
@@ -899,12 +907,12 @@ const aepsTransaction = async (req, res) => {
             } else {
                 // Non-role 4/5 fallback: just credit initiator AEPS wallet
                 if (initiatorCredit > 0) {
-                    await wallet.update({ apes1Wallet: closingAepsWallet, updatedBy: req.user.id });
+                    await wallet.update({ apes2Wallet: closingAepsWallet, updatedBy: req.user.id });
                 }
                 await model.walletHistory.create({
                     refId: req.user.id,
                     companyId: req.user.companyId,
-                    walletType: 'AEPS1',
+                    walletType: 'AEPS2',
                     operator: operator?.operatorName || normalizedBankiin,
                     amount: amountNumber,
                     comm: 0,
@@ -1119,10 +1127,10 @@ const checkStatus = async (req, res) => {
             if (currentStatus === 'SUCCESS' || currentStatus === 'PENDING') {
                 console.log(`[AEPS checkStatus] Reversing commissions for txnId: ${txnId}, previous status: ${currentStatus}`);
 
-                // Find all walletHistory entries for this transactionId with walletType = AEPS1
+                // Find all walletHistory entries for this transactionId with walletType = AEPS2
                 const aepsWalletHistories = await dbService.findAll(model.walletHistory, {
                     transactionId: txnId,
-                    walletType: 'AEPS1'
+                    walletType: 'AEPS2'
                 });
 
                 if (aepsWalletHistories && aepsWalletHistories.length > 0) {
@@ -1130,7 +1138,7 @@ const checkStatus = async (req, res) => {
                     const reversalHistoryPromises = [];
 
                     for (const history of aepsWalletHistories) {
-                        // Net impact on this party's apes1Wallet was: credit − debit
+                        // Net impact on this party's apes2Wallet was: credit − debit
                         // To reverse: we subtract that net (i.e. debit credit, credit debit)
                         const netImpact = round4((history.credit || 0) - (history.debit || 0));
                         if (netImpact === 0) continue;
@@ -1141,12 +1149,12 @@ const checkStatus = async (req, res) => {
                         });
                         if (!walletRecord) continue;
 
-                        const currentAeps = round4(walletRecord.apes1Wallet || 0);
+                        const currentAeps = round4(walletRecord.apes2Wallet || 0);
                         const newAeps = round4(currentAeps - netImpact);
 
                         reversalUpdates.push(
                             dbService.update(model.wallet, { id: walletRecord.id }, {
-                                apes1Wallet: newAeps,
+                                apes2Wallet: newAeps,
                                 updatedBy: existingUser.id
                             })
                         );
@@ -1155,7 +1163,7 @@ const checkStatus = async (req, res) => {
                             dbService.createOne(model.walletHistory, {
                                 refId: history.refId,
                                 companyId: history.companyId,
-                                walletType: 'AEPS1',
+                                walletType: 'AEPS2',
                                 operator: history.operator || '',
                                 remark: `Reversal - AEPS ${aepsHistoryRecord.transactionType || ''} Failed`,
                                 amount: history.amount || 0,
@@ -1187,16 +1195,16 @@ const checkStatus = async (req, res) => {
                             companyId: aepsHistoryRecord.companyId
                         });
                         if (walletRecord) {
-                            const currentAeps = round4(walletRecord.apes1Wallet || 0);
+                            const currentAeps = round4(walletRecord.apes2Wallet || 0);
                             const newAeps = round4(currentAeps - creditToReverse);
                             await dbService.update(model.wallet, { id: walletRecord.id }, {
-                                apes1Wallet: newAeps,
+                                apes2Wallet: newAeps,
                                 updatedBy: existingUser.id
                             });
                             await dbService.createOne(model.walletHistory, {
                                 refId: aepsHistoryRecord.refId,
                                 companyId: aepsHistoryRecord.companyId,
-                                walletType: 'AEPS1',
+                                walletType: 'AEPS2',
                                 operator: aepsHistoryRecord.operator || '',
                                 remark: `Reversal - AEPS ${aepsHistoryRecord.transactionType || ''} Failed`,
                                 amount: aepsHistoryRecord.amount || 0,
