@@ -1868,38 +1868,48 @@ const bankKycSendOtp = async (req, res) => {
         }
         const bankKycSendOtpResponse = await asl.aslAepsBankKycSendOtp(payload);
 
-        // Store Bank KYC OTP reference & hash from latest response
-        // ASL sometimes returns key as `otpReferneceId` (note the spelling) inside `data`
-        const bankKycOtpRef =
-            bankKycSendOtpResponse?.otpReferneceId ||
-            bankKycSendOtpResponse?.data?.otpReferneceId ||
-            bankKycSendOtpResponse?.otpReferenceId ||
-            bankKycSendOtpResponse?.data?.otpReferenceId;
-        const bankKycHash =
-            bankKycSendOtpResponse?.hash ||
-            bankKycSendOtpResponse?.data?.hash;
+        const status = bankKycSendOtpResponse?.status ? String(bankKycSendOtpResponse.status).toUpperCase() : null;
+        const nestedStatus = bankKycSendOtpResponse?.data?.status ? String(bankKycSendOtpResponse.data.status).toUpperCase() : null;
 
-        if (bankKycOtpRef || bankKycHash) {
-            const updateData = {};
-            if (bankKycOtpRef) {
-                // Save specifically for Bank KYC and also as generic otpReferenceId fallback
-                updateData.bankKycOtpReferenceId = bankKycOtpRef;
-                updateData.otpReferenceId = bankKycOtpRef;
-            }
-            if (bankKycHash) {
-                // Overwrite hash with latest Bank KYC hash so subsequent calls use correct value
-                updateData.hash = bankKycHash;
+        if (status === 'SUCCESS' || nestedStatus === 'SUCCESS') {
+            // Store Bank KYC OTP reference & hash from latest response
+            // ASL sometimes returns key as `otpReferneceId` (note the spelling) inside `data`
+            const bankKycOtpRef =
+                bankKycSendOtpResponse?.otpReferneceId ||
+                bankKycSendOtpResponse?.data?.otpReferneceId ||
+                bankKycSendOtpResponse?.otpReferenceId ||
+                bankKycSendOtpResponse?.data?.otpReferenceId;
+            const bankKycHash =
+                bankKycSendOtpResponse?.hash ||
+                bankKycSendOtpResponse?.data?.hash;
+
+            if (bankKycOtpRef || bankKycHash) {
+                const updateData = {};
+                if (bankKycOtpRef) {
+                    // Save specifically for Bank KYC and also as generic otpReferenceId fallback
+                    updateData.bankKycOtpReferenceId = bankKycOtpRef;
+                    updateData.otpReferenceId = bankKycOtpRef;
+                }
+                if (bankKycHash) {
+                    // Overwrite hash with latest Bank KYC hash so subsequent calls use correct value
+                    updateData.hash = bankKycHash;
+                }
+
+                await dbService.update(
+                    model.aepsOnboarding,
+                    { id: existingAepsOnboarding.id },
+                    updateData
+                );
             }
 
-            await dbService.update(
-                model.aepsOnboarding,
-                { id: existingAepsOnboarding.id },
-                updateData
-            );
+            return res.success({
+                message: 'Bank KYC send OTP successful',
+                data: bankKycSendOtpResponse
+            });
         }
 
-        return res.success({
-            message: 'Bank KYC send OTP successful',
+        return res.failure({
+            message: bankKycSendOtpResponse?.message || bankKycSendOtpResponse?.data?.message || 'Unable to send Bank KYC OTP',
             data: bankKycSendOtpResponse
         });
     } catch (error) {
