@@ -5,6 +5,7 @@ const runpaisa = require('../../../services/runpaisa');
 const paynidipro = require('../../../services/paynidipro');
 const zuelpayApi = require('../../../services/zuelpayApi');
 const aslApi = require('../../../services/asl');
+const oneklick = require('../../../services/oneklick');
 
 const { Op } = require('sequelize');
 
@@ -774,6 +775,99 @@ const payout = async (req, res) => {
                     if (apiResponse.bankref || apiResponse.bank_ref) payoutHistoryData.utrn = apiResponse.bankref || apiResponse.bank_ref;
                     if (apiResponse.remark || apiResponse.message) payoutHistoryData.statusMessage = apiResponse.remark || apiResponse.message;
                 }
+            } else if (activePayout.name === 'OneKlick' || activePayout.name === 'oneklick') {
+                console.log('Sending Request to OneKlick API');
+
+                let contactId = customerBank.oneklickContactId;
+
+                if (!contactId) {
+                    let cleanName = (customerBank.beneficiaryName || 'User Name').trim();
+                    cleanName = cleanName.replace(/^(mr|mrs|ms|miss|m\/s)\.?\s+/i, '');
+                    let nameParts = cleanName.split(' ');
+                    let firstName = nameParts[0] || 'User';
+                    let lastName = nameParts.slice(1).join(' ') || 'Name';
+
+                    if (firstName.length === 1) firstName += firstName;
+                    if (lastName.length === 1) lastName += lastName;
+
+                    const contactPayload = {
+                        firstName: firstName,
+                        lastName: lastName,
+                        email: existingUser.email || 'demo@gmail.com',
+                        mobile: customerBank.mobile || existingUser.mobileNo || user.mobile || user.phone || '9999999999',
+                        bankName: customerBank.bankName || 'Bank',
+                        accountNumber: customerBank.accountNumber,
+                        ifsc: customerBank.ifsc,
+                        referenceId: transactionID
+                    };
+
+                    const contactRes = await oneklick.createContact(contactPayload);
+                    if (contactRes.data?.contactId) {
+                        contactId = contactRes.data.contactId;
+                        await dbService.update(
+                            model.customerBank,
+                            { id: customerBank.id },
+                            { oneklickContactId: contactId }
+                        );
+                    } else if (contactRes.status === 'SUCCESS' || contactRes.code === '0x0200') {
+                        contactId = contactRes.data?.contactId;
+                        if (contactId) {
+                            await dbService.update(
+                                model.customerBank,
+                                { id: customerBank.id },
+                                { oneklickContactId: contactId }
+                            );
+                        }
+                    } else {
+                        return res.failure({
+                            message: typeof contactRes.message === 'object'
+                                ? JSON.stringify(contactRes.message)
+                                : contactRes.message || 'Failed to create contact on OneKlick'
+                        });
+                    }
+                }
+
+                if (!contactId) {
+                    return res.failure({ message: 'OneKlick Contact ID missing' });
+                }
+
+                const payoutPayload = {
+                    amount: payoutAmount,
+                    purpose: 'others',
+                    mode: paymentMode || 'IMPS',
+                    contactId: contactId,
+                    clientRefId: transactionID,
+                    udf1: '',
+                    udf2: ''
+                };
+
+                apiResponse = await oneklick.initiatePayout(payoutPayload);
+                console.log('OneKlick response:', JSON.stringify(apiResponse));
+
+                if (apiResponse) {
+                    const isSuccess = (apiResponse.status === 'SUCCESS' && apiResponse.code === '0x0200');
+                    const isPending = (apiResponse.status === 'PENDING');
+
+                    if (isSuccess) {
+                        payoutHistoryData.status = 'SUCCESS';
+                    } else if (isPending) {
+                        payoutHistoryData.status = 'PENDING';
+                    } else {
+                        payoutHistoryData.status = 'FAILED';
+                    }
+
+                    if (apiResponse.data?.orderId || apiResponse.data?.clientRefId || apiResponse.clientRefId) {
+                        payoutHistoryData.orderId = apiResponse.data?.orderId || apiResponse.data?.clientRefId || apiResponse.clientRefId;
+                    }
+                    if (apiResponse.data?.utrn || apiResponse.utrn || apiResponse.data?.referenceId) {
+                        payoutHistoryData.utrn = apiResponse.data?.utrn || apiResponse.utrn || apiResponse.data?.referenceId;
+                    }
+                    if (apiResponse.message) {
+                        payoutHistoryData.statusMessage = typeof apiResponse.message === 'object'
+                            ? JSON.stringify(apiResponse.message)
+                            : apiResponse.message;
+                    }
+                }
             } else {
                 return res.failure({ message: `Payout service ${activePayout.name} is not implemented.` });
             }
@@ -1420,8 +1514,47 @@ const checkPayoutStatus = async (req, res) => {
             return res.failure({ message: 'Payout record not found' });
         }
 
-        // Call RunPaisa Status API
-        const statusRes = await runpaisa.bankTransferStatus(existingPayout.orderId || existingPayout.transactionID);
+        // Call Payout Status API based on provider
+        let statusRes = null;
+
+        if (existingPayout.payoutType === 'OneKlick' || existingPayout.payoutType === 'oneklick') {
+            const response = await oneklick.checkStatus({ clientRefId: existingPayout.transactionID });
+            console.log('OneKlick response', response);
+
+            if (!response) {
+                return res.failure({ message: 'Invalid response from OneKlick API' });
+            }
+
+            const isSuccessCall =
+                (response.status === 'SUCCESS' && response.code === '0x0200') ||
+                (response.code === '0x0202' && response.data) ||
+                (response.code === '0x0206' && response.data);
+
+            if (!isSuccessCall) {
+                return res.failure({ message: response.message || 'Invalid response from OneKlick API' });
+            }
+
+            const oneklickTxnStatus = (response.data?.status || (response.code === '0x0202' ? 'FAILED' : 'PENDING')).toUpperCase();
+            const bankReference = response.data?.bankReference || response.data?.utr || response.data?.bank_reference || response.data?.bankref || '';
+
+            let mappedStatus = 'PENDING';
+            if (oneklickTxnStatus === 'SUCCESS' || oneklickTxnStatus === 'PROCESSED') {
+                mappedStatus = 'SUCCESS';
+            } else if (oneklickTxnStatus === 'FAILED' || oneklickTxnStatus === 'REVERSED') {
+                mappedStatus = 'FAILED';
+            }
+
+            statusRes = {
+                status: mappedStatus,
+                message: response.message || response.data?.failedMessage || 'Status retrieved successfully',
+                data: {
+                    utr: bankReference,
+                    ...response.data
+                }
+            };
+        } else {
+            statusRes = await runpaisa.bankTransferStatus(existingPayout.orderId || existingPayout.transactionID);
+        }
 
         if (statusRes && statusRes.status) {
             const statusUpper = statusRes.status.toString().toUpperCase();

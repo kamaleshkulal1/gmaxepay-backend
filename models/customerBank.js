@@ -90,6 +90,10 @@ let CustomerBank = sequelize.define('customerBank', {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
     allowNull: false
+  },
+  oneklickContactId: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   timestamps: true
