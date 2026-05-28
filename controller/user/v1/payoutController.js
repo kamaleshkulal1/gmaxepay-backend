@@ -1532,17 +1532,19 @@ const checkPayoutStatus = async (req, res) => {
                 return res.failure({ message: 'Invalid response from OneKlick API' });
             }
 
+            const targetResponse = response.data?.code ? response.data : response;
+
             const isSuccessCall =
-                (response.status === 'SUCCESS' && response.code === '0x0200') ||
-                (response.code === '0x0202' && response.data) ||
-                (response.code === '0x0206' && response.data);
+                (targetResponse.status === 'SUCCESS' && targetResponse.code === '0x0200') ||
+                (targetResponse.code === '0x0202' && targetResponse.data) ||
+                (targetResponse.code === '0x0206' && targetResponse.data);
 
             if (!isSuccessCall) {
-                return res.failure({ message: response.message || 'Invalid response from OneKlick API' });
+                return res.failure({ message: targetResponse.message || 'Invalid response from OneKlick API' });
             }
 
-            const oneklickTxnStatus = (response.data?.status || (response.code === '0x0202' ? 'FAILED' : 'PENDING')).toUpperCase();
-            const bankReference = response.data?.bankReference || response.data?.utr || response.data?.bank_reference || response.data?.bankref || '';
+            const oneklickTxnStatus = (targetResponse.data?.status || (targetResponse.code === '0x0202' ? 'FAILED' : 'PENDING')).toUpperCase();
+            const bankReference = targetResponse.data?.bankReference || targetResponse.data?.utr || targetResponse.data?.bank_reference || targetResponse.data?.bankref || '';
 
             let mappedStatus = 'PENDING';
             if (oneklickTxnStatus === 'SUCCESS' || oneklickTxnStatus === 'PROCESSED') {
@@ -1553,10 +1555,10 @@ const checkPayoutStatus = async (req, res) => {
 
             statusRes = {
                 status: mappedStatus,
-                message: response.message || response.data?.failedMessage || 'Status retrieved successfully',
+                message: targetResponse.message || targetResponse.data?.failedMessage || 'Status retrieved successfully',
                 data: {
                     utr: bankReference,
-                    ...response.data
+                    ...targetResponse.data
                 }
             };
         } else {
@@ -1597,7 +1599,7 @@ const checkPayoutStatus = async (req, res) => {
                                 companyId: history.companyId,
                                 walletType: walletCol,
                                 operator: history.operator || 'Payout1',
-                                remark: `Reversal - RunPaisa Status FAILED`,
+                                remark: `Reversal - ${existingPayout.payoutType} Status FAILED`,
                                 amount: history.amount || 0,
                                 comm: 0,
                                 surcharge: 0,
@@ -1627,7 +1629,7 @@ const checkPayoutStatus = async (req, res) => {
                                 companyId: gstRecord.companyId,
                                 walletType: aepsWalletCol,
                                 operator: 'GST Reversal',
-                                remark: `Reversal - RunPaisa Status FAILED (GST Refund)`,
+                                remark: `Reversal - ${existingPayout.payoutType} Status FAILED (GST Refund)`,
                                 amount: gstAmountToRefund,
                                 comm: 0, surcharge: 0,
                                 openingAmt: currentBal, closingAmt: newBal,
