@@ -803,33 +803,35 @@ const payout = async (req, res) => {
 
                     const contactRes = await oneklick.createContact(contactPayload);
                     console.log("contactRes", contactRes);
-                    if (contactRes.data?.contactId) {
-                        contactId = contactRes.data.contactId;
+                    const targetContactRes = contactRes.data?.data ? contactRes.data : contactRes;
+                    const targetContactId = targetContactRes.data?.contactId || targetContactRes.contactId;
+
+                    if (targetContactId) {
+                        contactId = targetContactId;
                         await dbService.update(
                             model.customerBank,
                             { id: customerBank.id },
                             { oneklickContactId: contactId }
                         );
-                    } else if (contactRes.status === 'SUCCESS' || contactRes.code === '0x0200') {
-                        contactId = contactRes.data?.contactId;
-                        if (contactId) {
-                            await dbService.update(
-                                model.customerBank,
-                                { id: customerBank.id },
-                                { oneklickContactId: contactId }
-                            );
-                        }
+                    } else if (contactRes.status === 'SUCCESS' || contactRes.code === '0x0200' || targetContactRes.code === '0x0200' || targetContactRes.status === 'SUCCESS') {
+                        contactId = targetContactId;
                     } else {
-                        return res.failure({
-                            message: typeof contactRes.message === 'object'
-                                ? JSON.stringify(contactRes.message)
-                                : contactRes.message || 'Failed to create contact on OneKlick'
-                        });
+                        let errMsg = targetContactRes.message || contactRes.message || 'Failed to create contact on OneKlick';
+                        if (typeof errMsg === 'object') {
+                            errMsg = JSON.stringify(errMsg);
+                        }
+                        return res.failure({ message: errMsg });
                     }
                 }
 
                 if (!contactId) {
-                    return res.failure({ message: 'OneKlick Contact ID missing' });
+                    let errMsg = contactRes ? (contactRes.data?.message || contactRes.message) : 'OneKlick Contact ID missing';
+                    if (typeof errMsg === 'object') {
+                        errMsg = JSON.stringify(errMsg);
+                    }
+                    return res.failure({
+                        message: errMsg
+                    });
                 }
 
                 const payoutPayload = {
