@@ -802,6 +802,7 @@ const payout = async (req, res) => {
                     };
 
                     const contactRes = await oneklick.createContact(contactPayload);
+                    console.log("contactRes", contactRes);
                     if (contactRes.data?.contactId) {
                         contactId = contactRes.data.contactId;
                         await dbService.update(
