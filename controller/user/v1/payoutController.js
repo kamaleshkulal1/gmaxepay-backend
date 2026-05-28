@@ -1525,7 +1525,7 @@ const checkPayoutStatus = async (req, res) => {
         let statusRes = null;
 
         if (existingPayout.payoutType === 'OneKlick' || existingPayout.payoutType === 'oneklick') {
-            const response = await oneklick.checkStatus({ clientRefId: existingPayout.transactionID });
+            const response = await oneklick.checkStatus({ txnid: existingPayout.orderId || existingPayout.transactionID });
             console.log('OneKlick response', response);
 
             if (!response) {
