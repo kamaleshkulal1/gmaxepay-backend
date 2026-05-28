@@ -32,6 +32,7 @@ const initiatePayout = async (data) => {
 
 const checkStatus = async (data) => {
     try {
+        console.log("data", JSON.stringify(data));
         const response = await axios.post(`${process.env.ONEKLICK_URL}/extends/checkStatus`, data, {
             headers: {
                 'Content-Type': 'application/json',
