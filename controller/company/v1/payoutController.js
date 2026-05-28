@@ -436,8 +436,9 @@ const payout = async (req, res) => {
                 console.log('OneKlick response:', JSON.stringify(apiResponse));
 
                 if (apiResponse) {
-                    const isSuccess = (apiResponse.status === 'SUCCESS' && apiResponse.code === '0x0200');
-                    const isPending = (apiResponse.status === 'PENDING');
+                    const targetApiResponse = apiResponse.data?.code ? apiResponse.data : apiResponse;
+                    const isSuccess = (targetApiResponse.status === 'SUCCESS' && targetApiResponse.code === '0x0200');
+                    const isPending = (targetApiResponse.status === 'PENDING');
 
                     if (isSuccess) {
                         payoutHistoryData.status = 'SUCCESS';
@@ -447,16 +448,19 @@ const payout = async (req, res) => {
                         payoutHistoryData.status = 'FAILED';
                     }
 
-                    if (apiResponse.data?.orderId || apiResponse.data?.clientRefId || apiResponse.clientRefId) {
-                        payoutHistoryData.orderId = apiResponse.data?.orderId || apiResponse.data?.clientRefId || apiResponse.clientRefId;
+                    const orderId = targetApiResponse.data?.orderId || targetApiResponse.data?.orderRefId || targetApiResponse.data?.clientRefId || targetApiResponse.orderId || targetApiResponse.clientRefId;
+                    if (orderId) {
+                        payoutHistoryData.orderId = orderId;
                     }
-                    if (apiResponse.data?.utrn || apiResponse.utrn || apiResponse.data?.referenceId) {
-                        payoutHistoryData.utrn = apiResponse.data?.utrn || apiResponse.utrn || apiResponse.data?.referenceId;
+
+                    const utrn = targetApiResponse.data?.utrn || targetApiResponse.data?.referenceId || targetApiResponse.utrn || targetApiResponse.referenceId;
+                    if (utrn) {
+                        payoutHistoryData.utrn = utrn;
                     }
-                    if (apiResponse.message) {
-                        payoutHistoryData.statusMessage = typeof apiResponse.message === 'object'
-                            ? JSON.stringify(apiResponse.message)
-                            : apiResponse.message;
+
+                    const msg = targetApiResponse.message || apiResponse.message;
+                    if (msg) {
+                        payoutHistoryData.statusMessage = typeof msg === 'object' ? JSON.stringify(msg) : msg;
                     }
                 }
             } else {
