@@ -441,7 +441,7 @@ const payout = async (req, res) => {
                     const isPending = (targetApiResponse.status === 'PENDING');
 
                     if (isSuccess) {
-                        payoutHistoryData.status = 'SUCCESS';
+                        payoutHistoryData.status = 'PENDING';
                     } else if (isPending) {
                         payoutHistoryData.status = 'PENDING';
                     } else {
@@ -471,7 +471,7 @@ const payout = async (req, res) => {
             payoutHistoryData.apiResponse = apiResponse;
             payoutHistoryData.agentTransactionId = transactionID;
 
-            if (payoutHistoryData.status === 'SUCCESS' && calculatedAmount > 0) {
+            if ((payoutHistoryData.status === 'SUCCESS' || payoutHistoryData.status === 'PENDING') && calculatedAmount > 0) {
                 const superAdminOpeningBalance = parseFloat(superAdminWallet.mainWallet || 0);
                 const operatorName = operatorType === 'PAYOUT2' ? 'Payout2' : 'Payout1';
                 const remarkText = `Bank payout via ${paymentMode}`;
@@ -716,7 +716,7 @@ const payout = async (req, res) => {
             });
         }
 
-        if (payoutHistoryData.status === 'SUCCESS') {
+        if (payoutHistoryData.status === 'SUCCESS' || payoutHistoryData.status === 'PENDING') {
             if (mode === 'wallet') {
                 const walletUpdate = {
                     [walletType]: aepsClosingBalance,

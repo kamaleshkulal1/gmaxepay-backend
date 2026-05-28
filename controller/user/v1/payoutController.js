@@ -853,7 +853,7 @@ const payout = async (req, res) => {
                     const isPending = (targetApiResponse.status === 'PENDING');
 
                     if (isSuccess) {
-                        payoutHistoryData.status = 'SUCCESS';
+                        payoutHistoryData.status = 'PENDING';
                     } else if (isPending) {
                         payoutHistoryData.status = 'PENDING';
                     } else {
@@ -911,7 +911,7 @@ const payout = async (req, res) => {
         }
 
         // Update wallet balance and Commercials if SUCCESS
-        if (payoutHistoryData.status === 'SUCCESS') {
+        if (payoutHistoryData.status === 'SUCCESS' || payoutHistoryData.status === 'PENDING') {
             if (mode === 'wallet') {
                 // Internal transfer: Debit from selected AEPS wallet, Credit to mainWallet
                 const walletUpdate = {
@@ -1174,7 +1174,7 @@ const payout = async (req, res) => {
 
         // Calculate final closing balance for the response/history (payout + gst + surcharge)
         let finalClosingBalance = aepsClosingBalance;
-        if (payoutHistoryData.status === 'SUCCESS' && commData.isValid) {
+        if ((payoutHistoryData.status === 'SUCCESS' || payoutHistoryData.status === 'PENDING') && commData.isValid) {
             if (user.userRole === 3) {
                 finalClosingBalance = parseFloat((aepsClosingBalance - commData.amounts.mdSurcharge).toFixed(4));
             } else if (user.userRole === 4) {
@@ -1220,7 +1220,7 @@ const payout = async (req, res) => {
             };
         }
 
-        if (payoutHistoryData.status === 'SUCCESS') {
+        if (payoutHistoryData.status === 'SUCCESS' || payoutHistoryData.status === 'PENDING') {
             return res.success(responseData);
         } else {
             return res.failure({
