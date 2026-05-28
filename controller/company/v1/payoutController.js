@@ -1151,18 +1151,24 @@ const checkPayoutStatus = async (req, res) => {
 
                     const allHistories = await dbService.findAll(model.walletHistory, { transactionId: txnId });
                     const gstRecord = await dbService.findOne(model.gstHistory, { transactionId: txnId });
+                    console.log(`[Check Payout Status] Found ${allHistories ? allHistories.length : 0} wallet histories for transactionId: ${txnId}`);
 
                     if (allHistories && allHistories.length > 0) {
                         for (const history of allHistories) {
                             const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                            console.log(`[Check Payout Status] History ID: ${history.id}, refId: ${history.refId}, credit: ${history.credit}, debit: ${history.debit}, netImpact: ${netImpact}`);
                             if (netImpact === 0) continue;
 
                             const walletRecord = await dbService.findOne(model.wallet, { refId: history.refId, companyId: history.companyId });
-                            if (!walletRecord) continue;
+                            if (!walletRecord) {
+                                console.log(`[Check Payout Status] Wallet record not found for refId: ${history.refId}, companyId: ${history.companyId}`);
+                                continue;
+                            }
 
                             const walletCol = history.walletType && history.walletType !== 'mainWallet' ? history.walletType : aepsWalletCol;
                             const currentBal = round4(walletRecord[walletCol] || 0);
                             const newBal = round4(currentBal - netImpact);
+                            console.log(`[Check Payout Status] Updating wallet for refId: ${history.refId}, walletCol: ${walletCol}, currentBal: ${currentBal}, netImpact: ${netImpact}, newBal: ${newBal}`);
 
                             await dbService.update(model.wallet, { id: walletRecord.id }, { [walletCol]: newBal, updatedBy: req.user.id });
                             await dbService.createOne(model.walletHistory, {
