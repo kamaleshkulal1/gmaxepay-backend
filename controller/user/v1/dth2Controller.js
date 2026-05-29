@@ -210,11 +210,13 @@ const dthRecharge = async (req, res) => {
 
 const checkStatus = async (req, res) => {
     try {
-        const { orderid } = req.body;
-        if (!orderid) return res.failure({ message: 'Order ID is required' });
-        const transaction = await dbService.findOne(model.service1Transaction, { orderid });
+        const { transactionId } = req.body;
+        if (!transactionId) return res.failure({ message: 'Order ID is required' });
+        const transaction = await dbService.findOne(model.service1Transaction, {
+            [Op.or]: [{ orderid: transactionId }, { transactionId }]
+        });
         if (!transaction) return res.failure({ message: 'Transaction not found' });
-        const response = await a1topService.checkStatus(orderid);
+        const response = await a1topService.checkStatus(transaction?.orderid);
 
         // Normalize status and update local database status
         const statusStr = String(response?.status || '').toUpperCase();
@@ -227,11 +229,99 @@ const checkStatus = async (req, res) => {
             newStatus = 'FAILURE';
         }
 
-        const callbackController = require('./callbackController');
-        const operatorId = response?.opid && String(response.opid).trim() !== '' ? response.opid : null;
-        await callbackController.updateService1TransactionStatus(orderid, newStatus, operatorId, req.user.companyId);
+        const currentStatus = transaction.status;
+        if (newStatus !== currentStatus) {
+            const serviceType = transaction.serviceType;
+            const updateData = {
+                status: newStatus,
+                opid: response?.opid && String(response.opid).trim() !== '' ? response.opid : transaction.opid,
+                apiResponse: response,
+                updatedBy: req.user.id
+            };
 
-        return res.success({ message: 'DTH2 Status checked and updated', data: { orderid, status: newStatus, apiResponse: response } });
+            if (newStatus === 'FAILURE' && (currentStatus === 'SUCCESS' || currentStatus === 'PENDING')) {
+                // Revert/refund the debited/credited amounts
+                const histories = await dbService.findAll(model.walletHistory, {
+                    transactionId: transaction.orderid,
+                    paymentStatus: currentStatus
+                });
+
+                if (histories && histories.length > 0) {
+                    for (const history of histories) {
+                        const refundAmount = round4((history.debit || 0) - (history.credit || 0));
+                        if (refundAmount !== 0) {
+                            const walletUser = await dbService.findOne(model.wallet, {
+                                refId: history.refId,
+                                companyId: history.companyId
+                            });
+                            if (walletUser) {
+                                const currentBalance = round4(walletUser.mainWallet || 0);
+                                const newBalance = round4(currentBalance + refundAmount);
+                                await dbService.update(model.wallet, { id: walletUser.id }, { mainWallet: newBalance, updatedBy: transaction.refId });
+                                await dbService.createOne(model.walletHistory, {
+                                    refId: history.refId,
+                                    companyId: history.companyId,
+                                    walletType: history.walletType || 'mainWallet',
+                                    operator: history.operator || 'Unknown',
+                                    remark: `Reversal - ${serviceType} Failed`,
+                                    amount: history.amount || 0,
+                                    comm: 0,
+                                    surcharge: 0,
+                                    openingAmt: newBalance,
+                                    closingAmt: newBalance,
+                                    credit: history.debit || 0,
+                                    debit: history.credit || 0,
+                                    transactionId: transaction.orderid,
+                                    paymentStatus: 'REFUNDED',
+                                    addedBy: transaction.refId,
+                                    updatedBy: transaction.refId
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    const amountToRefund = transaction.amount || 0;
+                    if (amountToRefund > 0) {
+                        const walletUser = await dbService.findOne(model.wallet, {
+                            refId: transaction.refId,
+                            companyId: transaction.companyId
+                        });
+                        if (walletUser) {
+                            const currentBalance = round4(walletUser.mainWallet || 0);
+                            const newBalance = round4(currentBalance + amountToRefund);
+                            await dbService.update(model.wallet, { id: walletUser.id }, { mainWallet: newBalance, updatedBy: transaction.refId });
+                            await dbService.createOne(model.walletHistory, {
+                                refId: transaction.refId,
+                                companyId: transaction.companyId,
+                                walletType: 'mainWallet',
+                                operator: 'Unknown',
+                                remark: `Reversal - ${serviceType} Failed`,
+                                amount: amountToRefund,
+                                comm: 0,
+                                surcharge: 0,
+                                openingAmt: newBalance,
+                                closingAmt: newBalance,
+                                credit: amountToRefund,
+                                debit: 0,
+                                transactionId: transaction.orderid,
+                                paymentStatus: 'REFUNDED',
+                                addedBy: transaction.refId,
+                                updatedBy: transaction.refId
+                            });
+                        }
+                    }
+                }
+                updateData.superadminComm = 0;
+                updateData.whitelabelComm = 0;
+                updateData.masterDistributorCom = 0;
+                updateData.distributorCom = 0;
+                updateData.retailerCom = 0;
+            }
+
+            await dbService.update(model.service1Transaction, { id: transaction.id }, updateData);
+        }
+
+        return res.success({ message: 'DTH2 Status checked and updated', data: { orderid: transaction.orderid, status: newStatus, apiResponse: response } });
     } catch (error) { return res.failure({ message: error.message }); }
 };
 
