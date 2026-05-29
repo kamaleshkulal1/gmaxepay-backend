@@ -93,7 +93,7 @@ const payout = async (req, res) => {
             type: mode === 'wallet' ? 'internal' : 'external',
             transactionID: transactionID,
             amount: payoutAmount,
-            walletType: walletType,
+            walletType: mode === 'bank' ? walletType : null,
             aepsType: normalizedAepsType,
             payoutType: activePayout.name,
             openingBalance: aepsOpeningBalance,

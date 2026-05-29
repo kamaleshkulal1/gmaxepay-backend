@@ -53,6 +53,10 @@ let PayoutHistory = sequelize.define('payoutHistory', {
     allowNull: true,
     comment: 'mainWallet, apes1Wallet, or apes2Wallet'
   },
+  aepsType: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   paymentMode: {
     type: DataTypes.STRING,
     allowNull: true,
