@@ -6,6 +6,7 @@ const { generateTransactionID } = require('../../../utils/transactionID');
 const googleMap = require('../../../services/googleMap');
 const imageService = require('../../../services/imageService');
 const { Op } = require('sequelize');
+const notificationService = require('../../../services/notificationService');
 
 const aepsTransaction = async (req, res) => {
     try {
@@ -1237,6 +1238,18 @@ const checkStatus = async (req, res) => {
                     updatedBy: existingUser.id
                 });
 
+                // Send push/database notification
+                try {
+                    await notificationService.createNotification({
+                        refId: aepsHistoryRecord.refId,
+                        companyId: aepsHistoryRecord.companyId,
+                        name: 'AEPS Status Update',
+                        msg: `Your AEPS transaction of ${aepsHistoryRecord.transactionAmount} has been updated to FAILED`
+                    });
+                } catch (notifyErr) {
+                    console.error('Failed to send AEPS status notification:', notifyErr);
+                }
+
                 return res.failure({
                     message: innerData?.errorMessage || response?.message || 'AEPS transaction failed. Commissions reversed.',
                     data: {
@@ -1251,13 +1264,26 @@ const checkStatus = async (req, res) => {
 
         // ── SUCCESS or still pending ─────────────────────────────────────────
         if (isSuccess) {
+            const currentStatus = aepsHistoryRecord?.paymentStatus;
             // Update aepsHistory status to SUCCESS if it was PENDING
-            if (aepsHistoryRecord && aepsHistoryRecord.paymentStatus === 'PENDING') {
+            if (aepsHistoryRecord && currentStatus === 'PENDING') {
                 await dbService.update(model.practomindAepsHistory, { transactionId: txnId }, {
                     status: true,
                     paymentStatus: 'SUCCESS',
                     updatedBy: existingUser.id
                 });
+
+                // Send push/database notification
+                try {
+                    await notificationService.createNotification({
+                        refId: aepsHistoryRecord.refId,
+                        companyId: aepsHistoryRecord.companyId,
+                        name: 'AEPS Status Update',
+                        msg: `Your AEPS transaction of ${aepsHistoryRecord.transactionAmount} has been updated to SUCCESS`
+                    });
+                } catch (notifyErr) {
+                    console.error('Failed to send AEPS status notification:', notifyErr);
+                }
             }
             return res.success({
                 message: 'AEPS transaction is successful',
@@ -1281,6 +1307,25 @@ const checkStatus = async (req, res) => {
 
     } catch (error) {
         console.error('Check status error', error);
+        // Fallback: If API call fails, return the current status from database
+        try {
+            const { txnId } = req.body;
+            if (txnId) {
+                const aepsHistoryRecord = await dbService.findOne(model.practomindAepsHistory, { transactionId: txnId });
+                if (aepsHistoryRecord) {
+                    return res.success({
+                        message: 'Status check API failed, showing current database status',
+                        data: {
+                            txnId: aepsHistoryRecord.transactionId,
+                            status: aepsHistoryRecord.paymentStatus,
+                            gatewayResponse: null
+                        }
+                    });
+                }
+            }
+        } catch (fallbackErr) {
+            console.error('Fallback status retrieval failed:', fallbackErr);
+        }
         return res.failure({ message: error.message || 'Unable to check status' });
     }
 }

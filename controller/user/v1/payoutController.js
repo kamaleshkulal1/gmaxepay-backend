@@ -6,6 +6,7 @@ const paynidipro = require('../../../services/paynidipro');
 const zuelpayApi = require('../../../services/zuelpayApi');
 const aslApi = require('../../../services/asl');
 const oneklick = require('../../../services/oneklick');
+const notificationService = require('../../../services/notificationService');
 
 const { Op } = require('sequelize');
 
@@ -1669,6 +1670,18 @@ const checkPayoutStatus = async (req, res) => {
                     updateData.closingBalance = existingPayout.openingBalance;
                 }
                 await dbService.update(model.payoutHistory, { id: existingPayout.id }, updateData);
+
+                // Send push/database notification
+                try {
+                    await notificationService.createNotification({
+                        refId: existingPayout.refId,
+                        companyId: existingPayout.companyId,
+                        name: 'Payout Status Update',
+                        msg: `Your payout of ${existingPayout.amount} has been updated to ${newStatus}`
+                    });
+                } catch (notifyErr) {
+                    console.error('Failed to send payout status notification:', notifyErr);
+                }
             }
 
             return res.success({
@@ -1688,6 +1701,27 @@ const checkPayoutStatus = async (req, res) => {
         }
     } catch (error) {
         console.error('Check Payout Status Error:', error);
+        // Fallback: If API call fails, return the current status from database
+        try {
+            const targetOrderId = req.body.orderId || req.body.transactionID;
+            if (targetOrderId) {
+                const existingPayout = await dbService.findOne(model.payoutHistory, { transactionID: targetOrderId })
+                    || await dbService.findOne(model.payoutHistory, { orderId: targetOrderId });
+                if (existingPayout) {
+                    return res.success({
+                        message: 'Status check API failed, showing current database status',
+                        data: {
+                            transactionID: existingPayout.transactionID,
+                            status: existingPayout.status,
+                            utrn: existingPayout.utrn,
+                            message: 'API check failed, returning database state'
+                        }
+                    });
+                }
+            }
+        } catch (fallbackErr) {
+            console.error('Fallback status retrieval failed:', fallbackErr);
+        }
         return res.internalServerError({ message: error.message || 'Internal server error' });
     }
 };

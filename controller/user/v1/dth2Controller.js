@@ -3,6 +3,7 @@ const dbService = require('../../../utils/dbService');
 const a1topService = require('../../../services/a1topService');
 const { Op } = require('sequelize');
 const { generateTransactionID } = require('../../../utils/transactionID');
+const notificationService = require('../../../services/notificationService');
 
 const round4 = (num) => { const n = Number(num); return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : 0; };
 const calcSlabAmount = (slab, baseAmount) => { if (!slab) return 0; const base = Number(baseAmount || 0); const rc = Number(slab.commAmt || 0); if (!Number.isFinite(base) || !Number.isFinite(rc)) return 0; return (slab.amtType || 'fix').toLowerCase() === 'per' ? round4((base * rc) / 100) : round4(rc); };
@@ -212,10 +213,18 @@ const checkStatus = async (req, res) => {
     try {
         const { transactionId } = req.body;
         if (!transactionId) return res.failure({ message: 'Order ID is required' });
-        const transaction = await dbService.findOne(model.service1Transaction, {
+
+        // Find existing transaction in service1Transaction or fallback to serviceTransaction
+        let transaction = await dbService.findOne(model.service1Transaction, {
             [Op.or]: [{ orderid: transactionId }, { transactionId }]
         });
+        if (!transaction) {
+            transaction = await dbService.findOne(model.serviceTransaction, {
+                [Op.or]: [{ orderid: transactionId }, { transactionId }]
+            });
+        }
         if (!transaction) return res.failure({ message: 'Transaction not found' });
+
         const response = await a1topService.checkStatus(transaction?.orderid);
 
         // Normalize status and update local database status
@@ -318,11 +327,48 @@ const checkStatus = async (req, res) => {
                 updateData.retailerCom = 0;
             }
 
-            await dbService.update(model.service1Transaction, { id: transaction.id }, updateData);
+            const targetModel = transaction.serviceType.includes('2') ? model.service1Transaction : model.serviceTransaction;
+            await dbService.update(targetModel, { id: transaction.id }, updateData);
+
+            try {
+                await notificationService.createNotification({
+                    refId: transaction.refId,
+                    companyId: transaction.companyId,
+                    name: 'DTH Recharge Status',
+                    msg: `Your DTH recharge of ${transaction.amount} has been updated to ${newStatus}`
+                });
+            } catch (notifyErr) {
+                console.error('Failed to send status update notification:', notifyErr);
+            }
         }
 
         return res.success({ message: 'DTH2 Status checked and updated', data: { orderid: transaction.orderid, status: newStatus, apiResponse: response } });
-    } catch (error) { return res.failure({ message: error.message }); }
+    } catch (error) {
+        console.error('Check Status error:', error);
+        try {
+            const transactionId = req.body.transactionId;
+            if (transactionId) {
+                const transaction = await dbService.findOne(model.service1Transaction, {
+                    [Op.or]: [{ orderid: transactionId }, { transactionId }]
+                }) || await dbService.findOne(model.serviceTransaction, {
+                    [Op.or]: [{ orderid: transactionId }, { transactionId }]
+                });
+                if (transaction) {
+                    return res.success({
+                        message: 'Status check API failed, showing current database status',
+                        data: {
+                            orderid: transaction.orderid,
+                            status: transaction.status,
+                            apiResponse: null
+                        }
+                    });
+                }
+            }
+        } catch (fallbackErr) {
+            console.error('Fallback status retrieval failed:', fallbackErr);
+        }
+        return res.failure({ message: error.message });
+    }
 };
 
 module.exports = { dthPlanFetch, customerInfo, dthRecharge, checkStatus };

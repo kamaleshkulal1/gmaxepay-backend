@@ -3,6 +3,7 @@ const dbService = require('../../../utils/dbService');
 const inspayService = require('../../../services/inspayService');
 const { Op, Sequelize } = require('sequelize');
 const { generateTransactionID } = require('../../../utils/transactionID');
+const notificationService = require('../../../services/notificationService');
 
 const round4 = (num) => {
     const n = Number(num);
@@ -756,41 +757,51 @@ const updateDthRechargeStatus = async (orderid, newStatus, opid, companyId = nul
 const checkStatus = async (req, res) => {
     try {
         const { orderid } = req.body;
+        const targetId = orderid || req.body.transactionId;
 
-        if (!orderid) {
-            return res.failure({ message: 'Order ID is required' });
+        if (!targetId) {
+            return res.failure({ message: 'Order ID or Transaction ID is required' });
         }
         const existingUser = await dbService.findOne(model.user, { id: req.user.id, companyId: req.user.companyId });
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
 
-        // Find existing DTH recharge record
-        const existingDthRecharge = await dbService.findOne(model.serviceTransaction, {
-            orderid,
+        // Find existing DTH recharge record in serviceTransaction or fallback to service1Transaction
+        let existingDthRecharge = await dbService.findOne(model.serviceTransaction, {
+            [Op.or]: [{ orderid: targetId }, { transactionId: targetId }],
             companyId: req.user.companyId
         });
+        if (!existingDthRecharge) {
+            existingDthRecharge = await dbService.findOne(model.service1Transaction, {
+                [Op.or]: [{ orderid: targetId }, { transactionId: targetId }],
+                companyId: req.user.companyId
+            });
+        }
 
         if (!existingDthRecharge) {
             return res.failure({ message: 'DTH recharge record not found' });
         }
 
         // Check status from API
-        const response = await inspayService.checkStatus(orderid);
+        const response = await inspayService.checkStatus(existingDthRecharge.orderid);
         const newStatus = response.status === 'Success' || response.status === 'SUCCESS'
             ? 'Success'
             : (response.status === 'Pending' || response.status === 'PENDING' ? 'Pending' : 'Failure');
 
+        const currentStatus = existingDthRecharge.status;
+
         // Use helper function to update status
-        const result = await updateDthRechargeStatus(orderid, newStatus, response.opid, req.user.companyId);
+        const result = await updateDthRechargeStatus(existingDthRecharge.orderid, newStatus, response.opid, req.user.companyId);
 
         if (!result.success) {
             return res.failure({ message: result.message });
         }
 
         // Update additional fields from API response
+        const targetModel = existingDthRecharge.serviceType.includes('2') ? model.service1Transaction : model.serviceTransaction;
         await dbService.update(
-            model.serviceTransaction,
+            targetModel,
             { id: result.record.id },
             {
                 txid: response.txid || result.record.txid,
@@ -800,9 +811,23 @@ const checkStatus = async (req, res) => {
             }
         );
 
+        if (newStatus !== currentStatus) {
+            // Send push/database notification
+            try {
+                await notificationService.createNotification({
+                    refId: existingDthRecharge.refId,
+                    companyId: existingDthRecharge.companyId,
+                    name: 'DTH Recharge Status',
+                    msg: `Your DTH recharge of ${existingDthRecharge.amount} has been updated to ${newStatus}`
+                });
+            } catch (notifyErr) {
+                console.error('Failed to send status update notification:', notifyErr);
+            }
+        }
+
         // Prepare response data
         const responseData = {
-            orderid,
+            orderid: existingDthRecharge.orderid,
             status: newStatus,
             apiResponse: response
         };
@@ -813,6 +838,31 @@ const checkStatus = async (req, res) => {
         });
     } catch (error) {
         console.error('Check Status error:', error);
+        // Fallback: If API call fails, return the current status from database
+        try {
+            const targetId = req.body.orderid || req.body.transactionId;
+            if (targetId) {
+                const transaction = await dbService.findOne(model.serviceTransaction, {
+                    [Op.or]: [{ orderid: targetId }, { transactionId: targetId }],
+                    companyId: req.user.companyId
+                }) || await dbService.findOne(model.service1Transaction, {
+                    [Op.or]: [{ orderid: targetId }, { transactionId: targetId }],
+                    companyId: req.user.companyId
+                });
+                if (transaction) {
+                    return res.success({
+                        message: 'Status check API failed, showing current database status',
+                        data: {
+                            orderid: transaction.orderid,
+                            status: transaction.status,
+                            apiResponse: null
+                        }
+                    });
+                }
+            }
+        } catch (fallbackErr) {
+            console.error('Fallback status retrieval failed:', fallbackErr);
+        }
         return res.internalServerError({ message: error.message });
     }
 };
