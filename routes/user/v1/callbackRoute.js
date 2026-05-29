@@ -6,6 +6,7 @@ router.get('/payment-callback', callbackController.inspayCallback);
 router.post('/payout-callback', callbackController.aslPayoutCallback);
 router.post('/runpaisa-payout-callback', callbackController.runpaisaPayoutCallback);
 router.post('/paynidipro-payout-callback', callbackController.paynidiproPayoutCallback);
+router.post('/oneklick-callback', callbackController.oneklickPayoutCallback);
 router.post('/aeps-callback', callbackController.aslAEPSCallback);
 router.get('/a1topup-callback', callbackController.a1topupCallback);
 router.post('/cms-callback', callbackController.cmsCallback);

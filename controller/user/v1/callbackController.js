@@ -1380,6 +1380,154 @@ const cmsCallback = async (req, res) => {
     }
 };
 
+const oneklickPayoutCallback = async (req, res) => {
+    try {
+        const payload = req.body || {};
+        console.log('[OneKlick Payout Callback] Incoming payload:', JSON.stringify(payload));
+
+        const { event, code, message, data } = payload;
+        const targetData = data || {};
+
+        const orderRefId = targetData.orderRefId;
+        const clientRefId = targetData.clientRefId;
+        const utr = targetData.utr;
+        const status = targetData.status;
+
+        // OneKlick initiate uses clientRefId as the transactionID
+        const systemOrderId = clientRefId || orderRefId;
+
+        if (!systemOrderId) {
+            console.error('[OneKlick Payout Callback] Missing clientRefId / orderRefId');
+            return res.send('OK');
+        }
+
+        const eventUpper = (event || '').toString().toUpperCase();
+        const codeUpper = (code || '').toString().toUpperCase();
+        const statusUpper = (status || '').toString().toUpperCase();
+
+        let newStatus = 'PENDING';
+        if (
+            codeUpper === '0X0200' ||
+            statusUpper === 'SUCCESS' ||
+            statusUpper === 'PROCESSED' ||
+            eventUpper.includes('SUCCESS')
+        ) {
+            newStatus = 'SUCCESS';
+        } else if (
+            statusUpper === 'FAILED' ||
+            statusUpper === 'REVERSED' ||
+            eventUpper.includes('FAILED') ||
+            eventUpper.includes('REVERSED') ||
+            codeUpper === '0X0202'
+        ) {
+            newStatus = 'FAILED';
+        }
+
+        let existingPayout = await dbService.findOne(model.payoutHistory, { transactionID: systemOrderId });
+        if (!existingPayout) {
+            existingPayout = await dbService.findOne(model.payoutHistory, { orderId: systemOrderId });
+        }
+
+        if (!existingPayout) {
+            console.error('[OneKlick Payout Callback] Payout history not found for orderId:', systemOrderId);
+            return res.send('OK');
+        }
+
+        const previousStatus = existingPayout.status;
+
+        // Reversal Logic if FAILED
+        if (newStatus === 'FAILED' && (previousStatus === 'SUCCESS' || previousStatus === 'PENDING')) {
+            console.log(`[OneKlick Payout Callback] Reversing payout wallets for transactionID: ${existingPayout.transactionID}`);
+            const txnId = existingPayout.transactionID;
+            const aepsWalletCol = existingPayout.walletType || 'apes1Wallet';
+
+            const allHistories = await dbService.findAll(model.walletHistory, { transactionId: txnId });
+            const gstRecord = await dbService.findOne(model.gstHistory, { transactionId: txnId });
+
+            if (allHistories && allHistories.length > 0) {
+                for (const history of allHistories) {
+                    const netImpact = round4((history.credit || 0) - (history.debit || 0));
+                    if (netImpact === 0) continue;
+
+                    const walletRecord = await dbService.findOne(model.wallet, { refId: history.refId, companyId: history.companyId });
+                    if (!walletRecord) continue;
+
+                    const walletCol = history.walletType && history.walletType !== 'mainWallet' ? history.walletType : aepsWalletCol;
+                    const currentBal = round4(walletRecord[walletCol] || 0);
+                    const newBal = round4(currentBal - netImpact);
+
+                    await dbService.update(model.wallet, { id: walletRecord.id }, { [walletCol]: newBal, updatedBy: existingPayout.refId });
+                    await dbService.createOne(model.walletHistory, {
+                        refId: history.refId,
+                        companyId: history.companyId,
+                        walletType: walletCol,
+                        operator: history.operator || 'Payout1',
+                        remark: `Reversal - OneKlick Payout Failed`,
+                        amount: history.amount || 0,
+                        comm: 0,
+                        surcharge: 0,
+                        openingAmt: currentBal,
+                        closingAmt: newBal,
+                        credit: history.debit || 0,
+                        debit: history.credit || 0,
+                        transactionId: txnId,
+                        paymentStatus: 'REFUNDED',
+                        addedBy: existingPayout.refId,
+                        updatedBy: existingPayout.refId
+                    });
+                }
+            }
+
+            // Independent GST Reversal Logic
+            if (gstRecord && gstRecord.amount > 0 && gstRecord.status !== 'FAILED') {
+                console.log(`[OneKlick Payout Callback] Reversing GST for transactionID: ${txnId}, Amount: ${gstRecord.amount}`);
+                const gstAmountToRefund = round4(gstRecord.amount);
+                const walletRecord = await dbService.findOne(model.wallet, { refId: gstRecord.refId, companyId: gstRecord.companyId });
+                if (walletRecord) {
+                    const currentBal = round4(walletRecord[aepsWalletCol] || 0);
+                    const newBal = round4(currentBal + gstAmountToRefund);
+                    await dbService.update(model.wallet, { id: walletRecord.id }, { [aepsWalletCol]: newBal, updatedBy: existingPayout.refId });
+                    await dbService.createOne(model.walletHistory, {
+                        refId: gstRecord.refId,
+                        companyId: gstRecord.companyId,
+                        walletType: aepsWalletCol,
+                        operator: 'GST Reversal',
+                        remark: `Reversal - OneKlick Payout Failed (GST Refund)`,
+                        amount: gstAmountToRefund,
+                        comm: 0, surcharge: 0,
+                        openingAmt: currentBal, closingAmt: newBal,
+                        credit: gstAmountToRefund, debit: 0,
+                        transactionId: txnId,
+                        paymentStatus: 'REFUNDED',
+                        addedBy: existingPayout.refId,
+                        updatedBy: existingPayout.refId
+                    });
+                    await dbService.update(model.gstHistory, { id: gstRecord.id }, { status: 'FAILED', updatedBy: existingPayout.refId });
+                    console.log(`[OneKlick Payout Callback] GST reversed successfully for transactionID: ${txnId}`);
+                } else {
+                    console.error(`[OneKlick Payout Callback] Wallet not found for GST reversal, refId: ${gstRecord.refId}`);
+                }
+            }
+        }
+
+        // Update payoutHistory
+        await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+            status: newStatus,
+            statusMessage: message || existingPayout.statusMessage,
+            utrn: utr || orderRefId || existingPayout.utrn,
+            orderId: orderRefId || existingPayout.orderId,
+            apiResponse: payload,
+            updatedBy: existingPayout.refId
+        });
+
+        console.log('[OneKlick Payout Callback] Processed:', { systemOrderId, newStatus, utr });
+        return res.send('OK');
+    } catch (error) {
+        console.error('[OneKlick Payout Callback] Error:', error);
+        return res.send('OK');
+    }
+};
+
 module.exports = {
     inspayCallback,
     aslPayoutCallback,
@@ -1387,5 +1535,6 @@ module.exports = {
     paynidiproPayoutCallback,
     aslAEPSCallback,
     a1topupCallback,
-    cmsCallback
+    cmsCallback,
+    oneklickPayoutCallback
 };
