@@ -1174,7 +1174,9 @@ const payout = async (req, res) => {
 
         // Calculate final closing balance for the response/history (payout + gst + surcharge)
         let finalClosingBalance = aepsClosingBalance;
-        if ((payoutHistoryData.status === 'SUCCESS' || payoutHistoryData.status === 'PENDING') && commData.isValid) {
+        if (payoutHistoryData.status === 'FAILED') {
+            finalClosingBalance = aepsOpeningBalance;
+        } else if ((payoutHistoryData.status === 'SUCCESS' || payoutHistoryData.status === 'PENDING') && commData.isValid) {
             if (user.userRole === 3) {
                 finalClosingBalance = parseFloat((aepsClosingBalance - commData.amounts.mdSurcharge).toFixed(4));
             } else if (user.userRole === 4) {
@@ -1656,13 +1658,17 @@ const checkPayoutStatus = async (req, res) => {
                     }
                 }
 
-                await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+                const updateData = {
                     status: newStatus,
                     statusMessage: statusRes.message || existingPayout.statusMessage,
                     utrn: statusRes.data?.utr || existingPayout.utrn,
                     apiResponse: statusRes,
                     updatedBy: req.user.id
-                });
+                };
+                if (newStatus === 'FAILED') {
+                    updateData.closingBalance = existingPayout.openingBalance;
+                }
+                await dbService.update(model.payoutHistory, { id: existingPayout.id }, updateData);
             }
 
             return res.success({

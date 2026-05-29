@@ -508,6 +508,9 @@ const aslPayoutCallback = async (req, res) => {
             apiResponse: payload,
             updatedBy: existingPayout.refId
         };
+        if (newStatus === 'FAILED') {
+            updateData.closingBalance = existingPayout.openingBalance;
+        }
 
         await dbService.update(
             model.payoutHistory,
@@ -641,13 +644,17 @@ const runpaisaPayoutCallback = async (req, res) => {
         }
 
         // Update payoutHistory
-        await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+        const updateData = {
             status: newStatus,
             statusMessage: message || existingPayout.statusMessage,
             utrn: utr || existingPayout.utrn,
             apiResponse: payload,
             updatedBy: existingPayout.refId
-        });
+        };
+        if (newStatus === 'FAILED') {
+            updateData.closingBalance = existingPayout.openingBalance;
+        }
+        await dbService.update(model.payoutHistory, { id: existingPayout.id }, updateData);
 
         console.log('[RunPaisa Payout Callback] Processed:', { order_id, newStatus, utr });
         return res.send('OK');
@@ -778,13 +785,17 @@ const paynidiproPayoutCallback = async (req, res) => {
         }
 
         // Update payoutHistory
-        await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+        const updateData = {
             status: newStatus,
             statusMessage: message || existingPayout.statusMessage,
             utrn: utr || existingPayout.utrn,
             apiResponse: payload,
             updatedBy: existingPayout.refId
-        });
+        };
+        if (newStatus === 'FAILED') {
+            updateData.closingBalance = existingPayout.openingBalance;
+        }
+        await dbService.update(model.payoutHistory, { id: existingPayout.id }, updateData);
 
         console.log('[Paynidipro Payout Callback] Processed:', { systemOrderId, newStatus, utr });
         return res.send('OK');
@@ -1511,14 +1522,18 @@ const oneklickPayoutCallback = async (req, res) => {
         }
 
         // Update payoutHistory
-        await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+        const updateData = {
             status: newStatus,
             statusMessage: message || existingPayout.statusMessage,
             utrn: utr || orderRefId || existingPayout.utrn,
             orderId: orderRefId || existingPayout.orderId,
             apiResponse: payload,
             updatedBy: existingPayout.refId
-        });
+        };
+        if (newStatus === 'FAILED') {
+            updateData.closingBalance = existingPayout.openingBalance;
+        }
+        await dbService.update(model.payoutHistory, { id: existingPayout.id }, updateData);
 
         console.log('[OneKlick Payout Callback] Processed:', { systemOrderId, newStatus, utr });
         return res.send('OK');

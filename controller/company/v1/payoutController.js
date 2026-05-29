@@ -807,19 +807,24 @@ const payout = async (req, res) => {
             }
         }
 
+        let finalClosingBalance = aepsClosingBalance;
+        if (payoutHistoryData.status === 'FAILED') {
+            finalClosingBalance = aepsOpeningBalance;
+        }
+
         const responseData = {
             transactionID: transactionID,
             status: payoutHistoryData.status,
             aepsType: normalizedAepsType,
             [normalizedAepsType.toLowerCase()]: {
                 openingBalance: aepsOpeningBalance,
-                closingBalance: aepsClosingBalance
+                closingBalance: finalClosingBalance
             },
             gstAmount: gstAmount
         };
 
         if (payoutHistory?.id) {
-            await dbService.update(model.payoutHistory, { id: payoutHistory.id }, { closingBalance: aepsClosingBalance, updatedBy: user.id });
+            await dbService.update(model.payoutHistory, { id: payoutHistory.id }, { closingBalance: finalClosingBalance, updatedBy: user.id });
         }
 
         if (mode === 'wallet' && payoutHistoryData.status === 'SUCCESS') {
@@ -1226,13 +1231,17 @@ const checkPayoutStatus = async (req, res) => {
                     }
                 }
 
-                await dbService.update(model.payoutHistory, { id: existingPayout.id }, {
+                const updateData = {
                     status: newStatus,
                     statusMessage: statusRes.message || existingPayout.statusMessage,
                     utrn: statusRes.data?.utr || existingPayout.utrn,
                     apiResponse: statusRes,
                     updatedBy: req.user.id
-                });
+                };
+                if (newStatus === 'FAILED') {
+                    updateData.closingBalance = existingPayout.openingBalance;
+                }
+                await dbService.update(model.payoutHistory, { id: existingPayout.id }, updateData);
             }
 
             return res.success({
