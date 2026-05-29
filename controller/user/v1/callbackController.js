@@ -1001,8 +1001,8 @@ const aslAEPSCallback = async (req, res) => {
 
 const a1topupCallback = async (req, res) => {
     try {
-        const payload = req.query || {};
-        console.log('[A1 TopUp Callback] Incoming query:', JSON.stringify(payload));
+        const payload = { ...(req.query || {}), ...(req.body || {}) };
+        console.log('[A1 TopUp Callback] Incoming payload:', JSON.stringify(payload));
         const {
             txid,
             status,
@@ -1551,5 +1551,6 @@ module.exports = {
     aslAEPSCallback,
     a1topupCallback,
     cmsCallback,
-    oneklickPayoutCallback
+    oneklickPayoutCallback,
+    updateService1TransactionStatus
 };

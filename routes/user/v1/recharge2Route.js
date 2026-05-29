@@ -11,5 +11,6 @@ router.post('/recent-history', authentication, recharge2Controller.recentRecharg
 router.post('/find-mobile-operator', authentication, recharge2Controller.findMobileNumberOperator);
 router.post('/find-recharge-plan', authentication, recharge2Controller.findAllRechargePlanFetch);
 router.post('/recharge-offer', authentication, recharge2Controller.findRechargeOfferFetch);
+router.post('/check-status', authentication, recharge2Controller.checkStatus);
 
 module.exports = router;

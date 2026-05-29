@@ -432,6 +432,33 @@ const findRechargeOfferFetch = async (req, res) => {
     }
 };
 
+const checkStatus = async (req, res) => {
+    try {
+        const { orderid } = req.body;
+        if (!orderid) return res.failure({ message: 'Order ID is required' });
+        const transaction = await dbService.findOne(model.service1Transaction, { orderid });
+        if (!transaction) return res.failure({ message: 'Transaction not found' });
+        const response = await a1topService.checkStatus(orderid);
+        
+        // Normalize status and update local database status
+        const statusStr = String(response?.status || '').toUpperCase();
+        let newStatus;
+        if (statusStr === 'SUCCESS' || statusStr === '1') {
+            newStatus = 'SUCCESS';
+        } else if (statusStr === 'PENDING' || statusStr === '2') {
+            newStatus = 'PENDING';
+        } else {
+            newStatus = 'FAILURE';
+        }
+
+        const callbackController = require('./callbackController');
+        const operatorId = response?.opid && String(response.opid).trim() !== '' ? response.opid : null;
+        await callbackController.updateService1TransactionStatus(orderid, newStatus, operatorId, req.user.companyId);
+
+        return res.success({ message: 'Recharge2 Status checked and updated', data: { orderid, status: newStatus, apiResponse: response } });
+    } catch (error) { return res.failure({ message: error.message }); }
+};
+
 module.exports = {
     recharge,
     getRechargeHistory,
@@ -440,5 +467,6 @@ module.exports = {
     recentRechargeHistory,
     findMobileNumberOperator,
     findAllRechargePlanFetch,
-    findRechargeOfferFetch
+    findRechargeOfferFetch,
+    checkStatus
 };
