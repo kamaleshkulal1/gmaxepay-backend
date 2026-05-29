@@ -1107,14 +1107,18 @@ const checkPayoutStatus = async (req, res) => {
 
             const isSuccessCall =
                 (targetResponse.status === 'SUCCESS' && targetResponse.code === '0x0200') ||
-                (targetResponse.code === '0x0202' && targetResponse.data) ||
-                (targetResponse.code === '0x0206' && targetResponse.data);
+                (targetResponse.code === '0x0202') ||
+                (targetResponse.code === '0x0206') ||
+                (targetResponse.status === 'FAILURE' || targetResponse.status === 'FAILED');
 
             if (!isSuccessCall) {
                 return res.failure({ message: targetResponse.message || 'Invalid response from OneKlick API' });
             }
 
-            const oneklickTxnStatus = (targetResponse.data?.status || (targetResponse.code === '0x0202' ? 'FAILED' : 'PENDING')).toUpperCase();
+            const oneklickTxnStatus = (
+                targetResponse.data?.status ||
+                (targetResponse.status === 'FAILURE' || targetResponse.status === 'FAILED' || targetResponse.code === '0x0202' ? 'FAILED' : 'PENDING')
+            ).toUpperCase();
             const bankReference = targetResponse.data?.bankReference || targetResponse.data?.utr || targetResponse.data?.bank_reference || targetResponse.data?.bankref || '';
 
             let mappedStatus = 'PENDING';
@@ -1129,7 +1133,7 @@ const checkPayoutStatus = async (req, res) => {
                 message: targetResponse.message || targetResponse.data?.failedMessage || 'Status retrieved successfully',
                 data: {
                     utr: bankReference,
-                    ...targetResponse.data
+                    ...(targetResponse.data || {})
                 }
             };
         } else {
