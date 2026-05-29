@@ -1533,6 +1533,7 @@ const checkPayoutStatus = async (req, res) => {
             }
 
             const targetResponse = response.data?.code ? response.data : response;
+            console.log('Target response', targetResponse);
 
             const isSuccessCall =
                 (targetResponse.status === 'SUCCESS' && targetResponse.code === '0x0200') ||
