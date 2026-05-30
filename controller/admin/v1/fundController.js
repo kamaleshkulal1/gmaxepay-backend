@@ -4,6 +4,7 @@ const imageService = require('../../../services/imageService');
 const emailService = require('../../../services/emailService');
 const { Op } = require('sequelize');
 const { decrypt } = require('../../../utils/encryption');
+const { generateTransactionID } = require('../../../utils/transactionID');
 
 const processFundRequestData = (data) => {
     if (!data) return data;
@@ -469,7 +470,200 @@ const getFundRequests = async (req, res) => {
     }
 };
 
+const creditDebitUserWallet = async (req, res) => {
+    try {
+        if (req.user.userRole !== 1 || req.user.companyId !== 1) {
+            return res.failure({
+                message: 'Only superadmin can access this endpoint'
+            });
+        }
+
+        const { userId, amount, action, remarks } = req.body;
+
+        if (!userId) {
+            return res.failure({ message: 'User ID is required' });
+        }
+
+        if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+            return res.failure({ message: 'A valid positive amount is required' });
+        }
+
+        if (!action || !['CREDIT', 'DEBIT'].includes(action.toUpperCase())) {
+            return res.failure({ message: 'Action must be either CREDIT or DEBIT' });
+        }
+
+        const transferAmount = parseFloat(amount);
+        const actionUpper = action.toUpperCase();
+
+        const adminUser = await dbService.findOne(model.user, {
+            id: 1,
+            companyId: 1,
+            isActive: true,
+            isDeleted: false
+        });
+
+        if (!adminUser) {
+            return res.failure({ message: 'Superadmin user not found or inactive' });
+        }
+
+        let adminWallet = await dbService.findOne(model.wallet, {
+            refId: 1,
+            companyId: 1
+        });
+
+        if (!adminWallet) {
+            adminWallet = await dbService.createOne(model.wallet, {
+                refId: 1,
+                companyId: 1,
+                mainWallet: 0,
+                apes1Wallet: 0,
+                apes2Wallet: 0,
+                isActive: true
+            });
+        }
+
+        const targetUser = await dbService.findOne(model.user, {
+            id: userId,
+            isActive: true,
+            isDeleted: false
+        });
+
+        if (!targetUser) {
+            return res.failure({ message: 'Target user not found or inactive' });
+        }
+
+        let targetWallet = await dbService.findOne(model.wallet, {
+            refId: userId,
+            companyId: targetUser.companyId
+        });
+
+        if (!targetWallet) {
+            targetWallet = await dbService.createOne(model.wallet, {
+                refId: userId,
+                companyId: targetUser.companyId,
+                mainWallet: 0,
+                apes1Wallet: 0,
+                apes2Wallet: 0,
+                isActive: true
+            });
+        }
+
+        const adminOpeningBalance = parseFloat(adminWallet.mainWallet) || 0;
+        const userOpeningBalance = parseFloat(targetWallet.mainWallet) || 0;
+
+        let adminClosingBalance = adminOpeningBalance;
+        let userClosingBalance = userOpeningBalance;
+
+        const targetCompany = await dbService.findOne(model.company, { id: targetUser.companyId });
+        const transactionId = generateTransactionID(targetCompany?.companyName || 'GMAXEPAY');
+
+        let adminWalletHistoryData = {
+            refId: 1,
+            companyId: 1,
+            walletType: 'MANUAL_TRANSFER',
+            amount: transferAmount,
+            openingAmt: adminOpeningBalance,
+            paymentStatus: 'SUCCESS',
+            transactionId: transactionId,
+            addedBy: req.user.id,
+            createdAt: new Date()
+        };
+
+        let userWalletHistoryData = {
+            refId: userId,
+            companyId: targetUser.companyId,
+            walletType: 'MANUAL_TRANSFER',
+            amount: transferAmount,
+            openingAmt: userOpeningBalance,
+            paymentStatus: 'SUCCESS',
+            transactionId: transactionId,
+            addedBy: req.user.id,
+            createdAt: new Date()
+        };
+
+        if (actionUpper === 'CREDIT') {
+            if (adminOpeningBalance < transferAmount) {
+                return res.failure({
+                    message: `Insufficient superadmin wallet balance. Available: ${adminOpeningBalance}, Required: ${transferAmount}`
+                });
+            }
+
+            adminClosingBalance = adminOpeningBalance - transferAmount;
+            userClosingBalance = userOpeningBalance + transferAmount;
+
+            adminWalletHistoryData.remark = remarks || `Manual transfer (debit) to user ID: ${userId} - ${transactionId}`;
+            adminWalletHistoryData.operator = 'MANUAL_DEBIT';
+            adminWalletHistoryData.closingAmt = adminClosingBalance;
+            adminWalletHistoryData.credit = 0;
+            adminWalletHistoryData.debit = transferAmount;
+
+            userWalletHistoryData.remark = remarks || `Manual transfer (credit) received from superadmin ID: ${req.user.id} - ${transactionId}`;
+            userWalletHistoryData.operator = 'MANUAL_CREDIT';
+            userWalletHistoryData.closingAmt = userClosingBalance;
+            userWalletHistoryData.credit = transferAmount;
+            userWalletHistoryData.debit = 0;
+        } else {
+            if (userOpeningBalance < transferAmount) {
+                return res.failure({
+                    message: `Insufficient user wallet balance. Available: ${userOpeningBalance}, Required: ${transferAmount}`
+                });
+            }
+
+            adminClosingBalance = adminOpeningBalance + transferAmount;
+            userClosingBalance = userOpeningBalance - transferAmount;
+
+            userWalletHistoryData.remark = remarks || `Manual transfer (debit) by superadmin ID: ${req.user.id} - ${transactionId}`;
+            userWalletHistoryData.operator = 'MANUAL_DEBIT';
+            userWalletHistoryData.closingAmt = userClosingBalance;
+            userWalletHistoryData.credit = 0;
+            userWalletHistoryData.debit = transferAmount;
+
+            adminWalletHistoryData.remark = remarks || `Manual transfer (credit) recovered from user ID: ${userId} - ${transactionId}`;
+            adminWalletHistoryData.operator = 'MANUAL_CREDIT';
+            adminWalletHistoryData.closingAmt = adminClosingBalance;
+            adminWalletHistoryData.credit = transferAmount;
+            adminWalletHistoryData.debit = 0;
+        }
+
+        await Promise.all([
+            dbService.update(
+                model.wallet,
+                { id: adminWallet.id },
+                { mainWallet: adminClosingBalance }
+            ),
+            dbService.update(
+                model.wallet,
+                { id: targetWallet.id },
+                { mainWallet: userClosingBalance }
+            ),
+            dbService.createOne(model.walletHistory, adminWalletHistoryData),
+            dbService.createOne(model.walletHistory, userWalletHistoryData)
+        ]);
+
+        return res.success({
+            message: `Wallet ${actionUpper.toLowerCase()}ed successfully`,
+            data: {
+                userId,
+                transactionId,
+                action: actionUpper,
+                amount: transferAmount,
+                userOpeningBalance,
+                userClosingBalance,
+                adminOpeningBalance,
+                adminClosingBalance
+            }
+        });
+
+    } catch (error) {
+        console.error('Credit/Debit user wallet error:', error);
+        return res.failure({
+            message: error.message || 'Unable to process credit/debit adjustment'
+        });
+    }
+};
+
 module.exports = {
     approveFundRequest,
-    getFundRequests
+    getFundRequests,
+    creditDebitUserWallet
 };
