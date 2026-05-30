@@ -478,7 +478,10 @@ const creditDebitUserWallet = async (req, res) => {
             });
         }
 
-        const { userId, amount, action, remarks } = req.body;
+        const { userId, amount, action, remarks, walletType } = req.body;
+
+        const VALID_WALLET_TYPES = ['mainWallet', 'apes1Wallet', 'apes2Wallet'];
+        const resolvedWalletType = walletType && VALID_WALLET_TYPES.includes(walletType) ? walletType : 'mainWallet';
 
         if (!userId) {
             return res.failure({ message: 'User ID is required' });
@@ -548,8 +551,8 @@ const creditDebitUserWallet = async (req, res) => {
             });
         }
 
-        const adminOpeningBalance = parseFloat(adminWallet.mainWallet) || 0;
-        const userOpeningBalance = parseFloat(targetWallet.mainWallet) || 0;
+        const adminOpeningBalance = parseFloat(adminWallet[resolvedWalletType]) || 0;
+        const userOpeningBalance = parseFloat(targetWallet[resolvedWalletType]) || 0;
 
         let adminClosingBalance = adminOpeningBalance;
         let userClosingBalance = userOpeningBalance;
@@ -560,7 +563,7 @@ const creditDebitUserWallet = async (req, res) => {
         let adminWalletHistoryData = {
             refId: 1,
             companyId: 1,
-            walletType: 'MANUAL_TRANSFER',
+            walletType: `MANUAL_TRANSFER_${resolvedWalletType.toUpperCase()}`,
             amount: transferAmount,
             openingAmt: adminOpeningBalance,
             paymentStatus: 'SUCCESS',
@@ -572,7 +575,7 @@ const creditDebitUserWallet = async (req, res) => {
         let userWalletHistoryData = {
             refId: userId,
             companyId: targetUser.companyId,
-            walletType: 'MANUAL_TRANSFER',
+            walletType: `MANUAL_TRANSFER_${resolvedWalletType.toUpperCase()}`,
             amount: transferAmount,
             openingAmt: userOpeningBalance,
             paymentStatus: 'SUCCESS',
@@ -629,12 +632,12 @@ const creditDebitUserWallet = async (req, res) => {
             dbService.update(
                 model.wallet,
                 { id: adminWallet.id },
-                { mainWallet: adminClosingBalance }
+                { [resolvedWalletType]: adminClosingBalance }
             ),
             dbService.update(
                 model.wallet,
                 { id: targetWallet.id },
-                { mainWallet: userClosingBalance }
+                { [resolvedWalletType]: userClosingBalance }
             ),
             dbService.createOne(model.walletHistory, adminWalletHistoryData),
             dbService.createOne(model.walletHistory, userWalletHistoryData)
@@ -646,6 +649,7 @@ const creditDebitUserWallet = async (req, res) => {
                 userId,
                 transactionId,
                 action: actionUpper,
+                walletType: resolvedWalletType,
                 amount: transferAmount,
                 userOpeningBalance,
                 userClosingBalance,
