@@ -12,4 +12,6 @@ router.post('/fund-requests', authentication, fundController.getFundRequests);
 
 router.post('/all-bank-details', authentication, fundController.allbankDetails);
 
+router.post('/credit-debit', authentication, fundController.creditDebitUserWallet);
+
 module.exports = router;
