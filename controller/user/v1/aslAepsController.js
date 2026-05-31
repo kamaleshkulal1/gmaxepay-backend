@@ -525,7 +525,10 @@ const aepsTransaction = async (req, res) => {
             }
         }
 
-        const topStatus = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
+        let topStatus = parsedResponse?.status ? String(parsedResponse.status).toUpperCase() : null;
+        if (topStatus === 'ERROR' || topStatus === 'FAILURE') {
+            topStatus = 'FAILED';
+        }
         const innerData =
             parsedResponse && typeof parsedResponse === 'object' && parsedResponse.data && typeof parsedResponse.data === 'object'
                 ? parsedResponse.data
@@ -535,7 +538,10 @@ const aepsTransaction = async (req, res) => {
             innerData?.status ??
             parsedResponse?.transactionStatus ??
             parsedResponse?.status;
-        const transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
+        let transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
+        if (transactionStatus === 'ERROR' || transactionStatus === 'FAILURE') {
+            transactionStatus = 'FAILED';
+        }
         const responseCode = innerData?.responseCode ?? parsedResponse?.responseCode;
 
         const isSuccess =
@@ -561,7 +567,7 @@ const aepsTransaction = async (req, res) => {
         // normalize it so API consumers don't see ERROR inside a successful response.
         const normalizedGatewayResponse =
             parsedResponse && typeof parsedResponse === 'object' && Object.prototype.hasOwnProperty.call(parsedResponse, 'status')
-                ? { ...parsedResponse, status: isSuccess ? 'SUCCESS' : (topStatus || 'ERROR') }
+                ? { ...parsedResponse, status: isSuccess ? 'SUCCESS' : (topStatus || 'FAILED') }
                 : parsedResponse;
 
         // Only set merchantTransactionId for SUCCESS transactions
@@ -1105,7 +1111,10 @@ const checkStatus = async (req, res) => {
         const innerData = response?.data && typeof response.data === 'object' ? response.data : null;
         const responseCode = innerData?.responseCode ?? response?.responseCode;
         const transactionStatusRaw = innerData?.transactionStatus ?? innerData?.status ?? response?.status;
-        const transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
+        let transactionStatus = transactionStatusRaw ? String(transactionStatusRaw).toUpperCase() : null;
+        if (transactionStatus === 'ERROR' || transactionStatus === 'FAILURE') {
+            transactionStatus = 'FAILED';
+        }
 
         const isSuccess =
             responseCode === '00' ||
