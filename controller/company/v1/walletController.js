@@ -106,9 +106,18 @@ const walletHistory = async (req, res) => {
 
         const history = await model.walletHistory.paginate(options);
 
-        return res.success({
+        return res.status(200).json({
+            status: 'SUCCESS',
             message: 'Wallet history fetched successfully',
-            data: history
+            data: history.docs || [],
+            total: history.total || 0,
+            count: history.docs ? history.docs.length : 0,
+            paginator: {
+                itemCount: history.total,
+                perPage: options.paginate || 10,
+                pageCount: history.pages,
+                currentPage: options.page || 1
+            }
         });
 
     } catch (error) {

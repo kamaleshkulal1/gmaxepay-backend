@@ -1492,10 +1492,12 @@ const getAllPayoutHistory = async (req, res) => {
             }
         }
 
-        return res.success({
+        return res.status(200).json({
+            status: 'SUCCESS',
             message: 'Payout history retrieved successfully',
             data: result?.data || [],
             total: result?.total || 0,
+            count: result?.data ? result.data.length : 0,
             paginator: result?.paginator
         });
     }

@@ -1202,10 +1202,12 @@ const getSurRecReports = async (req, res) => {
 
         const result = await dbService.paginate(model.surRecords, query, options);
 
-        return res.success({
+        return res.status(200).send({
+            status: 'SUCCESS',
             message: 'Surcharge reports retrieved successfully',
             data: result.data || [],
             total: result.total || 0,
+            count: result.data ? result.data.length : 0,
             paginator: result.paginator
         });
 
