@@ -145,17 +145,17 @@ const aepsTransaction = async (req, res) => {
 
         if (normalizedTxnType === 'CW') {
             operator = await dbService.findOne(model.operator, {
-                operatorType: 'AEPS1',
+                operatorType: 'AEPS3',
                 minValue: { [Op.lte]: amountNumber },
                 maxValue: { [Op.gte]: amountNumber }
             });
-            operatorType = operator?.operatorType || 'AEPS1';
+            operatorType = operator?.operatorType || 'AEPS3';
         } else if (normalizedTxnType === 'MS') {
             operator = await dbService.findOne(model.operator, {
-                operatorType: 'AEPS1_MS',
+                operatorType: 'AEPS3_MS',
                 isActive: true
             });
-            operatorType = operator?.operatorType || 'AEPS1_MS';
+            operatorType = operator?.operatorType || 'AEPS3_MS';
         }
         // BE: operator stays null, no commission
 
