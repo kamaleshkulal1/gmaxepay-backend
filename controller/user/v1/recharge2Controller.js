@@ -320,7 +320,8 @@ const getDownlineRecharge2Reports = async (req, res) => {
         let options = { order: [['createdAt', 'DESC']] };
         if (dataToFind.options) { options = { ...dataToFind.options, order: dataToFind.options.sort ? Object.entries(dataToFind.options.sort).map(([f, d]) => [f, d === -1 ? 'DESC' : 'ASC']) : [['createdAt', 'DESC']] }; }
         options.include = [{ model: model.user, as: 'user', attributes: ['id', 'name', 'userId', 'mobileNo'], required: false }];
-        const result = await dbService.paginate(model.service1Transaction, { refId: { [Op.in]: downlineIds }, companyId: req.user.companyId }, options);
+        const query = { refId: { [Op.in]: downlineIds }, companyId: req.user.companyId, ...(dataToFind.query || {}) };
+        const result = await dbService.paginate(model.service1Transaction, query, options);
         return res.status(200).send({ status: 'SUCCESS', message: 'Recharge2 reports retrieved successfully', data: result?.data || [], total: result?.total || 0, paginator: result?.paginator || { page: 1, paginate: 10, totalPages: 0 } });
     } catch (error) { return res.internalServerError({ message: error.message }); }
 };
@@ -332,7 +333,8 @@ const getRecharge2Reports = async (req, res) => {
         let options = { order: [['createdAt', 'DESC']] };
         if (dataToFind.options) { options = { ...dataToFind.options, order: dataToFind.options.sort ? Object.entries(dataToFind.options.sort).map(([f, d]) => [f, d === -1 ? 'DESC' : 'ASC']) : [['createdAt', 'DESC']] }; }
         options.include = [{ model: model.user, as: 'user', attributes: ['id', 'name', 'userId', 'mobileNo'], required: false }];
-        const result = await dbService.paginate(model.service1Transaction, { refId: req.user.id, companyId: req.user.companyId }, options);
+        const query = { refId: req.user.id, companyId: req.user.companyId, ...(dataToFind.query || {}) };
+        const result = await dbService.paginate(model.service1Transaction, query, options);
         return res.status(200).send({ status: 'SUCCESS', message: 'Recharge2 reports retrieved successfully', data: result?.data || [], total: result?.total || 0, paginator: result?.paginator || { page: 1, paginate: 10, totalPages: 0 } });
     } catch (error) { return res.internalServerError({ message: error.message }); }
 };
@@ -437,7 +439,7 @@ const checkStatus = async (req, res) => {
     try {
         const { transactionId } = req.body;
         if (!transactionId) return res.failure({ message: 'Order ID is required' });
-        
+
         // Find existing transaction in service1Transaction or fallback to serviceTransaction
         let transaction = await dbService.findOne(model.service1Transaction, {
             [Op.or]: [{ orderid: transactionId }, { transactionId }]
@@ -448,7 +450,7 @@ const checkStatus = async (req, res) => {
             });
         }
         if (!transaction) return res.failure({ message: 'Transaction not found' });
-        
+
         const response = await a1topService.checkStatus(transaction?.orderid);
 
         // Normalize status and update local database status
@@ -569,7 +571,7 @@ const checkStatus = async (req, res) => {
         }
 
         return res.success({ message: 'Recharge2 Status checked and updated', data: { orderid: transaction.orderid, status: newStatus, apiResponse: response } });
-    } catch (error) { 
+    } catch (error) {
         console.error('Check Status error:', error);
         // Fallback: If API call fails, return the current status from database
         try {
@@ -594,7 +596,7 @@ const checkStatus = async (req, res) => {
         } catch (fallbackErr) {
             console.error('Fallback status retrieval failed:', fallbackErr);
         }
-        return res.failure({ message: error.message }); 
+        return res.failure({ message: error.message });
     }
 };
 
