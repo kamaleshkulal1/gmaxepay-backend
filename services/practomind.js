@@ -1,11 +1,10 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
-const BASE_URL = (process.env.PRACTOMIND_BASE_URL || process.env.PUNJIKENDRA_BASE_URL || '').trim();
-const CLIENT_SECRET = process.env.PRACTOMIND_SECRET_KEY || process.env.PUNJIKENDRA_CLIENT_SECRET || '';
-const CLIENT_ID = process.env.PRACTOMIND_API_KEY || process.env.PUNJIKENDRA_CLIENT_ID || '';
+const BASE_URL = process.env.PUNJIKENDRA_BASE_URL
+const CLIENT_SECRET = process.env.PUNJIKENDRA_CLIENT_SECRET || '';
+const CLIENT_ID = process.env.PUNJIKENDRA_CLIENT_ID;
 const AEPSPIPE = process.env.AEPSPIPE || '4';
-
 
 let cachedToken = null;
 let tokenExpiry = 0;
