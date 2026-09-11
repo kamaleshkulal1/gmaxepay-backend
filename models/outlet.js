@@ -14,7 +14,7 @@ const { encrypt, decrypt } = require('../utils/encryption');
 // Helper function to encrypt image field (handles JSON and STRING)
 const encryptImageField = (imageData) => {
   if (!imageData) return null;
-  
+
   // If it's a JSON object, extract key and encrypt it
   if (typeof imageData === 'object') {
     const key = imageData.key || imageData;
@@ -23,7 +23,7 @@ const encryptImageField = (imageData) => {
     }
     return imageData;
   }
-  
+
   // If it's a string, encrypt it
   if (typeof imageData === 'string') {
     // Check if it's already JSON string
@@ -41,7 +41,7 @@ const encryptImageField = (imageData) => {
       return imageData;
     }
   }
-  
+
   return imageData;
 };
 
@@ -49,7 +49,7 @@ const encryptImageField = (imageData) => {
 // For JSON fields: expects {key: "encrypted_string"} or JSON string
 const decryptImageField = (imageData) => {
   if (!imageData) return null;
-  
+
   try {
     // If it's a JSON object, decrypt the key
     if (typeof imageData === 'object') {
@@ -71,7 +71,7 @@ const decryptImageField = (imageData) => {
       }
       return imageData;
     }
-    
+
     // If it's a string, try to parse as JSON first (for JSON fields stored as string)
     if (typeof imageData === 'string') {
       try {
@@ -108,7 +108,7 @@ const decryptImageField = (imageData) => {
         return imageData;
       }
     }
-    
+
     return imageData;
   } catch (error) {
     // If decryption fails, return as is (backward compatibility)
@@ -141,7 +141,7 @@ let Outlet = sequelize.define(
       references: {
         model: 'company',
         key: 'id'
-      },   
+      },
       allowNull: false
     },
     shopName: { type: DataTypes.STRING, allowNull: false },
@@ -190,7 +190,7 @@ let Outlet = sequelize.define(
     },
     shopCategoryId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'practomindCompanyCode',
         key: 'id'
@@ -215,31 +215,31 @@ let Outlet = sequelize.define(
     holderName: {
       type: DataTypes.STRING
     },
-    shopCity:{
+    shopCity: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    shopDistrict:{
+    shopDistrict: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    shopState:{
+    shopState: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    shopPincode:{
+    shopPincode: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    shopLatitude:{
+    shopLatitude: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    shopLongitude:{
+    shopLongitude: {
       type: DataTypes.STRING,
       allowNull: true
-    },  
-    shopCountry:{
+    },
+    shopCountry: {
       type: DataTypes.STRING,
       allowNull: true
     },

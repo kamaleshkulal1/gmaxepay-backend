@@ -1395,6 +1395,25 @@ const postShopDetails = async (req, res) => {
       return res.failure({ message: 'Shop details already verified.' });
     }
 
+    // Ensure valid shopCategoryId exists in practomindCompanyCode to prevent foreign key error
+    let validShopCategoryId = 1;
+    try {
+      let defaultCategory = await dbService.findOne(model.practomindCompanyCode, { id: 1 });
+      if (!defaultCategory) {
+        defaultCategory = await dbService.createOne(model.practomindCompanyCode, {
+          c_id: 'DEFAULT',
+          mccCode: '5411',
+          description: 'Grocery Stores, Supermarkets and General Retail',
+          isActive: true,
+          isDeleted: false
+        });
+      }
+      validShopCategoryId = defaultCategory?.id || null;
+    } catch (catErr) {
+      console.error('Error ensuring default practomindCompanyCode:', catErr.message);
+      validShopCategoryId = null;
+    }
+
     const outletPayload = {
       shopName,
       shopAddress: formatted_address || completeAddress,
@@ -1407,7 +1426,7 @@ const postShopDetails = async (req, res) => {
       shopLatitude: latitude,
       shopLongitude: longitude,
       shopCountry: addressData?.address_components?.country,
-      shopCategoryId: 1
+      ...(validShopCategoryId ? { shopCategoryId: validShopCategoryId } : {})
     };
 
     const outlet = await dbService.createOne(

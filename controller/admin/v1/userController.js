@@ -844,13 +844,11 @@ const getCompleteKycData = async (req, res) => {
       return res.failure({ message: 'User not found' });
     }
 
-    // Get image URLs helper - use CDN URLs for all images (not secure proxy)
-    // Pass useSecureProxy = false to get CDN URLs like: https://assets.gmaxepay.in/images/...
+
     const getImageUrl = (imageData) => {
       if (!imageData) return null;
       const plainKey = extractS3Key(imageData);
       if (!plainKey) return null;
-      // Use useSecureProxy = false to get CDN URLs instead of secure proxy URLs
       return imageService.getImageUrl(plainKey, false);
     };
 

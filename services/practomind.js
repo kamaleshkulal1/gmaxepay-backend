@@ -1,11 +1,14 @@
 const axios = require('axios');
 const crypto = require('crypto');
-const { generatePractomindToken } = require('../utils/aepsEncryption');
 
-const PRACTOMIND_BASE_URL = process.env.PRACTOMIND_BASE_URL;
-const PRACTOMIND_SECRET_KEY = process.env.PRACTOMIND_SECRET_KEY;
-const PRACTOMIND_API_KEY = process.env.PRACTOMIND_API_KEY;
+const BASE_URL = (process.env.PRACTOMIND_BASE_URL || process.env.PUNJIKENDRA_BASE_URL || '').trim();
+const CLIENT_SECRET = process.env.PRACTOMIND_SECRET_KEY || process.env.PUNJIKENDRA_CLIENT_SECRET || '';
+const CLIENT_ID = process.env.PRACTOMIND_API_KEY || process.env.PUNJIKENDRA_CLIENT_ID || '';
 const AEPSPIPE = process.env.AEPSPIPE || '4';
+
+
+let cachedToken = null;
+let tokenExpiry = 0;
 
 const formatDob = (dob) => {
   if (!dob) return '';
@@ -26,34 +29,88 @@ const formatDob = (dob) => {
   return String(dob);
 };
 
-const generateSignature = (payload, secret) => {
-  if (!secret) return '';
-  const payloadStr = payload ? (typeof payload === 'string' ? payload : JSON.stringify(payload)) : '';
-  return crypto.createHmac('sha256', secret).update(payloadStr).digest('hex');
+const getAccessToken = async (forceRefresh = false) => {
+  try {
+    if (!forceRefresh && cachedToken && Date.now() < tokenExpiry) {
+      return cachedToken;
+    }
+
+    if (!CLIENT_ID || !CLIENT_SECRET || !BASE_URL) {
+      throw new Error('Practomind / Punjikendra API credentials not configured');
+    }
+
+    const payload = {
+      clientId: CLIENT_ID,
+      clientSecret: CLIENT_SECRET
+    };
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const bodyStr = JSON.stringify(payload);
+    const signature = crypto
+      .createHmac('sha256', CLIENT_SECRET)
+      .update(timestamp + '.' + bodyStr)
+      .digest('hex');
+
+    const config = {
+      method: 'post',
+      url: `${BASE_URL.replace(/\/+$/, '')}/api/partner/v1/auth/token`,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': CLIENT_ID,
+        'X-TIMESTAMP': timestamp.toString(),
+        'X-SIGNATURE': signature
+      },
+      data: payload
+    };
+
+    console.log('[Practomind] Requesting access token...');
+    const response = await axios.request(config);
+    console.log('[Practomind] Token response:', JSON.stringify(response.data, null, 2));
+
+    let token = null;
+    if (response.data && response.data.status === 'success' && response.data.data?.token) {
+      token = response.data.data.token;
+    } else if (response.data && response.data.token) {
+      token = response.data.token;
+    }
+
+    if (token) {
+      cachedToken = token;
+      // Cache token for 45 minutes
+      tokenExpiry = Date.now() + 45 * 60 * 1000;
+      return token;
+    }
+
+    throw new Error(response.data?.message || 'Token generation failed');
+  } catch (error) {
+    cachedToken = null;
+    tokenExpiry = 0;
+    console.error('[Practomind] Token Error:', error.response?.data || error.message);
+    throw error;
+  }
 };
 
-const getHeaders = (payload = null, tokenPayload = {}) => {
-  if (!PRACTOMIND_SECRET_KEY || !PRACTOMIND_API_KEY) {
-    throw new Error('Practomind API credentials not configured');
-  }
+const getAuthHeaders = async (body = {}) => {
+  const token = await getAccessToken();
+  const timestamp = Math.floor(Date.now() / 1000);
+  const bodyStr = typeof body === 'object' && body !== null && Object.keys(body).length > 0 ? JSON.stringify(body) : '';
 
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const signature = generateSignature(payload, PRACTOMIND_SECRET_KEY);
-
-  const jwtClaims = {
-    merchantId: payload?.merchantId || tokenPayload?.merchantId,
-    merchantRefId: payload?.merchantRefId || tokenPayload?.merchantRefId,
-    ...tokenPayload
-  };
-  const token = generatePractomindToken(jwtClaims, PRACTOMIND_SECRET_KEY, 3600);
+  const signature = crypto
+    .createHmac('sha256', CLIENT_SECRET)
+    .update(timestamp + '.' + bodyStr)
+    .digest('hex');
 
   return {
     'Content-Type': 'application/json',
-    'X-API-KEY': PRACTOMIND_API_KEY,
-    'X-TIMESTAMP': timestamp,
-    'X-SIGNATURE': signature,
-    'Authorization': `Bearer ${token}`
+    'Authorization': `Bearer ${token}`,
+    'X-API-KEY': CLIENT_ID,
+    'X-TIMESTAMP': timestamp.toString(),
+    'X-SIGNATURE': signature
   };
+};
+
+const getHeaders = async (payload = null, tokenPayload = {}) => {
+  return await getAuthHeaders(payload || {});
 };
 
 const sanitizeLogPayload = (payload) => {
@@ -63,6 +120,8 @@ const sanitizeLogPayload = (payload) => {
   if (copy.txtPidData) copy.txtPidData = '[REDACTED_PID_DATA]';
   return copy;
 };
+
+// ==================== AEPS SERVICES ====================
 
 const practomindAepsOnboarding = async (data, merchantLoginId) => {
   try {
@@ -111,8 +170,8 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
 
     console.log('Practomind Merchant Register Payload:', JSON.stringify(payload, null, 2));
 
-    const headers = getHeaders(payload, { merchantLoginId: payload.merchantRefId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/merchant/register`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/register`, payload, { headers });
 
     console.log('Practomind Merchant Register Response:', response.data);
     return response.data;
@@ -132,8 +191,8 @@ const practomindSendEkycOtp = async (data) => {
 
     console.log('Practomind Send KYC OTP Payload:', payload);
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/kyc/otp`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/otp`, payload, { headers });
 
     console.log('Practomind Send KYC OTP Response:', response.data);
     return response.data;
@@ -153,8 +212,8 @@ const practomindResendEkycOtp = async (data) => {
 
     console.log('Practomind Resend KYC OTP Payload:', payload);
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/kyc/otp/resend`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/otp/resend`, payload, { headers });
 
     console.log('Practomind Resend KYC OTP Response:', response.data);
     return response.data;
@@ -175,8 +234,8 @@ const practomindValidateEkycOtp = async (data) => {
 
     console.log('Practomind Verify KYC OTP Payload:', payload);
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/kyc/otp/verify`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/otp/verify`, payload, { headers });
 
     console.log('Practomind Verify KYC OTP Response:', response.data);
     return response.data;
@@ -201,8 +260,8 @@ const practomindEkycSubmit = async (data) => {
 
     console.log('Practomind Biometric KYC Payload:', sanitizeLogPayload(payload));
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/kyc/biometric`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/biometric`, payload, { headers });
 
     console.log('Practomind Biometric KYC Response:', response.data);
     return response.data;
@@ -226,8 +285,8 @@ const practomindDailyAuthentication = async (data) => {
 
     console.log('Practomind Daily 2FA Biometric Payload:', sanitizeLogPayload(payload));
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/kyc/biometric/daily`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/biometric/daily`, payload, { headers });
 
     console.log('Practomind Daily 2FA Biometric Response:', response.data);
     return response.data;
@@ -256,8 +315,8 @@ const practomindCashWithdrawal = async (data) => {
 
     console.log('Practomind Cash Withdrawal Payload:', sanitizeLogPayload(payload));
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
 
     console.log('Practomind Cash Withdrawal Response:', response.data);
     return response.data;
@@ -284,8 +343,8 @@ const practomindBalanceEnquiry = async (data) => {
 
     console.log('Practomind Balance Enquiry Payload:', sanitizeLogPayload(payload));
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
 
     console.log('Practomind Balance Enquiry Response:', response.data);
     return response.data;
@@ -312,8 +371,8 @@ const practomindMiniStatement = async (data) => {
 
     console.log('Practomind Mini Statement Payload:', sanitizeLogPayload(payload));
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
 
     console.log('Practomind Mini Statement Response:', response.data);
     return response.data;
@@ -342,8 +401,8 @@ const practomindAadhaarPay = async (data) => {
 
     console.log('Practomind Aadhaar Pay Payload:', sanitizeLogPayload(payload));
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
 
     console.log('Practomind Aadhaar Pay Response:', response.data);
     return response.data;
@@ -361,8 +420,8 @@ const sendTransactionOtp = async (data) => {
       pipe: AEPSPIPE
     };
 
-    const headers = getHeaders(payload, { merchantId: payload.merchantId });
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/transaction/otp`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction/otp`, payload, { headers });
     return response.data;
   } catch (error) {
     console.error('Practomind Transaction OTP Error:', error.response?.data || error.message);
@@ -372,8 +431,8 @@ const sendTransactionOtp = async (data) => {
 
 const getAepsStatus = async (merchantId) => {
   try {
-    const headers = getHeaders(null, { merchantId });
-    const response = await axios.get(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/status`, {
+    const headers = await getHeaders(null);
+    const response = await axios.get(`${BASE_URL}/api/partner/v1/aeps/status`, {
       params: { merchantId },
       headers
     });
@@ -386,8 +445,8 @@ const getAepsStatus = async (merchantId) => {
 
 const getStates = async () => {
   try {
-    const headers = getHeaders(null);
-    const response = await axios.get(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/states`, { headers });
+    const headers = await getHeaders(null);
+    const response = await axios.get(`${BASE_URL}/api/partner/v1/aeps/states`, { headers });
     return response.data;
   } catch (error) {
     console.error('Practomind Get States Error:', error.response?.data || error.message);
@@ -398,8 +457,8 @@ const getStates = async () => {
 const getDistricts = async (stateCode) => {
   try {
     const payload = { stateCode };
-    const headers = getHeaders(payload);
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/districts`, payload, { headers });
+    const headers = await getHeaders(payload);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/districts`, payload, { headers });
     return response.data;
   } catch (error) {
     console.error('Practomind Get Districts Error:', error.response?.data || error.message);
@@ -409,8 +468,8 @@ const getDistricts = async (stateCode) => {
 
 const getBankIINs = async (data = {}) => {
   try {
-    const headers = getHeaders(data);
-    const response = await axios.post(`${PRACTOMIND_BASE_URL}/api/partner/v1/aeps/bank-iins`, data, { headers });
+    const headers = await getHeaders(data);
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/bank-iins`, data, { headers });
     return response.data;
   } catch (error) {
     console.error('Practomind Get Bank IINs Error:', error.response?.data || error.message);
@@ -418,20 +477,146 @@ const getBankIINs = async (data = {}) => {
   }
 };
 
+// ==================== PAYOUT SERVICES ====================
+
+const getBanks = async () => {
+  try {
+    const headers = await getAuthHeaders();
+    const config = {
+      method: 'get',
+      url: `${BASE_URL}/api/partner/v1/payout/banks`,
+      headers
+    };
+
+    console.log('[Practomind] Fetching banks...');
+    const response = await axios.request(config);
+    console.log('response', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error('[Practomind] getBanks Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
+};
+
+const getPurposes = async () => {
+  try {
+    const headers = await getAuthHeaders();
+    const config = {
+      method: 'get',
+      url: `${BASE_URL}/api/partner/v1/payout/purposes`,
+      headers
+    };
+
+    console.log('[Practomind] Fetching purposes...');
+    const response = await axios.request(config);
+    console.log('response', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error('[Practomind] getPurposes Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
+};
+
+const getPayoutStatus = async (referenceId) => {
+  try {
+    const headers = await getAuthHeaders();
+    const config = {
+      method: 'get',
+      url: `${BASE_URL}/api/partner/v1/payout/status/${referenceId}`,
+      headers
+    };
+
+    console.log(`[Practomind] Fetching status for reference ${referenceId}...`);
+    const response = await axios.request(config);
+    console.log('response', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error('[Practomind] getPayoutStatus Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
+};
+
+const initiateTransfer = async (data) => {
+  try {
+    const payload = {
+      accountNumber: data.accountNumber,
+      ifsc: data.ifsc,
+      accountName: data.accountName,
+      bankName: data.bankName,
+      mobile: data.mobile,
+      amount: Number(data.amount),
+      mode: data.mode || 'IMPS',
+      purpose: data.purpose || '004',
+      reference_id: data.reference_id
+    };
+
+    const headers = await getAuthHeaders(payload);
+    const config = {
+      method: 'post',
+      url: `${BASE_URL}/api/partner/v1/payout/transfer`,
+      headers,
+      data: payload
+    };
+
+    console.log('[Practomind] Initiating transfer:', JSON.stringify(payload));
+    const response = await axios.request(config);
+    console.log('response', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error('[Practomind] initiateTransfer Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
+};
+
+const checkBalance = async () => {
+  try {
+    const headers = await getAuthHeaders();
+    const config = {
+      method: 'get',
+      url: `${BASE_URL}/api/partner/v1/balance`,
+      headers
+    };
+
+    console.log('[Practomind] Fetching balance from:', config.url);
+    const response = await axios.request(config);
+    console.log('balance response', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error('[Practomind] checkBalance Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
+};
+
 module.exports = {
+  getAccessToken,
+  getAuthHeaders,
+  getHeaders,
   practomindAepsOnboarding,
+  aepsOnboarding: practomindAepsOnboarding,
   practomindSendEkycOtp,
+  sendOtp: practomindSendEkycOtp,
   practomindResendEkycOtp,
+  resendOtp: practomindResendEkycOtp,
   practomindValidateEkycOtp,
+  verifyOtp: practomindValidateEkycOtp,
   practomindEkycSubmit,
+  onboardingBiometric: practomindEkycSubmit,
   practomindDailyAuthentication,
+  dailyBiometric: practomindDailyAuthentication,
   practomindCashWithdrawal,
   practomindBalanceEnquiry,
   practomindMiniStatement,
   practomindAadhaarPay,
+  transaction: practomindCashWithdrawal,
   sendTransactionOtp,
   getAepsStatus,
+  aepsStatus: getAepsStatus,
   getStates,
   getDistricts,
-  getBankIINs
+  getBankIINs,
+  getBanks,
+  getPurposes,
+  getPayoutStatus,
+  initiateTransfer,
+  checkBalance
 };
