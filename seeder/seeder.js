@@ -13906,31 +13906,31 @@ async function serviceCharges() {
 
 async function seedData() {
 
-  // await roles();
-  // await permissions();
-  // await insertPermissions();
-  // await rolePermission();
-  // await rechargeStateCode();
-  // await KycDocumentSettings();
-  // await createBasicPackage();
-  // //  await servicePush();
-  // await OperatorType();
-  // await state();
-  // await gstState();
-  // await rechargeStateCode();
-  // await bank();
-  // await services();
+  await roles();
+  await permissions();
+  await insertPermissions();
+  await rolePermission();
+  await rechargeStateCode();
+  await KycDocumentSettings();
+  await createBasicPackage();
+  await servicePush();
+  await OperatorType();
+  await state();
+  await gstState();
+  await rechargeStateCode();
+  await bank();
+  await services();
 
-  // await cardType();
-  // await paymentInsturment();
-  // await seedPgCommercials();
-  // await seedRangeComm();
-  // await seedRangeCharges();
+  await cardType();
+  await paymentInsturment();
+  await seedPgCommercials();
+  await seedRangeComm();
+  await seedRangeCharges();
 
-  // // Create company first, then user and wallet
-  // const company = await seedCompany();
-  // if (company && company.id) {
-  //   await seedUsers(company.id);
-  // }
+  // Create company first, then user and wallet
+  const company = await seedCompany();
+  if (company && company.id) {
+    await seedUsers(company.id);
+  }
 }
 module.exports = seedData;
