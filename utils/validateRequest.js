@@ -1,16 +1,5 @@
-/**
- * validateRequest.js
- * @description :: exports methods for validating parameters of request body using joi validation.
- */
-
 const { FILTER_KEYS } = require('../constants/filterkeys');
 
-/**
- * @description : validate request body parameter with joi.
- * @param {obj} payload : body from request.
- * @param {obj} schemaKeys : model wise schema keys. ex. user validation object.
- * @returns : returns validation with message {isValid, message}
- */
 exports.validateParamsWithJoi = (payload, schemaKeys) => {
   const { error } = schemaKeys.validate(payload, {
     abortEarly: false,
@@ -26,13 +15,7 @@ exports.validateParamsWithJoi = (payload, schemaKeys) => {
   return { isValid: true };
 };
 
-/**
- * @description : validate request body parameter with joi for filter APIS.
- * @param {obj} payload : body from request.
- * @param {obj} schemaKeys : model wise schema keys. ex. user validation object
- * @param {obj} modelSchema : schema of model.
- * @returns returns validation with message {isValid, message}
- */
+
 exports.validateFilterWithJoi = (payload, schemaKeys, modelSchema) => {
   const keys = [];
   let isValid = true;
