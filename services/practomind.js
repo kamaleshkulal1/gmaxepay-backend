@@ -120,8 +120,6 @@ const sanitizeLogPayload = (payload) => {
   return copy;
 };
 
-// ==================== AEPS SERVICES ====================
-
 const practomindAepsOnboarding = async (data, merchantLoginId) => {
   try {
     let firstName = data.firstName || data.merchantFirstName || '';
@@ -476,7 +474,6 @@ const getBankIINs = async (data = {}) => {
   }
 };
 
-// ==================== PAYOUT SERVICES ====================
 
 const getBanks = async () => {
   try {
@@ -493,76 +490,6 @@ const getBanks = async () => {
     return response.data;
   } catch (error) {
     console.error('[Practomind] getBanks Error:', error.response?.data || error.message);
-    return error.response?.data || { status: 'failure', message: error.message };
-  }
-};
-
-const getPurposes = async () => {
-  try {
-    const headers = await getAuthHeaders();
-    const config = {
-      method: 'get',
-      url: `${BASE_URL}/api/partner/v1/payout/purposes`,
-      headers
-    };
-
-    console.log('[Practomind] Fetching purposes...');
-    const response = await axios.request(config);
-    console.log('response', JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error('[Practomind] getPurposes Error:', error.response?.data || error.message);
-    return error.response?.data || { status: 'failure', message: error.message };
-  }
-};
-
-const getPayoutStatus = async (referenceId) => {
-  try {
-    const headers = await getAuthHeaders();
-    const config = {
-      method: 'get',
-      url: `${BASE_URL}/api/partner/v1/payout/status/${referenceId}`,
-      headers
-    };
-
-    console.log(`[Practomind] Fetching status for reference ${referenceId}...`);
-    const response = await axios.request(config);
-    console.log('response', JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error('[Practomind] getPayoutStatus Error:', error.response?.data || error.message);
-    return error.response?.data || { status: 'failure', message: error.message };
-  }
-};
-
-const initiateTransfer = async (data) => {
-  try {
-    const payload = {
-      accountNumber: data.accountNumber,
-      ifsc: data.ifsc,
-      accountName: data.accountName,
-      bankName: data.bankName,
-      mobile: data.mobile,
-      amount: Number(data.amount),
-      mode: data.mode || 'IMPS',
-      purpose: data.purpose || '004',
-      reference_id: data.reference_id
-    };
-
-    const headers = await getAuthHeaders(payload);
-    const config = {
-      method: 'post',
-      url: `${BASE_URL}/api/partner/v1/payout/transfer`,
-      headers,
-      data: payload
-    };
-
-    console.log('[Practomind] Initiating transfer:', JSON.stringify(payload));
-    const response = await axios.request(config);
-    console.log('response', JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error('[Practomind] initiateTransfer Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'failure', message: error.message };
   }
 };
@@ -614,8 +541,6 @@ module.exports = {
   getDistricts,
   getBankIINs,
   getBanks,
-  getPurposes,
-  getPayoutStatus,
-  initiateTransfer,
+
   checkBalance
 };
