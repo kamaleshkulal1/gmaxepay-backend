@@ -153,7 +153,6 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
       bankAccountNumber: String(data.bankAccountNumber || data.companyBankAccountNumber || ''),
       bankIfscCode: data.bankIfscCode || '',
       bankName: data.bankName || data.companyBankName || '',
-      bankCode: data.bankCode || '',
       accountType: data.accountType || 'Savings account',
       shopAddress: data.shopAddress || data.merchantAddress1 || data.merchantAddress || '',
       shopDistrict: data.shopDistrict || data.merchantDistrict || data.merchantDistrictName || '',
