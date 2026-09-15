@@ -2341,6 +2341,79 @@ const getDistrict = async (req, res) => {
 const getState = async (req, res) => {
     try {
         const response = await practomindService.getStates();
+        if (response && (response.status === 'failure' || response.status === 'error')) {
+            return res.failure({
+                message: response.message || 'Unable to get states'
+            });
+        }
+
+        const stateList = Array.isArray(response?.data)
+            ? response.data
+            : (Array.isArray(response?.data?.data) ? response.data.data : (Array.isArray(response) ? response : []));
+
+        if (stateList.length > 0) {
+            console.log(`[AEPS2 getState] Processing ${stateList.length} states one by one...`);
+            const allStates = await dbService.findAll(model.practomindState, { isDeleted: false });
+
+            for (const item of stateList) {
+                const code = item.code ? String(item.code).trim() : null;
+                const stateName = (item.description || item.name || item.state || '').trim();
+                if (!code && !stateName) continue;
+
+                // Find existing state by code, stateId, or name
+                let existingState = null;
+                if (code) {
+                    existingState = allStates.find(s =>
+                        (s.stateCode && s.stateCode.trim().toUpperCase() === code.toUpperCase()) ||
+                        (s.stateId && s.stateId.trim().toUpperCase() === code.toUpperCase())
+                    );
+                }
+                if (!existingState && stateName) {
+                    existingState = allStates.find(s =>
+                        s.state && s.state.trim().toLowerCase() === stateName.toLowerCase()
+                    );
+                }
+
+                if (existingState) {
+                    const updateData = {};
+                    if (code && (!existingState.stateCode || existingState.stateCode.trim().toUpperCase() !== code.toUpperCase())) {
+                        updateData.stateCode = code;
+                        existingState.stateCode = code;
+                    }
+                    if (stateName && (!existingState.state || existingState.state.trim().toLowerCase() !== stateName.toLowerCase())) {
+                        updateData.state = stateName;
+                        existingState.state = stateName;
+                    }
+                    if (code && !existingState.stateId) {
+                        updateData.stateId = code;
+                        existingState.stateId = code;
+                    }
+                    if (existingState.isDeleted) {
+                        updateData.isDeleted = false;
+                        existingState.isDeleted = false;
+                    }
+                    if (!existingState.isActive) {
+                        updateData.isActive = true;
+                        existingState.isActive = true;
+                    }
+                    if (Object.keys(updateData).length > 0) {
+                        await dbService.update(model.practomindState, { id: existingState.id }, updateData);
+                    }
+                } else {
+                    const newState = await dbService.createOne(model.practomindState, {
+                        stateId: code || stateName,
+                        state: stateName || code,
+                        stateCode: code || stateName,
+                        isActive: true,
+                        isDeleted: false
+                    });
+                    if (newState) {
+                        allStates.push(newState.toJSON ? newState.toJSON() : newState);
+                    }
+                }
+            }
+        }
+
         return res.success({
             message: 'States retrieved successfully',
             data: response.data

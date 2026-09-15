@@ -14,7 +14,7 @@ let PractomindState = sequelize.define(
     },
     stateId: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       unique: true
     },
     state: {
