@@ -2340,7 +2340,7 @@ const getDistrict = async (req, res) => {
 
 const getState = async (req, res) => {
     try {
-        const response = await practomindService.getState();
+        const response = await practomindService.getStates();
         return res.success({
             message: 'States retrieved successfully',
             data: response.data
