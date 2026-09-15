@@ -59,6 +59,15 @@ const convertImageToBase64 = async (imageData, compress = false) => {
     }
 };
 
+const normalizeBankName = (name) => {
+    if (!name) return '';
+    return name
+        .toLowerCase()
+        .replace(/\b(limited|ltd|bank|co-operative|cooperative|co-op|coop|the)\b/gi, '')
+        .replace(/[^a-z0-9]/gi, '')
+        .trim();
+};
+
 const getPractomindAepsOnboardingStatus = async (req, res) => {
     try {
         const existingUser = await dbService.findOne(model.user, {
@@ -217,6 +226,34 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Bank details not found' });
         }
 
+        let practomindBank = null;
+        const searchBankName = (bankDetails?.bankName || req.body?.bankName || '').trim();
+
+        if (searchBankName) {
+            practomindBank = await dbService.findOne(model.practomindBankList, {
+                bankName: { [Op.iLike]: searchBankName },
+                isActive: true,
+                isDeleted: false
+            });
+
+            if (!practomindBank) {
+                const targetNorm = normalizeBankName(searchBankName);
+                if (targetNorm && targetNorm.length >= 3) {
+                    const allBanks = await dbService.findAll(model.practomindBankList, {
+                        isActive: true,
+                        isDeleted: false
+                    });
+                    practomindBank = allBanks.find(b => normalizeBankName(b.bankName) === targetNorm);
+                }
+            }
+        }
+
+        if (!practomindBank || !practomindBank.bankCode) {
+            return res.failure({
+                message: 'Your bank does not support AEPS onboarding process. Try with other bank.'
+            });
+        }
+
         const [
             existingCompanyAdmin,
             existingCompanyCode,
@@ -309,7 +346,8 @@ const createPractomindAepsOnboarding = async (req, res) => {
             aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
             companyBankAccountNumber: bankDetails?.accountNumber,
             bankIfscCode: bankDetails?.ifsc,
-            companyBankName: bankDetails?.bankName,
+            companyBankName: practomindBank?.bankName || bankDetails?.bankName,
+            bankCode: practomindBank?.bankCode || '',
             bankAccountName: bankDetails?.beneficiaryName ? bankDetails.beneficiaryName.replace(/\./g, '') : bankDetails?.beneficiaryName,
             bankBranchName: bankDetails?.branch,
             c_code: existingCompanyCode?.mccCode,
@@ -2115,15 +2153,6 @@ const getAeps2TransactionDetailsById = async (req, res) => {
             message: error.message || 'Unable to retrieve AEPS2 transaction details'
         });
     }
-};
-
-const normalizeBankName = (name) => {
-    if (!name) return '';
-    return name
-        .toLowerCase()
-        .replace(/\b(limited|ltd|bank|co-operative|cooperative|co-op|coop|the)\b/gi, '')
-        .replace(/[^a-z0-9]/gi, '')
-        .trim();
 };
 
 const getBanks = async (req, res) => {
