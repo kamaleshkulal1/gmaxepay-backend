@@ -317,7 +317,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             companyLegalName: existingOutlet?.shopName,
             shopCity: existingOutlet?.shopCity,
             shopDistrict: existingOutlet?.shopDistrict,
-            shopState: existingShopStateCode?.stateId,
+            shopState: existingOutlet?.shopState,
             shopPincode: existingOutlet?.shopPincode,
             latitude: existingOutlet?.shopLatitude,
             longitude: existingOutlet?.shopLongitude,
@@ -326,7 +326,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPanImage: merchantPanImageBase64
         };
 
-        console.log("onboardingData", onboardingData);
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
         const isSuccess = response?.status === true || response?.status === 'true' ||
             (response?.result && (response.result.status === true || response.result.status === 'true'));
@@ -2116,6 +2115,21 @@ const getAeps2TransactionDetailsById = async (req, res) => {
     }
 };
 
+const getBanks = async (req, res) => {
+    try {
+        const response = await practomindService.getBanks();
+        return res.success({
+            message: 'Banks retrieved successfully',
+            data: response
+        });
+    } catch (error) {
+        console.error('AEPS2 getBanks error', error);
+        return res.failure({
+            message: error.message || 'Unable to get banks'
+        });
+    }
+};
+
 module.exports = {
     getPractomindAepsOnboardingStatus,
     createPractomindAepsOnboarding,
@@ -2130,5 +2144,6 @@ module.exports = {
     bankList,
     recentBanks,
     aepsTransactionHistory,
-    getAeps2TransactionDetailsById
+    getAeps2TransactionDetailsById,
+    getBanks
 };

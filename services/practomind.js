@@ -541,6 +541,5 @@ module.exports = {
   getDistricts,
   getBankIINs,
   getBanks,
-
   checkBalance
 };

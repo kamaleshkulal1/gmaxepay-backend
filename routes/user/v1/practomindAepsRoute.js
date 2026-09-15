@@ -17,5 +17,6 @@ router.post('/recent-banks', authentication, practomindAepsController.recentBank
 router.post('/bank-list', authentication, practomindAepsController.bankList);
 router.post('/transaction-history', authentication, practomindAepsController.aepsTransactionHistory);
 router.post('/aeps2TransactionDetailsById/:id', authentication, practomindAepsController.getAeps2TransactionDetailsById);
+router.post('/get-banks', authentication, practomindAepsController.getBanks);
 module.exports = router;
 
