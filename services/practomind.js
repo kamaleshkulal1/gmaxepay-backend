@@ -480,11 +480,10 @@ const getBanks = async () => {
     const headers = await getAuthHeaders();
     const config = {
       method: 'get',
-      url: `${BASE_URL}/api/partner/v1/payout/banks`,
+      url: `${BASE_URL}/api/partner/v1/aeps/banks`,
       headers
     };
-
-    console.log('[Practomind] Fetching banks...');
+    console.log("Aeps Url", config);
     const response = await axios.request(config);
     console.log('response', JSON.stringify(response.data, null, 2));
     return response.data;
