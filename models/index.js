@@ -533,12 +533,14 @@ db.practomindAepsHistory.belongsTo(db.practomindBankList, {
   foreignKey: 'bankIin',
   targetKey: 'bankIIN',
   as: 'bank',
-  required: false
+  required: false,
+  constraints: false
 });
 db.practomindBankList.hasMany(db.practomindAepsHistory, {
   foreignKey: 'bankIin',
   sourceKey: 'bankIIN',
-  as: 'practomindAepsHistories'
+  as: 'practomindAepsHistories',
+  constraints: false
 });
 
 // BBPS Operator Relationships
