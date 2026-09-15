@@ -372,6 +372,32 @@ const createPractomindAepsOnboarding = async (req, res) => {
             convertImageToBase64(existingUser.panCardFrontImage, true)
         ]);
 
+        const latitude = req.body?.latitude || req.body?.lat || existingOutlet?.shopLatitude || existingOutlet?.latitude;
+        const longitude = req.body?.longitude || req.body?.long || existingOutlet?.shopLongitude || existingOutlet?.longitude;
+
+        let ipAddress = req.body?.ipAddress ||
+            req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+            req.headers['x-real-ip'] ||
+            req.socket?.remoteAddress ||
+            req.ip ||
+            '127.0.0.1';
+
+        if (ipAddress.includes('::ffff:')) {
+            ipAddress = ipAddress.replace('::ffff:', '');
+        }
+        if (ipAddress === '::1') {
+            ipAddress = '127.0.0.1';
+        }
+
+        if (req.body?.latitude || req.body?.lat || req.body?.longitude || req.body?.long) {
+            const outletUpdates = {};
+            if (latitude && existingOutlet?.shopLatitude !== String(latitude)) outletUpdates.shopLatitude = String(latitude);
+            if (longitude && existingOutlet?.shopLongitude !== String(longitude)) outletUpdates.shopLongitude = String(longitude);
+            if (Object.keys(outletUpdates).length > 0) {
+                await dbService.update(model.outlet, { id: existingOutlet.id }, outletUpdates);
+            }
+        }
+
         const onboardingData = {
             merchantLoginId: merchantLoginId,
             merchantFirstName: existingUser?.name,
@@ -388,7 +414,9 @@ const createPractomindAepsOnboarding = async (req, res) => {
             aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
             companyBankAccountNumber: bankDetails?.accountNumber,
             bankIfscCode: bankDetails?.ifsc,
-            companyBankName: practomindBank?.bankCode || '',
+            companyBankName: practomindBank?.bankName || bankDetails?.bankName,
+            bankName: practomindBank?.bankName || bankDetails?.bankName,
+            bankCode: practomindBank?.bankCode || '',
             bankAccountName: bankDetails?.beneficiaryName ? bankDetails.beneficiaryName.replace(/\./g, '') : bankDetails?.beneficiaryName,
             bankBranchName: bankDetails?.branch,
             c_code: existingCompanyCode?.mccCode,
@@ -399,8 +427,13 @@ const createPractomindAepsOnboarding = async (req, res) => {
             shopState: shopStateCode,
             shopStateCode: shopStateCode,
             shopPincode: existingOutlet?.shopPincode,
-            latitude: existingOutlet?.shopLatitude,
-            longitude: existingOutlet?.shopLongitude,
+            latitude: String(latitude || ''),
+            longitude: String(longitude || ''),
+            lat: String(latitude || ''),
+            long: String(longitude || ''),
+            shopLat: String(latitude || ''),
+            shopLong: String(longitude || ''),
+            ipAddress: ipAddress,
             maskedAadharImage: maskedAadharImageBase64,
             backgroundImageOfShop: backgroundImageOfShopBase64,
             merchantPanImage: merchantPanImageBase64

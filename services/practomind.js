@@ -158,10 +158,10 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
       shopDistrict: data.shopDistrict || data.merchantDistrict || data.merchantDistrictName || '',
       shopState: data.shopState || data.shopStateCode || data.merchantState || data.stateCode || '',
       shopPincode: String(data.shopPincode || data.merchantPinCode || ''),
-      shopLat: String(data.shopLat || data.latitude || ''),
-      shopLong: String(data.shopLong || data.longitude || ''),
-      lat: String(data.lat || data.latitude || ''),
-      long: String(data.long || data.longitude || ''),
+      shopLat: String(data.shopLat || data.latitude || data.lat || ''),
+      shopLong: String(data.shopLong || data.longitude || data.long || ''),
+      lat: String(data.lat || data.latitude || data.shopLat || ''),
+      long: String(data.long || data.longitude || data.shopLong || ''),
       ipAddress: data.ipAddress || '127.0.0.1',
       pipe: AEPSPIPE
     };
