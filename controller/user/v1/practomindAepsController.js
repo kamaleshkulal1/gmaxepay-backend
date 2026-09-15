@@ -210,7 +210,13 @@ const createPractomindAepsOnboarding = async (req, res) => {
                 companyId: existingUser.companyId
             }),
             dbService.findOne(model.practomindState, {
-                state: existingUser?.state
+                [Op.or]: [
+                    { state: { [Op.iLike]: (existingUser?.state || '').trim() } },
+                    { stateCode: { [Op.iLike]: (existingUser?.state || '').trim() } },
+                    { stateId: { [Op.iLike]: (existingUser?.state || '').trim() } }
+                ],
+                isActive: true,
+                isDeleted: false
             })
         ]);
 
@@ -254,6 +260,21 @@ const createPractomindAepsOnboarding = async (req, res) => {
             });
         }
 
+        // Validate and resolve user state code
+        if (!existingUserStateCode || !existingUserStateCode.stateCode) {
+            const allStates = await dbService.findAll(model.practomindState, { isActive: true, isDeleted: false });
+            const searchState = (existingUser?.state || '').trim().toLowerCase();
+            existingUserStateCode = allStates.find(s =>
+                (s.state && s.state.trim().toLowerCase() === searchState) ||
+                (s.stateCode && s.stateCode.trim().toLowerCase() === searchState) ||
+                (s.state && searchState && s.state.toLowerCase().includes(searchState))
+            );
+        }
+
+        if (!existingUserStateCode || !existingUserStateCode.stateCode) {
+            return res.failure({ message: 'State code not found. Please update user state.' });
+        }
+
         const [
             existingCompanyAdmin,
             existingCompanyCode,
@@ -267,7 +288,13 @@ const createPractomindAepsOnboarding = async (req, res) => {
                 id: existingOutlet.shopCategoryId
             }),
             dbService.findOne(model.practomindState, {
-                state: existingOutlet?.shopState
+                [Op.or]: [
+                    { state: { [Op.iLike]: (existingOutlet?.shopState || '').trim() } },
+                    { stateCode: { [Op.iLike]: (existingOutlet?.shopState || '').trim() } },
+                    { stateId: { [Op.iLike]: (existingOutlet?.shopState || '').trim() } }
+                ],
+                isActive: true,
+                isDeleted: false
             })
         ]);
 
@@ -288,6 +315,20 @@ const createPractomindAepsOnboarding = async (req, res) => {
             return res.failure({ message: 'Company admin bank details not found' });
         }
 
+        let shopStateCode = existingShopStateCode?.stateCode || existingShopStateCode?.stateId;
+        if (!shopStateCode && existingOutlet?.shopState) {
+            const allStates = await dbService.findAll(model.practomindState, { isActive: true, isDeleted: false });
+            const searchShopState = existingOutlet.shopState.trim().toLowerCase();
+            const matchedShopState = allStates.find(s =>
+                (s.state && s.state.trim().toLowerCase() === searchShopState) ||
+                (s.stateCode && s.stateCode.trim().toLowerCase() === searchShopState) ||
+                (s.state && searchShopState && s.state.toLowerCase().includes(searchShopState))
+            );
+            if (matchedShopState?.stateCode) {
+                shopStateCode = matchedShopState.stateCode;
+            }
+        }
+        shopStateCode = shopStateCode || existingUserStateCode.stateCode;
 
         let merchantLoginId;
         if (existingOnboarding?.merchantLoginId) {
@@ -340,7 +381,8 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPinCode: existingUser?.zipcode,
             merchantCityName: existingUser?.city,
             merchantDistrictName: existingUser?.district,
-            merchantState: existingUserStateCode?.stateId,
+            merchantState: existingUserStateCode.stateCode,
+            stateCode: existingUserStateCode.stateCode,
             merchantAddress: existingUser?.fullAddress,
             userPan: existingUser?.panDetails?.data?.pan_number,
             aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
@@ -355,7 +397,8 @@ const createPractomindAepsOnboarding = async (req, res) => {
             companyLegalName: existingOutlet?.shopName,
             shopCity: existingOutlet?.shopCity,
             shopDistrict: existingOutlet?.shopDistrict,
-            shopState: existingOutlet?.shopState,
+            shopState: shopStateCode,
+            shopStateCode: shopStateCode,
             shopPincode: existingOutlet?.shopPincode,
             latitude: existingOutlet?.shopLatitude,
             longitude: existingOutlet?.shopLongitude,
