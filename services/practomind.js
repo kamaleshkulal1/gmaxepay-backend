@@ -170,7 +170,7 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
 
     const headers = await getHeaders(payload);
     const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/register`, payload, { headers });
-
+    console.log("Practomind Response", JSON.stringify(response, null, 2));
     console.log('Practomind Merchant Register Response:', response.data);
     return response.data;
   } catch (error) {
