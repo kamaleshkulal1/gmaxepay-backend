@@ -2120,7 +2120,7 @@ const getBanks = async (req, res) => {
         const response = await practomindService.getBanks();
         return res.success({
             message: 'Banks retrieved successfully',
-            data: response
+            data: response.data
         });
     } catch (error) {
         console.error('AEPS2 getBanks error', error);
@@ -2129,6 +2129,52 @@ const getBanks = async (req, res) => {
         });
     }
 };
+
+const getBankIINs = async (req, res) => {
+    try {
+        const response = await practomindService.getBankIINs();
+        return res.success({
+            message: 'Bank IINs retrieved successfully',
+            data: response.data
+        });
+    } catch (error) {
+        console.error('AEPS2 getBankIINs error', error);
+        return res.failure({
+            message: error.message || 'Unable to get bank IINs'
+        });
+    }
+};
+
+const getDistrict = async (req, res) => {
+    try {
+        const response = await practomindService.getDistricts(req.body);
+        return res.success({
+            message: 'Districts retrieved successfully',
+            data: response.data
+        });
+    } catch (error) {
+        console.error('AEPS2 getDistricts error', error);
+        return res.failure({
+            message: error.message || 'Unable to get districts'
+        });
+    }
+};
+
+const getState = async (req, res) => {
+    try {
+        const response = await practomindService.getState();
+        return res.success({
+            message: 'States retrieved successfully',
+            data: response.data
+        });
+    } catch (error) {
+        console.error('AEPS2 getState error', error);
+        return res.failure({
+            message: error.message || 'Unable to get states'
+        });
+    }
+};
+
 
 module.exports = {
     getPractomindAepsOnboardingStatus,
@@ -2145,5 +2191,8 @@ module.exports = {
     recentBanks,
     aepsTransactionHistory,
     getAeps2TransactionDetailsById,
-    getBanks
+    getBanks,
+    getBankIINs,
+    getDistrict,
+    getState
 };
