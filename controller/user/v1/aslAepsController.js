@@ -949,12 +949,12 @@ const aepsTransaction = async (req, res) => {
         // Separate AEPS history (for reporting) — always written for all statuses
         const creditToApply = (isSuccess || isPending) ? initiatorCredit : 0;
         if (model.practomindAepsHistory) {
-            // Find matching Practomind bank to satisfy foreign key constraint (targetKey: aeps_bank_id)
+            // Find matching Practomind bank to satisfy foreign key constraint (targetKey: bankIIN)
             let practomindBankId = null;
             try {
                 if (model.practomindBankList) {
-                    const pBank = await dbService.findOne(model.practomindBankList, { iinno: normalizedBankiin });
-                    practomindBankId = pBank?.aeps_bank_id || null;
+                    const pBank = await dbService.findOne(model.practomindBankList, { bankIIN: normalizedBankiin });
+                    practomindBankId = pBank?.bankIIN || null;
                 }
             } catch (pBankErr) {
                 practomindBankId = null;

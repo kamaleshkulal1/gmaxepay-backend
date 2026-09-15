@@ -514,7 +514,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
         }
 
         const existingBankDetails = await dbService.findOne(model.practomindBankList, {
-            aeps_bank_id: transaction.bankIin
+            bankIIN: transaction.bankIin
         });
         if (!existingBankDetails) {
             return res.failure({ message: 'Bank details not found' });

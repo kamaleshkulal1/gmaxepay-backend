@@ -28,25 +28,21 @@ const createBank = async (req, res) => {
     }
 
     const dataToCreate = { ...(req.body || {}) };
-    const aeps_bank_id = (dataToCreate.aeps_bank_id || '').trim();
-    const bankName = (dataToCreate.bankName || '').trim();
-    const iinno = (dataToCreate.iinno || '').trim();
-
-    if (!aeps_bank_id) {
-      return res.failure({ message: 'aeps_bank_id is required' });
-    }
+    const bankCode = (dataToCreate.bankCode || dataToCreate.bankcode || dataToCreate.code || '').trim();
+    const bankName = (dataToCreate.bankName || dataToCreate.name || '').trim();
+    const bankIIN = (dataToCreate.bankIIN || dataToCreate.bankiin || dataToCreate.iin || dataToCreate.iinno || '').trim();
 
     if (!bankName) {
       return res.failure({ message: 'bankName is required' });
     }
-    if (!iinno) {
-      return res.failure({ message: 'iinno is required' });
+    if (!bankIIN) {
+      return res.failure({ message: 'bankIIN is required' });
     }
 
     const duplicateCheck = await checkUniqueFieldsInDatabase(
       model.practomindBankList,
-      ['iinno', 'bankName', 'aeps_bank_id'],
-      { iinno, bankName, aeps_bank_id },
+      ['bankName'],
+      { bankName },
       'INSERT'
     );
 
@@ -72,9 +68,9 @@ const createBank = async (req, res) => {
     }
 
     const created = await dbService.createOne(model.practomindBankList, {
-      aeps_bank_id,
+      bankCode: bankCode || null,
       bankName,
-      iinno,
+      bankIIN,
       bankLogo,
       isActive: dataToCreate.isActive !== undefined ? !!dataToCreate.isActive : true,
       isDeleted: false,
@@ -123,45 +119,27 @@ const updateBank = async (req, res) => {
       }
       dataToUpdate.bankName = bankName;
     }
-    if (body.iinno !== undefined) {
-      const iinno = String(body.iinno).trim();
-      if (!iinno) {
-        return res.failure({ message: 'iinno cannot be empty' });
+    if (body.bankIIN !== undefined || body.iinno !== undefined || body.iin !== undefined) {
+      const bankIIN = String(body.bankIIN !== undefined ? body.bankIIN : (body.iinno !== undefined ? body.iinno : body.iin)).trim();
+      if (!bankIIN) {
+        return res.failure({ message: 'bankIIN cannot be empty' });
       }
-      dataToUpdate.iinno = iinno;
+      dataToUpdate.bankIIN = bankIIN;
     }
-    if (body.aeps_bank_id !== undefined) {
-      const aeps_bank_id = String(body.aeps_bank_id).trim();
-      if (!aeps_bank_id) {
-        return res.failure({ message: 'aeps_bank_id cannot be empty' });
-      }
-      dataToUpdate.aeps_bank_id = aeps_bank_id;
+    if (body.bankCode !== undefined || body.bankcode !== undefined || body.code !== undefined) {
+      const bankCode = String(body.bankCode !== undefined ? body.bankCode : (body.bankcode !== undefined ? body.bankcode : body.code)).trim();
+      dataToUpdate.bankCode = bankCode;
     }
 
-    if (dataToUpdate.iinno || dataToUpdate.bankName) {
-      const checkIinno = dataToUpdate.iinno || existingBank.iinno;
+    if (dataToUpdate.bankName) {
       const checkBankName = dataToUpdate.bankName || existingBank.bankName;
-
-      if (dataToUpdate.iinno) {
-        const existingWithIinno = await dbService.findOne(model.practomindBankList, {
-          iinno: checkIinno,
-          id: { [Op.ne]: parseInt(id) },
-          isDeleted: false
-        });
-        if (existingWithIinno) {
-          return res.failure({ message: 'iinno already exists' });
-        }
-      }
-
-      if (dataToUpdate.bankName) {
-        const existingWithName = await dbService.findOne(model.practomindBankList, {
-          bankName: { [Op.iLike]: checkBankName },
-          id: { [Op.ne]: parseInt(id) },
-          isDeleted: false
-        });
-        if (existingWithName) {
-          return res.failure({ message: 'bankName already exists' });
-        }
+      const existingWithName = await dbService.findOne(model.practomindBankList, {
+        bankName: { [Op.iLike]: checkBankName },
+        id: { [Op.ne]: parseInt(id) },
+        isDeleted: false
+      });
+      if (existingWithName) {
+        return res.failure({ message: 'bankName already exists' });
       }
     }
 

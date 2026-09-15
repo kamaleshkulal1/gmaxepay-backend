@@ -836,7 +836,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
                 isActive: true
             }),
             dbService.findOne(model.practomindBankList, {
-                aeps_bank_id: transaction.bankIin
+                bankIIN: transaction.bankIin
             })
         ]);
 

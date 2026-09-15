@@ -531,13 +531,13 @@ db.company.hasMany(db.practomindAepsHistory, {
 
 db.practomindAepsHistory.belongsTo(db.practomindBankList, {
   foreignKey: 'bankIin',
-  targetKey: 'aeps_bank_id',
+  targetKey: 'bankIIN',
   as: 'bank',
   required: false
 });
 db.practomindBankList.hasMany(db.practomindAepsHistory, {
   foreignKey: 'bankIin',
-  sourceKey: 'aeps_bank_id',
+  sourceKey: 'bankIIN',
   as: 'practomindAepsHistories'
 });
 

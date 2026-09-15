@@ -13,24 +13,21 @@ let PractomindBankList = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
-    aeps_bank_id: {
+    bankCode: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
+      allowNull: true
     },
     bankName: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
+      allowNull: false
     },
     bankLogo: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    iinno: {
+    bankIIN: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
+      allowNull: true
     },
     ...reusableModelAttribute
   },

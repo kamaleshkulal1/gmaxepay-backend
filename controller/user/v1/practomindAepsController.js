@@ -752,7 +752,7 @@ const dailyAuthentication = async (req, res) => {
             longitude: longitude,
             userPan: existingOnboarding.userPan,
             aadhaarNumber: existingOnboarding.aadhaarNumber,
-            nationalBankIdenticationNumber: practomindBank.iinno,
+            nationalBankIdenticationNumber: practomindBank.bankIIN || practomindBank.iinno,
             txtPidData: txtPidData
         };
 
@@ -820,7 +820,7 @@ const cashWithdrawal = async (req, res) => {
         if (!txtPidData) return res.failure({ message: 'Biometric data is required' });
         if (!transactionAmount || transactionAmount <= 0) return res.failure({ message: 'Valid transaction amount is required' });
 
-        const practomindBank = await dbService.findOne(model.practomindBankList, { iinno: bankIIN, isActive: true });
+        const practomindBank = await dbService.findOne(model.practomindBankList, { bankIIN: bankIIN, isActive: true });
         if (!practomindBank) return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
 
         const amountNumber = round4(transactionAmount || 0);
@@ -1030,7 +1030,7 @@ const cashWithdrawal = async (req, res) => {
             latitude,
             longitude,
             aadhaarNumber,
-            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+            nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN,
             transactionAmount: amountNumber,
             transactionId,
             txtPidData
@@ -1142,10 +1142,10 @@ const cashWithdrawal = async (req, res) => {
                 partnerTxnid: response?.partnerTxnid || null, transactionStatus: response?.result?.transactionStatus || (isSuccess ? 'successful' : 'failed'),
                 status: isSuccess, paymentStatus, message: response.message || '', device: response?.result?.device || null,
                 requestTransactionTime: response?.result?.requestTransactionTime || null, consumerAadhaarNumber: aadhaarNumber,
-                mobileNumber: existingUser.mobileNo, bankIin: practomindBank.aeps_bank_id, latitude: latitude || null, longitude: longitude || null,
+                mobileNumber: existingUser.mobileNo, bankIin: practomindBank.bankIIN || bankIIN, latitude: latitude || null, longitude: longitude || null,
                 receiptUrl: response?.url || null, outletname: response?.outletname || null, outletmobile: response?.outletmobile || null,
                 ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
-                requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno, transactionAmount: amountNumber, transactionId },
+                requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN, transactionAmount: amountNumber, transactionId },
                 responsePayload: response, ipAddress: req.ip || req.connection?.remoteAddress,
                 openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
                 serviceType: 'ICICI',
@@ -1222,7 +1222,7 @@ const balanceEnquiry = async (req, res) => {
         });
 
         const practomindBank = await dbService.findOne(model.practomindBankList, {
-            iinno: bankIIN,
+            bankIIN: bankIIN,
             isActive: true
         });
         if (!practomindBank) {
@@ -1239,7 +1239,7 @@ const balanceEnquiry = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             aadhaarNumber: aadhaarNumber,
-            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+            nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN,
             transactionId: transactionId,
             txtPidData: txtPidData
         };
@@ -1292,7 +1292,7 @@ const balanceEnquiry = async (req, res) => {
             requestTransactionTime: response?.result?.requestTransactionTime || response?.result?.result?.requestTransactionTime || null,
             consumerAadhaarNumber: aadhaarNumber,
             mobileNumber: existingUser.mobileNo,
-            bankIin: practomindBank.aeps_bank_id,
+            bankIin: practomindBank.bankIIN || bankIIN,
             latitude: latitude || null,
             longitude: longitude || null,
             receiptUrl: response?.url || response?.result?.url || response?.result?.result?.url || null,
@@ -1304,7 +1304,7 @@ const balanceEnquiry = async (req, res) => {
                 latitude: enquiryData.latitude,
                 longitude: enquiryData.longitude,
                 adhaarNumber: enquiryData.aadhaarNumber || aadhaarNumber,
-                nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+                nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN,
                 transactionId: enquiryData.transactionId
             },
             responsePayload: response,
@@ -1362,7 +1362,7 @@ const miniStatement = async (req, res) => {
         if (!txtPidData) return res.failure({ message: 'Biometric data is required' });
 
         const existingCompany = await dbService.findOne(model.company, { id: req.user.companyId });
-        const practomindBank = await dbService.findOne(model.practomindBankList, { iinno: bankIIN, isActive: true });
+        const practomindBank = await dbService.findOne(model.practomindBankList, { bankIIN: bankIIN, isActive: true });
         if (!practomindBank) return res.failure({ message: 'Bank Is Not Supported For Mini Statement' });
 
         const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXPAY');
@@ -1550,7 +1550,7 @@ const miniStatement = async (req, res) => {
             latitude: latitude,
             longitude: longitude,
             aadhaarNumber: aadhaarNumber,
-            nationalBankIdenticationNumber: bankIIN || practomindBank.iinno,
+            nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN,
             transactionId: transactionId,
             txtPidData: txtPidData
         };
@@ -1707,10 +1707,10 @@ const miniStatement = async (req, res) => {
                 status: isSuccess, paymentStatus, message: response.message || '',
                 device: response?.result?.device || null, requestTransactionTime: response?.result?.requestTransactionTime || null,
                 consumerAadhaarNumber: aadhaarNumber, mobileNumber: existingUser.mobileNo,
-                bankIin: practomindBank.aeps_bank_id, latitude: latitude || null, longitude: longitude || null,
+                bankIin: practomindBank.bankIIN || bankIIN, latitude: latitude || null, longitude: longitude || null,
                 receiptUrl: response?.url || null, outletname: response?.outletname || null, outletmobile: response?.outletmobile || null,
                 ministatement: response?.ministatement ? (typeof response.ministatement === 'string' ? response.ministatement : JSON.stringify(response.ministatement)) : null,
-                requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.iinno, transactionId },
+                requestPayload: { mobileNumber: customerNumber, latitude, longitude, adhaarNumber: aadhaarNumber, nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN, transactionId },
                 responsePayload: response, ipAddress: req.ip || req.connection?.remoteAddress,
                 openingAeps2Wallet, closingAeps2Wallet, credit: creditToApply,
                 serviceType: 'ICICI',
@@ -1751,7 +1751,8 @@ const bankList = async (req, res) => {
         const formattedBankList = banks.map(bank => {
             const bankData = bank.toJSON ? bank.toJSON() : bank;
             return {
-                bankIIN: bankData.iinno,
+                bankCode: bankData.bankCode || null,
+                bankIIN: bankData.bankIIN || bankData.iinno,
                 bankName: bankData.bankName,
                 bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
             };
@@ -1812,7 +1813,7 @@ const recentBanks = async (req, res) => {
         const banks = await dbService.findAll(
             model.practomindBankList,
             {
-                aeps_bank_id: { [Op.in]: uniqueBankIINs },
+                bankIIN: { [Op.in]: uniqueBankIINs },
                 isActive: true
             }
         );
@@ -1820,8 +1821,9 @@ const recentBanks = async (req, res) => {
         const bankMap = new Map();
         banks.forEach((bank) => {
             const bankData = bank.toJSON ? bank.toJSON() : bank;
-            bankMap.set(bankData.aeps_bank_id, {
-                bankIIN: bankData.iinno,
+            bankMap.set(bankData.bankIIN, {
+                bankCode: bankData.bankCode || null,
+                bankIIN: bankData.bankIIN || bankData.iinno,
                 bankName: bankData.bankName,
                 bankLogo: imageService.getImageUrl(bankData.bankLogo, false)
             });
@@ -1997,7 +1999,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
 
             [existingBankDetails, parentUser, companyDetails] = await Promise.all([
                 dbService.findOne(model.practomindBankList, {
-                    aeps_bank_id: transaction.bankIin
+                    bankIIN: transaction.bankIin
                 }),
                 existingUser.reportingTo ? dbService.findOne(model.user, {
                     id: existingUser.reportingTo,
@@ -2057,7 +2059,7 @@ const getAeps2TransactionDetailsById = async (req, res) => {
                     isActive: true
                 }),
                 dbService.findOne(model.practomindBankList, {
-                    aeps_bank_id: transaction.bankIin
+                    bankIIN: transaction.bankIin
                 })
             ]);
 
@@ -2115,9 +2117,87 @@ const getAeps2TransactionDetailsById = async (req, res) => {
     }
 };
 
+const normalizeBankName = (name) => {
+    if (!name) return '';
+    return name
+        .toLowerCase()
+        .replace(/\b(limited|ltd|bank|co-operative|cooperative|co-op|coop|the)\b/gi, '')
+        .replace(/[^a-z0-9]/gi, '')
+        .trim();
+};
+
 const getBanks = async (req, res) => {
     try {
         const response = await practomindService.getBanks();
+        if (response && (response.status === 'failure' || response.status === 'error')) {
+            return res.failure({
+                message: response.message || 'Unable to get banks'
+            });
+        }
+
+        const bankList = Array.isArray(response?.data)
+            ? response.data
+            : (Array.isArray(response?.data?.data) ? response.data.data : (Array.isArray(response) ? response : []));
+
+        if (bankList.length > 0) {
+            console.log(`[AEPS2 getBanks] Processing ${bankList.length} banks one by one...`);
+            const allBanks = await dbService.findAll(model.practomindBankList, { isDeleted: false });
+
+            for (const item of bankList) {
+                const bankCode = item.code ? String(item.code).trim() : null;
+                const bankName = (item.name || item.description || '').trim();
+                if (!bankName && !bankCode) continue;
+
+                const targetNorm = normalizeBankName(bankName);
+
+                // 1. Find by bankCode
+                let existingBank = null;
+                if (bankCode) {
+                    existingBank = allBanks.find(b => b.bankCode && String(b.bankCode).trim() === bankCode);
+                }
+
+                // 2. Find by exact name (case-insensitive)
+                if (!existingBank && bankName) {
+                    existingBank = allBanks.find(b => b.bankName && b.bankName.trim().toLowerCase() === bankName.toLowerCase());
+                }
+
+                // 3. Find by normalized name
+                if (!existingBank && targetNorm && targetNorm.length >= 3) {
+                    existingBank = allBanks.find(b => normalizeBankName(b.bankName) === targetNorm);
+                }
+
+                if (existingBank) {
+                    const updateData = {};
+                    if (bankCode && existingBank.bankCode !== bankCode) {
+                        updateData.bankCode = bankCode;
+                        existingBank.bankCode = bankCode;
+                    }
+                    if (!existingBank.bankName && bankName) {
+                        updateData.bankName = bankName;
+                        existingBank.bankName = bankName;
+                    }
+                    if (existingBank.isDeleted) {
+                        updateData.isDeleted = false;
+                        existingBank.isDeleted = false;
+                    }
+                    if (Object.keys(updateData).length > 0) {
+                        await dbService.update(model.practomindBankList, { id: existingBank.id }, updateData);
+                    }
+                } else {
+                    const newBank = await dbService.createOne(model.practomindBankList, {
+                        bankCode,
+                        bankName: bankName || `Bank ${bankCode}`,
+                        bankIIN: null,
+                        isActive: true,
+                        isDeleted: false
+                    });
+                    if (newBank) {
+                        allBanks.push(newBank.toJSON ? newBank.toJSON() : newBank);
+                    }
+                }
+            }
+        }
+
         return res.success({
             message: 'Banks retrieved successfully',
             data: response.data
@@ -2132,7 +2212,76 @@ const getBanks = async (req, res) => {
 
 const getBankIINs = async (req, res) => {
     try {
-        const response = await practomindService.getBankIINs();
+        const response = await practomindService.getBankIINs(req.body || {});
+        if (response && (response.status === 'failure' || response.status === 'error')) {
+            return res.failure({
+                message: response.message || 'Unable to get bank IINs'
+            });
+        }
+
+        const iinList = Array.isArray(response?.data)
+            ? response.data
+            : (Array.isArray(response?.data?.data) ? response.data.data : (Array.isArray(response) ? response : []));
+
+        if (iinList.length > 0) {
+            console.log(`[AEPS2 getBankIINs] Processing ${iinList.length} bank IINs one by one...`);
+            const allBanks = await dbService.findAll(model.practomindBankList, { isDeleted: false });
+
+            for (const item of iinList) {
+                const bankIIN = item.iin ? String(item.iin).trim() : null;
+                const bankName = (item.bankName || item.description || '').trim();
+                if (!bankIIN && !bankName) continue;
+
+                const targetNorm = normalizeBankName(bankName);
+
+                // 1. Find by exact name (case-insensitive)
+                let existingBank = null;
+                if (bankName) {
+                    existingBank = allBanks.find(b => b.bankName && b.bankName.trim().toLowerCase() === bankName.toLowerCase());
+                }
+
+                // 2. Find by normalized name
+                if (!existingBank && targetNorm && targetNorm.length >= 3) {
+                    existingBank = allBanks.find(b => normalizeBankName(b.bankName) === targetNorm);
+                }
+
+                // 3. Find by bankIIN if bankName matches or bankName is empty
+                if (!existingBank && bankIIN) {
+                    existingBank = allBanks.find(b => b.bankIIN && String(b.bankIIN).trim() === bankIIN && (!b.bankName || b.bankName.trim().toLowerCase() === bankName.toLowerCase()));
+                }
+
+                if (existingBank) {
+                    const updateData = {};
+                    if (bankIIN && existingBank.bankIIN !== bankIIN) {
+                        updateData.bankIIN = bankIIN;
+                        existingBank.bankIIN = bankIIN;
+                    }
+                    if (!existingBank.bankName && bankName) {
+                        updateData.bankName = bankName;
+                        existingBank.bankName = bankName;
+                    }
+                    if (existingBank.isDeleted) {
+                        updateData.isDeleted = false;
+                        existingBank.isDeleted = false;
+                    }
+                    if (Object.keys(updateData).length > 0) {
+                        await dbService.update(model.practomindBankList, { id: existingBank.id }, updateData);
+                    }
+                } else {
+                    const newBank = await dbService.createOne(model.practomindBankList, {
+                        bankCode: null,
+                        bankName: bankName || `Bank ${bankIIN}`,
+                        bankIIN,
+                        isActive: true,
+                        isDeleted: false
+                    });
+                    if (newBank) {
+                        allBanks.push(newBank.toJSON ? newBank.toJSON() : newBank);
+                    }
+                }
+            }
+        }
+
         return res.success({
             message: 'Bank IINs retrieved successfully',
             data: response.data
