@@ -137,7 +137,7 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
       firstName: firstName,
       lastName: lastName,
       middleName: middleName,
-      dob: formatDob(data.dob),
+      dob: data.dob,
       gender: data.gender || 'M',
       merchantPhoneNumber: String(data.merchantPhoneNumber || data.mobileNo || ''),
       merchantPan: data.merchantPan || data.userPan || data.panNumber || '',

@@ -297,8 +297,8 @@ const createPractomindAepsOnboarding = async (req, res) => {
         const onboardingData = {
             merchantLoginId: merchantLoginId,
             merchantFirstName: existingUser?.name,
+            dob: existingUser?.dob,
             merchantPhoneNumber: existingUser?.mobileNo,
-            companyLegalName: existingCompany?.companyName,
             emailId: existingUser?.email,
             merchantPinCode: existingUser?.zipcode,
             merchantCityName: existingUser?.city,
@@ -314,6 +314,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             bankBranchName: bankDetails?.branch,
             c_code: existingCompanyCode?.mccCode,
             shopAddress: existingOutlet?.shopAddress,
+            companyLegalName: existingOutlet?.shopName,
             shopCity: existingOutlet?.shopCity,
             shopDistrict: existingOutlet?.shopDistrict,
             shopState: existingShopStateCode?.stateId,
