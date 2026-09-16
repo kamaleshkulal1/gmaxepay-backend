@@ -579,7 +579,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             companyBankAccountNumber: bankDetails?.accountNumber,
             bankAccountNumber: bankDetails?.accountNumber,
             bankIfscCode: bankDetails?.ifsc,
-            companyBankName: practomindBank?.bankName || bankDetails?.bankName,
+            companyBankName: practomindBank?.bankCode || bankDetails?.bankName,
             bankName: practomindBank?.bankName || bankDetails?.bankName,
             bankCode: practomindBank?.bankCode || '',
             accountType: req.body?.accountType || 'Savings account',
