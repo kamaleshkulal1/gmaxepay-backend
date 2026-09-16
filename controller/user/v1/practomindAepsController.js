@@ -175,6 +175,94 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
 };
 
 
+const resolvePractomindDistrict = async (inputDistrict, stateCode) => {
+    if (!inputDistrict) return '';
+    const cleanInput = String(inputDistrict).trim();
+    if (!cleanInput) return '';
+    if (!stateCode) return cleanInput.toUpperCase();
+
+    try {
+        const trimmedStateCode = stateCode.trim().toUpperCase();
+
+        let districtRecord = await dbService.findOne(model.practomindDistrict, {
+            stateCode: { [Op.iLike]: trimmedStateCode },
+            district: { [Op.iLike]: cleanInput },
+            isActive: true,
+            isDeleted: false
+        });
+
+        if (districtRecord?.district) {
+            return districtRecord.district.trim().toUpperCase();
+        }
+
+        // 2. Query all districts for this state from DB
+        let stateDistricts = await dbService.findAll(model.practomindDistrict, {
+            stateCode: { [Op.iLike]: trimmedStateCode },
+            isActive: true,
+            isDeleted: false
+        });
+
+        // 3. If DB has no districts for this state, fetch from Practomind API
+        if (!stateDistricts || stateDistricts.length === 0) {
+            try {
+                const apiRes = await practomindService.getDistricts({ stateCode: trimmedStateCode });
+                const dList = Array.isArray(apiRes?.data)
+                    ? apiRes.data
+                    : (Array.isArray(apiRes?.data?.data) ? apiRes.data.data : (Array.isArray(apiRes) ? apiRes : []));
+                if (dList && dList.length > 0) {
+                    for (const item of dList) {
+                        const code = item.code ? String(item.code).trim() : null;
+                        const dName = (item.description || item.district || item.name || '').trim();
+                        if (code || dName) {
+                            await dbService.createOne(model.practomindDistrict, {
+                                districtId: code || dName,
+                                district: dName || code,
+                                districtCode: code || dName,
+                                stateCode: trimmedStateCode,
+                                stateId: trimmedStateCode,
+                                isActive: true,
+                                isDeleted: false
+                            }).catch(() => { });
+                        }
+                    }
+                    stateDistricts = await dbService.findAll(model.practomindDistrict, {
+                        stateCode: { [Op.iLike]: trimmedStateCode },
+                        isActive: true,
+                        isDeleted: false
+                    });
+                }
+            } catch (apiErr) {
+                console.error('[resolvePractomindDistrict] Failed to fetch districts from API:', apiErr.message);
+            }
+        }
+
+        // 4. Match against stateDistricts
+        if (stateDistricts && stateDistricts.length > 0) {
+            const normInput = cleanInput.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            let matched = stateDistricts.find(d => {
+                const normD = (d.district || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                return normD && normD === normInput;
+            });
+
+            if (!matched) {
+                matched = stateDistricts.find(d => {
+                    const normD = (d.district || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return normD && (normD.includes(normInput) || normInput.includes(normD));
+                });
+            }
+
+            if (matched?.district) {
+                return matched.district.trim().toUpperCase();
+            }
+        }
+    } catch (err) {
+        console.error('[resolvePractomindDistrict] Error querying districts:', err.message);
+    }
+
+    return cleanInput.toUpperCase();
+};
+
 const createPractomindAepsOnboarding = async (req, res) => {
     try {
         const [existingUser, existingOnboarding] = await Promise.all([
@@ -260,7 +348,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             });
         }
 
-        // Validate and resolve user state code
         if (!existingUserStateCode || !existingUserStateCode.stateCode) {
             const allStates = await dbService.findAll(model.practomindState, { isActive: true, isDeleted: false });
             const searchState = (existingUser?.state || '').trim().toLowerCase();
@@ -372,8 +459,15 @@ const createPractomindAepsOnboarding = async (req, res) => {
             convertImageToBase64(existingUser.panCardFrontImage, true)
         ]);
 
-        const latitude = req.body?.latitude || req.body?.lat || existingOutlet?.shopLatitude || existingOutlet?.latitude;
-        const longitude = req.body?.longitude || req.body?.long || existingOutlet?.shopLongitude || existingOutlet?.longitude;
+        const rawLat = req.body?.latitude || req.body?.lat || existingOutlet?.shopLatitude || existingOutlet?.latitude;
+        const rawLong = req.body?.longitude || req.body?.long || existingOutlet?.shopLongitude || existingOutlet?.longitude;
+        const formatCoord = practomindService.formatCoordinate || ((c) => {
+            if (c === null || c === undefined || c === '') return '';
+            const n = parseFloat(c);
+            return isNaN(n) ? '' : n.toFixed(4);
+        });
+        const formattedLat = formatCoord(rawLat);
+        const formattedLong = formatCoord(rawLong);
 
         let ipAddress = req.body?.ipAddress ||
             req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
@@ -391,48 +485,122 @@ const createPractomindAepsOnboarding = async (req, res) => {
 
         if (req.body?.latitude || req.body?.lat || req.body?.longitude || req.body?.long) {
             const outletUpdates = {};
-            if (latitude && existingOutlet?.shopLatitude !== String(latitude)) outletUpdates.shopLatitude = String(latitude);
-            if (longitude && existingOutlet?.shopLongitude !== String(longitude)) outletUpdates.shopLongitude = String(longitude);
+            if (formattedLat && existingOutlet?.shopLatitude !== formattedLat) outletUpdates.shopLatitude = formattedLat;
+            if (formattedLong && existingOutlet?.shopLongitude !== formattedLong) outletUpdates.shopLongitude = formattedLong;
             if (Object.keys(outletUpdates).length > 0) {
                 await dbService.update(model.outlet, { id: existingOutlet.id }, outletUpdates);
             }
         }
 
+        const nameParser = practomindService.formatPractomindName || ((d) => ({
+            firstName: d.firstName || d.merchantFirstName || '',
+            middleName: d.middleName || '',
+            lastName: d.lastName || ''
+        }));
+        const { firstName, middleName, lastName } = nameParser({
+            firstName: req.body?.firstName,
+            middleName: req.body?.middleName,
+            lastName: req.body?.lastName,
+            merchantFirstName: existingUser?.name
+        });
+
+        const addressCleaner = practomindService.cleanAddress || ((a) => String(a || '').replace(/[^a-zA-Z0-9\s]/g, ' ').substring(0, 45).trim());
+
+        const rawMerchantAddress = req.body?.merchantAddress1 || req.body?.merchantAddress || existingUser?.fullAddress || '';
+        const cleanedMerchantAddress1 = addressCleaner(rawMerchantAddress, {
+            district: existingUser?.district,
+            state: existingUserStateCode?.state,
+            stateCode: existingUserStateCode?.stateCode,
+            pincode: existingUser?.zipcode
+        });
+
+        const cleanedMerchantAddress2 = addressCleaner(req.body?.merchantAddress2 || '', {
+            district: existingUser?.district,
+            state: existingUserStateCode?.state,
+            stateCode: existingUserStateCode?.stateCode,
+            pincode: existingUser?.zipcode
+        });
+
+        const rawShopAddress = req.body?.shopAddress || existingOutlet?.shopAddress || rawMerchantAddress;
+        const cleanedShopAddress = addressCleaner(rawShopAddress, {
+            district: existingOutlet?.shopDistrict || existingUser?.district,
+            state: existingShopStateCode?.state || shopStateCode,
+            stateCode: shopStateCode,
+            pincode: existingOutlet?.shopPincode || existingUser?.zipcode
+        });
+
+        const resolvedMerchantDistrict = await resolvePractomindDistrict(
+            req.body?.merchantDistrict || existingUser?.district || existingUser?.city,
+            existingUserStateCode.stateCode
+        );
+
+        const resolvedShopDistrict = await resolvePractomindDistrict(
+            req.body?.shopDistrict || existingOutlet?.shopDistrict || existingOutlet?.shopCity || resolvedMerchantDistrict,
+            shopStateCode
+        );
+
+        let dob = existingUser?.dob || req.body?.dob || '';
+        if (dob && /^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+            dob = dob.split('-').reverse().join('-');
+        }
+
+        let gender = req.body?.gender || existingUser?.gender || 'M';
+        if (gender) {
+            gender = String(gender).trim().toUpperCase().startsWith('F') ? 'F' : 'M';
+        }
+
         const onboardingData = {
             merchantLoginId: merchantLoginId,
-            merchantFirstName: existingUser?.name,
-            dob: existingUser?.dob,
+            merchantRefId: merchantLoginId,
+            firstName: firstName,
+            middleName: middleName,
+            lastName: lastName,
+            merchantFirstName: firstName,
+            merchantMiddleName: middleName,
+            merchantLastName: lastName,
+            dob: dob,
+            gender: gender,
             merchantPhoneNumber: existingUser?.mobileNo,
             emailId: existingUser?.email,
-            merchantPinCode: existingUser?.zipcode,
+            merchantPinCode: String(existingUser?.zipcode || ''),
             merchantCityName: existingUser?.city,
-            merchantDistrictName: existingUser?.district,
+            merchantDistrict: resolvedMerchantDistrict,
+            merchantDistrictName: resolvedMerchantDistrict,
             merchantState: existingUserStateCode.stateCode,
             stateCode: existingUserStateCode.stateCode,
-            merchantAddress: existingUser?.fullAddress,
+            merchantStateName: existingUserStateCode?.state,
+            stateName: existingUserStateCode?.state,
+            merchantAddress1: cleanedMerchantAddress1,
+            merchantAddress2: cleanedMerchantAddress2,
+            merchantAddress: cleanedMerchantAddress1,
             userPan: existingUser?.panDetails?.data?.pan_number,
-            aadhaarNumber: existingUser?.aadharDetails?.aadhaarNumber,
+            merchantPan: existingUser?.panDetails?.data?.pan_number,
+            aadhaarNumber: String(existingUser?.aadharDetails?.aadhaarNumber || ''),
             companyBankAccountNumber: bankDetails?.accountNumber,
+            bankAccountNumber: bankDetails?.accountNumber,
             bankIfscCode: bankDetails?.ifsc,
             companyBankName: practomindBank?.bankName || bankDetails?.bankName,
             bankName: practomindBank?.bankName || bankDetails?.bankName,
             bankCode: practomindBank?.bankCode || '',
+            accountType: req.body?.accountType || 'Savings account',
             bankAccountName: bankDetails?.beneficiaryName ? bankDetails.beneficiaryName.replace(/\./g, '') : bankDetails?.beneficiaryName,
             bankBranchName: bankDetails?.branch,
             c_code: existingCompanyCode?.mccCode,
-            shopAddress: existingOutlet?.shopAddress,
+            shopAddress: cleanedShopAddress,
             companyLegalName: existingOutlet?.shopName,
+            shopName: existingOutlet?.shopName,
             shopCity: existingOutlet?.shopCity,
-            shopDistrict: existingOutlet?.shopDistrict,
+            shopDistrict: resolvedShopDistrict,
             shopState: shopStateCode,
             shopStateCode: shopStateCode,
-            shopPincode: existingOutlet?.shopPincode,
-            latitude: String(latitude || ''),
-            longitude: String(longitude || ''),
-            lat: String(latitude || ''),
-            long: String(longitude || ''),
-            shopLat: String(latitude || ''),
-            shopLong: String(longitude || ''),
+            shopStateName: existingShopStateCode?.state || existingUserStateCode?.state,
+            shopPincode: String(existingOutlet?.shopPincode || existingUser?.zipcode || ''),
+            latitude: formattedLat,
+            longitude: formattedLong,
+            lat: formattedLat,
+            long: formattedLong,
+            shopLat: formattedLat,
+            shopLong: formattedLong,
             ipAddress: ipAddress,
             maskedAadharImage: maskedAadharImageBase64,
             backgroundImageOfShop: backgroundImageOfShopBase64,
