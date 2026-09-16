@@ -452,11 +452,12 @@ const getStates = async () => {
   }
 };
 
-const getDistricts = async (stateCode) => {
+const getDistricts = async (data) => {
   try {
-    const payload = { stateCode };
+    const payload = { stateCode: data.stateCode };
     const headers = await getHeaders(payload);
     const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/districts`, payload, { headers });
+    console.log('Practomind Get Districts Response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Practomind Get Districts Error:', error.response?.data || error.message);
