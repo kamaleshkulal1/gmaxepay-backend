@@ -59,6 +59,7 @@ db.aslBankList = require('./aslBankList');
 db.practomindBankList = require('./practomindBankList');
 db.practomindCompanyCode = require('./practomindCompanyCode');
 db.practomindState = require('./practomindState');
+db.practomindDistrict = require('./practomindDistrict');
 
 db.zupayState = require('./zupayState');
 db.zupayCity = require('./zupayCity');

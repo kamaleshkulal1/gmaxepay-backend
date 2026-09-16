@@ -2400,13 +2400,180 @@ const getBankIINs = async (req, res) => {
 
 const getDistrict = async (req, res) => {
     try {
-        const response = await practomindService.getDistricts(req.body);
+        const inputState = (req.body?.stateCode || req.body?.state_code || req.body?.state || req.body?.code || req.query?.stateCode || req.query?.state || '').trim();
+
+        if (!inputState) {
+            return res.failure({
+                message: 'State code is required'
+            });
+        }
+
+        let stateCode = inputState.toUpperCase();
+        let stateId = null;
+
+        // If inputState is a full name or stateId, try to resolve to stateCode via practomindState
+        const allStates = await dbService.findAll(model.practomindState, {
+            isActive: true,
+            isDeleted: false
+        });
+
+        const matchedState = allStates.find(s =>
+            (s.stateCode && s.stateCode.trim().toUpperCase() === stateCode) ||
+            (s.stateId && s.stateId.trim().toUpperCase() === stateCode) ||
+            (s.state && s.state.trim().toLowerCase() === inputState.toLowerCase())
+        );
+
+        if (matchedState) {
+            if (matchedState.stateCode) {
+                stateCode = matchedState.stateCode.trim().toUpperCase();
+            }
+            stateId = matchedState.stateId || matchedState.stateCode;
+        }
+
+        const response = await practomindService.getDistricts({
+            ...req.body,
+            stateCode
+        });
+
+        if (response && (response.status === 'failure' || response.status === 'error')) {
+            const dbDistricts = await dbService.findAll(model.practomindDistrict, {
+                stateCode: { [Op.iLike]: stateCode },
+                isActive: true,
+                isDeleted: false
+            });
+
+            if (dbDistricts && dbDistricts.length > 0) {
+                const formatted = dbDistricts.map(d => ({
+                    code: d.districtCode,
+                    description: d.district,
+                    stateCode: d.stateCode
+                }));
+                return res.success({
+                    message: 'Districts retrieved successfully',
+                    data: formatted
+                });
+            }
+
+            return res.failure({
+                message: response.message || 'Unable to get districts'
+            });
+        }
+
+        const districtList = Array.isArray(response?.data)
+            ? response.data
+            : (Array.isArray(response?.data?.data) ? response.data.data : (Array.isArray(response) ? response : []));
+
+        if (districtList.length > 0) {
+            console.log(`[AEPS2 getDistrict] Processing ${districtList.length} districts for state ${stateCode}...`);
+            const allDistricts = await dbService.findAll(model.practomindDistrict, {
+                stateCode: { [Op.iLike]: stateCode },
+                isDeleted: false
+            });
+
+            for (const item of districtList) {
+                const code = item.code ? String(item.code).trim() : null;
+                const districtName = (item.description || item.district || item.name || '').trim();
+                if (!code && !districtName) continue;
+
+                // Find existing district by code, districtId, or name
+                let existingDistrict = null;
+                if (code) {
+                    existingDistrict = allDistricts.find(d =>
+                        (d.districtCode && d.districtCode.trim().toUpperCase() === code.toUpperCase()) ||
+                        (d.districtId && d.districtId.trim().toUpperCase() === code.toUpperCase())
+                    );
+                }
+                if (!existingDistrict && districtName) {
+                    existingDistrict = allDistricts.find(d =>
+                        d.district && d.district.trim().toLowerCase() === districtName.toLowerCase()
+                    );
+                }
+
+                if (existingDistrict) {
+                    const updateData = {};
+                    if (code && (!existingDistrict.districtCode || existingDistrict.districtCode.trim().toUpperCase() !== code.toUpperCase())) {
+                        updateData.districtCode = code;
+                        existingDistrict.districtCode = code;
+                    }
+                    if (districtName && (!existingDistrict.district || existingDistrict.district.trim().toLowerCase() !== districtName.toLowerCase())) {
+                        updateData.district = districtName;
+                        existingDistrict.district = districtName;
+                    }
+                    if (code && !existingDistrict.districtId) {
+                        updateData.districtId = code;
+                        existingDistrict.districtId = code;
+                    }
+                    if (stateCode && (!existingDistrict.stateCode || existingDistrict.stateCode.trim().toUpperCase() !== stateCode)) {
+                        updateData.stateCode = stateCode;
+                        existingDistrict.stateCode = stateCode;
+                    }
+                    if (stateId && !existingDistrict.stateId) {
+                        updateData.stateId = stateId;
+                        existingDistrict.stateId = stateId;
+                    }
+                    if (existingDistrict.isDeleted) {
+                        updateData.isDeleted = false;
+                        existingDistrict.isDeleted = false;
+                    }
+                    if (!existingDistrict.isActive) {
+                        updateData.isActive = true;
+                        existingDistrict.isActive = true;
+                    }
+                    if (Object.keys(updateData).length > 0) {
+                        await dbService.update(model.practomindDistrict, { id: existingDistrict.id }, updateData);
+                    }
+                } else {
+                    const newDistrict = await dbService.createOne(model.practomindDistrict, {
+                        districtId: code || districtName,
+                        district: districtName || code,
+                        districtCode: code || districtName,
+                        stateCode: stateCode,
+                        stateId: stateId || stateCode,
+                        isActive: true,
+                        isDeleted: false
+                    });
+                    if (newDistrict) {
+                        allDistricts.push(newDistrict.toJSON ? newDistrict.toJSON() : newDistrict);
+                    }
+                }
+            }
+        }
+
+        const formattedData = districtList.map(item => ({
+            code: item.code,
+            description: item.description || item.district || item.name,
+            stateCode: stateCode
+        }));
+
         return res.success({
             message: 'Districts retrieved successfully',
-            data: response.data
+            data: formattedData
         });
     } catch (error) {
         console.error('AEPS2 getDistricts error', error);
+        try {
+            const inputState = (req.body?.stateCode || req.body?.state_code || req.body?.state || req.body?.code || req.query?.stateCode || req.query?.state || '').trim();
+            if (inputState) {
+                const dbDistricts = await dbService.findAll(model.practomindDistrict, {
+                    stateCode: { [Op.iLike]: inputState.toUpperCase() },
+                    isActive: true,
+                    isDeleted: false
+                });
+                if (dbDistricts && dbDistricts.length > 0) {
+                    const formatted = dbDistricts.map(d => ({
+                        code: d.districtCode,
+                        description: d.district,
+                        stateCode: d.stateCode
+                    }));
+                    return res.success({
+                        message: 'Districts retrieved successfully',
+                        data: formatted
+                    });
+                }
+            }
+        } catch (dbErr) {
+            console.error('AEPS2 getDistricts DB fallback error', dbErr);
+        }
         return res.failure({
             message: error.message || 'Unable to get districts'
         });
