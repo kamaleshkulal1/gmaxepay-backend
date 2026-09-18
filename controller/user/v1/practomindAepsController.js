@@ -740,9 +740,12 @@ const createPractomindAepsOnboarding = async (req, res) => {
             gender = String(gender).trim().toUpperCase().startsWith('F') ? 'F' : 'M';
         }
 
+        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY');
+
         const onboardingData = {
             merchantLoginId: merchantLoginId,
-            merchantRefId: merchantLoginId,
+            merchantRefId: transactionId,
+            transactionId: transactionId,
             firstName: firstName,
             middleName: middleName,
             lastName: lastName,
