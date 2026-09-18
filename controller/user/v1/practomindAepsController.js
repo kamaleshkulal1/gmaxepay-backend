@@ -175,284 +175,284 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
 };
 
 const formatCoordinate = (coord) => {
-  if (coord === null || coord === undefined || coord === '') return '';
-  const num = parseFloat(coord);
-  return isNaN(num) ? '' : num.toFixed(4);
+    if (coord === null || coord === undefined || coord === '') return '';
+    const num = parseFloat(coord);
+    return isNaN(num) ? '' : num.toFixed(4);
 };
 
 const cleanAddress = (address, options = {}) => {
-  if (!address || typeof address !== 'string') return '';
-  let addr = address.trim();
+    if (!address || typeof address !== 'string') return '';
+    let addr = address.trim();
 
-  const toRemove = [
-    'india',
-    options.pincode ? String(options.pincode).trim().toLowerCase() : null,
-    options.district ? String(options.district).trim().toLowerCase() : null,
-    options.districtName ? String(options.districtName).trim().toLowerCase() : null,
-    options.districtCode ? String(options.districtCode).trim().toLowerCase() : null,
-    options.state ? String(options.state).trim().toLowerCase() : null,
-    options.stateCode ? String(options.stateCode).trim().toLowerCase() : null
-  ].filter(Boolean);
+    const toRemove = [
+        'india',
+        options.pincode ? String(options.pincode).trim().toLowerCase() : null,
+        options.district ? String(options.district).trim().toLowerCase() : null,
+        options.districtName ? String(options.districtName).trim().toLowerCase() : null,
+        options.districtCode ? String(options.districtCode).trim().toLowerCase() : null,
+        options.state ? String(options.state).trim().toLowerCase() : null,
+        options.stateCode ? String(options.stateCode).trim().toLowerCase() : null
+    ].filter(Boolean);
 
-  const segments = addr.split(',').map(s => s.trim()).filter(Boolean);
-  if (segments.length > 1) {
-    const filteredSegments = segments.filter(seg => {
-      const cleanSeg = seg.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      if (!cleanSeg) return false;
-      return !toRemove.some(item => {
-        const cleanItem = item.replace(/[^a-zA-Z0-9]/g, '');
-        return cleanItem && (cleanSeg === cleanItem || cleanSeg === cleanItem.replace(/\s+/g, ''));
-      });
-    });
-    if (filteredSegments.length > 0) {
-      addr = filteredSegments.join(' ');
+    const segments = addr.split(',').map(s => s.trim()).filter(Boolean);
+    if (segments.length > 1) {
+        const filteredSegments = segments.filter(seg => {
+            const cleanSeg = seg.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            if (!cleanSeg) return false;
+            return !toRemove.some(item => {
+                const cleanItem = item.replace(/[^a-zA-Z0-9]/g, '');
+                return cleanItem && (cleanSeg === cleanItem || cleanSeg === cleanItem.replace(/\s+/g, ''));
+            });
+        });
+        if (filteredSegments.length > 0) {
+            addr = filteredSegments.join(' ');
+        }
     }
-  }
 
-  // Remove any remaining 6-digit pincodes
-  addr = addr.replace(/\b\d{6}\b/g, ' ');
+    // Remove any remaining 6-digit pincodes
+    addr = addr.replace(/\b\d{6}\b/g, ' ');
 
-  // Replace non-alphanumeric characters with spaces
-  addr = addr.replace(/[^a-zA-Z0-9\s]/g, ' ');
-  addr = addr.replace(/\s+/g, ' ').trim();
+    // Replace non-alphanumeric characters with spaces
+    addr = addr.replace(/[^a-zA-Z0-9\s]/g, ' ');
+    addr = addr.replace(/\s+/g, ' ').trim();
 
-  // Strip trailing words if state, district, or pincode was appended at the end
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const words = addr.split(' ');
-    if (words.length > 1) {
-      const lastWord = words[words.length - 1].toLowerCase();
-      const lastTwoWords = words.length >= 2 ? words.slice(-2).join(' ').toLowerCase() : '';
-      const lastThreeWords = words.length >= 3 ? words.slice(-3).join(' ').toLowerCase() : '';
-      for (const item of toRemove) {
-        if (!item) continue;
-        const cleanItem = item.replace(/[^a-zA-Z0-9]/g, '');
-        if (lastThreeWords && (lastThreeWords === item || lastThreeWords.replace(/[^a-z0-9]/g, '') === cleanItem)) {
-          words.pop(); words.pop(); words.pop();
-          addr = words.join(' ');
-          changed = true;
-          break;
+    // Strip trailing words if state, district, or pincode was appended at the end
+    let changed = true;
+    while (changed) {
+        changed = false;
+        const words = addr.split(' ');
+        if (words.length > 1) {
+            const lastWord = words[words.length - 1].toLowerCase();
+            const lastTwoWords = words.length >= 2 ? words.slice(-2).join(' ').toLowerCase() : '';
+            const lastThreeWords = words.length >= 3 ? words.slice(-3).join(' ').toLowerCase() : '';
+            for (const item of toRemove) {
+                if (!item) continue;
+                const cleanItem = item.replace(/[^a-zA-Z0-9]/g, '');
+                if (lastThreeWords && (lastThreeWords === item || lastThreeWords.replace(/[^a-z0-9]/g, '') === cleanItem)) {
+                    words.pop(); words.pop(); words.pop();
+                    addr = words.join(' ');
+                    changed = true;
+                    break;
+                }
+                if (lastTwoWords && (lastTwoWords === item || lastTwoWords.replace(/[^a-z0-9]/g, '') === cleanItem)) {
+                    words.pop(); words.pop();
+                    addr = words.join(' ');
+                    changed = true;
+                    break;
+                }
+                if (lastWord === item || lastWord.replace(/[^a-z0-9]/g, '') === cleanItem) {
+                    words.pop();
+                    addr = words.join(' ');
+                    changed = true;
+                    break;
+                }
+            }
         }
-        if (lastTwoWords && (lastTwoWords === item || lastTwoWords.replace(/[^a-z0-9]/g, '') === cleanItem)) {
-          words.pop(); words.pop();
-          addr = words.join(' ');
-          changed = true;
-          break;
-        }
-        if (lastWord === item || lastWord.replace(/[^a-z0-9]/g, '') === cleanItem) {
-          words.pop();
-          addr = words.join(' ');
-          changed = true;
-          break;
-        }
-      }
     }
-  }
 
-  // Limit length to under 45 characters
-  if (addr.length > 45) {
-    addr = addr.substring(0, 45).trim();
-  }
+    // Limit length to under 45 characters
+    if (addr.length > 45) {
+        addr = addr.substring(0, 45).trim();
+    }
 
-  // Fallback if empty
-  if (!addr && address) {
-    addr = address.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').substring(0, 45).trim();
-  }
+    // Fallback if empty
+    if (!addr && address) {
+        addr = address.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').substring(0, 45).trim();
+    }
 
-  return addr;
+    return addr;
 };
 
 const formatPractomindName = (data = {}) => {
-  let firstName = (data.firstName || data.merchantFirstName || '').trim();
-  let middleName = (data.middleName || data.merchantMiddleName || '').trim();
-  let lastName = (data.lastName || data.merchantLastName || '').trim();
+    let firstName = (data.firstName || data.merchantFirstName || '').trim();
+    let middleName = (data.middleName || data.merchantMiddleName || '').trim();
+    let lastName = (data.lastName || data.merchantLastName || '').trim();
 
-  // Clean dots and special characters
-  firstName = firstName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-  middleName = middleName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-  lastName = lastName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    // Clean dots and special characters
+    firstName = firstName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    middleName = middleName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    lastName = lastName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  const allTokens = `${firstName} ${middleName} ${lastName}`.trim().split(/\s+/).filter(Boolean);
+    const allTokens = `${firstName} ${middleName} ${lastName}`.trim().split(/\s+/).filter(Boolean);
 
-  if (allTokens.length === 1) {
-    firstName = allTokens[0];
-    middleName = '';
-    lastName = '';
-  } else if (allTokens.length === 2) {
-    if (allTokens[0].length === 1) {
-      middleName = allTokens[0];
-      firstName = allTokens[1];
-      lastName = '';
-    } else if (allTokens[1].length === 1) {
-      firstName = allTokens[0];
-      middleName = allTokens[1];
-      lastName = '';
-    } else {
-      firstName = allTokens[0];
-      middleName = '';
-      lastName = allTokens[1];
-    }
-  } else if (allTokens.length >= 3) {
-    const initialIndices = [];
-    allTokens.forEach((token, idx) => {
-      if (token.length === 1) initialIndices.push(idx);
-    });
-
-    if (initialIndices.length > 0) {
-      const initials = initialIndices.map(idx => allTokens[idx]);
-      middleName = initials.join('');
-      const nonInitials = allTokens.filter((_, idx) => !initialIndices.includes(idx));
-      if (nonInitials.length >= 2) {
-        firstName = nonInitials[0];
-        lastName = nonInitials[nonInitials.length - 1];
-      } else if (nonInitials.length === 1) {
-        firstName = nonInitials[0];
-        lastName = '';
-      } else {
+    if (allTokens.length === 1) {
         firstName = allTokens[0];
-        lastName = allTokens[allTokens.length - 1];
-      }
-    } else {
-      firstName = allTokens[0];
-      middleName = allTokens[1];
-      lastName = allTokens[allTokens.length - 1];
+        middleName = '';
+        lastName = '';
+    } else if (allTokens.length === 2) {
+        if (allTokens[0].length === 1) {
+            middleName = allTokens[0];
+            firstName = allTokens[1];
+            lastName = '';
+        } else if (allTokens[1].length === 1) {
+            firstName = allTokens[0];
+            middleName = allTokens[1];
+            lastName = '';
+        } else {
+            firstName = allTokens[0];
+            middleName = '';
+            lastName = allTokens[1];
+        }
+    } else if (allTokens.length >= 3) {
+        const initialIndices = [];
+        allTokens.forEach((token, idx) => {
+            if (token.length === 1) initialIndices.push(idx);
+        });
+
+        if (initialIndices.length > 0) {
+            const initials = initialIndices.map(idx => allTokens[idx]);
+            middleName = initials.join('');
+            const nonInitials = allTokens.filter((_, idx) => !initialIndices.includes(idx));
+            if (nonInitials.length >= 2) {
+                firstName = nonInitials[0];
+                lastName = nonInitials[nonInitials.length - 1];
+            } else if (nonInitials.length === 1) {
+                firstName = nonInitials[0];
+                lastName = '';
+            } else {
+                firstName = allTokens[0];
+                lastName = allTokens[allTokens.length - 1];
+            }
+        } else {
+            firstName = allTokens[0];
+            middleName = allTokens[1];
+            lastName = allTokens[allTokens.length - 1];
+        }
     }
-  }
 
-  // Individual name fields must contain alphabets only without spaces
-  firstName = firstName.replace(/[^a-zA-Z]/g, '');
-  middleName = middleName.replace(/[^a-zA-Z]/g, '');
-  lastName = lastName.replace(/[^a-zA-Z]/g, '');
+    // Individual name fields must contain alphabets only without spaces
+    firstName = firstName.replace(/[^a-zA-Z]/g, '');
+    middleName = middleName.replace(/[^a-zA-Z]/g, '');
+    lastName = lastName.replace(/[^a-zA-Z]/g, '');
 
-  return { firstName, middleName, lastName };
+    return { firstName, middleName, lastName };
 };
 
 const resolvePractomindDistrictCode = async (districtInput, stateCode) => {
-  if (!districtInput) return '';
-  const cleanInput = String(districtInput).trim();
-  if (!cleanInput) return '';
+    if (!districtInput) return '';
+    const cleanInput = String(districtInput).trim();
+    if (!cleanInput) return '';
 
-  const cleanStateCode = stateCode ? String(stateCode).trim().toUpperCase() : '';
+    const cleanStateCode = stateCode ? String(stateCode).trim().toUpperCase() : '';
 
-  try {
-    if (model && model.practomindDistrict) {
-      // 1. Direct match on code, districtId, or name
-      const whereClause = {
-        [Op.or]: [
-          { districtCode: { [Op.iLike]: cleanInput } },
-          { districtId: { [Op.iLike]: cleanInput } },
-          { district: { [Op.iLike]: cleanInput } }
-        ],
-        isActive: true,
-        isDeleted: false
-      };
-      if (cleanStateCode) {
-        whereClause.stateCode = { [Op.iLike]: cleanStateCode };
-      }
+    try {
+        if (model && model.practomindDistrict) {
+            // 1. Direct match on code, districtId, or name
+            const whereClause = {
+                [Op.or]: [
+                    { districtCode: { [Op.iLike]: cleanInput } },
+                    { districtId: { [Op.iLike]: cleanInput } },
+                    { district: { [Op.iLike]: cleanInput } }
+                ],
+                isActive: true,
+                isDeleted: false
+            };
+            if (cleanStateCode) {
+                whereClause.stateCode = { [Op.iLike]: cleanStateCode };
+            }
 
-      const match = await model.practomindDistrict.findOne({ where: whereClause });
-      if (match) {
-        const code = match.districtCode || match.districtId;
-        if (code) {
-          return String(code).trim().toUpperCase();
-        }
-      }
+            const match = await model.practomindDistrict.findOne({ where: whereClause });
+            if (match) {
+                const code = match.districtCode || match.districtId;
+                if (code) {
+                    return String(code).trim().toUpperCase();
+                }
+            }
 
-      // 2. Query all districts for state from DB
-      if (cleanStateCode) {
-        let stateDistricts = await model.practomindDistrict.findAll({
-          where: { stateCode: { [Op.iLike]: cleanStateCode }, isActive: true, isDeleted: false }
-        });
+            // 2. Query all districts for state from DB
+            if (cleanStateCode) {
+                let stateDistricts = await model.practomindDistrict.findAll({
+                    where: { stateCode: { [Op.iLike]: cleanStateCode }, isActive: true, isDeleted: false }
+                });
 
-        // If no districts in DB for this state, fetch from Practomind API
-        if (!stateDistricts || stateDistricts.length === 0) {
-          try {
-            const apiRes = await practomindService.getDistricts({ stateCode: cleanStateCode });
-            const dList = Array.isArray(apiRes?.data)
-              ? apiRes.data
-              : (Array.isArray(apiRes?.data?.data) ? apiRes.data.data : (Array.isArray(apiRes) ? apiRes : []));
-            if (dList && dList.length > 0) {
-              for (const item of dList) {
-                const code = item.code ? String(item.code).trim() : null;
-                const dName = (item.description || item.district || item.name || '').trim();
-                if (code || dName) {
-                  await model.practomindDistrict.create({
-                    districtId: code || dName,
-                    district: dName || code,
-                    districtCode: code || dName,
-                    stateCode: cleanStateCode,
-                    stateId: cleanStateCode,
+                // If no districts in DB for this state, fetch from Practomind API
+                if (!stateDistricts || stateDistricts.length === 0) {
+                    try {
+                        const apiRes = await practomindService.getDistricts({ stateCode: cleanStateCode });
+                        const dList = Array.isArray(apiRes?.data)
+                            ? apiRes.data
+                            : (Array.isArray(apiRes?.data?.data) ? apiRes.data.data : (Array.isArray(apiRes) ? apiRes : []));
+                        if (dList && dList.length > 0) {
+                            for (const item of dList) {
+                                const code = item.code ? String(item.code).trim() : null;
+                                const dName = (item.description || item.district || item.name || '').trim();
+                                if (code || dName) {
+                                    await model.practomindDistrict.create({
+                                        districtId: code || dName,
+                                        district: dName || code,
+                                        districtCode: code || dName,
+                                        stateCode: cleanStateCode,
+                                        stateId: cleanStateCode,
+                                        isActive: true,
+                                        isDeleted: false
+                                    }).catch(() => { });
+                                }
+                            }
+                            stateDistricts = await model.practomindDistrict.findAll({
+                                where: { stateCode: { [Op.iLike]: cleanStateCode }, isActive: true, isDeleted: false }
+                            });
+                        }
+                    } catch (e) { }
+                }
+
+                if (stateDistricts && stateDistricts.length > 0) {
+                    const normInput = cleanInput.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                    // Match on code or districtId
+                    let matched = stateDistricts.find(d => {
+                        const normCode = String(d.districtCode || d.districtId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                        return normCode && normCode === normInput;
+                    });
+
+                    // Match on description/name
+                    if (!matched) {
+                        matched = stateDistricts.find(d => {
+                            const normD = String(d.district || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return normD && normD === normInput;
+                        });
+                    }
+
+                    // Partial match on description/name
+                    if (!matched) {
+                        matched = stateDistricts.find(d => {
+                            const normD = String(d.district || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return normD && (normD.includes(normInput) || normInput.includes(normD));
+                        });
+                    }
+
+                    if (matched) {
+                        const code = matched.districtCode || matched.districtId;
+                        if (code) {
+                            return String(code).trim().toUpperCase();
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback: Search globally across all states in model.practomindDistrict
+            const anyMatch = await model.practomindDistrict.findOne({
+                where: {
+                    [Op.or]: [
+                        { districtCode: { [Op.iLike]: cleanInput } },
+                        { districtId: { [Op.iLike]: cleanInput } },
+                        { district: { [Op.iLike]: cleanInput } }
+                    ],
                     isActive: true,
                     isDeleted: false
-                  }).catch(() => {});
                 }
-              }
-              stateDistricts = await model.practomindDistrict.findAll({
-                where: { stateCode: { [Op.iLike]: cleanStateCode }, isActive: true, isDeleted: false }
-              });
-            }
-          } catch (e) {}
-        }
-
-        if (stateDistricts && stateDistricts.length > 0) {
-          const normInput = cleanInput.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-          // Match on code or districtId
-          let matched = stateDistricts.find(d => {
-            const normCode = String(d.districtCode || d.districtId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            return normCode && normCode === normInput;
-          });
-
-          // Match on description/name
-          if (!matched) {
-            matched = stateDistricts.find(d => {
-              const normD = String(d.district || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              return normD && normD === normInput;
             });
-          }
-
-          // Partial match on description/name
-          if (!matched) {
-            matched = stateDistricts.find(d => {
-              const normD = String(d.district || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              return normD && (normD.includes(normInput) || normInput.includes(normD));
-            });
-          }
-
-          if (matched) {
-            const code = matched.districtCode || matched.districtId;
-            if (code) {
-              return String(code).trim().toUpperCase();
+            if (anyMatch) {
+                const code = anyMatch.districtCode || anyMatch.districtId;
+                if (code) {
+                    return String(code).trim().toUpperCase();
+                }
             }
-          }
         }
-      }
-
-      // 3. Fallback: Search globally across all states in model.practomindDistrict
-      const anyMatch = await model.practomindDistrict.findOne({
-        where: {
-          [Op.or]: [
-            { districtCode: { [Op.iLike]: cleanInput } },
-            { districtId: { [Op.iLike]: cleanInput } },
-            { district: { [Op.iLike]: cleanInput } }
-          ],
-          isActive: true,
-          isDeleted: false
-        }
-      });
-      if (anyMatch) {
-        const code = anyMatch.districtCode || anyMatch.districtId;
-        if (code) {
-          return String(code).trim().toUpperCase();
-        }
-      }
+    } catch (err) {
+        console.error('[Practomind Controller] Failed to resolve district code from model:', err.message);
     }
-  } catch (err) {
-    console.error('[Practomind Controller] Failed to resolve district code from model:', err.message);
-  }
 
-  return cleanInput.toUpperCase();
+    return cleanInput.toUpperCase();
 };
 
 const resolvePractomindDistrict = resolvePractomindDistrictCode;
@@ -472,6 +472,13 @@ const createPractomindAepsOnboarding = async (req, res) => {
 
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
+        }
+
+        if (existingOnboarding && (
+            existingOnboarding.isBioMetricValidated ||
+            ((existingOnboarding.isAepsOnboardingCompleted || existingOnboarding.onboardingStatus === 'COMPLETED') && !existingOnboarding.ekycResponseCode)
+        )) {
+            return res.failure({ message: 'AEPS onboarding already completed' });
         }
 
         const [
@@ -740,7 +747,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             gender = String(gender).trim().toUpperCase().startsWith('F') ? 'F' : 'M';
         }
 
-        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY');
+        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 10);
 
         const onboardingData = {
             merchantLoginId: merchantLoginId,
