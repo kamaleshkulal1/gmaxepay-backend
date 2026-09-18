@@ -654,6 +654,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
         ]);
 
         const rawLat = req.body?.latitude || req.body?.lat || existingOutlet?.shopLatitude || existingOutlet?.latitude;
+        const rawLong = req.body?.longitude || req.body?.long || existingOutlet?.shopLongitude || existingOutlet?.longitude;
         const formattedLat = formatCoordinate(rawLat);
         const formattedLong = formatCoordinate(rawLong);
 
