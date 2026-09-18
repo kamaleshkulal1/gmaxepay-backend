@@ -104,7 +104,7 @@ const sanitizeLogPayload = (payload) => {
 const practomindAepsOnboarding = async (data, merchantLoginId) => {
   try {
     const payload = {
-      merchantRefId: String(data.merchantRefId || merchantLoginId || data.merchantLoginId || data.merchantPhoneNumber || ''),
+      merchantRefId: String('GMAX000093'),
       firstName: data.firstName || data.merchantFirstName || '',
       lastName: data.lastName || data.merchantLastName || '',
       middleName: data.middleName || data.merchantMiddleName || '',
