@@ -152,8 +152,8 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
 const practomindSendEkycOtp = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
-      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `OTP_REF_${Date.now()}`),
+      merchantId: data.merchantId || data.merchantLoginId,
+      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `OTP_REF_${Date.now()}`).slice(0, 20),
       pipe: AEPSPIPE
     };
 
@@ -173,8 +173,8 @@ const practomindSendEkycOtp = async (data) => {
 const practomindResendEkycOtp = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
-      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `RESEND_REF_${Date.now()}`),
+      merchantId: data.merchantId || data.merchantLoginId,
+      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `RESEND_REF_${Date.now()}`).slice(0, 20),
       pipe: AEPSPIPE
     };
 
@@ -194,8 +194,8 @@ const practomindResendEkycOtp = async (data) => {
 const practomindValidateEkycOtp = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
-      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `VERIFY_REF_${Date.now()}`),
+      merchantId: data.merchantId || data.merchantLoginId,
+      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `VERIFY_REF_${Date.now()}`).slice(0, 20),
       otp: String(data.otp),
       pipe: AEPSPIPE
     };
@@ -216,8 +216,8 @@ const practomindValidateEkycOtp = async (data) => {
 const practomindEkycSubmit = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
-      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `BIO_REF_${Date.now()}`),
+      merchantId: data.merchantId || data.merchantLoginId,
+      merchantRefId: String(data.merchantRefId || data.merchantLoginId || `BIO_REF_${Date.now()}`).slice(0, 20),
       aadhaarNumber: String(data.aadhaarNumber || data.adhaarNumber || ''),
       pidData: data.pidData || data.txtPidData,
       deviceType: data.deviceType || 'mantra',
@@ -242,7 +242,7 @@ const practomindEkycSubmit = async (data) => {
 const practomindDailyAuthentication = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
+      merchantId: data.merchantId || data.merchantLoginId,
       aadhaarNumber: String(data.aadhaarNumber || data.adhaarNumber || ''),
       pidData: data.pidData || data.txtPidData,
       deviceType: data.deviceType || 'mantra',
@@ -267,7 +267,7 @@ const practomindDailyAuthentication = async (data) => {
 const practomindCashWithdrawal = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
+      merchantId: data.merchantId || data.merchantLoginId,
       service_type: 2,
       amount: Number(data.amount !== undefined && data.amount !== null ? data.amount : data.transactionAmount || 0),
       aadhaar: String(data.aadhaar || data.aadhaarNumber || data.adhaarNumber || ''),
@@ -278,7 +278,7 @@ const practomindCashWithdrawal = async (data) => {
       pipe: AEPSPIPE,
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
-      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_CW_${Date.now()}`)
+      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_CW_${Date.now()}`).slice(0, 20)
     };
 
     console.log('Practomind Cash Withdrawal Payload:', sanitizeLogPayload(payload));
@@ -297,7 +297,7 @@ const practomindCashWithdrawal = async (data) => {
 const practomindBalanceEnquiry = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
+      merchantId: data.merchantId || data.merchantLoginId,
       service_type: 3,
       aadhaar: String(data.aadhaar || data.aadhaarNumber || data.adhaarNumber || ''),
       pidData: data.pidData || data.txtPidData,
@@ -306,7 +306,7 @@ const practomindBalanceEnquiry = async (data) => {
       pipe: AEPSPIPE,
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
-      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_BE_${Date.now()}`)
+      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_BE_${Date.now()}`).slice(0, 20)
     };
 
     console.log('Practomind Balance Enquiry Payload:', sanitizeLogPayload(payload));
@@ -325,7 +325,7 @@ const practomindBalanceEnquiry = async (data) => {
 const practomindMiniStatement = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
+      merchantId: data.merchantId || data.merchantLoginId,
       service_type: 4,
       aadhaar: String(data.aadhaar || data.aadhaarNumber || data.adhaarNumber || ''),
       pidData: data.pidData || data.txtPidData,
@@ -334,7 +334,7 @@ const practomindMiniStatement = async (data) => {
       pipe: AEPSPIPE,
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
-      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_MS_${Date.now()}`)
+      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_MS_${Date.now()}`).slice(0, 20)
     };
 
     console.log('Practomind Mini Statement Payload:', sanitizeLogPayload(payload));
@@ -353,7 +353,7 @@ const practomindMiniStatement = async (data) => {
 const practomindAadhaarPay = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
+      merchantId: data.merchantId || data.merchantLoginId,
       service_type: 5,
       amount: Number(data.amount !== undefined && data.amount !== null ? data.amount : data.transactionAmount || 0),
       aadhaar: String(data.aadhaar || data.aadhaarNumber || data.adhaarNumber || ''),
@@ -364,7 +364,7 @@ const practomindAadhaarPay = async (data) => {
       pipe: AEPSPIPE,
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
-      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_AP_${Date.now()}`)
+      reference_id: String(data.reference_id || data.referenceId || data.transactionId || `AEPS_AP_${Date.now()}`).slice(0, 20)
     };
 
     console.log('Practomind Aadhaar Pay Payload:', sanitizeLogPayload(payload));
@@ -383,7 +383,7 @@ const practomindAadhaarPay = async (data) => {
 const sendTransactionOtp = async (data) => {
   try {
     const payload = {
-      merchantId: data.merchantId,
+      merchantId: data.merchantId || data.merchantLoginId,
       transactionType: data.transactionType || 'CW',
       pipe: AEPSPIPE
     };

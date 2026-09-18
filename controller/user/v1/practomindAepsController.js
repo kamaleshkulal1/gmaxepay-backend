@@ -795,28 +795,57 @@ const createPractomindAepsOnboarding = async (req, res) => {
         };
 
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
-        const isSuccess = response?.status === true || response?.status === 'true' ||
-            (response?.result && (response.result.status === true || response.result.status === 'true'));
+        const isSuccess =
+            response?.status === true ||
+            response?.status === 'true' ||
+            response?.status === 'success' ||
+            response?.status === 'SUCCESS' ||
+            response?.data?.successStatus === true ||
+            response?.data?.successStatus === 'true' ||
+            response?.data?.status === '000' ||
+            response?.data?.responseCode === '000' ||
+            (response?.result && (response.result.status === true || response.result.status === 'true' || response.result.status === 'success'));
 
         if (!isSuccess) {
             return res.failure({
-                message: response?.message || 'Practomind AEPS onboarding failed',
+                message: response?.data?.message || response?.message || 'Practomind AEPS onboarding failed',
                 data: response
             });
         }
+
+        const returnedMerchantId =
+            response?.data?.data?.merchantId ||
+            response?.data?.merchantId ||
+            response?.merchantId ||
+            response?.merchantLoginId ||
+            merchantLoginId;
+
+        const returnedMerchantRefId =
+            response?.data?.data?.merchantRefId ||
+            response?.data?.merchantRefId ||
+            response?.merchantRefId ||
+            onboardingData.merchantRefId ||
+            transactionId;
+
+        const returnedTxnRefId =
+            response?.data?.data?.txnRefId ||
+            response?.data?.txnRefId ||
+            response?.txnRefId ||
+            null;
 
         // Only save to database on success
         const dbData = {
             userId: existingUser.id,
             companyId: existingUser.companyId,
-            merchantLoginId: response?.merchantLoginId || merchantLoginId,
-            merchantLoginPin: response?.merchantLoginPin || null,
+            merchantLoginId: returnedMerchantId,
+            merchantRefId: returnedMerchantRefId,
+            merchantLoginPin: response?.data?.data?.merchantLoginPin || response?.data?.merchantLoginPin || response?.merchantLoginPin || null,
             merchantPhoneNumber: onboardingData.merchantPhoneNumber,
             aadhaarNumber: onboardingData.aadhaarNumber,
             userPan: onboardingData.userPan,
             onboardingStatus: 'COMPLETED',
             status: 'success',
-            message: response?.message || 'Onboarding successful',
+            message: response?.data?.message || response?.message || 'Onboarding successful',
             errorMessage: null,
             // Reset EKYC fields when re-onboarding (for retry scenarios)
             isAepsOnboardingCompleted: true,
@@ -824,7 +853,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             isOtpValidated: false,
             isBioMetricValidated: false,
             KeyID: null,
-            TxnId: null,
+            TxnId: returnedTxnRefId,
             primaryKeyId: null,
             encodeFPTxnId: null,
             ekycResponseCode: null,
@@ -840,14 +869,14 @@ const createPractomindAepsOnboarding = async (req, res) => {
             }
         } catch (dbError) {
             if (dbError.name === 'SequelizeUniqueConstraintError') {
-                console.error('Duplicate merchantLoginId detected:', merchantLoginId);
+                console.error('Duplicate merchantLoginId detected:', returnedMerchantId);
                 return res.failure({ message: 'Merchant ID already exists. Please try again.' });
             }
             throw dbError;
         }
 
         return res.success({
-            message: 'Practomind AEPS onboarding successful',
+            message: response?.data?.message || response?.message || 'Practomind AEPS onboarding successful',
             data: response
         });
 
@@ -892,33 +921,46 @@ const sendEkycOtp = async (req, res) => {
             aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
             latitude: shopDetails.shopLatitude,
             longitude: shopDetails.shopLongitude,
-            merchantLoginId: existingOnboarding.merchantLoginId
+            merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId
         };
 
         const response = await practomindService.practomindSendEkycOtp(otpData);
 
-        const isSuccess = response.status === true || response.status === 'true';
+        const isSuccess =
+            response?.status === true ||
+            response?.status === 'true' ||
+            response?.status === 'success' ||
+            response?.status === 'SUCCESS' ||
+            response?.data?.successStatus === true ||
+            response?.data?.responseCode === '000';
 
-        if (isSuccess && response.result) {
+        const resultData = response?.data?.data || response?.data || response?.result || response;
+
+        if (isSuccess) {
+            const keyId = resultData?.KeyID || resultData?.keyId || response?.KeyID || null;
+            const txnId = resultData?.TxnId || resultData?.txnId || resultData?.txnRefId || response?.TxnId || null;
+
             await dbService.update(
                 model.practomindAepsOnboarding,
                 { id: existingOnboarding.id },
                 {
-                    KeyID: response.result.KeyID,
-                    TxnId: response.result.TxnId,
+                    KeyID: keyId,
+                    TxnId: txnId,
                     isOtpSent: true,
                     status: 'otp_sent',
-                    message: response.message
+                    message: response?.data?.message || response?.message || 'OTP sent successfully'
                 }
             );
 
             return res.success({
-                message: response.message || 'OTP sent successfully',
-                data: response.result
+                message: response?.data?.message || response?.message || 'OTP sent successfully',
+                data: resultData
             });
         } else {
             return res.failure({
-                message: response.message || 'Failed to send OTP',
+                message: response?.data?.message || response?.message || 'Failed to send OTP',
                 data: response
             });
         }
@@ -956,6 +998,8 @@ const validateEkycOtp = async (req, res) => {
         const validationData = {
             merchantPhoneNumber: existingOnboarding.merchantPhoneNumber || existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
             otp: otp
@@ -965,7 +1009,17 @@ const validateEkycOtp = async (req, res) => {
         const response = await practomindService.practomindValidateEkycOtp(validationData);
 
         // Parse response
-        const isSuccess = response.status === true || response.status === 'true';
+        const isSuccess =
+            response?.status === true ||
+            response?.status === 'true' ||
+            response?.status === 'success' ||
+            response?.status === 'SUCCESS' ||
+            response?.data?.successStatus === true ||
+            response?.data?.responseCode === '000';
+
+        const resultData = response?.data?.data || response?.data || response?.result || response;
+        const primaryKeyId = resultData?.primaryKeyId || resultData?.PrimaryKeyId || response?.primaryKeyId || null;
+        const encodeFPTxnId = resultData?.encodeFPTxnId || resultData?.EncodeFPTxnId || response?.encodeFPTxnId || null;
 
         if (isSuccess) {
             // Update onboarding record
@@ -973,21 +1027,21 @@ const validateEkycOtp = async (req, res) => {
                 model.practomindAepsOnboarding,
                 { id: existingOnboarding.id },
                 {
-                    primaryKeyId: response.primaryKeyId,
-                    encodeFPTxnId: response.encodeFPTxnId,
+                    primaryKeyId: primaryKeyId,
+                    encodeFPTxnId: encodeFPTxnId,
                     isOtpValidated: true,
                     status: 'otp_validated',
-                    message: response.message
+                    message: response?.data?.message || response?.message || 'OTP validated successfully'
                 }
             );
 
             return res.success({
-                message: response.message || 'OTP validated successfully',
-                data: response
+                message: response?.data?.message || response?.message || 'OTP validated successfully',
+                data: resultData
             });
         } else {
             return res.failure({
-                message: response.message || 'OTP validation failed',
+                message: response?.data?.message || response?.message || 'OTP validation failed',
                 data: response
             });
         }
@@ -1022,6 +1076,8 @@ const resendEkycOtp = async (req, res) => {
         const resendData = {
             merchantPhoneNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
             latitude: existingUser.latitude,
@@ -1032,16 +1088,37 @@ const resendEkycOtp = async (req, res) => {
         const response = await practomindService.practomindResendEkycOtp(resendData);
 
         // Parse response
-        const isSuccess = response.status === true || response.status === 'true';
+        const isSuccess =
+            response?.status === true ||
+            response?.status === 'true' ||
+            response?.status === 'success' ||
+            response?.status === 'SUCCESS' ||
+            response?.data?.successStatus === true ||
+            response?.data?.responseCode === '000';
+
+        const resultData = response?.data?.data || response?.data || response?.result || response;
 
         if (isSuccess) {
+            const keyId = resultData?.KeyID || resultData?.keyId || response?.KeyID || existingOnboarding.KeyID;
+            const txnId = resultData?.TxnId || resultData?.txnId || resultData?.txnRefId || response?.TxnId || existingOnboarding.TxnId;
+
+            await dbService.update(
+                model.practomindAepsOnboarding,
+                { id: existingOnboarding.id },
+                {
+                    KeyID: keyId,
+                    TxnId: txnId,
+                    message: response?.data?.message || response?.message || 'OTP resent successfully'
+                }
+            );
+
             return res.success({
-                message: response.message || 'OTP resent successfully',
-                data: response
+                message: response?.data?.message || response?.message || 'OTP resent successfully',
+                data: resultData
             });
         } else {
             return res.failure({
-                message: response.message || 'Failed to resend OTP',
+                message: response?.data?.message || response?.message || 'Failed to resend OTP',
                 data: response
             });
         }
@@ -1053,7 +1130,7 @@ const resendEkycOtp = async (req, res) => {
 
 const ekycSubmit = async (req, res) => {
     try {
-        const { txtPidData } = req.body;
+        const { txtPidData, deviceType, latitude, longitude } = req.body;
         const existingUser = await dbService.findOne(model.user, {
             id: req.user.id,
             companyId: req.user.companyId
@@ -1080,22 +1157,39 @@ const ekycSubmit = async (req, res) => {
         const ekycData = {
             merchantPhoneNumber: existingOnboarding.merchantPhoneNumber || existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
+            primaryKeyId: existingOnboarding.primaryKeyId,
+            encodeFPTxnId: existingOnboarding.encodeFPTxnId,
             userPan: existingOnboarding.userPan,
             aadhaarNumber: existingOnboarding.aadhaarNumber,
-            txtPidData: txtPidData
+            txtPidData: txtPidData,
+            pidData: txtPidData,
+            deviceType: deviceType || 'mantra',
+            lat: latitude || existingUser.latitude,
+            long: longitude || existingUser.longitude
         };
 
         // Call Practomind API
         const response = await practomindService.practomindEkycSubmit(ekycData);
 
         // Parse response
-        const isSuccess = response.status === true || response.status === 'true';
+        const isSuccess =
+            response?.status === true ||
+            response?.status === 'true' ||
+            response?.status === 'success' ||
+            response?.status === 'SUCCESS' ||
+            response?.data?.successStatus === true ||
+            response?.data?.responseCode === '000';
+
+        const resultData = response?.data?.data || response?.data || response?.result || response;
+        const kycResponseCode = resultData?.kycResponseCode || response?.kycResponseCode || null;
 
         if (isSuccess) {
             // Check if kycResponseCode exists (means need to repeat the process from onboarding)
-            const hasKycResponseCode = response.kycResponseCode && response.kycResponseCode !== '';
+            const hasKycResponseCode = kycResponseCode && kycResponseCode !== '' && kycResponseCode !== '000';
 
             if (hasKycResponseCode) {
                 // Increment retry count
@@ -1106,20 +1200,20 @@ const ekycSubmit = async (req, res) => {
                     model.practomindAepsOnboarding,
                     { id: existingOnboarding.id },
                     {
-                        ekycResponseCode: response.kycResponseCode,
+                        ekycResponseCode: kycResponseCode,
                         ekycRetryCount: retryCount,
                         isAepsOnboardingCompleted: false,
                         isBioMetricValidated: false,
                         status: 'ekyc_retry_required',
-                        message: response.message,
+                        message: response?.data?.message || response?.message || 'EKYC retry required',
                         lastRetryAt: new Date()
                     }
                 );
 
                 return res.failure({
-                    message: `EKYC verification failed with code ${response.kycResponseCode}. Please repeat the entire process from onboarding to EKYC. Attempt: ${retryCount}`,
+                    message: `EKYC verification failed with code ${kycResponseCode}. Please repeat the entire process from onboarding to EKYC. Attempt: ${retryCount}`,
                     data: response,
-                    kycResponseCode: response.kycResponseCode,
+                    kycResponseCode: kycResponseCode,
                     retryCount: retryCount,
                     requiresRetry: true,
                     nextStep: 'onboarding'
@@ -1133,20 +1227,20 @@ const ekycSubmit = async (req, res) => {
                         isBioMetricValidated: true,
                         onboardingStatus: 'COMPLETED',
                         status: 'ekyc_completed',
-                        message: response.message,
+                        message: response?.data?.message || response?.message || 'EKYC completed successfully',
                         ekycResponseCode: null,
                         ekycRetryCount: 0
                     }
                 );
 
                 return res.success({
-                    message: response.message || 'EKYC completed successfully',
+                    message: response?.data?.message || response?.message || 'EKYC completed successfully',
                     data: response
                 });
             }
         } else {
             return res.failure({
-                message: response.message || 'EKYC submission failed',
+                message: response?.data?.message || response?.message || 'EKYC submission failed',
                 data: response
             });
         }
@@ -1216,6 +1310,8 @@ const dailyAuthentication = async (req, res) => {
         const authData = {
             mobileNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
             userPan: existingOnboarding.userPan,
@@ -1228,7 +1324,13 @@ const dailyAuthentication = async (req, res) => {
         const response = await practomindService.practomindDailyAuthentication(authData);
 
         // Parse response
-        const isSuccess = response.status === true || response.status === 'true';
+        const isSuccess =
+            response?.status === true ||
+            response?.status === 'true' ||
+            response?.status === 'success' ||
+            response?.status === 'SUCCESS' ||
+            response?.data?.successStatus === true ||
+            response?.data?.responseCode === '000';
 
         if (isSuccess) {
             // Create daily login record
@@ -1242,17 +1344,17 @@ const dailyAuthentication = async (req, res) => {
                 logoutTime: logoutTime,
                 isLoggedIn: true,
                 loginDate: todayDateStr,
-                responseMessage: response.responseMessage || response.message,
+                responseMessage: response?.data?.message || response?.responseMessage || response?.message,
                 status: 'success'
             });
 
             return res.success({
-                message: response.message || 'Daily authentication successful',
+                message: response?.data?.message || response?.message || 'Daily authentication successful',
                 data: response
             });
         } else {
             return res.failure({
-                message: response.message || 'Daily authentication failed',
+                message: response?.data?.message || response?.message || 'Daily authentication failed',
                 data: response
             });
         }
@@ -1495,6 +1597,8 @@ const cashWithdrawal = async (req, res) => {
         const statementData = {
             mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
             latitude,
             longitude,
             aadhaarNumber,
@@ -1704,6 +1808,8 @@ const balanceEnquiry = async (req, res) => {
         const enquiryData = {
             mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
             aadhaarNumber: aadhaarNumber,
@@ -2015,6 +2121,8 @@ const miniStatement = async (req, res) => {
         const statementData = {
             mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
+            merchantId: existingOnboarding.merchantLoginId,
+            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
             latitude: latitude,
             longitude: longitude,
             aadhaarNumber: aadhaarNumber,

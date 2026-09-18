@@ -33,6 +33,11 @@ const PractomindAepsOnboarding = sequelize.define(
       allowNull: true,
       unique: true
     },
+    merchantRefId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Merchant Reference ID from Practomind onboarding'
+    },
     merchantLoginPin: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -139,6 +144,10 @@ const PractomindAepsOnboarding = sequelize.define(
       {
         unique: true,
         fields: ['merchantLoginId']
+      },
+      {
+        unique: false,
+        fields: ['merchantRefId']
       },
       {
         unique: false,
