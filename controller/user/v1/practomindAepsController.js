@@ -861,20 +861,6 @@ const createPractomindAepsOnboarding = async (req, res) => {
             lastRetryAt: null
         };
 
-        try {
-            if (existingOnboarding) {
-                await dbService.update(model.practomindAepsOnboarding, { id: existingOnboarding.id }, dbData);
-            } else {
-                await dbService.createOne(model.practomindAepsOnboarding, dbData);
-            }
-        } catch (dbError) {
-            if (dbError.name === 'SequelizeUniqueConstraintError') {
-                console.error('Duplicate merchantLoginId detected:', returnedMerchantId);
-                return res.failure({ message: 'Merchant ID already exists. Please try again.' });
-            }
-            throw dbError;
-        }
-
         return res.success({
             message: response?.data?.message || response?.message || 'Practomind AEPS onboarding successful',
             data: response
