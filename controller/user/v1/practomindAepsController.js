@@ -264,11 +264,19 @@ const cleanAddress = (address, options = {}) => {
 };
 
 const formatPractomindName = (data = {}) => {
-    let firstName = (data.firstName || data.merchantFirstName || '').trim();
+    let firstName = (data.firstName || '').trim();
     let middleName = (data.middleName || data.merchantMiddleName || '').trim();
     let lastName = (data.lastName || data.merchantLastName || '').trim();
 
-    // Clean dots and special characters
+    const merchantFullName = (data.merchantFirstName || '').trim();
+    if (!lastName && !middleName && merchantFullName) {
+        if (!firstName || merchantFullName.toLowerCase().startsWith(firstName.toLowerCase())) {
+            firstName = merchantFullName;
+        }
+    } else if (!firstName && merchantFullName) {
+        firstName = merchantFullName;
+    }
+
     firstName = firstName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
     middleName = middleName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
     lastName = lastName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -280,44 +288,21 @@ const formatPractomindName = (data = {}) => {
         middleName = '';
         lastName = '';
     } else if (allTokens.length === 2) {
-        if (allTokens[0].length === 1) {
-            middleName = allTokens[0];
-            firstName = allTokens[1];
-            lastName = '';
-        } else if (allTokens[1].length === 1) {
-            firstName = allTokens[0];
-            middleName = allTokens[1];
-            lastName = '';
-        } else {
-            firstName = allTokens[0];
-            middleName = '';
-            lastName = allTokens[1];
-        }
-    } else if (allTokens.length >= 3) {
-        const initialIndices = [];
-        allTokens.forEach((token, idx) => {
-            if (token.length === 1) initialIndices.push(idx);
-        });
-
-        if (initialIndices.length > 0) {
-            const initials = initialIndices.map(idx => allTokens[idx]);
-            middleName = initials.join('');
-            const nonInitials = allTokens.filter((_, idx) => !initialIndices.includes(idx));
-            if (nonInitials.length >= 2) {
-                firstName = nonInitials[0];
-                lastName = nonInitials[nonInitials.length - 1];
-            } else if (nonInitials.length === 1) {
-                firstName = nonInitials[0];
-                lastName = '';
-            } else {
-                firstName = allTokens[0];
-                lastName = allTokens[allTokens.length - 1];
-            }
-        } else {
-            firstName = allTokens[0];
-            middleName = allTokens[1];
-            lastName = allTokens[allTokens.length - 1];
-        }
+        firstName = allTokens[0];
+        middleName = '';
+        lastName = allTokens[1];
+    } else if (allTokens.length === 3) {
+        firstName = allTokens[0];
+        middleName = allTokens[1];
+        lastName = allTokens[2];
+    } else if (allTokens.length > 3) {
+        firstName = allTokens[0];
+        middleName = allTokens.slice(1, -1).join('');
+        lastName = allTokens[allTokens.length - 1];
+    } else {
+        firstName = '';
+        middleName = '';
+        lastName = '';
     }
 
     // Individual name fields must contain alphabets only without spaces
@@ -454,8 +439,6 @@ const resolvePractomindDistrictCode = async (districtInput, stateCode) => {
 
     return cleanInput.toUpperCase();
 };
-
-const resolvePractomindDistrict = resolvePractomindDistrictCode;
 
 const createPractomindAepsOnboarding = async (req, res) => {
     try {
@@ -747,7 +730,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             gender = String(gender).trim().toUpperCase().startsWith('F') ? 'F' : 'M';
         }
 
-        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 10);
+        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
 
         const onboardingData = {
             merchantLoginId: merchantLoginId,
