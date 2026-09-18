@@ -101,237 +101,38 @@ const sanitizeLogPayload = (payload) => {
   return copy;
 };
 
-const formatCoordinate = (coord) => {
-  if (coord === null || coord === undefined || coord === '') return '';
-  const num = parseFloat(coord);
-  return isNaN(num) ? '' : num.toFixed(4);
-};
-
-const cleanAddress = (address, options = {}) => {
-  if (!address || typeof address !== 'string') return '';
-  let addr = address.trim();
-
-  const toRemove = [
-    'india',
-    options.pincode ? String(options.pincode).trim().toLowerCase() : null,
-    options.district ? String(options.district).trim().toLowerCase() : null,
-    options.state ? String(options.state).trim().toLowerCase() : null,
-    options.stateCode ? String(options.stateCode).trim().toLowerCase() : null
-  ].filter(Boolean);
-
-  const segments = addr.split(',').map(s => s.trim()).filter(Boolean);
-  if (segments.length > 1) {
-    const filteredSegments = segments.filter(seg => {
-      const cleanSeg = seg.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      if (!cleanSeg) return false;
-      return !toRemove.some(item => {
-        const cleanItem = item.replace(/[^a-zA-Z0-9]/g, '');
-        return cleanItem && (cleanSeg === cleanItem || cleanSeg === cleanItem.replace(/\s+/g, ''));
-      });
-    });
-    if (filteredSegments.length > 0) {
-      addr = filteredSegments.join(' ');
-    }
-  }
-
-  // Remove any remaining 6-digit pincodes
-  addr = addr.replace(/\b\d{6}\b/g, ' ');
-
-  // Replace non-alphanumeric characters with spaces
-  addr = addr.replace(/[^a-zA-Z0-9\s]/g, ' ');
-  addr = addr.replace(/\s+/g, ' ').trim();
-
-  // Strip trailing words if state, district, or pincode was appended at the end
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const words = addr.split(' ');
-    if (words.length > 1) {
-      const lastWord = words[words.length - 1].toLowerCase();
-      const lastTwoWords = words.length >= 2 ? words.slice(-2).join(' ').toLowerCase() : '';
-      const lastThreeWords = words.length >= 3 ? words.slice(-3).join(' ').toLowerCase() : '';
-      for (const item of toRemove) {
-        if (!item) continue;
-        const cleanItem = item.replace(/[^a-zA-Z0-9]/g, '');
-        if (lastThreeWords && (lastThreeWords === item || lastThreeWords.replace(/[^a-z0-9]/g, '') === cleanItem)) {
-          words.pop(); words.pop(); words.pop();
-          addr = words.join(' ');
-          changed = true;
-          break;
-        }
-        if (lastTwoWords && (lastTwoWords === item || lastTwoWords.replace(/[^a-z0-9]/g, '') === cleanItem)) {
-          words.pop(); words.pop();
-          addr = words.join(' ');
-          changed = true;
-          break;
-        }
-        if (lastWord === item || lastWord.replace(/[^a-z0-9]/g, '') === cleanItem) {
-          words.pop();
-          addr = words.join(' ');
-          changed = true;
-          break;
-        }
-      }
-    }
-  }
-
-  // Limit length to under 45 characters
-  if (addr.length > 45) {
-    addr = addr.substring(0, 45).trim();
-  }
-
-  // Fallback if empty
-  if (!addr && address) {
-    addr = address.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').substring(0, 45).trim();
-  }
-
-  return addr;
-};
-
-const formatPractomindName = (data = {}) => {
-  let firstName = (data.firstName || data.merchantFirstName || '').trim();
-  let middleName = (data.middleName || data.merchantMiddleName || '').trim();
-  let lastName = (data.lastName || data.merchantLastName || '').trim();
-
-  // Clean dots and special characters
-  firstName = firstName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-  middleName = middleName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-  lastName = lastName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-
-  const allTokens = `${firstName} ${middleName} ${lastName}`.trim().split(/\s+/).filter(Boolean);
-
-  if (allTokens.length === 1) {
-    firstName = allTokens[0];
-    middleName = '';
-    lastName = '';
-  } else if (allTokens.length === 2) {
-    if (allTokens[0].length === 1) {
-      middleName = allTokens[0];
-      firstName = allTokens[1];
-      lastName = '';
-    } else if (allTokens[1].length === 1) {
-      firstName = allTokens[0];
-      middleName = allTokens[1];
-      lastName = '';
-    } else {
-      firstName = allTokens[0];
-      middleName = '';
-      lastName = allTokens[1];
-    }
-  } else if (allTokens.length >= 3) {
-    const initialIndices = [];
-    allTokens.forEach((token, idx) => {
-      if (token.length === 1) initialIndices.push(idx);
-    });
-
-    if (initialIndices.length > 0) {
-      const initials = initialIndices.map(idx => allTokens[idx]);
-      middleName = initials.join('');
-      const nonInitials = allTokens.filter((_, idx) => !initialIndices.includes(idx));
-      if (nonInitials.length >= 2) {
-        firstName = nonInitials[0];
-        lastName = nonInitials[nonInitials.length - 1];
-      } else if (nonInitials.length === 1) {
-        firstName = nonInitials[0];
-        lastName = '';
-      } else {
-        firstName = allTokens[0];
-        lastName = allTokens[allTokens.length - 1];
-      }
-    } else {
-      firstName = allTokens[0];
-      middleName = allTokens[1];
-      lastName = allTokens[allTokens.length - 1];
-    }
-  }
-
-  // Individual name fields must contain alphabets only without spaces
-  firstName = firstName.replace(/[^a-zA-Z]/g, '');
-  middleName = middleName.replace(/[^a-zA-Z]/g, '');
-  lastName = lastName.replace(/[^a-zA-Z]/g, '');
-
-  return { firstName, middleName, lastName };
-};
-
 const practomindAepsOnboarding = async (data, merchantLoginId) => {
   try {
-    const { firstName, middleName, lastName } = formatPractomindName(data);
-
-    const stateVal = data.merchantState || data.stateCode || '';
-    const districtVal = (data.merchantDistrict || data.merchantDistrictName || '').trim().toUpperCase();
-    const pincodeVal = String(data.merchantPinCode || '');
-
-    const shopStateVal = data.shopState || data.shopStateCode || stateVal;
-    const shopDistrictVal = (data.shopDistrict || data.shopDistrictName || districtVal).trim().toUpperCase();
-    const shopPincodeVal = String(data.shopPincode || pincodeVal);
-
-    const stateNameVal = data.stateName || data.merchantStateName || data.state || '';
-    const shopStateNameVal = data.shopStateName || data.shopState || stateNameVal;
-
-    const cleanedMerchantAddress1 = cleanAddress(data.merchantAddress1 || data.merchantAddress || '', {
-      district: districtVal,
-      state: stateNameVal || stateVal,
-      stateCode: stateVal,
-      pincode: pincodeVal
-    });
-
-    const cleanedMerchantAddress2 = cleanAddress(data.merchantAddress2 || '', {
-      district: districtVal,
-      state: stateNameVal || stateVal,
-      stateCode: stateVal,
-      pincode: pincodeVal
-    });
-
-    const cleanedShopAddress = cleanAddress(data.shopAddress || data.merchantAddress1 || data.merchantAddress || '', {
-      district: shopDistrictVal,
-      state: shopStateNameVal || shopStateVal,
-      stateCode: shopStateVal,
-      pincode: shopPincodeVal
-    });
-
-    const formattedLat = formatCoordinate(data.lat || data.latitude || data.shopLat || '');
-    const formattedLong = formatCoordinate(data.long || data.longitude || data.shopLong || '');
-
-    let dob = data.dob || '';
-    if (dob && /^\d{4}-\d{2}-\d{2}$/.test(dob)) {
-      dob = dob.split('-').reverse().join('-');
-    }
-
-    let gender = data.gender || 'M';
-    if (gender) {
-      gender = String(gender).trim().toUpperCase().startsWith('F') ? 'F' : 'M';
-    }
-
     const payload = {
       merchantRefId: String(data.merchantRefId || merchantLoginId || data.merchantLoginId || data.merchantPhoneNumber || ''),
-      firstName: firstName,
-      lastName: lastName,
-      middleName: middleName,
-      dob: dob,
-      gender: gender,
+      firstName: data.firstName || data.merchantFirstName || '',
+      lastName: data.lastName || data.merchantLastName || '',
+      middleName: data.middleName || data.merchantMiddleName || '',
+      dob: data.dob || '',
+      gender: data.gender || 'M',
       merchantPhoneNumber: String(data.merchantPhoneNumber || data.mobileNo || ''),
       merchantPan: data.merchantPan || data.userPan || data.panNumber || '',
       aadhaarNumber: String(data.aadhaarNumber || data.adhaarNumber || ''),
       shopName: data.shopName || data.companyLegalName || '',
-      merchantAddress1: cleanedMerchantAddress1,
-      merchantAddress2: cleanedMerchantAddress2,
-      merchantState: stateVal,
-      stateCode: data.stateCode || stateVal,
-      merchantDistrict: districtVal,
-      merchantPinCode: pincodeVal,
+      merchantAddress1: data.merchantAddress1 || data.merchantAddress || '',
+      merchantAddress2: data.merchantAddress2 || '',
+      merchantState: data.merchantState || data.stateCode || '',
+      stateCode: data.stateCode || data.merchantState || '',
+      merchantDistrict: data.merchantDistrict || data.merchantDistrictCode || '',
+      merchantPinCode: String(data.merchantPinCode || ''),
       emailId: data.emailId || '',
       bankAccountNumber: String(data.bankAccountNumber || data.companyBankAccountNumber || ''),
       bankIfscCode: data.bankIfscCode || '',
-      bankName: data.bankCode || data.companyBankName || '',
+      bankName: data.bankCode || data.companyBankName || data.bankName || '',
       accountType: data.accountType || 'Savings account',
-      shopAddress: cleanedShopAddress,
-      shopDistrict: shopDistrictVal,
-      shopState: shopStateVal,
-      shopPincode: shopPincodeVal,
-      shopLat: formattedLat,
-      shopLong: formattedLong,
-      lat: formattedLat,
-      long: formattedLong,
+      shopAddress: data.shopAddress || data.merchantAddress1 || '',
+      shopDistrict: data.shopDistrict || data.shopDistrictCode || data.merchantDistrict || '',
+      shopState: data.shopState || data.shopStateCode || data.merchantState || '',
+      shopPincode: String(data.shopPincode || data.merchantPinCode || ''),
+      shopLat: data.shopLat || data.lat || data.latitude || '',
+      shopLong: data.shopLong || data.long || data.longitude || '',
+      lat: data.lat || data.shopLat || data.latitude || '',
+      long: data.long || data.shopLong || data.longitude || '',
       ipAddress: data.ipAddress || '127.0.0.1',
       pipe: AEPSPIPE
     };
@@ -712,8 +513,5 @@ module.exports = {
   getDistricts,
   getBankIINs,
   getBanks,
-  checkBalance,
-  formatCoordinate,
-  cleanAddress,
-  formatPractomindName
+  checkBalance
 };
