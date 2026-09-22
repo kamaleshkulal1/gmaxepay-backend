@@ -160,7 +160,7 @@ const practomindSendEkycOtp = async (data) => {
     console.log('Practomind Send KYC OTP Payload:', payload);
 
     const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/otp`, payload, { headers });
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/otp/send`, payload, { headers });
 
     console.log('Practomind Send KYC OTP Response:', response.data);
     return response.data;
@@ -181,7 +181,7 @@ const practomindResendEkycOtp = async (data) => {
     console.log('Practomind Resend KYC OTP Payload:', payload);
 
     const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/otp/resend`, payload, { headers });
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/otp/resend`, payload, { headers });
 
     console.log('Practomind Resend KYC OTP Response:', response.data);
     return response.data;
@@ -203,7 +203,7 @@ const practomindValidateEkycOtp = async (data) => {
     console.log('Practomind Verify KYC OTP Payload:', payload);
 
     const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/otp/verify`, payload, { headers });
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/otp/validate`, payload, { headers });
 
     console.log('Practomind Verify KYC OTP Response:', response.data);
     return response.data;
@@ -229,7 +229,7 @@ const practomindEkycSubmit = async (data) => {
     console.log('Practomind Biometric KYC Payload:', sanitizeLogPayload(payload));
 
     const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/biometric`, payload, { headers });
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/ekyc`, payload, { headers });
 
     console.log('Practomind Biometric KYC Response:', response.data);
     return response.data;
@@ -254,7 +254,7 @@ const practomindDailyAuthentication = async (data) => {
     console.log('Practomind Daily 2FA Biometric Payload:', sanitizeLogPayload(payload));
 
     const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/kyc/biometric/daily`, payload, { headers });
+    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/2fa`, payload, { headers });
 
     console.log('Practomind Daily 2FA Biometric Response:', response.data);
     return response.data;
