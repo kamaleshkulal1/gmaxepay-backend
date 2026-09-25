@@ -165,13 +165,13 @@ if (process.env.NODE_ENV !== 'test') {
     .sync({ alter: true })
     .then(() => { })
     .finally(async () => {
-      app.use(routes);
-      // seeder();
-      name();
-      aepsLogout();
-      connectRedis();
+      // app.use(routes);
+      // // seeder();
+      // name();
+      // aepsLogout();
+      // connectRedis();
     });
-  // app.use(routes);
+  app.use(routes);
   httpServer.listen(process.env.PORT, () => {
     console.log(`gmaxepay is running on port ${process.env.PORT} successfully.`);
   });
