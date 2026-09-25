@@ -883,6 +883,10 @@ const sendEkycOtp = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
+        const existingCompany = await dbService.findOne(model.company, {
+            id: req.user.companyId
+        });
+
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
             companyId: existingUser.companyId
@@ -901,15 +905,17 @@ const sendEkycOtp = async (req, res) => {
             companyId: existingUser.companyId
         });
 
+        const merchantRefId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
+
         const otpData = {
             merchantPhoneNumber: existingUser.mobileNo,
             panNumber: existingUser.panDetails?.data?.pan_number,
             aadhaarNumber: existingUser.aadharDetails?.aadhaarNumber,
-            latitude: shopDetails.shopLatitude,
-            longitude: shopDetails.shopLongitude,
+            latitude: shopDetails?.shopLatitude,
+            longitude: shopDetails?.shopLongitude,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId
+            merchantRefId: merchantRefId
         };
 
         const response = await practomindService.practomindSendEkycOtp(otpData);
@@ -971,6 +977,10 @@ const validateEkycOtp = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
+        const existingCompany = await dbService.findOne(model.company, {
+            id: req.user.companyId
+        });
+
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
             companyId: existingUser.companyId
@@ -980,12 +990,14 @@ const validateEkycOtp = async (req, res) => {
             return res.failure({ message: 'Please send OTP first' });
         }
 
+        const merchantRefId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
+
         // Prepare validation data
         const validationData = {
             merchantPhoneNumber: existingOnboarding.merchantPhoneNumber || existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
+            merchantRefId: merchantRefId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
             otp: otp
@@ -1049,6 +1061,10 @@ const resendEkycOtp = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
+        const existingCompany = await dbService.findOne(model.company, {
+            id: req.user.companyId
+        });
+
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
             companyId: existingUser.companyId
@@ -1058,12 +1074,14 @@ const resendEkycOtp = async (req, res) => {
             return res.failure({ message: 'Please send OTP first' });
         }
 
+        const merchantRefId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
+
         // Prepare resend data
         const resendData = {
             merchantPhoneNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
+            merchantRefId: merchantRefId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
             latitude: existingUser.latitude,
@@ -1126,6 +1144,10 @@ const ekycSubmit = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
+        const existingCompany = await dbService.findOne(model.company, {
+            id: req.user.companyId
+        });
+
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
             companyId: existingUser.companyId
@@ -1139,12 +1161,14 @@ const ekycSubmit = async (req, res) => {
             return res.failure({ message: 'Fingerprint data is required' });
         }
 
+        const merchantRefId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
+
         // Prepare EKYC data
         const ekycData = {
             merchantPhoneNumber: existingOnboarding.merchantPhoneNumber || existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
+            merchantRefId: merchantRefId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
             primaryKeyId: existingOnboarding.primaryKeyId,
@@ -1292,12 +1316,17 @@ const dailyAuthentication = async (req, res) => {
             return res.failure({ message: 'Biometric data is required' });
         }
 
+        const existingCompany = await dbService.findOne(model.company, {
+            id: req.user.companyId
+        });
+        const merchantRefId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
+
         // Prepare 2FA data
         const authData = {
             mobileNumber: existingUser.mobileNo,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
+            merchantRefId: merchantRefId,
             latitude: latitude,
             longitude: longitude,
             userPan: existingOnboarding.userPan,
@@ -1380,7 +1409,7 @@ const cashWithdrawal = async (req, res) => {
         if (!practomindBank) return res.failure({ message: 'Bank Is Not Supported For Cash Withdrawal' });
 
         const amountNumber = round4(transactionAmount || 0);
-        const transactionId = generateTransactionID(existingCompany?.companyName);
+        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
 
         // ── AEPS2 operator lookup (amount-range based) ─────────────────────────
         const operator = await dbService.findOne(model.operator, {
@@ -1584,7 +1613,7 @@ const cashWithdrawal = async (req, res) => {
             mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
+            merchantRefId: transactionId,
             latitude,
             longitude,
             aadhaarNumber,
@@ -1788,14 +1817,14 @@ const balanceEnquiry = async (req, res) => {
         }
 
         // Generate unique transaction ID
-        const transactionId = generateTransactionID(existingCompany?.companyName);
+        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
 
         // Prepare enquiry data
         const enquiryData = {
             mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
+            merchantRefId: transactionId,
             latitude: latitude,
             longitude: longitude,
             aadhaarNumber: aadhaarNumber,
@@ -1925,7 +1954,7 @@ const miniStatement = async (req, res) => {
         const practomindBank = await dbService.findOne(model.practomindBankList, { bankIIN: bankIIN, isActive: true });
         if (!practomindBank) return res.failure({ message: 'Bank Is Not Supported For Mini Statement' });
 
-        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXPAY');
+        const transactionId = generateTransactionID(existingCompany?.companyName || 'GMAXEPAY').slice(0, 20);
 
         const operator = await dbService.findOne(model.operator, { operatorName: 'AEPS2_MS' });
         const operatorType = operator?.operatorType || 'AEPS2_MS';
@@ -2108,7 +2137,7 @@ const miniStatement = async (req, res) => {
             mobileNumber: customerNumber,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: existingOnboarding.merchantRefId || existingOnboarding.merchantLoginId,
+            merchantRefId: transactionId,
             latitude: latitude,
             longitude: longitude,
             aadhaarNumber: aadhaarNumber,
