@@ -1018,7 +1018,6 @@ const aepsTransaction = async (req, res) => {
             });
         }
 
-        // If FAILED/PENDING: do not stop persistence above; just return gateway response after storing
         if (!isSuccess) {
             return res.failure({
                 message:
