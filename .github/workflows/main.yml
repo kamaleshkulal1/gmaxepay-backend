@@ -15,27 +15,56 @@ jobs:
     if: github.ref == 'refs/heads/dev'
 
     steps:
-      - name: SSH and deploy node app
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST || secrets.SSH_VPS_HOST }}
-          username: ${{ secrets.EC2_USERNAME || secrets.SSH_VPS_USER || 'ec2-user' }}
-          key: ${{ secrets.EC2_PEM_KEY || secrets.SSH_VPS_PEM_KEY }}
-          port: 22
-          script: |
-            REPO_DIR="/home/${{ secrets.EC2_USERNAME }}/gmaxepay-backend"
+      - name: Deploy to VPS via Native SSH
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST || secrets.SSH_VPS_HOST }}
+          SSH_USER: ${{ secrets.EC2_USERNAME || secrets.SSH_VPS_USER || 'ec2-user' }}
+          SSH_KEY: ${{ secrets.EC2_PEM_KEY || secrets.SSH_VPS_PEM_KEY }}
+          SSH_PORT: ${{ secrets.SSH_VPS_PORT || '22' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -s' << 'EOF'
+            set -e
+
+            REPO_DIR="/home/$USER/gmaxepay-backend"
+            if [ ! -d "$REPO_DIR" ]; then
+              REPO_DIR="$HOME/gmaxepay-backend"
+            fi
             if [ ! -d "$REPO_DIR" ]; then
               REPO_DIR="gmaxepay-backend"
             fi
             cd "$REPO_DIR" || exit 1
+
+            echo "🚀 Working in: $(pwd)"
+            PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "none")
+
+            echo "📥 Pulling latest changes from dev..."
             git pull origin dev
-            npm install
-            pm2 describe gmaxepay-backend > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
-              pm2 restart gmaxepay-backend --update-env
+
+            CURR_COMMIT=$(git rev-parse HEAD)
+
+            # Only run npm install if dependencies changed or node_modules missing
+            if [ "$PREV_COMMIT" != "$CURR_COMMIT" ] && git diff --name-only "$PREV_COMMIT" "$CURR_COMMIT" | grep -qE "package\.json|package-lock\.json"; then
+              echo "📦 Dependencies changed. Running fast npm install..."
+              npm install --prefer-offline --no-audit --no-fund
+            elif [ ! -d "node_modules" ]; then
+              echo "📦 node_modules missing. Running npm install..."
+              npm install --prefer-offline --no-audit --no-fund
+            else
+              echo "⚡ No dependency changes. Skipping npm install!"
+            fi
+
+            echo "🔄 Reloading PM2 process..."
+            if pm2 describe gmaxepay-backend > /dev/null 2>&1; then
+              pm2 reload gmaxepay-backend --update-env || pm2 restart gmaxepay-backend --update-env
             else
               pm2 start index.js --name gmaxepay-backend
             fi
+            pm2 save
+            echo "✅ Deployment finished successfully!"
+          EOF
 
   deploy-production:
     name: Deploy to Production EC2
