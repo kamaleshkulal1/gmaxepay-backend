@@ -291,24 +291,20 @@ const formatPractomindName = (data = {}) => {
         firstName = allTokens[0];
         middleName = '';
         lastName = allTokens[1];
-    } else if (allTokens.length === 3) {
+    } else if (allTokens.length >= 3) {
         firstName = allTokens[0];
         middleName = allTokens[1];
-        lastName = allTokens[2];
-    } else if (allTokens.length > 3) {
-        firstName = allTokens[0];
-        middleName = allTokens.slice(1, -1).join('');
-        lastName = allTokens[allTokens.length - 1];
+        lastName = allTokens.slice(2).join(' ');
     } else {
         firstName = '';
         middleName = '';
         lastName = '';
     }
 
-    // Individual name fields must contain alphabets only without spaces
+    // Individual name fields must contain alphabets only (lastName allows spaces between multiple parts/initials)
     firstName = firstName.replace(/[^a-zA-Z]/g, '');
     middleName = middleName.replace(/[^a-zA-Z]/g, '');
-    lastName = lastName.replace(/[^a-zA-Z]/g, '');
+    lastName = lastName.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ').trim();
 
     return { firstName, middleName, lastName };
 };
@@ -843,7 +839,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             merchantPhoneNumber: onboardingData.merchantPhoneNumber,
             aadhaarNumber: onboardingData.aadhaarNumber,
             userPan: onboardingData.userPan,
-            onboardingStatus: 'COMPLETED',
+            onboardingStatus: 'PENDING',
             status: 'success',
             message: response?.data?.message || response?.message || 'Onboarding successful',
             errorMessage: null,
@@ -860,6 +856,41 @@ const createPractomindAepsOnboarding = async (req, res) => {
             ekycRetryCount: 0,
             lastRetryAt: null
         };
+
+        let recordToUpdate = existingOnboarding;
+        if (!recordToUpdate && returnedMerchantId) {
+            recordToUpdate = await dbService.findOne(model.practomindAepsOnboarding, {
+                merchantLoginId: returnedMerchantId
+            });
+        }
+        if (!recordToUpdate) {
+            recordToUpdate = await dbService.findOne(model.practomindAepsOnboarding, {
+                userId: existingUser.id,
+                companyId: existingUser.companyId
+            });
+        }
+
+        if (recordToUpdate) {
+            await dbService.update(
+                model.practomindAepsOnboarding,
+                { id: recordToUpdate.id },
+                {
+                    ...dbData,
+                    updatedBy: req.user.id
+                }
+            );
+        } else {
+            await dbService.createOne(
+                model.practomindAepsOnboarding,
+                {
+                    ...dbData,
+                    isActive: true,
+                    isDeleted: false,
+                    addedBy: req.user.id,
+                    updatedBy: req.user.id
+                }
+            );
+        }
 
         return res.success({
             message: response?.data?.message || response?.message || 'Practomind AEPS onboarding successful',
