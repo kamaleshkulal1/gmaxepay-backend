@@ -521,6 +521,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
                 }
             }
         }
+        console.log("Aadhaar Details", JSON.stringify(existingUser?.aadharDetails, null, 2))
 
         if (!practomindBank || !practomindBank.bankCode) {
             return res.failure({
