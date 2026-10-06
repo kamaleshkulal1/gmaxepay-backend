@@ -25,6 +25,7 @@ const getProfile = async (req, res) => {
       name: user.name,
       fatherName: user.fatherName || null,
       motherName: user.motherName || null,
+      maritalStatus: user.maritalStatus || null,
       profileImage: user.profileImage ? `${process.env.AWS_CDN_URL}/${user.profileImage}` : null,
       referrerCode: user.referCode,
       outlet: outlet ? outlet.shopName : null

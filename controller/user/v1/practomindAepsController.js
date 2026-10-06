@@ -742,6 +742,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             dob: dob,
             fatherName: existingUser?.fatherName,
             motherName: existingUser?.motherName,
+            maritalStatus: existingUser?.maritalStatus || req.body?.maritalStatus || "MARRIED",
             gender: gender,
             merchantPhoneNumber: existingUser?.mobileNo,
             emailId: existingUser?.email,

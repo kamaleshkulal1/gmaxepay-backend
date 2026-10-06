@@ -1731,12 +1731,15 @@ const postProfile = async (req, res) => {
     }
 
     const updates = {};
-    const { fatherName, motherName } = req.body;
+    const { fatherName, motherName, maritalStatus } = req.body;
     if (fatherName !== undefined && fatherName !== null && String(fatherName).trim() !== "") {
       updates.fatherName = String(fatherName).trim();
     }
     if (motherName !== undefined && motherName !== null && String(motherName).trim() !== "") {
       updates.motherName = String(motherName).trim();
+    }
+    if (maritalStatus !== undefined && maritalStatus !== null && String(maritalStatus).trim() !== "") {
+      updates.maritalStatus = String(maritalStatus).trim();
     }
     const photoFileName = uploadedPhoto.originalname || 'profile.jpg';
 

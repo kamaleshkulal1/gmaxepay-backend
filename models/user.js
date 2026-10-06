@@ -430,6 +430,10 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true
     },
+    maritalStatus: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     locationType: {
       type: DataTypes.STRING
     },
