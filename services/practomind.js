@@ -109,6 +109,8 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
       lastName: data.lastName || data.merchantLastName || '',
       middleName: data.middleName || data.merchantMiddleName || '',
       dob: data.dob || '',
+      fatherName: data?.fatherName || '',
+      motherName: data?.motherName || '',
       gender: data.gender || 'M',
       merchantPhoneNumber: String(data.merchantPhoneNumber || data.mobileNo || ''),
       merchantPan: data.merchantPan || data.userPan || data.panNumber || '',
