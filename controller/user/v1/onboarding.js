@@ -2155,6 +2155,13 @@ const postProfile = async (req, res) => {
     }
 
     const updates = {};
+    const { fatherName, motherName } = req.body;
+    if (fatherName !== undefined && fatherName !== null && String(fatherName).trim() !== "") {
+      updates.fatherName = String(fatherName).trim();
+    }
+    if (motherName !== undefined && motherName !== null && String(motherName).trim() !== "") {
+      updates.motherName = String(motherName).trim();
+    }
     const imageFileName = req.file.originalname || 'profile.jpg';
 
     try {

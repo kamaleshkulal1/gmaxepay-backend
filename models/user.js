@@ -422,6 +422,14 @@ const User = sequelize.define(
     qualifictaion: {
       type: DataTypes.STRING
     },
+    fatherName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    motherName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     locationType: {
       type: DataTypes.STRING
     },
