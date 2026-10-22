@@ -1,15 +1,40 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
-const getClientId = () => (process.env.PRACTOMIND_API_KEY || '').trim();
-const getClientSecret = () => (process.env.PRACTOMIND_SECRET_KEY || '').trim();
-const getBaseUrl = () => (process.env.PRACTOMIND_BASE_URL || '').trim().replace(/\/+$/, '');
-const getAepsPipe = () => process.env.AEPSPIPE || '4';
+const getClientId = () => {
+  return (
+    (process.env.PRACTOMIND_API_KEY || '').trim() ||
+    (process.env.PUNJIKENDRA_CLIENT_ID || '').trim() ||
+    ''
+  );
+};
 
-const BASE_URL = getBaseUrl();
-const CLIENT_SECRET = getClientSecret();
-const CLIENT_ID = getClientId();
-const AEPSPIPE = getAepsPipe();
+const getClientSecret = () => {
+  return (
+    (process.env.PRACTOMIND_SECRET_KEY || '').trim() ||
+    (process.env.PUNJIKENDRA_CLIENT_SECRET || '').trim() ||
+    ''
+  );
+};
+
+const getBaseUrl = () => {
+  const url =
+    (process.env.PRACTOMIND_BASE_URL || '').trim() ||
+    (process.env.PUNJIKENDRA_BASE_URL || '').trim() ||
+    'https://app.punjikendra.in';
+  return url.replace(/\/+$/, '');
+};
+
+const getAepsPipe = () => (process.env.AEPSPIPE || '4').trim();
+
+const buildUrl = (endpointPath) => {
+  if (typeof endpointPath === 'string' && (endpointPath.startsWith('http://') || endpointPath.startsWith('https://'))) {
+    return endpointPath;
+  }
+  const base = getBaseUrl();
+  const cleanPath = endpointPath.startsWith('/') ? endpointPath : `/${endpointPath}`;
+  return `${base}${cleanPath}`;
+};
 
 const getAuthHeaders = (body = null, method = 'POST') => {
   const clientId = getClientId();
@@ -56,10 +81,15 @@ const getAccessToken = async () => {
 };
 
 const makeGetRequest = async (endpointPath, logLabel = 'GET', params = null) => {
-  const baseUrl = getBaseUrl();
+  const url = buildUrl(endpointPath);
   const clientId = getClientId();
   const clientSecret = getClientSecret();
-  const url = `${baseUrl}${endpointPath}`;
+
+  console.log(`[Practomind] ===== ${logLabel} (GET REQUEST) =====`);
+  console.log(`[Practomind] URL: ${url}`);
+  if (params) {
+    console.log(`[Practomind] Query Params:`, JSON.stringify(params, null, 2));
+  }
 
   const attempts = [
     { payloadFn: (ts) => ts.toString(), hasContentType: false, desc: 'timestamp without dot (no Content-Type)' },
@@ -92,18 +122,20 @@ const makeGetRequest = async (endpointPath, logLabel = 'GET', params = null) => 
     }
 
     try {
-      console.log(`[Practomind] ${logLabel} (attempt ${i + 1}/${attempts.length}: ${attempt.desc}) URL: ${url}`);
+      console.log(`[Practomind] Attempt ${i + 1}/${attempts.length}: ${attempt.desc}`);
+      console.log(`[Practomind] Request Headers:`, JSON.stringify(headers, null, 2));
       const response = await axios.get(url, { headers, ...(params ? { params } : {}) });
 
       const resStatus = (response.data?.status || '').toLowerCase();
       const resMsg = (response.data?.message || '').toLowerCase();
       if (resStatus === 'error' && (resMsg.includes('signature') || resMsg.includes('hmac'))) {
-        console.warn(`[Practomind] ${logLabel} attempt ${i + 1} rejected with signature error: "${response.data.message}". Trying fallback HMAC...`);
+        console.warn(`[Practomind] Attempt ${i + 1} rejected with signature error: "${response.data.message}". Trying fallback HMAC...`);
         lastData = response.data;
         continue;
       }
 
-      console.log(`[Practomind] ${logLabel} succeeded on attempt ${i + 1}`);
+      console.log(`[Practomind] ===== ${logLabel} SUCCESS (${response.status}) =====`);
+      console.log(`[Practomind] Response Data:`, JSON.stringify(response.data, null, 2));
       return response.data;
     } catch (err) {
       const errData = err.response?.data;
@@ -111,13 +143,19 @@ const makeGetRequest = async (endpointPath, logLabel = 'GET', params = null) => 
       const isSigError = errMsg.includes('signature') || errMsg.includes('hmac') || err.response?.status === 401;
 
       if (isSigError && i < attempts.length - 1) {
-        console.warn(`[Practomind] ${logLabel} attempt ${i + 1} failed with signature error (${errData?.message || err.message}). Trying fallback HMAC...`);
+        console.warn(`[Practomind] Attempt ${i + 1} failed with signature error (${errData?.message || err.message}). Trying fallback HMAC...`);
         lastError = err;
         lastData = errData;
         continue;
       }
 
-      console.error(`[Practomind] ${logLabel} Error:`, errData || err.message);
+      console.error(`[Practomind] ===== ${logLabel} ERROR =====`);
+      console.error(`[Practomind] URL: ${url}`);
+      console.error(`[Practomind] Error Message: ${err.message}`);
+      if (err.response) {
+        console.error(`[Practomind] Response Status: ${err.response.status}`);
+        console.error(`[Practomind] Response Body:`, JSON.stringify(err.response.data, null, 2));
+      }
       return errData || { status: 'failure', message: err.message, code: err.code };
     }
   }
@@ -137,23 +175,40 @@ const sanitizeLogPayload = (payload) => {
 };
 
 const makePostRequest = async (endpointPath, payload, logLabel = 'POST') => {
-  try {
-    const baseUrl = getBaseUrl();
-    const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    const headers = getAuthHeaders(rawBody, 'POST');
-    const config = {
-      method: 'post',
-      url: `${baseUrl}${endpointPath}`,
-      headers,
-      data: rawBody
-    };
+  const url = buildUrl(endpointPath);
+  const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  const headers = getAuthHeaders(rawBody, 'POST');
+  const config = {
+    method: 'post',
+    url,
+    headers,
+    data: rawBody
+  };
 
-    console.log(`[Practomind] Initiating ${logLabel}:`, typeof payload === 'string' ? payload : sanitizeLogPayload(payload));
+  console.log(`[Practomind] ===== ${logLabel} (POST REQUEST) =====`);
+  console.log(`[Practomind] URL: ${url}`);
+  console.log(`[Practomind] Request Headers:`, JSON.stringify(headers, null, 2));
+  console.log(
+    `[Practomind] Request Payload:`,
+    typeof payload === 'string'
+      ? payload
+      : JSON.stringify(sanitizeLogPayload(payload), null, 2)
+  );
+
+  try {
     const response = await axios.request(config);
-    console.log(`[Practomind] ${logLabel} Response:`, JSON.stringify(response.data, null, 2));
+    console.log(`[Practomind] ===== ${logLabel} SUCCESS (${response.status}) =====`);
+    console.log(`[Practomind] Response Data:`, JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
-    console.error(`[Practomind] ${logLabel} Error:`, error.response?.data || error.message);
+    console.error(`[Practomind] ===== ${logLabel} ERROR =====`);
+    console.error(`[Practomind] URL: ${url}`);
+    console.error(`[Practomind] Error Message: ${error.message}`);
+    console.error(`[Practomind] Error Code: ${error.code}`);
+    if (error.response) {
+      console.error(`[Practomind] Response Status: ${error.response.status}`);
+      console.error(`[Practomind] Response Body:`, JSON.stringify(error.response.data, null, 2));
+    }
     return error.response?.data || { status: 'failure', message: error.message };
   }
 };
