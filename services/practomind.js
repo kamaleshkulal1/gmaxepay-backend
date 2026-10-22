@@ -1,96 +1,131 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
-const BASE_URL = process.env.PUNJIKENDRA_BASE_URL
-const CLIENT_SECRET = process.env.PUNJIKENDRA_CLIENT_SECRET || '';
-const CLIENT_ID = process.env.PUNJIKENDRA_CLIENT_ID;
-const AEPSPIPE = process.env.AEPSPIPE || '4';
+const getClientId = () => (process.env.PRACTOMIND_API_KEY || '').trim();
+const getClientSecret = () => (process.env.PRACTOMIND_SECRET_KEY || '').trim();
+const getBaseUrl = () => (process.env.PRACTOMIND_BASE_URL || '').trim().replace(/\/+$/, '');
+const getAepsPipe = () => process.env.AEPSPIPE || '4';
 
-let cachedToken = null;
-let tokenExpiry = 0;
+const BASE_URL = getBaseUrl();
+const CLIENT_SECRET = getClientSecret();
+const CLIENT_ID = getClientId();
+const AEPSPIPE = getAepsPipe();
 
-const getAccessToken = async (forceRefresh = false) => {
-  try {
-    if (!forceRefresh && cachedToken && Date.now() < tokenExpiry) {
-      return cachedToken;
-    }
-
-    if (!CLIENT_ID || !CLIENT_SECRET || !BASE_URL) {
-      throw new Error('Practomind / Punjikendra API credentials not configured');
-    }
-
-    const payload = {
-      clientId: CLIENT_ID,
-      clientSecret: CLIENT_SECRET
-    };
-
-    const timestamp = Math.floor(Date.now() / 1000);
-    const bodyStr = JSON.stringify(payload);
-    const signature = crypto
-      .createHmac('sha256', CLIENT_SECRET)
-      .update(timestamp + '.' + bodyStr)
-      .digest('hex');
-
-    const config = {
-      method: 'post',
-      url: `${BASE_URL.replace(/\/+$/, '')}/api/partner/v1/auth/token`,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': CLIENT_ID,
-        'X-TIMESTAMP': timestamp.toString(),
-        'X-SIGNATURE': signature
-      },
-      data: payload
-    };
-
-    console.log('[Practomind] Requesting access token...');
-    const response = await axios.request(config);
-    console.log('[Practomind] Token response:', JSON.stringify(response.data, null, 2));
-
-    let token = null;
-    if (response.data && response.data.status === 'success' && response.data.data?.token) {
-      token = response.data.data.token;
-    } else if (response.data && response.data.token) {
-      token = response.data.token;
-    }
-
-    if (token) {
-      cachedToken = token;
-      // Cache token for 45 minutes
-      tokenExpiry = Date.now() + 45 * 60 * 1000;
-      return token;
-    }
-
-    throw new Error(response.data?.message || 'Token generation failed');
-  } catch (error) {
-    cachedToken = null;
-    tokenExpiry = 0;
-    console.error('[Practomind] Token Error:', error.response?.data || error.message);
-    throw error;
-  }
-};
-
-const getAuthHeaders = async (body = {}) => {
-  const token = await getAccessToken();
+const getAuthHeaders = (body = null, method = 'POST') => {
+  const clientId = getClientId();
+  const clientSecret = getClientSecret();
   const timestamp = Math.floor(Date.now() / 1000);
-  const bodyStr = typeof body === 'object' && body !== null && Object.keys(body).length > 0 ? JSON.stringify(body) : '';
+
+  let rawBody = '';
+  if (body !== null && body !== undefined) {
+    if (typeof body === 'string') {
+      rawBody = body;
+    } else if (typeof body === 'object' && Object.keys(body).length > 0) {
+      rawBody = JSON.stringify(body);
+    }
+  }
+
+  const payloadToSign = rawBody ? `${timestamp}.${rawBody}` : timestamp.toString();
 
   const signature = crypto
-    .createHmac('sha256', CLIENT_SECRET)
-    .update(timestamp + '.' + bodyStr)
+    .createHmac('sha256', clientSecret || '')
+    .update(payloadToSign)
     .digest('hex');
 
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-    'X-API-KEY': CLIENT_ID,
+  const headers = {
+    'X-API-KEY': clientId,
     'X-TIMESTAMP': timestamp.toString(),
-    'X-SIGNATURE': signature
+    'X-SIGNATURE': signature,
+    'X-Domain': process.env.PUNJIKENDRA_DOMAIN || 'https://bharat.gmaxepay.in'
   };
+
+  if (rawBody || String(method).toUpperCase() === 'POST') {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return headers;
 };
 
 const getHeaders = async (payload = null, tokenPayload = {}) => {
-  return await getAuthHeaders(payload || {});
+  return getAuthHeaders(payload, 'POST');
+};
+
+const getAccessToken = async () => {
+  console.warn('[Practomind] getAccessToken called, but Bearer tokens are disabled. Requests use Stateless HMAC-SHA256 headers directly.');
+  return null;
+};
+
+const makeGetRequest = async (endpointPath, logLabel = 'GET', params = null) => {
+  const baseUrl = getBaseUrl();
+  const clientId = getClientId();
+  const clientSecret = getClientSecret();
+  const url = `${baseUrl}${endpointPath}`;
+
+  const attempts = [
+    { payloadFn: (ts) => ts.toString(), hasContentType: false, desc: 'timestamp without dot (no Content-Type)' },
+    { payloadFn: (ts) => `${ts}.`, hasContentType: false, desc: 'timestamp with dot (no Content-Type)' },
+    { payloadFn: (ts) => ts.toString(), hasContentType: true, desc: 'timestamp without dot (with Content-Type)' },
+    { payloadFn: (ts) => `${ts}.`, hasContentType: true, desc: 'timestamp with dot (with Content-Type)' }
+  ];
+
+  let lastError = null;
+  let lastData = null;
+
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    const timestamp = Math.floor(Date.now() / 1000);
+    const payloadToSign = attempt.payloadFn(timestamp);
+
+    const signature = crypto
+      .createHmac('sha256', clientSecret || '')
+      .update(payloadToSign)
+      .digest('hex');
+
+    const headers = {
+      'X-API-KEY': clientId,
+      'X-TIMESTAMP': timestamp.toString(),
+      'X-SIGNATURE': signature,
+      'X-Domain': process.env.PUNJIKENDRA_DOMAIN || 'https://bharat.gmaxepay.in'
+    };
+    if (attempt.hasContentType) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    try {
+      console.log(`[Practomind] ${logLabel} (attempt ${i + 1}/${attempts.length}: ${attempt.desc}) URL: ${url}`);
+      const response = await axios.get(url, { headers, ...(params ? { params } : {}) });
+
+      const resStatus = (response.data?.status || '').toLowerCase();
+      const resMsg = (response.data?.message || '').toLowerCase();
+      if (resStatus === 'error' && (resMsg.includes('signature') || resMsg.includes('hmac'))) {
+        console.warn(`[Practomind] ${logLabel} attempt ${i + 1} rejected with signature error: "${response.data.message}". Trying fallback HMAC...`);
+        lastData = response.data;
+        continue;
+      }
+
+      console.log(`[Practomind] ${logLabel} succeeded on attempt ${i + 1}`);
+      return response.data;
+    } catch (err) {
+      const errData = err.response?.data;
+      const errMsg = (errData?.message || err.message || '').toLowerCase();
+      const isSigError = errMsg.includes('signature') || errMsg.includes('hmac') || err.response?.status === 401;
+
+      if (isSigError && i < attempts.length - 1) {
+        console.warn(`[Practomind] ${logLabel} attempt ${i + 1} failed with signature error (${errData?.message || err.message}). Trying fallback HMAC...`);
+        lastError = err;
+        lastData = errData;
+        continue;
+      }
+
+      console.error(`[Practomind] ${logLabel} Error:`, errData || err.message);
+      return errData || { status: 'failure', message: err.message, code: err.code };
+    }
+  }
+
+  if (lastData) {
+    return lastData;
+  }
+  return lastError?.response?.data || { status: 'failure', message: lastError?.message || 'HMAC computation failed across all attempts' };
 };
 
 const sanitizeLogPayload = (payload) => {
@@ -99,6 +134,28 @@ const sanitizeLogPayload = (payload) => {
   if (copy.pidData) copy.pidData = '[REDACTED_PID_DATA]';
   if (copy.txtPidData) copy.txtPidData = '[REDACTED_PID_DATA]';
   return copy;
+};
+
+const makePostRequest = async (endpointPath, payload, logLabel = 'POST') => {
+  try {
+    const baseUrl = getBaseUrl();
+    const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    const headers = getAuthHeaders(rawBody, 'POST');
+    const config = {
+      method: 'post',
+      url: `${baseUrl}${endpointPath}`,
+      headers,
+      data: rawBody
+    };
+
+    console.log(`[Practomind] Initiating ${logLabel}:`, typeof payload === 'string' ? payload : sanitizeLogPayload(payload));
+    const response = await axios.request(config);
+    console.log(`[Practomind] ${logLabel} Response:`, JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error(`[Practomind] ${logLabel} Error:`, error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
 };
 
 const practomindAepsOnboarding = async (data, merchantLoginId) => {
@@ -110,10 +167,10 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
       middleName: data.middleName || data.merchantMiddleName || '',
       dob: data.dob || '',
       fatherName: data?.fatherName || '',
-      motherName: data?.motherName || "",
-      maritalStatus: data.maritalStatus || "",
+      motherName: data?.motherName || '',
+      maritalStatus: data.maritalStatus || '',
       gender: data.gender || 'M',
-      mcc: '5411',
+      mcc: data.mcc || data.c_code || '5411',
       merchantPhoneNumber: String(data.merchantPhoneNumber || data.mobileNo || ''),
       merchantPan: data.merchantPan || data.userPan || data.panNumber || '',
       aadhaarNumber: String(data.aadhaarNumber || data.adhaarNumber || ''),
@@ -138,15 +195,10 @@ const practomindAepsOnboarding = async (data, merchantLoginId) => {
       lat: data.lat || data.shopLat || data.latitude || '',
       long: data.long || data.shopLong || data.longitude || '',
       ipAddress: data.ipAddress || '127.0.0.1',
-      pipe: AEPSPIPE
+      pipe: data.pipe || getAepsPipe()
     };
 
-    console.log('Practomind Merchant Register Payload:', JSON.stringify(payload, null, 2));
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/register`, payload, { headers });
-    console.log("Practomind Response:", JSON.stringify(response.data, null, 2));
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/merchant/register', payload, 'aepsOnboarding');
   } catch (error) {
     console.error('Practomind Merchant Register Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind register API' };
@@ -158,16 +210,10 @@ const practomindSendEkycOtp = async (data) => {
     const payload = {
       merchantId: data.merchantId || data.merchantLoginId,
       merchantRefId: String(data.merchantRefId || data.merchantLoginId || `OTP_REF_${Date.now()}`).slice(0, 20),
-      pipe: AEPSPIPE
+      pipe: data.pipe || getAepsPipe()
     };
 
-    console.log('Practomind Send KYC OTP Payload:', payload);
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/otp/send`, payload, { headers });
-
-    console.log('Practomind Send KYC OTP Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/merchant/otp/send', payload, 'sendOtp');
   } catch (error) {
     console.error('Practomind Send KYC OTP Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind send OTP API' };
@@ -179,16 +225,10 @@ const practomindResendEkycOtp = async (data) => {
     const payload = {
       merchantId: data.merchantId || data.merchantLoginId,
       merchantRefId: String(data.merchantRefId || data.merchantLoginId || `RESEND_REF_${Date.now()}`).slice(0, 20),
-      pipe: AEPSPIPE
+      pipe: data.pipe || getAepsPipe()
     };
 
-    console.log('Practomind Resend KYC OTP Payload:', payload);
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/otp/resend`, payload, { headers });
-
-    console.log('Practomind Resend KYC OTP Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/merchant/otp/resend', payload, 'resendOtp');
   } catch (error) {
     console.error('Practomind Resend KYC OTP Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind resend OTP API' };
@@ -201,16 +241,10 @@ const practomindValidateEkycOtp = async (data) => {
       merchantId: data.merchantId || data.merchantLoginId,
       merchantRefId: String(data.merchantRefId || data.merchantLoginId || `VERIFY_REF_${Date.now()}`).slice(0, 20),
       otp: String(data.otp),
-      pipe: AEPSPIPE
+      pipe: data.pipe || getAepsPipe()
     };
 
-    console.log('Practomind Verify KYC OTP Payload:', payload);
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/otp/validate`, payload, { headers });
-
-    console.log('Practomind Verify KYC OTP Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/merchant/otp/validate', payload, 'verifyOtp');
   } catch (error) {
     console.error('Practomind Verify KYC OTP Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind verify OTP API' };
@@ -225,18 +259,12 @@ const practomindEkycSubmit = async (data) => {
       aadhaarNumber: String(data.aadhaarNumber || data.adhaarNumber || ''),
       pidData: data.pidData || data.txtPidData,
       deviceType: data.deviceType || 'mantra',
-      pipe: AEPSPIPE,
+      pipe: data.pipe || getAepsPipe(),
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || '')
     };
 
-    console.log('Practomind Biometric KYC Payload:', sanitizeLogPayload(payload));
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/ekyc`, payload, { headers });
-
-    console.log('Practomind Biometric KYC Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/merchant/ekyc', payload, 'onboardingBiometric');
   } catch (error) {
     console.error('Practomind Biometric KYC Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind biometric KYC API' };
@@ -251,18 +279,12 @@ const practomindDailyAuthentication = async (data) => {
       aadhaarNumber: String(data.aadhaarNumber || data.adhaarNumber || ''),
       pidData: data.pidData || data.txtPidData,
       deviceType: data.deviceType || 'mantra',
-      pipe: AEPSPIPE,
+      pipe: data.pipe || getAepsPipe(),
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || '')
     };
 
-    console.log('Practomind Daily 2FA Biometric Payload:', sanitizeLogPayload(payload));
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/merchant/2fa`, payload, { headers });
-
-    console.log('Practomind Daily 2FA Biometric Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/merchant/2fa', payload, 'dailyBiometric');
   } catch (error) {
     console.error('Practomind Daily 2FA Biometric Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind daily biometric API' };
@@ -281,19 +303,13 @@ const practomindCashWithdrawal = async (data) => {
       bank_iin: String(data.bank_iin || data.nationalBankIdenticationNumber || ''),
       cwAuthTxnId: data.cwAuthTxnId || '',
       deviceType: data.deviceType || 'mantra',
-      pipe: AEPSPIPE,
+      pipe: data.pipe || getAepsPipe(),
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
       reference_id: String(data.reference_id || data.referenceId || data.merchantRefId || data.transactionId || `AEPS_CW_${Date.now()}`).slice(0, 20)
     };
 
-    console.log('Practomind Cash Withdrawal Payload:', sanitizeLogPayload(payload));
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
-
-    console.log('Practomind Cash Withdrawal Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/transaction', payload, 'Cash Withdrawal');
   } catch (error) {
     console.error('Practomind Cash Withdrawal Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind cash withdrawal API' };
@@ -310,19 +326,13 @@ const practomindBalanceEnquiry = async (data) => {
       pidData: data.pidData || data.txtPidData,
       bank_iin: String(data.bank_iin || data.nationalBankIdenticationNumber || ''),
       deviceType: data.deviceType || 'mantra',
-      pipe: AEPSPIPE,
+      pipe: data.pipe || getAepsPipe(),
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
       reference_id: String(data.reference_id || data.referenceId || data.merchantRefId || data.transactionId || `AEPS_BE_${Date.now()}`).slice(0, 20)
     };
 
-    console.log('Practomind Balance Enquiry Payload:', sanitizeLogPayload(payload));
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
-
-    console.log('Practomind Balance Enquiry Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/transaction', payload, 'Balance Enquiry');
   } catch (error) {
     console.error('Practomind Balance Enquiry Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind balance enquiry API' };
@@ -339,19 +349,13 @@ const practomindMiniStatement = async (data) => {
       pidData: data.pidData || data.txtPidData,
       bank_iin: String(data.bank_iin || data.nationalBankIdenticationNumber || ''),
       deviceType: data.deviceType || 'mantra',
-      pipe: AEPSPIPE,
+      pipe: data.pipe || getAepsPipe(),
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
       reference_id: String(data.reference_id || data.referenceId || data.merchantRefId || data.transactionId || `AEPS_MS_${Date.now()}`).slice(0, 20)
     };
 
-    console.log('Practomind Mini Statement Payload:', sanitizeLogPayload(payload));
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
-
-    console.log('Practomind Mini Statement Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/transaction', payload, 'Mini Statement');
   } catch (error) {
     console.error('Practomind Mini Statement Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind mini statement API' };
@@ -370,19 +374,13 @@ const practomindAadhaarPay = async (data) => {
       bank_iin: String(data.bank_iin || data.nationalBankIdenticationNumber || ''),
       cwAuthTxnId: data.cwAuthTxnId || '',
       deviceType: data.deviceType || 'mantra',
-      pipe: AEPSPIPE,
+      pipe: data.pipe || getAepsPipe(),
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || ''),
       reference_id: String(data.reference_id || data.referenceId || data.merchantRefId || data.transactionId || `AEPS_AP_${Date.now()}`).slice(0, 20)
     };
 
-    console.log('Practomind Aadhaar Pay Payload:', sanitizeLogPayload(payload));
-
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction`, payload, { headers });
-
-    console.log('Practomind Aadhaar Pay Response:', response.data);
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/transaction', payload, 'Aadhaar Pay');
   } catch (error) {
     console.error('Practomind Aadhaar Pay Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind aadhaar pay API' };
@@ -394,12 +392,10 @@ const sendTransactionOtp = async (data) => {
     const payload = {
       merchantId: data.merchantId || data.merchantLoginId,
       transactionType: data.transactionType || 'CW',
-      pipe: AEPSPIPE
+      pipe: data.pipe || getAepsPipe()
     };
 
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/transaction/otp`, payload, { headers });
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/transaction/otp', payload, 'Transaction OTP');
   } catch (error) {
     console.error('Practomind Transaction OTP Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind transaction OTP API' };
@@ -408,12 +404,14 @@ const sendTransactionOtp = async (data) => {
 
 const getAepsStatus = async (merchantId) => {
   try {
-    const headers = await getHeaders(null);
-    const response = await axios.get(`${BASE_URL}/api/partner/v1/aeps/status`, {
-      params: { merchantId },
-      headers
-    });
-    return response.data;
+    console.log('[Practomind] Fetching AEPS status...');
+    const result = await makeGetRequest(
+      '/api/partner/v1/aeps/status',
+      'aepsStatus',
+      merchantId ? { merchantId } : null
+    );
+    console.log('Practomind AEPS Status Response:', JSON.stringify(result, null, 2));
+    return result;
   } catch (error) {
     console.error('Practomind AEPS Status Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind status API' };
@@ -422,9 +420,9 @@ const getAepsStatus = async (merchantId) => {
 
 const getStates = async () => {
   try {
-    const headers = await getHeaders(null);
-    const response = await axios.get(`${BASE_URL}/api/partner/v1/aeps/states`, { headers });
-    return response.data;
+    console.log('[Practomind] Fetching states...');
+    const result = await makeGetRequest('/api/partner/v1/aeps/states', 'getStates');
+    return result;
   } catch (error) {
     console.error('Practomind Get States Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind states API' };
@@ -433,11 +431,8 @@ const getStates = async () => {
 
 const getDistricts = async (data) => {
   try {
-    const payload = { stateCode: data.stateCode };
-    const headers = await getHeaders(payload);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/districts`, payload, { headers });
-    console.log('Practomind Get Districts Response:', response.data);
-    return response.data;
+    const payload = { stateCode: data?.stateCode };
+    return await makePostRequest('/api/partner/v1/aeps/districts', payload, 'getDistricts');
   } catch (error) {
     console.error('Practomind Get Districts Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind districts API' };
@@ -446,28 +441,19 @@ const getDistricts = async (data) => {
 
 const getBankIINs = async (data = {}) => {
   try {
-    const headers = await getHeaders(data);
-    const response = await axios.post(`${BASE_URL}/api/partner/v1/aeps/bank-iins`, data, { headers });
-    return response.data;
+    return await makePostRequest('/api/partner/v1/aeps/bank-iins', data, 'getBankIINs');
   } catch (error) {
     console.error('Practomind Get Bank IINs Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'error', message: error.message || 'Unable to reach Practomind bank IIN API' };
   }
 };
 
-
 const getBanks = async () => {
   try {
-    const headers = await getAuthHeaders();
-    const config = {
-      method: 'get',
-      url: `${BASE_URL}/api/partner/v1/aeps/banks`,
-      headers
-    };
-    console.log("Aeps Url", config);
-    const response = await axios.request(config);
-    console.log('response', JSON.stringify(response.data, null, 2));
-    return response.data;
+    console.log('[Practomind] Fetching banks...');
+    const result = await makeGetRequest('/api/partner/v1/aeps/banks', 'getBanks');
+    console.log('response', JSON.stringify(result, null, 2));
+    return result;
   } catch (error) {
     console.error('[Practomind] getBanks Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'failure', message: error.message };
@@ -476,19 +462,76 @@ const getBanks = async () => {
 
 const checkBalance = async () => {
   try {
-    const headers = await getAuthHeaders();
-    const config = {
-      method: 'get',
-      url: `${BASE_URL}/api/partner/v1/balance`,
-      headers
-    };
-
-    console.log('[Practomind] Fetching balance from:', config.url);
-    const response = await axios.request(config);
-    console.log('balance response', JSON.stringify(response.data, null, 2));
-    return response.data;
+    console.log('[Practomind] Fetching balance...');
+    const result = await makeGetRequest('/api/partner/v1/balance', 'checkBalance');
+    console.log('balance response', JSON.stringify(result, null, 2));
+    return result;
   } catch (error) {
     console.error('[Practomind] checkBalance Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
+};
+
+const getPurposes = async () => {
+  try {
+    console.log('[Practomind] Fetching purposes...');
+    const result = await makeGetRequest('/api/partner/v1/payout/purposes', 'getPurposes');
+    console.log('response', JSON.stringify(result, null, 2));
+    return result;
+  } catch (error) {
+    console.error('[Practomind] getPurposes Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message };
+  }
+};
+
+const getPayoutStatus = async (referenceId) => {
+  try {
+    const trimmedRefId = String(referenceId || '').trim();
+    if (!trimmedRefId) {
+      return { status: 'failure', message: 'referenceId is required' };
+    }
+    console.log(`[Practomind] Fetching status for reference ${trimmedRefId}...`);
+    const result = await makeGetRequest(`/api/partner/v1/payout/status/${encodeURIComponent(trimmedRefId)}`, 'getPayoutStatus');
+    console.log('response', JSON.stringify(result, null, 2));
+    return result;
+  } catch (error) {
+    console.error('[Practomind] getPayoutStatus Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message, code: error.code };
+  }
+};
+
+const initiateTransfer = async (data) => {
+  try {
+    const payload = {
+      accountNumber: data.accountNumber,
+      ifsc: data.ifsc,
+      accountName: data.accountName,
+      bankName: data.bankName,
+      mobile: data.mobile,
+      amount: Number(data.amount),
+      mode: data.mode || 'IMPS',
+      purpose: data.purpose || '004',
+      state: data.state || 'DL',
+      lat: data.lat ? String(data.lat) : (data.latitude ? String(data.latitude) : '28.6139'),
+      long: data.long ? String(data.long) : (data.longitude ? String(data.longitude) : '77.2090'),
+      reference_id: data.reference_id
+    };
+
+    return await makePostRequest('/api/partner/v1/payout/transfer', payload, 'initiateTransfer');
+  } catch (error) {
+    console.error('[Practomind] initiateTransfer Error:', error.response?.data || error.message);
+    return error.response?.data || { status: 'failure', message: error.message, code: error.code };
+  }
+};
+
+const stateCodePayout = async () => {
+  try {
+    console.log('[Practomind] Fetching state code payout...');
+    const result = await makeGetRequest('/api/partner/v1/payout/states', 'stateCodePayout');
+    console.log('response', JSON.stringify(result, null, 2));
+    return result;
+  } catch (error) {
+    console.error('[Practomind] stateCodePayout Error:', error.response?.data || error.message);
     return error.response?.data || { status: 'failure', message: error.message };
   }
 };
@@ -497,6 +540,8 @@ module.exports = {
   getAccessToken,
   getAuthHeaders,
   getHeaders,
+  makeGetRequest,
+  makePostRequest,
   practomindAepsOnboarding,
   aepsOnboarding: practomindAepsOnboarding,
   practomindSendEkycOtp,
@@ -521,5 +566,9 @@ module.exports = {
   getDistricts,
   getBankIINs,
   getBanks,
-  checkBalance
+  checkBalance,
+  getPurposes,
+  getPayoutStatus,
+  initiateTransfer,
+  stateCodePayout
 };
