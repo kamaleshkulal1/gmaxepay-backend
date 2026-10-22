@@ -25,7 +25,7 @@ const getBaseUrl = () => {
   return url.replace(/\/+$/, '');
 };
 
-const getAepsPipe = () => (process.env.AEPSPIPE || '4').trim();
+const getAepsPipe = () => (process.env.AEPSPIPE || '2').trim();
 
 const buildUrl = (endpointPath) => {
   if (typeof endpointPath === 'string' && (endpointPath.startsWith('http://') || endpointPath.startsWith('https://'))) {
