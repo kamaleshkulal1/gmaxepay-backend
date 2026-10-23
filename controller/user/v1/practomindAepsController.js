@@ -1319,13 +1319,22 @@ const dailyAuthentication = async (req, res) => {
             isPrimary: true
         });
 
-        if (!existingCustomerBank) {
+        if (!existingCustomerBank || !existingCustomerBank.bankName) {
             return res.failure({ message: 'Please add primary bank details first' });
         }
-        const practomindBank = await dbService.findOne(model.practomindBankList, {
-            bankName: existingCustomerBank.bankName,
+        const bankNameUpper = (existingCustomerBank.bankName || '').trim().toUpperCase();
+        let practomindBank = await dbService.findOne(model.practomindBankList, {
+            bankName: bankNameUpper,
             isActive: true
         });
+
+        if (!practomindBank && bankNameUpper) {
+            practomindBank = await dbService.findOne(model.practomindBankList, {
+                bankName: { [Op.iLike]: (existingCustomerBank.bankName || '').trim() },
+                isActive: true
+            });
+        }
+
         console.log("existingCustomerBank", existingCustomerBank);
         if (!practomindBank) {
             return res.failure({ message: 'Customer Bank does not support' });
