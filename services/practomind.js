@@ -188,6 +188,7 @@ const makePostRequest = async (endpointPath, payload, logLabel = 'POST') => {
   console.log(`[Practomind] ===== ${logLabel} (POST REQUEST) =====`);
   console.log(`[Practomind] URL: ${url}`);
   console.log(`[Practomind] Request Headers:`, JSON.stringify(headers, null, 2));
+  console.log("rawbody", payload)
   console.log(
     `[Practomind] Request Payload:`,
     typeof payload === 'string'
