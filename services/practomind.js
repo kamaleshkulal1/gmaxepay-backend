@@ -340,6 +340,7 @@ const practomindDailyAuthentication = async (data) => {
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || '')
     };
+    console.log("payload", payload);
 
     return await makePostRequest('/api/partner/v1/aeps/merchant/2fa', payload, 'dailyBiometric');
   } catch (error) {
