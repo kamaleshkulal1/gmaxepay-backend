@@ -1328,7 +1328,7 @@ const dailyAuthentication = async (req, res) => {
         });
         console.log("existingCustomerBank", existingCustomerBank);
         if (!practomindBank) {
-            return res.failure({ message: 'Practomind bank not found' });
+            return res.failure({ message: 'Customer Bank does not support' });
         }
 
         if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') {
