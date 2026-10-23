@@ -1326,6 +1326,7 @@ const dailyAuthentication = async (req, res) => {
             bankName: existingCustomerBank.bankName,
             isActive: true
         });
+        console.log("existingCustomerBank", existingCustomerBank);
         if (!practomindBank) {
             return res.failure({ message: 'Practomind bank not found' });
         }
