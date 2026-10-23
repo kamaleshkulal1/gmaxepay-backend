@@ -188,7 +188,7 @@ const makePostRequest = async (endpointPath, payload, logLabel = 'POST') => {
   console.log(`[Practomind] ===== ${logLabel} (POST REQUEST) =====`);
   console.log(`[Practomind] URL: ${url}`);
   console.log(`[Practomind] Request Headers:`, JSON.stringify(headers, null, 2));
-  console.log("rawbody", payload)
+  console.log("rawbody", JSON.stringify(payload, null, 2));
   console.log(
     `[Practomind] Request Payload:`,
     typeof payload === 'string'
@@ -319,6 +319,7 @@ const practomindEkycSubmit = async (data) => {
       lat: String(data.lat || data.latitude || ''),
       long: String(data.long || data.longitude || '')
     };
+    console.log("payload", payload);
 
     return await makePostRequest('/api/partner/v1/aeps/merchant/ekyc', payload, 'onboardingBiometric');
   } catch (error) {
