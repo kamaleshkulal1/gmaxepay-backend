@@ -791,7 +791,8 @@ const createPractomindAepsOnboarding = async (req, res) => {
             ipAddress: ipAddress,
             maskedAadharImage: maskedAadharImageBase64,
             backgroundImageOfShop: backgroundImageOfShopBase64,
-            merchantPanImage: merchantPanImageBase64
+            merchantPanImage: merchantPanImageBase64,
+            pipe: existingUser.pipe || undefined
         };
 
         const response = await practomindService.practomindAepsOnboarding(onboardingData, merchantLoginId);
@@ -950,7 +951,8 @@ const sendEkycOtp = async (req, res) => {
             longitude: shopDetails?.shopLongitude,
             merchantLoginId: existingOnboarding.merchantLoginId,
             merchantId: existingOnboarding.merchantLoginId,
-            merchantRefId: merchantRefId
+            merchantRefId: merchantRefId,
+            pipe: existingUser.pipe || undefined
         };
 
         const response = await practomindService.practomindSendEkycOtp(otpData);
@@ -1035,7 +1037,8 @@ const validateEkycOtp = async (req, res) => {
             merchantRefId: merchantRefId,
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
-            otp: otp
+            otp: otp,
+            pipe: existingUser.pipe || undefined
         };
 
         // Call Practomind API
@@ -1120,7 +1123,8 @@ const resendEkycOtp = async (req, res) => {
             KeyID: existingOnboarding.KeyID,
             TxnId: existingOnboarding.TxnId,
             latitude: existingUser.latitude,
-            longitude: existingUser.longitude
+            longitude: existingUser.longitude,
+            pipe: existingUser.pipe || undefined
         };
 
         // Call Practomind API
@@ -1214,7 +1218,8 @@ const ekycSubmit = async (req, res) => {
             pidData: txtPidData,
             deviceType: deviceType || 'mantra',
             lat: latitude || existingUser.latitude,
-            long: longitude || existingUser.longitude
+            long: longitude || existingUser.longitude,
+            pipe: existingUser.pipe || undefined
         };
 
         // Call Practomind API
@@ -1377,7 +1382,8 @@ const dailyAuthentication = async (req, res) => {
             userPan: existingOnboarding.userPan,
             aadhaarNumber: existingOnboarding.aadhaarNumber,
             nationalBankIdenticationNumber: practomindBank.bankIIN || practomindBank.iinno,
-            txtPidData: txtPidData
+            txtPidData: txtPidData,
+            pipe: existingUser.pipe || undefined
         };
 
         // Call Practomind API
@@ -1665,7 +1671,8 @@ const cashWithdrawal = async (req, res) => {
             nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN,
             transactionAmount: amountNumber,
             transactionId,
-            txtPidData
+            txtPidData,
+            pipe: existingUser.pipe || undefined
         }
 
         // Call Practomind API
@@ -1785,6 +1792,7 @@ const cashWithdrawal = async (req, res) => {
                 responseCode: response?.result?.responseCode || null,
                 errorCode: response?.result?.errorCode || null,
                 errorMessage: response?.result?.errorMessage || null,
+                pipeType: existingUser.pipe || null,
                 superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt,
                 superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
                 ...aepsAvail, addedBy: existingUser.id
@@ -1875,7 +1883,8 @@ const balanceEnquiry = async (req, res) => {
             aadhaarNumber: aadhaarNumber,
             nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN,
             transactionId: transactionId,
-            txtPidData: txtPidData
+            txtPidData: txtPidData,
+            pipe: existingUser.pipe || undefined
         };
 
         // Call Practomind API
@@ -1948,6 +1957,7 @@ const balanceEnquiry = async (req, res) => {
             responseCode: response?.result?.responseCode || response?.result?.result?.responseCode || null,
             errorCode: response?.result?.errorCode || response?.result?.result?.errorCode || null,
             errorMessage: response?.result?.errorMessage || response?.result?.result?.errorMessage || null,
+            pipeType: existingUser.pipe || null,
             addedBy: existingUser.id
         };
 
@@ -2188,7 +2198,8 @@ const miniStatement = async (req, res) => {
             aadhaarNumber: aadhaarNumber,
             nationalBankIdenticationNumber: bankIIN || practomindBank.bankIIN,
             transactionId: transactionId,
-            txtPidData: txtPidData
+            txtPidData: txtPidData,
+            pipe: existingUser.pipe || undefined
         };
         // Call Practomind API
         const response = await practomindService.practomindMiniStatement(statementData);
@@ -2354,6 +2365,7 @@ const miniStatement = async (req, res) => {
                 responseCode: response?.result?.responseCode || null,
                 errorCode: response?.result?.errorCode || null,
                 errorMessage: response?.result?.errorMessage || null,
+                pipeType: existingUser.pipe || null,
                 superadminComm: superAdminCommAmt, whitelabelComm: companyCommAmt, masterDistributorCom: mdCommAmt, distributorCom: distCommAmt, retailerCom: retailerCommAmt,
                 superadminCommTDS: superAdminTDS, whitelabelCommTDS: whitelabelTDS, masterDistributorComTDS: masterDistTDS, distributorComTDS: distributorTDS, retailerComTDS: retailerTDS,
                 ...aepsAvail, addedBy: existingUser.id

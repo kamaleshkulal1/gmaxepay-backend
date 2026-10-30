@@ -532,6 +532,12 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true
     },
+    pipe: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'AEPS pipe override for this user (e.g. "1", "2", "3"). Null means use global AEPSPIPE env default.'
+    },
     ...reusableModelAttribute
   },
   {

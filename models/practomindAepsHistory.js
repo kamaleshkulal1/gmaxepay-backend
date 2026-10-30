@@ -180,7 +180,6 @@ const PractomindAepsHistory = sequelize.define(
       allowNull: true,
       comment: 'IP address of the request'
     },
-    // Wallet snapshot for AEPS2 wallet crediting
     openingAeps2Wallet: {
       type: DataTypes.FLOAT,
       allowNull: true,
@@ -197,7 +196,6 @@ const PractomindAepsHistory = sequelize.define(
       defaultValue: 0,
       comment: 'Net amount credited to initiator AEPS2 wallet'
     },
-    // --- Commission Breakdown (for CW and MS only) ---
     superadminComm: {
       type: DataTypes.FLOAT,
       allowNull: true,
@@ -223,7 +221,6 @@ const PractomindAepsHistory = sequelize.define(
       allowNull: true,
       defaultValue: 0
     },
-    // --- TDS on Commission (2% of each party's gross incoming commission) ---
     superadminCommTDS: {
       type: DataTypes.FLOAT,
       allowNull: true,
@@ -249,7 +246,6 @@ const PractomindAepsHistory = sequelize.define(
       allowNull: true,
       defaultValue: 0
     },
-    // --- Avail flags: which parties existed in this chain ---
     superAdminAvail: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
@@ -298,6 +294,12 @@ const PractomindAepsHistory = sequelize.define(
     errorMessage: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    pipeType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'AEPS pipe used for this transaction (e.g. "1", "2", "4"). Sourced from user.pipe or AEPSPIPE env.'
     },
     ...reusableModelAttribute
   },
