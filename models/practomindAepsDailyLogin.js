@@ -78,6 +78,12 @@ const PractomindAepsDailyLogin = sequelize.define(
       allowNull: true,
       comment: 'Response status from 2FA API'
     },
+    pipe: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'AEPS pipe used during this daily 2FA authentication (e.g. "1", "2", "4").'
+    },
     ...reusableModelAttribute
   },
   {

@@ -9,6 +9,8 @@ const imageService = require('../../../services/imageService');
 const { Op, Transaction } = require('sequelize');
 const sequelize = require('../../../config/dbConnection');
 
+const getAepsPipe = () => (practomindService.getAepsPipe ? practomindService.getAepsPipe() : (process.env.AEPSPIPE || '2').trim());
+
 const convertImageToBase64 = async (imageData, compress = false) => {
     try {
         if (!imageData) return null;
@@ -79,12 +81,13 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
             return res.failure({ message: 'User not found' });
         }
 
-        const onboardingQuery = {
+        const pipe = existingUser.pipe || getAepsPipe();
+
+        const existingPractomindAepsOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
             companyId: existingUser.companyId,
-            ...(existingUser.pipe ? { pipe: existingUser.pipe } : {})
-        };
-        const existingPractomindAepsOnboarding = await dbService.findOne(model.practomindAepsOnboarding, onboardingQuery);
+            pipe: pipe
+        });
 
         // Daily 2FA status (IST date based)
         await aepsDailyLoginService.logoutPreviousDaySessions(req.user.id, req.user.companyId);
@@ -94,7 +97,8 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
             refId: req.user.id,
             companyId: req.user.companyId,
             loginDate: todayDateStr,
-            isLoggedIn: true
+            isLoggedIn: true,
+            pipe: pipe
         });
 
         const isDaily2FACompleted = Boolean(existingDaily2FA);
@@ -440,21 +444,22 @@ const resolvePractomindDistrictCode = async (districtInput, stateCode) => {
 
 const createPractomindAepsOnboarding = async (req, res) => {
     try {
-        const [existingUser, existingOnboarding] = await Promise.all([
-            dbService.findOne(model.user, {
-                id: req.user.id,
-                companyId: req.user.companyId
-            }),
-            dbService.findOne(model.practomindAepsOnboarding, {
-                userId: req.user.id,
-                companyId: req.user.companyId,
-                pipe: existingUser.pipe || getAepsPipe()
-            })
-        ]);
+        const existingUser = await dbService.findOne(model.user, {
+            id: req.user.id,
+            companyId: req.user.companyId
+        });
 
         if (!existingUser) {
             return res.failure({ message: 'User not found' });
         }
+
+        const pipe = existingUser.pipe || getAepsPipe();
+
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: req.user.id,
+            companyId: req.user.companyId,
+            pipe: pipe
+        });
 
         if (existingOnboarding && (
             existingOnboarding.isBioMetricValidated ||
@@ -863,7 +868,7 @@ const createPractomindAepsOnboarding = async (req, res) => {
             ekycResponseCode: null,
             ekycRetryCount: 0,
             lastRetryAt: null,
-            pipe: existingUser.pipe || null
+            pipe: existingUser.pipe || getAepsPipe()
         };
 
         let recordToUpdate = existingOnboarding;
@@ -875,7 +880,8 @@ const createPractomindAepsOnboarding = async (req, res) => {
         if (!recordToUpdate) {
             recordToUpdate = await dbService.findOne(model.practomindAepsOnboarding, {
                 userId: existingUser.id,
-                companyId: existingUser.companyId
+                companyId: existingUser.companyId,
+                pipe: existingUser.pipe || getAepsPipe()
             });
         }
 
@@ -929,7 +935,8 @@ const sendEkycOtp = async (req, res) => {
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
-            companyId: existingUser.companyId
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         if (!existingOnboarding) {
@@ -1024,7 +1031,8 @@ const validateEkycOtp = async (req, res) => {
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
-            companyId: existingUser.companyId
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         if (!existingOnboarding || !existingOnboarding.isOtpSent) {
@@ -1109,7 +1117,8 @@ const resendEkycOtp = async (req, res) => {
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
-            companyId: existingUser.companyId
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         if (!existingOnboarding || !existingOnboarding.isOtpSent) {
@@ -1193,7 +1202,8 @@ const ekycSubmit = async (req, res) => {
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
-            companyId: existingUser.companyId
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         if (!existingOnboarding || !existingOnboarding.isOtpValidated) {
@@ -1319,7 +1329,8 @@ const dailyAuthentication = async (req, res) => {
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
-            companyId: existingUser.companyId
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         const existingCustomerBank = await dbService.findOne(model.customerBank, {
@@ -1359,7 +1370,8 @@ const dailyAuthentication = async (req, res) => {
             refId: req.user.id,
             companyId: req.user.companyId,
             loginDate: todayDateStr,
-            isLoggedIn: true
+            isLoggedIn: true,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         if (existingDaily2FA) {
@@ -1415,7 +1427,8 @@ const dailyAuthentication = async (req, res) => {
                 isLoggedIn: true,
                 loginDate: todayDateStr,
                 responseMessage: response?.data?.message || response?.responseMessage || response?.message,
-                status: 'success'
+                status: 'success',
+                pipe: existingUser.pipe || getAepsPipe()
             });
 
             return res.success({
@@ -1448,10 +1461,18 @@ const cashWithdrawal = async (req, res) => {
         if (!existingCompany) return res.failure({ message: 'Company not found' });
 
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
-        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, { refId: req.user.id, companyId: req.user.companyId, loginDate: todayDateStr, isLoggedIn: true });
+        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            loginDate: todayDateStr,
+            isLoggedIn: true,
+            pipe: existingUser.pipe || getAepsPipe()
+        });
         if (!existingDaily2FA) return res.failure({ message: 'Please complete daily authentication first' });
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { userId: existingUser.id, companyId: existingUser.companyId });
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id, companyId: existingUser.companyId, pipe: existingUser.pipe || getAepsPipe()
+        });
         if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') return res.failure({ message: 'Onboarding not completed' });
 
         if (!bankIIN) return res.failure({ message: 'Bank IIN is required' });
@@ -1831,7 +1852,8 @@ const balanceEnquiry = async (req, res) => {
             refId: req.user.id,
             companyId: req.user.companyId,
             loginDate: todayDateStr,
-            isLoggedIn: true
+            isLoggedIn: true,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         if (!existingDaily2FA) {
@@ -1840,7 +1862,8 @@ const balanceEnquiry = async (req, res) => {
 
         const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
-            companyId: existingUser.companyId
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe || getAepsPipe()
         });
 
         if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') {
@@ -1998,10 +2021,20 @@ const miniStatement = async (req, res) => {
         if (!existingUser) return res.failure({ message: 'User not found' });
 
         const todayDateStr = aepsDailyLoginService.getIndianDateOnly();
-        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, { refId: req.user.id, companyId: req.user.companyId, loginDate: todayDateStr, isLoggedIn: true });
+        const existingDaily2FA = await dbService.findOne(model.practomindAepsDailyLogin, {
+            refId: req.user.id,
+            companyId: req.user.companyId,
+            loginDate: todayDateStr,
+            isLoggedIn: true,
+            pipe: existingUser.pipe || getAepsPipe()
+        });
         if (!existingDaily2FA) return res.failure({ message: 'Please complete daily authentication first' });
 
-        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, { userId: existingUser.id, companyId: existingUser.companyId });
+        const existingOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
+            userId: existingUser.id,
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe || getAepsPipe()
+        });
         if (!existingOnboarding || existingOnboarding.onboardingStatus !== 'COMPLETED') return res.failure({ message: 'Onboarding not completed' });
 
         if (!bankIIN) return res.failure({ message: 'Bank IIN is required' });

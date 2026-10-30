@@ -595,6 +595,7 @@ const stateCodePayout = async () => {
 };
 
 module.exports = {
+  getAepsPipe,
   getAccessToken,
   getAuthHeaders,
   getHeaders,
