@@ -81,7 +81,8 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
 
         const existingPractomindAepsOnboarding = await dbService.findOne(model.practomindAepsOnboarding, {
             userId: existingUser.id,
-            companyId: existingUser.companyId
+            companyId: existingUser.companyId,
+            pipe: existingUser.pipe
         });
 
         // Daily 2FA status (IST date based)

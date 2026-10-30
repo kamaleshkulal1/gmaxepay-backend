@@ -132,6 +132,12 @@ const PractomindAepsOnboarding = sequelize.define(
       allowNull: true,
       comment: 'Timestamp of last EKYC retry attempt'
     },
+    pipe: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'AEPS pipe used during onboarding (e.g. "1", "2", "4"). Sourced from user.pipe or AEPSPIPE env.'
+    },
     ...reusableModelAttribute
   },
   {
