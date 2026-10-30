@@ -447,7 +447,8 @@ const createPractomindAepsOnboarding = async (req, res) => {
             }),
             dbService.findOne(model.practomindAepsOnboarding, {
                 userId: req.user.id,
-                companyId: req.user.companyId
+                companyId: req.user.companyId,
+                pipe: existingUser.pipe || getAepsPipe()
             })
         ]);
 
