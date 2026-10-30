@@ -107,6 +107,7 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
         // Handle case when onboarding doesn't exist yet (pending)
         if (!existingPractomindAepsOnboarding) {
             const statusData = {
+                pipe: pipe,
                 onboardingStatus: 'PENDING',
                 aepsOnboarding: {
                     status: 'pending',
@@ -147,6 +148,7 @@ const getPractomindAepsOnboardingStatus = async (req, res) => {
         }
 
         const statusData = {
+            pipe: pipe,
             onboardingStatus: overallStatus,
             aepsOnboarding: {
                 status: isOnboardingComplete ? 'completed' : 'pending',
